@@ -9,7 +9,7 @@
 
 ---
 
-# 1. Kotlin（sharedLogic）
+# 1. Kotlin（shared/* 共通層）
 
 ## 1.1 命名規則
 
@@ -199,7 +199,7 @@ fun onSaveTapped() {
 
 ## 1.9 expect / actual
 
-- `expect` 宣言は `sharedLogic/src/commonMain/.../platform/` に集約する
+- `expect` 宣言は所属するレイヤーのモジュール内に置く（DB 系は `shared/data-local`、Dispatcher / プラットフォーム情報は `shared/core`、現状は `sharedLogic/src/commonMain/.../platform/` に集約）
 - `actual` 実装は `iosMain` / `androidMain` に同名ファイルを置く
 - できる限り **`expect` ではなく抽象インターフェースとコンストラクタ注入** を選ぶ（テスタビリティのため）
 - 詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照
@@ -275,8 +275,8 @@ photos.forEach { storage.upload(it) }
 ```
 iosApp/iosApp/
 ├── App/
-│   ├── iOSApp.swift             // @main
-│   └── AppContainer.swift       // sharedLogic の AppContainer をラップ
+│   ├── iOSApp.swift                 // @main・Firebase 初期化
+│   └── AppContainer.swift           // shared/core（現状: sharedLogic）の AppContainer をラップ
 ├── Features/
 │   ├── VisitList/
 │   │   ├── VisitListView.swift
@@ -285,9 +285,11 @@ iosApp/iosApp/
 │   │   ├── VisitEditorView.swift
 │   │   └── VisitEditorViewModelBridge.swift
 │   └── ...
-└── Shared/
-    ├── Bridge/                  // Flow / suspend を Swift から扱うヘルパ
-    └── Extensions/
+├── FirebaseRepositories/            // shared/domain の Repository インターフェースを Swift で実装
+│   ├── VisitRepositoryIosImpl.swift
+│   └── AuthRepositoryIosImpl.swift
+├── Bridge/                          // Flow / suspend / sealed を Swift から扱うヘルパ
+└── Extensions/
 ```
 
 ### View ファイルの構造
@@ -345,10 +347,12 @@ Button("追加") {
 
 ---
 
-## 2.4 KMP（sharedLogic）の利用
+## 2.4 KMP（shared/* 共通層）の利用
 
-- Kotlin の `suspend` / `Flow` は直接呼ばず、`Shared/Bridge/` のヘルパを通す
+- `iosApp` は `SharedFramework`（`shared/framework` 由来の XCFramework）だけを参照する。個別の shared モジュールを直接参照しない
+- Kotlin の `suspend` / `Flow` は直接呼ばず、`Bridge/` のヘルパを通す
 - Kotlin で投げる例外は Swift では `NSError` として届く。受け側で型を見て分岐する
+- Firebase Repository の iOS 実装は `FirebaseRepositories/` 配下に置き、`shared/domain` のインターフェースに準拠させる
 - 詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照
 
 ---

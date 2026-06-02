@@ -25,6 +25,7 @@
 | [x] | KMP プロジェクトの初期化（`sharedLogic` / `sharedUI` / `iosApp` / `androidApp`） | 既存のスケルトン |
 | [x] | ドキュメント整備（CLAUDE.md / docs 一式） | 2026-06-02 |
 | [x] | `gradle/libs.versions.toml` に必要ライブラリを追加（SQLDelight / Firebase / Ktor / kotlinx-datetime / kotlinx-serialization） | 2026-06-02 / Firebase は公式（プラットフォーム別）を採用 |
+| [ ] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug`。GitHub Actions 想定。モジュール分割前に整える |
 | [ ] | SKIE の採用判断（採用するなら `sharedLogic` の Gradle に追加） | [`kmp-bridge.md`](./kmp-bridge.md) 参照 |
 | [ ] | `local.properties` での API キー管理を整える（Places / Firebase） | リポジトリにコミットしない |
 | [ ] | `.gitignore` に `GoogleService-Info.plist` / `google-services.json` を追加するか、Decrypt 運用にするかを決定 | |
@@ -58,6 +59,23 @@
 
 ---
 
+## フェーズ 2.5: モジュール分割 (1) — 基盤レイヤー
+
+> [`architecture.md` §段階的移行ステップ](./architecture.md#段階的移行ステップ) に従い、Phase 2 が動く状態で完了したあとに独立 PR で実施する。機能追加と分割を同じ PR に混ぜない。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `build-logic/convention/` プロジェクトを追加し、`kmp.library` / `kmp.feature` / `android.library` Convention Plugin を作成 | `libs.versions.toml` を convention 側から参照できるように |
+| [ ] | `core` モジュール切り出し（Result / Logger / Dispatchers / DI 基盤 / テストヘルパ） | sharedLogic からの移動 |
+| [ ] | `domain` モジュール切り出し（ドメインモデル + Repository インターフェース + UseCase） | sharedLogic からの移動 |
+| [ ] | `data-local` モジュール切り出し（SQLDelight スキーマ + DriverFactory） | sharedLogic からの移動 |
+| [ ] | `data-firebase` モジュール切り出し（Firestore / Auth / Storage Android 実装） | androidMain のみソースを持つ |
+| [ ] | `AppContainer` の依存配線を新モジュール構成に合わせて整理 | iOS / Android 両方 |
+| [ ] | 旧 `sharedLogic` モジュールを削除（`settings.gradle.kts` から除外） | 分割完了後 |
+| [ ] | 分割後ビルド確認: `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug` | CI が通ること |
+
+---
+
 ## フェーズ 3: iOS UI（MVP）
 
 | 状態 | タスク | 備考 |
@@ -76,16 +94,33 @@
 
 ---
 
+## フェーズ 3.5: モジュール分割 (2) — feature レイヤー & Android 検証
+
+> Phase 3 の iOS UI 実装と並走する。各 feature の SwiftUI 実装が一段落したタイミングで該当 feature モジュールを切り出す。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `shared/framework` モジュール作成（iOS 向け Umbrella）+ XCFramework ビルド確認 | Phase 3 開始時 / `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` |
+| [ ] | `feature/visit-list` モジュール切り出し（最初の feature module） | Phase 3 開始時 |
+| [ ] | `feature/visit-detail` モジュール切り出し | Phase 3 進行中 |
+| [ ] | `feature/visit-editor` モジュール切り出し | Phase 3 進行中 |
+| [ ] | `androidApp` で `feature/visit-list` を Compose の 1 画面として表示 | Phase 3 完了と並行（検証ターゲット） |
+| [ ] | Android 側で `data-firebase` の `observe` 経由 Firestore 読み取りが動くことを確認 | 検証ターゲット |
+
+---
+
 ## フェーズ 4: Places API（カフェ検索）
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | Ktor Client + Kotlinx Serialization のセットアップ | |
-| [ ] | `PlacesClient`（Text Search / Nearby Search / Place Details） | |
-| [ ] | `CafeRepository` 経由で ViewModel から呼び出せるようにする | |
+| [ ] | **モジュール分割**: `data-places` モジュール切り出し（Phase 4 開始時） | Ktor + Places クライアントをここに集約 |
+| [ ] | Ktor Client + Kotlinx Serialization のセットアップ | `data-places` モジュール内 |
+| [ ] | `PlacesClient`（Text Search / Nearby Search / Place Details） | `data-places` モジュール内 |
+| [ ] | `CafeRepository` 経由で ViewModel から呼び出せるようにする | I/F は `domain` モジュールに |
 | [ ] | カフェ検索画面（CafeSearchView） | テキスト検索 |
 | [ ] | 現在地検索（CoreLocation 連携。位置情報の利用許可ダイアログ対応） | |
 | [ ] | Places API 規約に従い、写真は都度取得する実装にする | キャッシュしない |
+| [ ] | **モジュール分割**: `feature/cafe-search` モジュール切り出し（Phase 4 完了直後） | |
 
 ---
 
@@ -107,7 +142,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | Android アプリ実装着手（`sharedUI` の Compose Multiplatform 利用） | |
+| [-] | Android アプリ実装着手（`sharedUI` の Compose Multiplatform 利用） | Phase 3.5 で `feature/visit-list` を Compose 表示する検証実装に置き換えたため取り下げ（Android はリリース対象外） |
 | [ ] | 検索（キーワード）の高速化（SQLDelight FTS） | |
 | [ ] | エクスポート（JSON）機能 | |
 | [ ] | 同一カフェの集計表示 | |

@@ -23,6 +23,59 @@
 - 複雑な問題には、サブエージェントを通じてより多くの計算リソースを投入する
 - サブエージェント 1 つにつきタスクは 1 つ（集中した実行のため）
 
+#### CoffeeVision の 3 ロール体制
+
+このプロジェクトでは Swift / Kotlin の実装は専用サブエージェントに委譲し、メインセッション（= 親）が仕様の番人として全体を統制する 3 ロール体制を取る。
+
+| ロール | 実体 | 書き込みスコープ | 主な責務 |
+|--------|------|------------------|---------|
+| **親** | メインセッション（このファイルに従う Claude） | `docs/**` / `CLAUDE.md` / `.claude/**` / プロジェクト全体の調整 | 仕様の意思決定、docs 更新、`lessons.md` 記録、サブエージェント間の橋渡し、PR / commit |
+| **`ios-engineer`** | `.claude/agents/ios-engineer.md` | `iosApp/**` のみ | Swift / SwiftUI 実装、ブリッジの Swift 側、iOS Firebase 実装、ビルド検証 |
+| **`kmp-engineer`** | `.claude/agents/kmp-engineer.md` | `shared*/**` / `androidApp/**` / `gradle*` / `build-logic/**` | Kotlin Multiplatform 実装、共通 ViewModel、SQLDelight、Android Firebase、Gradle |
+
+##### 親（メインセッション）の責務
+
+- **仕様・docs 更新の独占権**: `docs/**` / `CLAUDE.md` / `lessons.md` / `implementation_note.md` を更新できるのは親だけ。サブエージェントから上がってきた「親への依頼」を吸収して反映する
+- **dispatch 判断**: 実装タスクが Swift だけで完結するなら `ios-engineer` に、Kotlin だけなら `kmp-engineer` に Agent ツールで委譲する。両方に跨るタスクは分解する
+- **KMP ブリッジの仲介**: Swift ⇄ Kotlin の境界は `iOS=Swift`, `KMP=Kotlin` で分担。`commonMain` の公開 API 変更が出たら、親が「インターフェースの合意書」を docs に固めてから両エージェントに dispatch する
+- **整合性チェック**: 両サブエージェントが返したレポートを突き合わせ、`commonMain` API 変更と iOS Bridge の追随が齟齬なくマージされているか確認する
+- **実装ノートの記録**: サブエージェントレポートに含まれる「仕様 / トレードオフの論点」のうち、`requirements.md` に上げるほどではないが残しておくべき判断・影響・経緯を [`docs/implementation_note.md`](./docs/implementation_note.md) に追記する。タイトル + 本文だけで十分（影響 / トレードオフ / 経緯は必要なときだけ）
+- **実装ノートの整理**: 定期的に同種エントリが溜まったら正規 doc（`coding-conventions.md` / `kmp-bridge.md` / `architecture.md` / `lessons.md` 等）へ昇格させ、ノートから削除する。「現在生きてる方針サマリ」も更新する。判断基準は実装ノート内の運用ルールを参照
+- **commit / PR**: コードを書いたサブエージェントではなく親が最終 commit する（仕様変更と実装変更を分けたい場合はその限りでない）
+
+##### dispatch の基本形
+
+```
+1. 親がタスクを受ける（ユーザーまたは自発）
+2. 親が `docs/tasks.md` に計画項目を追加
+3. 親が必要なら docs を先に整える（仕様の事前確定）
+4. 親が Agent ツールで ios-engineer / kmp-engineer に委譲
+   - サブエージェントへの指示には「触ってよいスコープ」「期待される成果物」「関連 docs のパス」を明示
+5. サブエージェントが構造化レポートを返す
+6. 親がレポートを評価し、
+   - 「親への依頼」を docs / 別サブエージェントへの dispatch に変換
+   - 要件未満の決定・影響・トレードオフ・経緯を `docs/implementation_note.md` に追記
+   - 汎用的に学んだ落とし穴があれば `docs/tasks/lessons.md` に追記
+   - `docs/tasks.md` のチェックボックスを更新
+7. 必要に応じて 4 に戻る
+```
+
+##### サブエージェントが守ること（参考）
+
+両サブエージェントの定義ファイル（`.claude/agents/ios-engineer.md` / `.claude/agents/kmp-engineer.md`）に詳細を記載。要点：
+
+- `docs/**` / `CLAUDE.md` への書き込みは禁止（スコープ外は親に依頼で返す）
+- 必読 docs を毎回 Read してから着手
+- 同じアプローチで 2 回失敗したら止めて親にレポート
+- 最終レスポンスは「実装した内容 / 検証結果 / 仕様トレードオフ / 親への依頼 / 未解決」の構造化 Markdown で返す
+
+##### よくある dispatch パターン
+
+- **新機能の追加**: 親が docs で仕様確定 → `kmp-engineer` でドメインモデル + ViewModel → `ios-engineer` で SwiftUI + Bridge → 親がレポート 2 件を統合 → commit
+- **既存機能のバグ修正（片側完結）**: 該当側のサブエージェントに直接 dispatch
+- **KMP ブリッジ周りの変更**: `kmp-engineer` で `commonMain` API + `@Throws` / `sealed` 調整 → レポートの公開 API 差分を親が docs に固定 → `ios-engineer` で Bridge 追随
+- **モジュール分割（Phase 2.x）**: 親が分割計画を `docs/architecture.md` / `docs/tasks.md` で確定 → `kmp-engineer` に dispatch → 親が integration 検証
+
 ### 3. Self-Improvement Loop（自己改善ループ）
 
 - ユーザーからの修正があったら必ず `docs/tasks/lessons.md` にパターンを記録する
@@ -122,6 +175,7 @@
 | 要件定義 | 機能一覧・画面一覧・非機能要件 | [`docs/requirements.md`](./docs/requirements.md) |
 | データモデル | Visit / CoffeeItem / FoodItem の Kotlin / SQLDelight / Firestore 表現 | [`docs/data-model.md`](./docs/data-model.md) |
 | KMP ブリッジ | Swift ⇄ Kotlin 相互運用ルール、`expect`/`actual`、Flow / suspend の扱い | [`docs/kmp-bridge.md`](./docs/kmp-bridge.md) |
+| 実装ノート | 要件未満の実装上の決定・影響・トレードオフ・経緯の時系列ログ（親のみ更新） | [`docs/implementation_note.md`](./docs/implementation_note.md) |
 | タスク一覧 | フェーズ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |
 
 ---

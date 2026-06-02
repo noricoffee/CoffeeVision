@@ -1,0 +1,32 @@
+CREATE TABLE coffee_item (
+    id TEXT NOT NULL PRIMARY KEY,
+    visit_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    brew_method TEXT NOT NULL,
+    origin TEXT,
+    variety TEXT,
+    processing TEXT,
+    roast_level TEXT,
+    cup TEXT,
+    rating INTEGER NOT NULL,
+    notes TEXT,
+    sort_order INTEGER NOT NULL,
+    FOREIGN KEY (visit_id) REFERENCES visit(id) ON DELETE CASCADE
+);
+
+CREATE INDEX coffee_item_by_visit ON coffee_item (visit_id, sort_order);
+
+selectByVisit:
+SELECT * FROM coffee_item WHERE visit_id = ? ORDER BY sort_order ASC;
+
+upsert:
+INSERT OR REPLACE INTO coffee_item (
+    id, visit_id, name, brew_method, origin, variety, processing,
+    roast_level, cup, rating, notes, sort_order
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteByVisit:
+DELETE FROM coffee_item WHERE visit_id = ?;
+
+deleteById:
+DELETE FROM coffee_item WHERE id = ?;

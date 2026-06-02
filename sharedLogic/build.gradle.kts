@@ -8,6 +8,10 @@ plugins {
 }
 
 kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xexpect-actual-classes")
+    }
+
     listOf(
         iosArm64(),
         iosSimulatorArm64()
@@ -50,7 +54,6 @@ kotlin {
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutines.test)
-            implementation(libs.sqldelight.driver.sqlite)
         }
         iosMain.dependencies {
             implementation(libs.sqldelight.driver.native)
@@ -64,6 +67,9 @@ kotlin {
             implementation(libs.firebase.firestore)
             implementation(libs.firebase.auth)
             implementation(libs.firebase.storage)
+        }
+        getByName("androidHostTest").dependencies {
+            implementation(libs.sqldelight.driver.sqlite)
         }
     }
 }

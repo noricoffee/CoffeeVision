@@ -1,0 +1,25 @@
+CREATE TABLE food_item (
+    id TEXT NOT NULL PRIMARY KEY,
+    visit_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    rating INTEGER NOT NULL,
+    notes TEXT,
+    sort_order INTEGER NOT NULL,
+    FOREIGN KEY (visit_id) REFERENCES visit(id) ON DELETE CASCADE
+);
+
+CREATE INDEX food_item_by_visit ON food_item (visit_id, sort_order);
+
+selectByVisit:
+SELECT * FROM food_item WHERE visit_id = ? ORDER BY sort_order ASC;
+
+upsert:
+INSERT OR REPLACE INTO food_item (
+    id, visit_id, name, rating, notes, sort_order
+) VALUES (?, ?, ?, ?, ?, ?);
+
+deleteByVisit:
+DELETE FROM food_item WHERE visit_id = ?;
+
+deleteById:
+DELETE FROM food_item WHERE id = ?;

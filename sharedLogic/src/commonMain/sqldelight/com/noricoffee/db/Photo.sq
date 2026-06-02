@@ -1,0 +1,27 @@
+CREATE TABLE photo (
+    id TEXT NOT NULL PRIMARY KEY,
+    visit_id TEXT NOT NULL,
+    local_path TEXT,
+    remote_url TEXT,
+    width INTEGER,
+    height INTEGER,
+    created_at INTEGER NOT NULL,
+    sort_order INTEGER NOT NULL,
+    FOREIGN KEY (visit_id) REFERENCES visit(id) ON DELETE CASCADE
+);
+
+CREATE INDEX photo_by_visit ON photo (visit_id, sort_order);
+
+selectByVisit:
+SELECT * FROM photo WHERE visit_id = ? ORDER BY sort_order ASC;
+
+upsert:
+INSERT OR REPLACE INTO photo (
+    id, visit_id, local_path, remote_url, width, height, created_at, sort_order
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteByVisit:
+DELETE FROM photo WHERE visit_id = ?;
+
+deleteById:
+DELETE FROM photo WHERE id = ?;

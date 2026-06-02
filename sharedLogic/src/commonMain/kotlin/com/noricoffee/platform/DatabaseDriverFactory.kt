@@ -1,0 +1,7 @@
+package com.noricoffee.platform
+
+import app.cash.sqldelight.db.SqlDriver
+
+expect class DatabaseDriverFactory {
+    fun create(): SqlDriver
+}

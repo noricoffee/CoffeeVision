@@ -1,0 +1,42 @@
+CREATE TABLE visit (
+    id TEXT NOT NULL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    cafe_place_id TEXT NOT NULL,
+    cafe_name TEXT NOT NULL,
+    cafe_address TEXT,
+    cafe_latitude REAL,
+    cafe_longitude REAL,
+    cafe_photo_references TEXT NOT NULL,
+    cafe_website_url TEXT,
+    cafe_maps_url TEXT,
+    visited_on TEXT NOT NULL,
+    ambiance TEXT NOT NULL,
+    rating INTEGER NOT NULL,
+    notes TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX visit_by_user_visited ON visit (user_id, visited_on DESC);
+CREATE INDEX visit_by_cafe ON visit (cafe_place_id);
+
+selectAll:
+SELECT * FROM visit WHERE user_id = ? ORDER BY visited_on DESC, created_at DESC;
+
+selectById:
+SELECT * FROM visit WHERE id = ?;
+
+selectByCafe:
+SELECT * FROM visit WHERE user_id = ? AND cafe_place_id = ? ORDER BY visited_on DESC;
+
+upsert:
+INSERT OR REPLACE INTO visit (
+    id, user_id, cafe_place_id, cafe_name, cafe_address,
+    cafe_latitude, cafe_longitude, cafe_photo_references,
+    cafe_website_url, cafe_maps_url,
+    visited_on, ambiance, rating, notes,
+    created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM visit WHERE id = ?;

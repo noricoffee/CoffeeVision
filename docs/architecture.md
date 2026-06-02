@@ -32,10 +32,10 @@ coffeevision/
 │       │       ├── usecase/           # SaveVisitUseCase ...（薄ければ省略可）
 │       │       ├── viewmodel/         # 画面ごとの ViewModel + UIState
 │       │       ├── db/                # SQLDelight 生成コード + ラッパ
-│       │       ├── remote/            # Firestore / Places API クライアント
+│       │       ├── remote/            # Places API クライアント（Ktor）
 │       │       └── platform/          # expect 宣言
-│       ├── iosMain/kotlin/            # iOS 固有 actual
-│       ├── androidMain/kotlin/        # Android 固有 actual
+│       ├── iosMain/kotlin/            # iOS 固有 actual（SQLDelight Native ドライバ など）
+│       ├── androidMain/kotlin/        # Android 固有 actual（Firestore / Auth / Storage の実装はここに置く）
 │       └── commonTest/kotlin/         # 共通ユニットテスト
 │
 ├── sharedUI/                          # Compose Multiplatform（当面は Android 向け将来枠）
@@ -98,7 +98,8 @@ coffeevision/
 | UseCase | 複数 Repository をまたぐ手続き（薄ければ省略可） | `sharedLogic/.../usecase/` |
 | Repository | データソースの集約。UI に対しては単一のインターフェースを提供 | `sharedLogic/.../repository/` |
 | Local | SQLDelight。検索・オフライン参照を高速化する用途 | `sharedLogic/.../db/` |
-| Remote | Firestore / Storage / Places API クライアント | `sharedLogic/.../remote/` |
+| Remote (Places) | Google Places API クライアント（Ktor） | `sharedLogic/.../remote/` |
+| Remote (Firebase) | Firestore / Storage / Auth は **公式プラットフォーム別 SDK** を使う。Android 実装は `sharedLogic/androidMain`、iOS 実装は `iosApp` 側の Swift で書き、Repository インターフェースを `commonMain` に置いて差し替える | `commonMain` にインターフェース / `androidMain` & `iosApp` に実装 |
 
 ---
 
@@ -190,10 +191,14 @@ SwiftUI View
 ViewModel（sharedLogic）
    │  visitRepository.save(visit)
    ▼
-VisitRepository
+VisitRepository（commonMain インターフェース）
+   │   実装はプラットフォーム別:
+   │     - Android: VisitRepositoryAndroidImpl（sharedLogic/androidMain, firebase-firestore-ktx）
+   │     - iOS:     VisitRepositoryIosImpl（iosApp 側 Swift, FirebaseFirestore SPM）
+   │
    ├─ SQLDelight.insert(visit)          ← 即座にローカル DB に保存
-   └─ FirestoreClient.set(visit)        ← 並行して Firestore へ書き込み
-                                          （SDK のオフライン永続化が同期を引き受ける）
+   └─ Firestore.set(visit)              ← 並行して Firestore へ書き込み
+                                          （各プラットフォームの公式 SDK のオフライン永続化が同期を引き受ける）
    │
    ▼
 SQLDelight が emit → Repository.observeAll() が新しい一覧を流す
@@ -224,11 +229,12 @@ SwiftUI View が再描画
 class AppContainer(
     sqlDriver: SqlDriver,
     placesApiKey: String,
-    firestore: Firestore,
+    // Firebase 実装はプラットフォーム別 SDK を使うため、ここでは Repository を外部から受け取る
+    val visitRepository: VisitRepository,
+    val authRepository: AuthRepository,
 ) {
     private val db = AppDatabase(sqlDriver)
 
-    val visitRepository: VisitRepository = VisitRepositoryImpl(db, firestore)
     val cafeRepository: CafeRepository = CafeRepositoryImpl(/* PlacesClient(placesApiKey) */)
 
     fun makeVisitListViewModel(scope: CoroutineScope) =
@@ -236,7 +242,10 @@ class AppContainer(
 }
 ```
 
-`SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
+- `SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
+- Firebase を扱う Repository（`VisitRepository` / `AuthRepository` など）は **`commonMain` ではインターフェースのみ定義**し、実装は以下のように分けます。
+    - **Android**: `sharedLogic/androidMain` に `firebase-firestore-ktx` 等を使った実装を置き、`AppContainer` 生成時に Activity / Application から渡す
+    - **iOS**: `iosApp` 側の Swift コードで `FirebaseFirestore`（SPM 配信）を使った実装クラスを書き、Kotlin の `VisitRepository` インターフェースに準拠させて `AppContainer` 構築時に渡す
 
 ---
 
@@ -251,7 +260,11 @@ class AppContainer(
 
 ### リモート（Firestore + Storage）
 
-- **Firestore のオフライン永続化を有効にする**（KMP SDK のデフォルト挙動）
+- **Firebase は公式のプラットフォーム別 SDK を採用する**
+    - iOS: `FirebaseFirestore` / `FirebaseAuth` / `FirebaseStorage` を Xcode の SPM（または CocoaPods）で `iosApp` に追加
+    - Android: `gradle/libs.versions.toml` で Firebase BoM + `firebase-firestore-ktx` / `firebase-auth-ktx` / `firebase-storage-ktx` を宣言し、`sharedLogic/androidMain` で利用
+    - GitLive 製の Firebase KMP SDK（`dev.gitlive.firebase.*`）は採用しない
+- **Firestore のオフライン永続化を有効にする**（公式 SDK のデフォルト挙動。iOS / Android それぞれで初期化時に確認）
 - 同期キューを独自実装しない。Firestore SDK が再接続時に自動同期する
 - 写真は Firebase Storage にアップロードし、Firestore の `Visit` ドキュメントには Storage URL のみを保存する
 - Security Rules で `request.auth.uid == resource.data.userId` を強制する
@@ -307,9 +320,9 @@ fun visit_list_loads_on_appear() = runTest {
 |------|----------|------|
 | 共通基盤 | Kotlin Multiplatform / kotlinx-coroutines / kotlinx-serialization | `sharedLogic/commonMain` |
 | ローカル DB | SQLDelight | `sharedLogic` |
-| クラウド DB | Firebase Firestore（KMP SDK） | `sharedLogic` |
-| ストレージ | Firebase Storage（KMP SDK） | `sharedLogic` |
-| 認証 | Firebase Auth（KMP SDK） | `sharedLogic` |
+| クラウド DB | Firebase Firestore（公式 SDK：iOS は SPM、Android は `firebase-firestore-ktx`） | iOS: `iosApp` / Android: `sharedLogic/androidMain` |
+| ストレージ | Firebase Storage（公式 SDK） | 同上 |
+| 認証 | Firebase Auth（公式 SDK） | 同上 |
 | カフェ検索 | Google Places API（Ktor で REST 呼び出し） | `sharedLogic` |
 | HTTP | Ktor Client | `sharedLogic` |
 | ロギング | Napier または kermit | `sharedLogic` |
@@ -324,7 +337,8 @@ fun visit_list_loads_on_appear() = runTest {
 
 - [Kotlin Multiplatform — JetBrains](https://www.jetbrains.com/help/kotlin-multiplatform-dev/get-started.html)
 - [SQLDelight](https://sqldelight.github.io/sqldelight/)
-- [Firebase Kotlin Multiplatform SDK](https://github.com/GitLiveApp/firebase-kotlin-sdk)
+- [Firebase for iOS（公式 / Swift Package Manager）](https://firebase.google.com/docs/ios/setup)
+- [Firebase for Android（公式 / firebase-bom）](https://firebase.google.com/docs/android/setup)
 - [Google Places API](https://developers.google.com/maps/documentation/places/web-service)
 - [コーディング規約](./coding-conventions.md)
 - [データモデル](./data-model.md)

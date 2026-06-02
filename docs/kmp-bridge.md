@@ -213,6 +213,79 @@ actual class DatabaseDriverFactory(private val context: Context) {
 
 ---
 
+## Firebase は公式プラットフォーム別 SDK を使う
+
+CoffeeVision では Firebase に **公式の per-platform SDK** を採用します。
+GitLive 製の Kotlin Multiplatform Firebase SDK（`dev.gitlive.firebase.*`）は採用しません。
+
+| プラットフォーム | SDK | 配置 |
+|------|-----|------|
+| iOS | `FirebaseFirestore` / `FirebaseAuth` / `FirebaseStorage`（SPM or CocoaPods） | `iosApp` 側で Xcode から追加 |
+| Android | Firebase BoM + `firebase-firestore-ktx` / `firebase-auth-ktx` / `firebase-storage-ktx` | `sharedLogic/androidMain` |
+
+そのため、`commonMain` から Firestore / Auth / Storage を直接呼ぶことはできません。
+**Repository インターフェースを `commonMain` に置き、実装をプラットフォーム別に分ける**設計にします。
+
+### 設計パターン
+
+```
+commonMain/
+  repository/
+    VisitRepository.kt            ← interface のみ
+    AuthRepository.kt             ← interface のみ
+
+androidMain/
+  repository/
+    VisitRepositoryAndroidImpl.kt ← firebase-firestore-ktx を使う
+    AuthRepositoryAndroidImpl.kt  ← firebase-auth-ktx を使う
+
+iosApp/iosApp/Shared/Firebase/
+    VisitRepositoryIosImpl.swift  ← FirebaseFirestore (Swift) を使う
+    AuthRepositoryIosImpl.swift   ← FirebaseAuth を使う
+```
+
+iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kotlin → Swift で interface はプロトコル相当として見えるため）。
+`AppContainer` 構築時に、Swift 側で作った Repository 実装を Kotlin の `AppContainer` コンストラクタに渡します。
+
+```swift
+// iosApp 起動時
+let visitRepo = VisitRepositoryIosImpl()      // Swift 実装
+let authRepo  = AuthRepositoryIosImpl()       // Swift 実装
+
+let container = AppContainer(
+    sqlDriver: makeIosSqlDriver(),
+    placesApiKey: Config.placesApiKey,
+    visitRepository: visitRepo,
+    authRepository: authRepo
+)
+```
+
+```kotlin
+// Android（Application#onCreate など）
+val visitRepo = VisitRepositoryAndroidImpl(/* Firestore.getInstance() などを内部で参照 */)
+val authRepo = AuthRepositoryAndroidImpl()
+
+val container = AppContainer(
+    sqlDriver = makeAndroidSqlDriver(this),
+    placesApiKey = BuildConfig.PLACES_API_KEY,
+    visitRepository = visitRepo,
+    authRepository = authRepo,
+)
+```
+
+### なぜ `expect`/`actual` ではなく interface + DI なのか
+
+- `expect`/`actual` だと iOS 実装も Kotlin で書く必要があり、Kotlin/Native から Objective-C 経由で FirebaseFirestore を呼ぶことになる（cinterop が必要で重い）
+- Swift 側で FirebaseFirestore を直接扱った方が、Firestore の Codable / SwiftConcurrency 対応をそのまま活かせる
+- テスト時は `commonTest` に Fake 実装を置けば差し替えが効く
+
+### Firestore 初期化と永続化
+
+- iOS: `iosApp` の `@main App` 内で `FirebaseApp.configure()` を呼ぶ。Firestore のオフライン永続化はデフォルト ON
+- Android: Firebase BoM 経由の `firebase-firestore-ktx` を導入し、`androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用、`google-services.json` を `androidApp/` に配置（Phase 2 で実施）
+
+---
+
 ## 例外ハンドリング
 
 ### Kotlin で投げた例外を Swift で受ける
@@ -363,5 +436,6 @@ func save(_ visit: Visit) async throws {
 
 - [SKIE — Touchlab](https://skie.touchlab.co/)
 - [Kotlin/Native Interop with Swift/Objective-C](https://kotlinlang.org/docs/native-objc-interop.html)
-- [Firebase Kotlin SDK](https://github.com/GitLiveApp/firebase-kotlin-sdk)
+- [Firebase for iOS（公式 / Swift Package Manager）](https://firebase.google.com/docs/ios/setup)
+- [Firebase for Android（公式 / firebase-bom）](https://firebase.google.com/docs/android/setup)
 - [アーキテクチャ方針](./architecture.md)

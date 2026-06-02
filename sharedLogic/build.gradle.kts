@@ -19,6 +19,8 @@ kotlin {
         iosTarget.binaries.framework {
             baseName = "SharedLogic"
             isStatic = true
+            // sqliter (NativeSqliteDriver の依存) が iOS のシステム SQLite に動的リンクするため
+            linkerOpts("-lsqlite3")
         }
     }
 

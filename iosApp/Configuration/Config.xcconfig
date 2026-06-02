@@ -5,3 +5,7 @@ PRODUCT_BUNDLE_IDENTIFIER=com.noricoffee.coffeevision$(TEAM_ID)
 
 CURRENT_PROJECT_VERSION=1
 MARKETING_VERSION=1.0
+
+// SQLDelight の NativeSqliteDriver (sqliter) が iOS のシステム SQLite に動的リンクするため、
+// 静的フレームワーク (SharedLogic) を取り込むアプリ側で libsqlite3 をリンクする必要がある。
+OTHER_LDFLAGS = $(inherited) -lsqlite3

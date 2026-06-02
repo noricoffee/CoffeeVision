@@ -37,6 +37,14 @@
 - `db.transaction { ... }` 内で複数テーブルを upsert しても、`asFlow()` の購読者には **トランザクション commit 後に一度だけ** 通知が届く
 - 子テーブル（coffee_item / food_item / photo）だけを更新した場合、`visit` 行を観測している `observeAll` には emit が **来ない**。Phase 1 は常に `save(visit)` で visit 行も更新する設計のため問題なしだが、将来子テーブル単独更新を入れるなら `combine` で複数 Query を束ねる
 
+### iOS で `Undefined symbol: _sqlite3_bind_blob` が出たとき
+
+- 原因: `NativeSqliteDriver`（の依存 `sqliter`）は iOS の **システム SQLite** に動的リンクする。`SharedLogic.framework` を `isStatic = true` で出しているので、最終リンク（Xcode 側のアプリビルド）で `-lsqlite3` が要る
+- **`sharedLogic/build.gradle.kts` の framework ブロックに `linkerOpts("-lsqlite3")` を入れただけでは不十分**（実測: 31 件の `_sqlite3_*` 未解決が残った）。`isStatic = true` の framework は Xcode 側のアプリリンクにフラグを伝播しないことがある
+- 確実な対処: **Xcode の xcconfig に `OTHER_LDFLAGS = $(inherited) -lsqlite3` を追加**する。本プロジェクトでは `iosApp/Configuration/Config.xcconfig` がアプリの base configuration として使われているので、そこに書く
+- Xcode のキャッシュが古い framework を掴んでいると反映されないので、**Product → Clean Build Folder** してから再ビルド
+- なお Gradle 側の `linkerOpts("-lsqlite3")` も残しておくのが安全（KMP の build 内で iOS テスト等を走らせるときに必要になり得る）
+
 ### ドメインモデルとマッパの責任分担
 
 - バリデーション（rating の 1..5、name の長さ等）は **ViewModel 層に置く** 方針（`data-model.md` §7）

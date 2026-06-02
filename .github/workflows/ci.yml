@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  android:
+    name: Android assembleDebug & shared tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Run shared tests and Android assembleDebug
+        run: ./gradlew :sharedLogic:testAndroidHostTest :androidApp:assembleDebug --stacktrace
+
+  ios:
+    name: iOS framework (Kotlin/Native link)
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ~/.konan は Kotlin/Native のコンパイラ + LLVM + sysroot 一式（数百 MB）。
+      # キャッシュしないと毎回フルダウンロードになり、iOS ジョブが大幅に遅くなる。
+      - name: Cache Konan
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            konan-${{ runner.os }}-
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # Phase 3.5 で :shared:framework モジュールを切り出したら、ここを
+      # `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える。
+      - name: Link iOS frameworks (arm64 / simulator-arm64)
+        run: ./gradlew :sharedLogic:linkReleaseFrameworkIosArm64 :sharedLogic:linkReleaseFrameworkIosSimulatorArm64 --stacktrace

@@ -59,7 +59,7 @@
 
 ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。
 
-- （まだなし）
+- CI（GitHub Actions）の iOS 側ビルドコマンドは、`:shared:framework` モジュール未作成のため `:sharedLogic` の iOS framework link タスクで代替している。フェーズ 3.5 で `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える
 
 ---
 
@@ -86,3 +86,21 @@
 ## エントリ
 
 <!-- 新しい決定は本セクションの末尾に追記する。陳腐化・昇格時は削除可 -->
+
+### 2026-06-03: CI（GitHub Actions）の iOS ビルドコマンドを暫定で `:sharedLogic` に向ける
+
+- 領域: Build / CI
+- 関連: `.github/workflows/ci.yml`, `docs/tasks.md`（フェーズ 0 / フェーズ 3.5）
+
+`tasks.md` フェーズ 0 の CI 整備タスクは iOS 側コマンドを `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` と書いているが、`:shared:framework` モジュールはフェーズ 3.5 で `sharedLogic` から切り出す前提のため、現時点では未作成。
+
+暫定対応として CI では `:sharedLogic` の iOS framework link タスクを直接呼ぶ：
+
+- `:sharedLogic:linkReleaseFrameworkIosArm64`
+- `:sharedLogic:linkReleaseFrameworkIosSimulatorArm64`
+
+ローカル（macOS）で両ジョブのコマンド（Android: `:sharedLogic:testAndroidHostTest :androidApp:assembleDebug` / iOS: 上記 link 2 つ）が成功することを確認済。GitHub Actions 上でのグリーン確認は初回 PR まで保留する。
+
+差し替えタイミング: フェーズ 3.5「分割後ビルド確認」のチェック項目に `ci.yml` の link コマンドを `:shared:framework:assembleSharedFrameworkXCFramework` に置き換える旨を備考で明記した。
+
+トレードオフ: tasks.md の文言と完全一致しなくなるが、"モジュール分割前に CI を整える" という方針を優先し、現状でグリーンになるコマンドで CI を成立させた。

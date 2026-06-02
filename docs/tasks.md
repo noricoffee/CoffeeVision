@@ -25,7 +25,7 @@
 | [x] | KMP プロジェクトの初期化（`sharedLogic` / `sharedUI` / `iosApp` / `androidApp`） | 既存のスケルトン |
 | [x] | ドキュメント整備（CLAUDE.md / docs 一式） | 2026-06-02 |
 | [x] | `gradle/libs.versions.toml` に必要ライブラリを追加（SQLDelight / Firebase / Ktor / kotlinx-datetime / kotlinx-serialization） | 2026-06-02 / Firebase は公式（プラットフォーム別）を採用 |
-| [ ] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug`。GitHub Actions 想定。モジュール分割前に整える |
+| [~] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 / `.github/workflows/ci.yml` 追加（Android: `:sharedLogic:testAndroidHostTest` + `:androidApp:assembleDebug` / iOS: `:sharedLogic:linkReleaseFrameworkIos{Arm64,SimulatorArm64}`）。ローカル両ジョブ成功確認済。初回 PR で workflow グリーン確認後 [x]。`:shared:framework:assembleSharedFrameworkXCFramework` への差し替えはフェーズ 3.5 で実施。詳細は [`implementation_note.md`](./implementation_note.md) 参照 |
 | [ ] | SKIE の採用判断（採用するなら `sharedLogic` の Gradle に追加） | [`kmp-bridge.md`](./kmp-bridge.md) 参照 |
 | [ ] | `local.properties` での API キー管理を整える（Places / Firebase） | リポジトリにコミットしない |
 | [ ] | `.gitignore` に `GoogleService-Info.plist` / `google-services.json` を追加するか、Decrypt 運用にするかを決定 | |
@@ -72,7 +72,7 @@
 | [ ] | `data-firebase` モジュール切り出し（Firestore / Auth / Storage Android 実装） | androidMain のみソースを持つ |
 | [ ] | `AppContainer` の依存配線を新モジュール構成に合わせて整理 | iOS / Android 両方 |
 | [ ] | 旧 `sharedLogic` モジュールを削除（`settings.gradle.kts` から除外） | 分割完了後 |
-| [ ] | 分割後ビルド確認: `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug` | CI が通ること |
+| [ ] | 分割後ビルド確認: `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug` | CI が通ること。あわせて `.github/workflows/ci.yml` の iOS link コマンドを `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える |
 
 ---
 

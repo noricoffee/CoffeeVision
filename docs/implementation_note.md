@@ -65,7 +65,7 @@
 - `applicationId` / iOS バンドル ID は `com.noricoffee.coffeevision` で統一する（`sharedLogic` のライブラリ namespace は `com.noricoffee.sharedLogic` のままで OK）
 - SKIE 0.10.12 を `sharedLogic` に導入済。**SKIE は呼び出し方向限定**で、Swift で Kotlin interface を実装する側は Obj-C 互換シグネチャ（completion handler / Kotlin Flow 戻り値）を実装する必要がある。Swift で `Flow` を作るには `MutableStateFlow` を直接構築するパターンを第一候補とし、詰まったら `iosMain` にラッパを追加する
 - iOS 側 Firebase 実装（`iosApp/iosApp/FirebaseRepositories/`）は Phase 2 で実装済。`SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由（`init(internal:)` が internal アクセスのため直接構築不可）。Visit ドメインモデルは Swift 側で `Visit_`（末尾アンダースコア）として現れる（SQLDelight 生成 `Visit` 行型との衝突回避）
-- `AppContainer(scope: CoroutineScope = MainScope())` のデフォルト引数は SKIE に引き出されないため、現状は Swift 側に dispatcher なしの `IosMainScope` を置く hack で逃げている。正規対応として `commonMain` に `CoroutineScope` ファクトリ（例: `coffeeVisionDefaultScope()`）を追加するタスクが Phase 2 に残る
+- `AppContainer` は **scope なしの 3 引数セカンダリコンストラクタ** を通常用途（Swift / アプリ起動）とし、4 引数版（scope 注入可）はテスト用途に限定する。SKIE が Kotlin デフォルト引数を Swift に引き出さないため、プライマリのデフォルト値 `= MainScope()` は持たせず用途をコンストラクタ単位で分けている
 
 ---
 
@@ -92,6 +92,28 @@
 ## エントリ
 
 <!-- 新しい決定は本セクションの末尾に追記する。陳腐化・昇格時は削除可 -->
+
+### 2026-06-05: AppContainer はセカンダリコンストラクタで scope を隠蔽し IosMainScope hack を解消
+
+- 領域: KMP / iOS Bridge
+- 関連: `sharedLogic/src/commonMain/kotlin/com/noricoffee/AppContainer.kt`, `iosApp/iosApp/AppState.swift`, `iosApp/iosApp/FirebaseRepositories/IosMainScope.swift`（削除）
+
+`AppContainer` に **scope 引数なしのセカンダリコンストラクタ** を追加し、Swift から `AppContainer(sqlDriver:remoteVisitDataSource:authRepository:)` で呼べるようにした。同時に、プライマリコンストラクタのデフォルト値 `= MainScope()` を **削除**して用途を明確化:
+
+- セカンダリ（3 引数）: 通常用途 — Swift / アプリ起動。内部で `MainScope()` を生成
+- プライマリ（4 引数）: テスト用途 — `CoroutineScope` を明示注入したい場合のみ
+
+理由: SKIE が Kotlin のデフォルト引数を Swift に引き出さないため、デフォルト値を残しても Swift から省略呼び出しできず、用途が二重化する。コンストラクタ単位で用途を分ける方が API として明瞭。
+
+これにより Swift 側の `IosMainScope`（dispatcher なし hack）と `DummyCoroutineContext` は不要になり削除。`VisitRepositoryImpl.startSync()` の `scope.launch { ... }` が `Dispatchers.Main` 上で動く正規状態に復帰した。Firestore リスナのリアルタイム同期は Security Rules 設定後に動作確認する想定。
+
+影響:
+- Kotlin 側のテストや `androidApp` で `AppContainer` を呼んでいた箇所は **なかった**（grep 確認済）ため、プライマリのデフォルト値削除による互換性破壊の影響範囲はゼロ
+- 汎用知見として `docs/tasks/lessons.md` に「SKIE は Kotlin のデフォルト引数を Swift に引き出さない」を追加済
+
+---
+
+
 
 ### 2026-06-03: CI（GitHub Actions）の iOS ビルドコマンドを暫定で `:sharedLogic` に向ける
 
@@ -180,7 +202,7 @@ Phase 2 の iOS 側実装（SPM で `firebase-ios-sdk 12.14.0` 追加 / `Firebas
 
 **未解決（次タスクに分離）:**
 
-1. **`IosMainScope` の dispatcher 欠如**: `AppContainer(scope: CoroutineScope = MainScope())` のデフォルト引数は SKIE 経由で Swift に引き出されない（`MainScope()` も同様）。暫定で `Kotlinx_coroutines_coreCoroutineScope` プロトコル準拠の `IosMainScope` を Swift で実装し、`coroutineContext` に dispatcher なしの `DummyCoroutineContext` を返している。**結果として `VisitRepositoryImpl.startSync()` の `scope.launch { ... }` がリアルタイムには動かない見込み**。正規対応は `commonMain` に `CoroutineScope` ファクトリを追加すること（`docs/tasks.md` Phase 2 の該当行に分離）
+1. ~~**`IosMainScope` の dispatcher 欠如**~~ → **2026-06-05 解消済**。`AppContainer` に scope なしのセカンダリコンストラクタを追加し、Swift 側は 3 引数版に切り替え、`IosMainScope.swift` を削除した。詳細は下の「2026-06-05: AppContainer はセカンダリコンストラクタで scope を隠蔽し IosMainScope hack を解消」エントリ参照
 
 2. **Firestore Security Rules 未設定**: 本番モードで作成したため、現状は全拒否。書き込みボタンを押しても `Missing or insufficient permissions.` で失敗する。`docs/data-model.md` §3.3 のルールを Firebase Console に設定する必要あり（ユーザー作業）
 

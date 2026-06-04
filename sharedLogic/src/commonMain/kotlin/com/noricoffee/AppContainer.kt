@@ -23,9 +23,20 @@ import kotlinx.coroutines.MainScope
  *   - Android: `sharedLogic/androidMain` の Kotlin 実装を渡す
  * - 内部で [LocalVisitRepository]（SQLDelight）と [RemoteVisitDataSource] を合成して
  *   [VisitRepositoryImpl] を組み立て、UI には [VisitRepository] 1 本だけを見せる
- * - [scope] は呼び出し元から注入可能（テスト時に差し替えやすくするため）。本番では既定の
- *   [MainScope] を使う想定だが、[docs/kmp-bridge.md](../../../../docs/kmp-bridge.md)
- *   §CoroutineScope の橋渡し のとおり「AppContainer 内で隠蔽する」方針
+ *
+ * ## CoroutineScope の取り扱い（重要）
+ *
+ * 通常用途（iOS / Android のアプリ起動時）では **scope 引数なし** のセカンダリコンストラクタを
+ * 使い、内部で [MainScope]（`SupervisorJob() + Dispatchers.Main`）を生成させること。
+ * Swift から見える初期化シグネチャは
+ * `init(sqlDriver:remoteVisitDataSource:authRepository:)` になる。
+ *
+ * scope を引数で受け取るプライマリコンストラクタは **テスト用途専用**（`TestDispatcher` の
+ * 差し替え等）。Kotlin のデフォルト引数は SKIE 経由で Swift には引き出されないため、デフォルト
+ * 値を持たせず、用途を分けるためにセカンダリコンストラクタを別建てにしている。
+ *
+ * [docs/kmp-bridge.md](../../../../docs/kmp-bridge.md) §CoroutineScope の橋渡し のとおり、
+ * 「AppContainer 内で隠蔽する」方針。
  *
  * ## Phase 2 時点の責務
  *
@@ -39,8 +50,25 @@ class AppContainer(
     sqlDriver: SqlDriver,
     private val remoteVisitDataSource: RemoteVisitDataSource,
     val authRepository: AuthRepository,
-    val scope: CoroutineScope = MainScope(),
+    val scope: CoroutineScope,
 ) {
+
+    /**
+     * 通常用途（iOS / Android のアプリ起動時）で使うセカンダリコンストラクタ。
+     *
+     * 内部で [MainScope]（= `SupervisorJob() + Dispatchers.Main`）を生成し、プライマリ
+     * コンストラクタに委譲する。Swift からはこのシグネチャを使うこと。
+     */
+    constructor(
+        sqlDriver: SqlDriver,
+        remoteVisitDataSource: RemoteVisitDataSource,
+        authRepository: AuthRepository,
+    ) : this(
+        sqlDriver = sqlDriver,
+        remoteVisitDataSource = remoteVisitDataSource,
+        authRepository = authRepository,
+        scope = MainScope(),
+    )
 
     private val db: AppDatabase = AppDatabase(sqlDriver)
 

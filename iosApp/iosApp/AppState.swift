@@ -34,8 +34,7 @@ final class AppState {
         self.container = AppContainer(
             sqlDriver: sqlDriver,
             remoteVisitDataSource: remoteDataSource,
-            authRepository: authRepo,
-            scope: IosMainScope()
+            authRepository: authRepo
         )
     }
 

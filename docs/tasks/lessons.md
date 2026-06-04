@@ -50,3 +50,15 @@
 - バリデーション（rating の 1..5、name の長さ等）は **ViewModel 層に置く** 方針（`data-model.md` §7）
 - Mapper は純粋な型変換に徹し、例外を投げる箇所を増やさない
 - Enum の DB 表現は `name` 文字列。未知の値が DB に入っていたら `valueOf` が `IllegalArgumentException` を投げるが、これは「マイグレーション漏れ」を即座に検知できるのでむしろ望ましい
+
+---
+
+## 2026-06-04
+
+### SKIE の SuspendInterop は呼び出し方向限定
+
+- SKIE は「Kotlin の `suspend` / `Flow` を Swift から **呼び出す**」方向のエルゴノミクス改善ツール。Swift 側で `async throws` / `for await` が自然に使える
+- **逆方向（Swift で Kotlin interface を実装する側）には効果が及ばない**: 生成された Obj-C プロトコル準拠の生シグネチャ（`completionHandler:` 形式 / `Kotlinx_coroutines_coreFlow` 戻り値）を実装する必要がある
+- Phase 2 では `AuthRepositoryIosImpl.swift` / `RemoteVisitDataSourceIosImpl.swift` がこのパターンに該当
+- Swift から Kotlin `Flow` を作って返すには `MutableStateFlow(initialValue:)` を SKIE 経由で構築し、イベントごとに `setValue` で更新するのが第一候補
+- 両方向の interop を SKIE が魔法のように解決する、という誤解は禁物。Kotlin 側の interface 定義時から「Swift 実装」と「Swift 呼び出し」の両側を意識すること

@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.androidMultiplatformLibrary)
     alias(libs.plugins.kotlinSerialization)
     alias(libs.plugins.sqldelight)
+    alias(libs.plugins.skie)
 }
 
 kotlin {

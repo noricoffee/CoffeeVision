@@ -29,6 +29,9 @@ ktor = "3.0.3"
 firebaseBom = "33.7.0"
 googleServices = "4.4.2"
 
+# Kotlin → Swift トランスパイラ拡張（suspend / Flow / sealed を Swift idiomatic に変換）
+skie = "0.10.12"
+
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
 kotlin-testJunit = { module = "org.jetbrains.kotlin:kotlin-test-junit", version.ref = "kotlin" }
@@ -83,3 +86,4 @@ kotlinMultiplatform = { id = "org.jetbrains.kotlin.multiplatform", version.ref =
 kotlinSerialization = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 sqldelight = { id = "app.cash.sqldelight", version.ref = "sqldelight" }
 googleServices = { id = "com.google.gms.google-services", version.ref = "googleServices" }
+skie = { id = "co.touchlab.skie", version.ref = "skie" }

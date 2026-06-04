@@ -29,28 +29,56 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 
 ---
 
-## SKIE の利用（推奨）
+## SKIE の利用（採用済み）
 
 [**SKIE**](https://skie.touchlab.co/) は Touchlab が提供する Kotlin/Native → Swift トランスパイラ拡張で、`suspend` を Swift の `async` に、`Flow` を `AsyncSequence` に、`sealed class` を Swift の `enum` に変換してくれます。
 
-> 採用判断は `gradle/libs.versions.toml` を更新するタイミングで最終確定する。SKIE を入れない場合は本ドキュメント末尾の「SKIE を使わない場合」を参照。
+> **採用済み: SKIE 0.10.12（Kotlin 2.3.21 互換）**。2026-06-04 に `sharedLogic` モジュールへ組み込み。デフォルト機能（SuspendInterop / FlowInterop / SealedInterop）のみ有効化、独自設定なし。
 
-### Gradle への追加（採用時）
+### Gradle 設定（実プロジェクト記述）
 
 ```kotlin
-// shared/framework/build.gradle.kts（移行後）/ sharedLogic/build.gradle.kts（現状）
+// gradle/libs.versions.toml
+[versions]
+skie = "0.10.12"
+[plugins]
+skie = { id = "co.touchlab.skie", version.ref = "skie" }
+
+// sharedLogic/build.gradle.kts
 plugins {
-    id("co.touchlab.skie") version "<latest>"
+    alias(libs.plugins.skie)
 }
 ```
 
-### SKIE 適用後の見え方
+### SKIE 適用後の見え方（呼び出し側）
 
-| Kotlin | Swift（SKIE 適用後） |
+| Kotlin | Swift（SKIE 適用後・呼び出し側） |
 |--------|---------------------|
 | `suspend fun save(visit: Visit)` | `func save(visit: Visit) async throws` |
-| `fun observe(): Flow<List<Visit>>` | `func observe() -> AsyncStream<[Visit]>` 相当 |
+| `fun observe(): Flow<List<Visit>>` | `SkieSwiftFlow<List<Visit>>`（`AsyncSequence` 準拠）→ `for await x in flow` |
 | `sealed class Result { object Loading; data class Success(...) }` | `enum Result { case loading; case success(...) }`（Swift の `switch` で網羅性チェックが効く） |
+
+### ⚠ 重要: SKIE は「呼び出し方向限定」
+
+SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` 関数や `Flow` を「呼び出す」側**にしか効きません。
+**Swift 側で Kotlin の interface を「実装する」場合**は、生成された Obj-C プロトコル準拠の素のシグネチャを実装する必要があります:
+
+| Kotlin interface 定義 | Swift 側で「実装する」ときのシグネチャ |
+|----------------------|------------------------------|
+| `suspend fun signInAnonymouslyIfNeeded(): String` | `func signInAnonymouslyIfNeeded(completionHandler: @escaping (String?, Error?) -> Void)` |
+| `suspend fun upload(visit: Visit)` | `func upload(visit: Visit, completionHandler: @escaping (Error?) -> Void)` |
+| `fun observeUserId(): Flow<String?>` | `func observeUserId() -> any Kotlinx_coroutines_coreFlow`（Kotlin Flow を返す。Swift の `AsyncStream` を直接返せない） |
+
+呼び出し側（ViewModel ブリッジ等）の Swift コードは `async throws` / `for await` をそのまま使えますが、`FirebaseRepositories/` 配下のプラットフォーム実装クラスは上記の生シグネチャを実装します。
+
+#### Swift から `Flow` を「作って」返す方法
+
+`observeUserId() -> any Kotlinx_coroutines_coreFlow` のような Flow 戻り値の interface を Swift で実装するには、Kotlin の Flow インスタンスを Swift 側で生成する必要があります。基本パターン:
+
+1. **`MutableStateFlow` を Swift から構築 → 値を流し込む**: SKIE 経由で `MutableStateFlow(initialValue:)` を Swift から呼び、Firestore リスナや AsyncStream のイベントごとに `setValue` で更新する
+2. **Kotlin 側に AsyncStream → Flow の薄いブリッジヘルパを置く**（`iosMain`）: 詰まったらこちらに退避
+
+実装 PoC の結果に応じて、上記のどちらを正規パターンにするかを `implementation_note.md` に記録すること。
 
 ---
 

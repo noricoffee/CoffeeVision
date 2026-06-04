@@ -26,7 +26,7 @@
 | [x] | ドキュメント整備（CLAUDE.md / docs 一式） | 2026-06-02 |
 | [x] | `gradle/libs.versions.toml` に必要ライブラリを追加（SQLDelight / Firebase / Ktor / kotlinx-datetime / kotlinx-serialization） | 2026-06-02 / Firebase は公式（プラットフォーム別）を採用 |
 | [~] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 / `.github/workflows/ci.yml` 追加（Android: `:sharedLogic:testAndroidHostTest` + `:androidApp:assembleDebug` / iOS: `:sharedLogic:linkReleaseFrameworkIos{Arm64,SimulatorArm64}`）。ローカル両ジョブ成功確認済。初回 PR で workflow グリーン確認後 [x]。`:shared:framework:assembleSharedFrameworkXCFramework` への差し替えはフェーズ 3.5 で実施。詳細は [`implementation_note.md`](./implementation_note.md) 参照 |
-| [ ] | SKIE の採用判断（採用するなら `sharedLogic` の Gradle に追加） | [`kmp-bridge.md`](./kmp-bridge.md) 参照 |
+| [x] | SKIE の採用判断（採用するなら `sharedLogic` の Gradle に追加） | 2026-06-04 / 採用 / SKIE 0.10.12（Kotlin 2.3.21 互換）を `sharedLogic` に組み込み。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-04 エントリ参照 |
 | [ ] | `local.properties` での API キー管理を整える（Places / Firebase） | リポジトリにコミットしない / Phase 4（Places）着手時に整備 |
 | [x] | `.gitignore` に `GoogleService-Info.plist` / `google-services.json` を追加するか、Decrypt 運用にするかを決定 | 2026-06-04 / `.gitignore` に追加してコミットしない方針で決定。CI 復元手段はリリース準備時に検討 |
 
@@ -198,4 +198,4 @@
   - ~~Firebase を **公式プラットフォーム別 SDK** に変更したため、`docs/architecture.md` の "Firebase Firestore KMP SDK" 表記と `docs/kmp-bridge.md` の GitLive 前提箇所を見直すこと~~ → 2026-06-02 反映済み（Repository インターフェース + プラットフォーム別実装の方針を `kmp-bridge.md` に追記）
   - iOS 側の Firebase 初期化は Xcode（SPM / CocoaPods）で別途設定が必要（Phase 2）
   - `androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用するのは Phase 2（`google-services.json` 配置時）に行う
-  - SKIE の採用判断は未着手
+  - ~~SKIE の採用判断は未着手~~ → 2026-06-04 採用済み（0.10.12）

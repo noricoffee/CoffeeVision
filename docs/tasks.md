@@ -55,12 +55,15 @@
 | [x] | Firebase プロジェクト作成・`GoogleService-Info.plist` / `google-services.json` 配置 | 2026-06-04 / iOS は `iosApp/iosApp/GoogleService-Info.plist`、Android は `androidApp/google-services.json`。匿名 Auth 有効化と Firestore（asia-northeast1, 本番モード）作成も完了。両ファイルは `.gitignore` 済 |
 | [x] | KMP 共通層に `AuthRepository` インターフェースを追加 | 2026-06-04 / `sharedLogic/commonMain` に追加。`signInAnonymouslyIfNeeded()` + `observeUserId()`、`@Throws(Exception::class)` 付与 |
 | [x] | `VisitRepository` の local + remote 合成方針を確定 | 2026-06-04 / `RemoteVisitDataSource` interface + `VisitRepositoryImpl`（`commonMain`）で合成する案を採用。判断記録は [`implementation_note.md`](./implementation_note.md) 2026-06-04 エントリ |
-| [ ] | iOS アプリで Firebase SDK を SPM で追加 | `firebase-ios-sdk`: FirebaseAuth / FirebaseFirestore / FirebaseStorage |
-| [ ] | iOS アプリで Firebase 初期化 | `iOSApp.swift` で `FirebaseApp.configure()` |
-| [ ] | 匿名サインインの実装（起動時自動） | iOS は Swift で `Auth.auth().signInAnonymously()`、`AuthRepository` プロトコルに準拠 |
-| [ ] | Firestore のオフライン永続化を有効化 | iOS SDK はデフォルト on。明示的に `PersistentCacheSettings` を設定して確認ログを残す |
-| [ ] | `VisitRepository` の Firestore 書き込みを実装（ローカル → クラウドの順） | [`architecture.md`](./architecture.md) §「データフロー」/ iOS 実装は `iosApp/FirebaseRepositories/` |
-| [ ] | Firestore Security Rules を作成・デプロイ | `request.auth.uid == resource.data.userId` を強制 |
+| [x] | iOS アプリで Firebase SDK を SPM で追加 | 2026-06-04 / `firebase-ios-sdk` 12.14.0 を `iosApp.xcodeproj` に追加（FirebaseAuth / FirebaseFirestore / FirebaseStorage の 3 products） |
+| [x] | iOS アプリで Firebase 初期化 | 2026-06-04 / `iOSApp.swift` で `FirebaseApp.configure()` + `PersistentCacheSettings` を明示有効化 |
+| [x] | 匿名サインインの実装（起動時自動） | 2026-06-04 / `AuthRepositoryIosImpl`（completion handler 形式で `AuthRepository` interface に準拠）。iPhone 17 / iOS 26.1 シミュレータで uid 取得まで確認済 |
+| [x] | Firestore のオフライン永続化を有効化 | 2026-06-04 / 起動時に `[CoffeeVision] Firestore persistent cache enabled` ログ確認済 |
+| [~] | `VisitRepository` の Firestore 書き込みを実装（ローカル → クラウドの順） | 2026-06-04 / `RemoteVisitDataSourceIosImpl` で Visit 本体 + Cafe 埋め込み分のみ実装。子コレクションは別行に分離。`IosMainScope` の dispatcher 欠如により `startSync()` のリモート購読がリアルタイムには動かない見込み（[`implementation_note.md`](./implementation_note.md) 2026-06-04 IosMainScope エントリ参照） |
+| [ ] | `IosMainScope` の dispatcher hack を解消（`commonMain` に `CoroutineScope` ファクトリ追加） | `AppContainer(scope: CoroutineScope)` のデフォルト `MainScope()` を Swift から呼べない問題への正規対応。`kmp-engineer` に dispatch 予定 |
+| [ ] | iOS 側で Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期実装 | 親ドキュメント書き込み後、サブコレクションの upload / observe を追加。`RemoteVisitDataSourceIosImpl` の TODO 解消 |
+| [ ] | Firestore Security Rules を作成・デプロイ | `request.auth.uid == resource.data.userId` を強制。[`data-model.md`](./data-model.md) §3.3 のルールを Firebase Console に設定 |
+| [ ] | シミュレータ動作確認: 匿名サインイン後の Firestore 書き込み実体確認 | Security Rules 設定後、Phase2VerificationView の書き込みボタンで Firebase Console にデータが届くことを目視 |
 
 ---
 
@@ -85,7 +88,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `AppContainer`（Kotlin）を実装し、iOS の `iOSApp.swift` から起動 | |
+| [x] | `AppContainer`（Kotlin）を実装し、iOS の `iOSApp.swift` から起動 | 2026-06-04 / Phase 2 で先行実施（Swift で `AppContainer` を組み立て + `startInitialSync()` 呼び出しまで）。ViewModel ファクトリの追加は Phase 3 の各 ViewModel タスクと一緒に実施 |
 | [ ] | `VisitListViewModel`（Kotlin）と `VisitListViewModelBridge`（Swift）を実装 | |
 | [ ] | ホーム画面（VisitListView）を実装 | |
 | [ ] | Visit 詳細画面（VisitDetailView）を実装 | |

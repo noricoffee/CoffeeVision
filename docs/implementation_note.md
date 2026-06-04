@@ -64,6 +64,8 @@
 - `AppContainer.startInitialSync()` は匿名サインイン → uid 確定 → リモート → ローカル同期購読 を起動コードから 1 行で呼べる。サインアウト時の sync 停止再開は要件発生時に拡張する
 - `applicationId` / iOS バンドル ID は `com.noricoffee.coffeevision` で統一する（`sharedLogic` のライブラリ namespace は `com.noricoffee.sharedLogic` のままで OK）
 - SKIE 0.10.12 を `sharedLogic` に導入済。**SKIE は呼び出し方向限定**で、Swift で Kotlin interface を実装する側は Obj-C 互換シグネチャ（completion handler / Kotlin Flow 戻り値）を実装する必要がある。Swift で `Flow` を作るには `MutableStateFlow` を直接構築するパターンを第一候補とし、詰まったら `iosMain` にラッパを追加する
+- iOS 側 Firebase 実装（`iosApp/iosApp/FirebaseRepositories/`）は Phase 2 で実装済。`SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由（`init(internal:)` が internal アクセスのため直接構築不可）。Visit ドメインモデルは Swift 側で `Visit_`（末尾アンダースコア）として現れる（SQLDelight 生成 `Visit` 行型との衝突回避）
+- `AppContainer(scope: CoroutineScope = MainScope())` のデフォルト引数は SKIE に引き出されないため、現状は Swift 側に dispatcher なしの `IosMainScope` を置く hack で逃げている。正規対応として `commonMain` に `CoroutineScope` ファクトリ（例: `coffeeVisionDefaultScope()`）を追加するタスクが Phase 2 に残る
 
 ---
 
@@ -160,6 +162,36 @@ Swift から Kotlin `Flow` を返すには、SKIE 経由で `MutableStateFlow(in
 - Phase 2 iOS 実装の dispatch では Swift 側実装シグネチャを明示する必要がある
 
 トレードオフ: SKIE は呼び出し側のエルゴノミクスを劇的に改善するが、両方向の interop が魔法のように解決されるわけではない。ios-engineer はこの制約を最初から理解した上で `FirebaseRepositories/` の Swift 実装に取り掛かる必要がある。
+
+---
+
+### 2026-06-04: Phase 2 iOS Firebase 実装の現状（動作確認範囲と未解決の hack）
+
+- 領域: iOS / Firebase / KMP Bridge
+- 関連: `iosApp/iosApp/{AppState,Phase2VerificationView,iOSApp}.swift`, `iosApp/iosApp/FirebaseRepositories/*.swift`
+
+Phase 2 の iOS 側実装（SPM で `firebase-ios-sdk 12.14.0` 追加 / `FirebaseApp.configure()` / `AuthRepositoryIosImpl` / `RemoteVisitDataSourceIosImpl` / `AppContainer` 構築 + `startInitialSync()`）を `ios-engineer` 経由で実装。iPhone 17 / iOS 26.1 シミュレータでアプリ起動 → 匿名サインインで uid 取得まで動作確認済。
+
+**動作確認できた範囲:**
+- `xcodebuild` BUILD SUCCEEDED
+- シミュレータ起動 → アプリ表示
+- 匿名サインイン → uid 取得 → 画面表示
+- Firestore オフライン永続化の起動ログ確認
+
+**未解決（次タスクに分離）:**
+
+1. **`IosMainScope` の dispatcher 欠如**: `AppContainer(scope: CoroutineScope = MainScope())` のデフォルト引数は SKIE 経由で Swift に引き出されない（`MainScope()` も同様）。暫定で `Kotlinx_coroutines_coreCoroutineScope` プロトコル準拠の `IosMainScope` を Swift で実装し、`coroutineContext` に dispatcher なしの `DummyCoroutineContext` を返している。**結果として `VisitRepositoryImpl.startSync()` の `scope.launch { ... }` がリアルタイムには動かない見込み**。正規対応は `commonMain` に `CoroutineScope` ファクトリを追加すること（`docs/tasks.md` Phase 2 の該当行に分離）
+
+2. **Firestore Security Rules 未設定**: 本番モードで作成したため、現状は全拒否。書き込みボタンを押しても `Missing or insufficient permissions.` で失敗する。`docs/data-model.md` §3.3 のルールを Firebase Console に設定する必要あり（ユーザー作業）
+
+3. **Visit 子コレクション同期未実装**: `RemoteVisitDataSourceIosImpl.upload()` 内に TODO コメントで明示。`coffeeItems` / `foodItems` / `photos` サブコレクションの同期は別タスクに分離
+
+**SKIE 関連の重要発見（kmp-bridge.md / lessons.md に反映済）:**
+- `SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由
+- Kotlin の `Visit` データクラスは Swift では `Visit_`（末尾 `_`）。SQLDelight 生成行型 `Visit` との衝突回避
+- SKIE protocol witness は `__` プレフィックス付き completion handler 形式 / `SkieSwiftFlow<T>` / `SkieSwiftOptionalFlow<T>` 戻り値が正規シグネチャ
+
+経緯: `ios-engineer` への dispatch で SKIE 制約への対応を含めた実装が完了。動作確認は匿名サインインまでで止め、`IosMainScope` hack 解消と Security Rules 設定を別タスクとして分離してコミットする方針（小分けコミット）。
 
 ---
 

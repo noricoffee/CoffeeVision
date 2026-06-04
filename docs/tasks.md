@@ -27,8 +27,8 @@
 | [x] | `gradle/libs.versions.toml` に必要ライブラリを追加（SQLDelight / Firebase / Ktor / kotlinx-datetime / kotlinx-serialization） | 2026-06-02 / Firebase は公式（プラットフォーム別）を採用 |
 | [~] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 / `.github/workflows/ci.yml` 追加（Android: `:sharedLogic:testAndroidHostTest` + `:androidApp:assembleDebug` / iOS: `:sharedLogic:linkReleaseFrameworkIos{Arm64,SimulatorArm64}`）。ローカル両ジョブ成功確認済。初回 PR で workflow グリーン確認後 [x]。`:shared:framework:assembleSharedFrameworkXCFramework` への差し替えはフェーズ 3.5 で実施。詳細は [`implementation_note.md`](./implementation_note.md) 参照 |
 | [ ] | SKIE の採用判断（採用するなら `sharedLogic` の Gradle に追加） | [`kmp-bridge.md`](./kmp-bridge.md) 参照 |
-| [ ] | `local.properties` での API キー管理を整える（Places / Firebase） | リポジトリにコミットしない |
-| [ ] | `.gitignore` に `GoogleService-Info.plist` / `google-services.json` を追加するか、Decrypt 運用にするかを決定 | |
+| [ ] | `local.properties` での API キー管理を整える（Places / Firebase） | リポジトリにコミットしない / Phase 4（Places）着手時に整備 |
+| [x] | `.gitignore` に `GoogleService-Info.plist` / `google-services.json` を追加するか、Decrypt 運用にするかを決定 | 2026-06-04 / `.gitignore` に追加してコミットしない方針で決定。CI 復元手段はリリース準備時に検討 |
 
 ---
 
@@ -48,14 +48,19 @@
 
 ## フェーズ 2: 認証と Firestore 接続
 
+> 2026-06-04 着手。iOS 先行 → Android 検証の順で進める。Firebase SDK は **公式（iOS は SPM、Android は Firebase BoM）**。
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | Firebase プロジェクト作成・`GoogleService-Info.plist` / `google-services.json` 配置 | |
-| [ ] | iOS アプリで Firebase 初期化 | `iOSApp.swift` |
-| [ ] | 匿名サインインの実装（起動時自動） | `AuthRepository` |
-| [ ] | Firestore のオフライン永続化を有効化 | デフォルト on の確認 |
-| [ ] | `VisitRepository` の Firestore 書き込みを実装（ローカル → クラウドの順） | [`architecture.md`](./architecture.md) §「データフロー」 |
-| [ ] | Firestore Security Rules を作成・デプロイ | |
+| [x] | Firebase プロジェクト作成・`GoogleService-Info.plist` / `google-services.json` 配置 | 2026-06-04 / iOS は `iosApp/iosApp/GoogleService-Info.plist`、Android は `androidApp/google-services.json`。匿名 Auth 有効化と Firestore（asia-northeast1, 本番モード）作成も完了。両ファイルは `.gitignore` 済 |
+| [x] | KMP 共通層に `AuthRepository` インターフェースを追加 | 2026-06-04 / `sharedLogic/commonMain` に追加。`signInAnonymouslyIfNeeded()` + `observeUserId()`、`@Throws(Exception::class)` 付与 |
+| [x] | `VisitRepository` の local + remote 合成方針を確定 | 2026-06-04 / `RemoteVisitDataSource` interface + `VisitRepositoryImpl`（`commonMain`）で合成する案を採用。判断記録は [`implementation_note.md`](./implementation_note.md) 2026-06-04 エントリ |
+| [ ] | iOS アプリで Firebase SDK を SPM で追加 | `firebase-ios-sdk`: FirebaseAuth / FirebaseFirestore / FirebaseStorage |
+| [ ] | iOS アプリで Firebase 初期化 | `iOSApp.swift` で `FirebaseApp.configure()` |
+| [ ] | 匿名サインインの実装（起動時自動） | iOS は Swift で `Auth.auth().signInAnonymously()`、`AuthRepository` プロトコルに準拠 |
+| [ ] | Firestore のオフライン永続化を有効化 | iOS SDK はデフォルト on。明示的に `PersistentCacheSettings` を設定して確認ログを残す |
+| [ ] | `VisitRepository` の Firestore 書き込みを実装（ローカル → クラウドの順） | [`architecture.md`](./architecture.md) §「データフロー」/ iOS 実装は `iosApp/FirebaseRepositories/` |
+| [ ] | Firestore Security Rules を作成・デプロイ | `request.auth.uid == resource.data.userId` を強制 |
 
 ---
 

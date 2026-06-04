@@ -373,6 +373,30 @@ SwiftUI View は ViewModel を `@State` または `@Bindable` で保持し、状
 
 ---
 
+## データフロー（読み取り）
+
+UI は `VisitRepository.observeAll(userId)` 等の **ローカル DB に対する Flow** を購読します。
+リモート（Firestore）からの変更は `VisitRepositoryImpl` が `RemoteVisitDataSource.observeChanges` を購読し、受信した Visit をローカル DB に upsert することで反映します。
+
+```
+RemoteVisitDataSource.observeChanges()  ──┐
+                                          ▼
+                              VisitRepositoryImpl.startSync()
+                                          │
+                                          ▼
+                              LocalVisitRepository.save()
+                                          │
+                                          ▼
+                                   SQLDelight emit
+                                          │
+                                          ▼
+                              VisitRepository.observeAll()  ◀── UI が購読
+```
+
+これにより「Firestore キャッシュとローカル DB の二重キャッシュ」を避け、**ローカル DB を唯一の Source of Truth** として扱います。
+
+---
+
 ## データフロー（書き込み）
 
 ```
@@ -416,20 +440,28 @@ SwiftUI View が再描画
 - iOS は `iOSApp` 起動時に `AppContainer` を生成し、SwiftUI の `Environment` 経由で各画面に供給する
 
 ```kotlin
-// sharedLogic/commonMain
+// sharedLogic/commonMain（Phase 2 時点の実装スケッチ）
 class AppContainer(
     sqlDriver: SqlDriver,
-    placesApiKey: String,
-    // Firebase 実装はプラットフォーム別 SDK を使うため、ここでは Repository を外部から受け取る
-    val visitRepository: VisitRepository,
+    // Firebase 実装はプラットフォーム別 SDK を使うため、外部から受け取る
+    private val remoteVisitDataSource: RemoteVisitDataSource,
     val authRepository: AuthRepository,
+    val scope: CoroutineScope = MainScope(),
 ) {
     private val db = AppDatabase(sqlDriver)
 
-    val cafeRepository: CafeRepository = CafeRepositoryImpl(/* PlacesClient(placesApiKey) */)
+    private val localVisitRepository = LocalVisitRepository(db)
 
-    fun makeVisitListViewModel(scope: CoroutineScope) =
-        VisitListViewModel(visitRepository, scope)
+    // VisitRepositoryImpl が local + remote を合成して、UI には 1 本だけを見せる
+    val visitRepository: VisitRepository =
+        VisitRepositoryImpl(local = localVisitRepository, remote = remoteVisitDataSource)
+
+    // 起動時の匿名サインイン → uid 確定 → リモート → ローカル同期購読 を 1 メソッドで起こす
+    @Throws(Exception::class)
+    suspend fun startInitialSync(): String { /* ... */ }
+
+    // ViewModel ファクトリ（makeVisitListViewModel 等）は Phase 3 で追加
+    // CafeRepository（Places）は Phase 4 で追加
 }
 ```
 

@@ -60,6 +60,9 @@
 ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。
 
 - CI（GitHub Actions）の iOS 側ビルドコマンドは、`:shared:framework` モジュール未作成のため `:sharedLogic` の iOS framework link タスクで代替している。フェーズ 3.5 で `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える
+- `VisitRepository` は `commonMain` で 2 段構成（`RemoteVisitDataSource` interface + `VisitRepositoryImpl` 合成クラス）。プラットフォーム別実装は `RemoteVisitDataSource` だけを書く
+- `AppContainer.startInitialSync()` は匿名サインイン → uid 確定 → リモート → ローカル同期購読 を起動コードから 1 行で呼べる。サインアウト時の sync 停止再開は要件発生時に拡張する
+- `applicationId` / iOS バンドル ID は `com.noricoffee.coffeevision` で統一する（`sharedLogic` のライブラリ namespace は `com.noricoffee.sharedLogic` のままで OK）
 
 ---
 
@@ -104,3 +107,49 @@
 差し替えタイミング: フェーズ 3.5「分割後ビルド確認」のチェック項目に `ci.yml` の link コマンドを `:shared:framework:assembleSharedFrameworkXCFramework` に置き換える旨を備考で明記した。
 
 トレードオフ: tasks.md の文言と完全一致しなくなるが、"モジュール分割前に CI を整える" という方針を優先し、現状でグリーンになるコマンドで CI を成立させた。
+
+---
+
+### 2026-06-04: VisitRepository を commonMain で合成し、Firestore は薄いアダプタに限定する
+
+- 領域: KMP / Shared
+- 関連: `sharedLogic/src/commonMain/kotlin/com/noricoffee/repository/{VisitRepositoryImpl,RemoteVisitDataSource}.kt`
+
+Phase 2 の I/F 整備として `VisitRepository` の local + remote 合成方針を確定した。
+
+- 採用: `RemoteVisitDataSource` interface を `commonMain` に切り出し、`VisitRepositoryImpl`（`commonMain`）が `LocalVisitRepository` と合成する案
+- 不採用: プラットフォーム別に `VisitRepository` を実装する案（合成ロジックが iOS / Android で重複し、ローカル → リモート順序が共通層で保証できない）
+- 既定書き込みポリシー: `WritePolicy.PropagateRemoteFailure`（リモート失敗を呼び出し元に伝播）。Firestore オフライン永続化に委ねる場合は `WritePolicy.IgnoreRemoteFailure` を選択可能
+- 読み取り経路: UI は常にローカル DB を見る。Firestore からの変更は `startSync(userId, scope)` でローカル DB に反映してから UI に流れる（二重キャッシュを避ける）
+
+影響: iOS / Android の Firebase 実装者が書くのは `RemoteVisitDataSource` の実装だけになる。Phase 2.5 で `VisitRepositoryImpl` は `shared/domain` に移送する想定。
+
+未確定: `VisitRepository.delete(id)` が userId を取らない問題（Firestore 実装側で uid を逆引きする運用に暫定で寄せている）。必要なら次フェーズでシグネチャを `delete(userId, id)` に変更する。
+
+---
+
+### 2026-06-04: AppContainer は手書き DI、startInitialSync で sign-in + sync を一気に起こす
+
+- 領域: KMP / Build
+- 関連: `sharedLogic/src/commonMain/kotlin/com/noricoffee/AppContainer.kt`
+
+`AppContainer(sqlDriver, remoteVisitDataSource, authRepository, scope = MainScope())` を Phase 2 用のスケッチとして `commonMain` に追加。`startInitialSync()` で匿名サインインと `VisitRepositoryImpl.startSync` を一括で起こす。
+
+ViewModel ファクトリは Phase 3 で ViewModel を作るタイミングで追加（YAGNI で Phase 2 では未実装）。サインアウト / uid 切り替え時の sync 停止・再開は要件に出てきたら拡張する。
+
+---
+
+### 2026-06-04: Android applicationId を iOS バンドル ID と揃え `com.noricoffee.coffeevision` に統一
+
+- 領域: Android / Build
+- 関連: `androidApp/build.gradle.kts`, `androidApp/src/main/kotlin/com/noricoffee/coffeevision/MainActivity.kt`
+
+iOS バンドル ID は `com.noricoffee.coffeevision` だが、Android の `applicationId` / `namespace` は `com.noricoffee` のままになっていた。Firebase Console へのアプリ登録時に齟齬の原因になるため、Android 側を `com.noricoffee.coffeevision` に揃えた。
+
+- `androidApp/build.gradle.kts` の `namespace` / `applicationId` を更新
+- `MainActivity.kt` を `com.noricoffee.coffeevision` パッケージへ git mv（履歴保持）
+- `App()` Composable は `sharedUI` の `com.noricoffee.App` にあるため、明示的に import 追加
+
+`sharedLogic` のライブラリ namespace（`com.noricoffee.sharedLogic`）と `commonMain` の Kotlin パッケージ（`com.noricoffee.*`）は **applicationId とは別概念** のため、そのまま維持する。共通ライブラリのパッケージは複数アプリから再利用できる名前空間として残しておくのが自然。
+
+トレードオフ: 既存ファイルが少ないうちに統一できたため、影響範囲は MainActivity 1 ファイルのみ。Firebase Console の Android アプリ登録時は新 package で登録すること。

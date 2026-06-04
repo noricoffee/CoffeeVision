@@ -276,6 +276,32 @@ iosApp/iosApp/FirebaseRepositories/
 
 > Phase 1 時点では `commonMain` / `androidMain` の参照先がいずれも `sharedLogic` 配下です。Phase 2.5 で `shared/domain` と `shared/data-firebase` に分離します（[`tasks.md`](./tasks.md) Phase 2.5 参照）。
 
+### Repository 合成パターン
+
+`VisitRepository` は `commonMain` で **2 段構成** にします：
+
+1. `RemoteVisitDataSource`（interface, `commonMain`） — Firestore リスナを `Flow` で公開し、`upload(visit)` / `remove(userId, id)` を持つ薄いアダプタ
+2. `VisitRepositoryImpl`（class, `commonMain`） — `LocalVisitRepository`（SQLDelight）と `RemoteVisitDataSource` を合成し、UI には `VisitRepository` 1 本だけを見せる
+
+各プラットフォームが書くのは `RemoteVisitDataSource` の実装のみ。合成ロジック（ローカル → リモートの書き込み順序、`startSync(userId, scope)` でリモート変更をローカル DB へ反映）は共通層で 1 度だけ書きます。
+
+```
+iOS Swift / Android Kotlin
+    │  RemoteVisitDataSource を実装（Firestore SDK 直叩き）
+    ▼
+RemoteVisitDataSource (commonMain interface)
+    │
+    ├─ VisitRepositoryImpl.save()  : ローカル → リモートの順で書く
+    └─ VisitRepositoryImpl.startSync(): リモート変更を購読してローカル DB に upsert
+            │
+            ▼
+    VisitRepository (UI から見える唯一の API)
+```
+
+書き込み時のリモート失敗扱いは `WritePolicy.PropagateRemoteFailure`（既定）と `WritePolicy.IgnoreRemoteFailure` で切り替え可能。後者は Firestore のオフライン永続化による再送に委ねる選択肢です。
+
+詳細仕様と判断経緯は [`implementation_note.md`](./implementation_note.md) を参照してください。
+
 iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kotlin → Swift で interface はプロトコル相当として見えるため）。
 `AppContainer` 構築時に、Swift 側で作った Repository 実装を Kotlin の `AppContainer` コンストラクタに渡します。
 

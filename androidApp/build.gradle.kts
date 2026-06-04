@@ -21,11 +21,11 @@ dependencies {
 }
 
 android {
-    namespace = "com.noricoffee"
+    namespace = "com.noricoffee.coffeevision"
     compileSdk = libs.versions.android.compileSdk.get().toInt()
 
     defaultConfig {
-        applicationId = "com.noricoffee"
+        applicationId = "com.noricoffee.coffeevision"
         minSdk = libs.versions.android.minSdk.get().toInt()
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1

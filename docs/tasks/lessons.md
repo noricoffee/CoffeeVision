@@ -63,6 +63,13 @@
 - Swift から Kotlin `Flow` を作って返すには `MutableStateFlow(initialValue:)` を SKIE 経由で構築し、イベントごとに `setValue` で更新するのが第一候補
 - 両方向の interop を SKIE が魔法のように解決する、という誤解は禁物。Kotlin 側の interface 定義時から「Swift 実装」と「Swift 呼び出し」の両側を意識すること
 
+### Firestore で nullable フィールドは `null` ではなくキー省略で書く
+
+- `null` を入れると Firestore のクエリで `where("origin", "==", null)` のような扱いが必要になり、無駄に複雑化する
+- 書き込み側で nullable が nil のときは辞書からキー自体を省略する（`if let value = optional { data["key"] = value }`）
+- 読み込み側は `data["key"] as? String` が nil を返してそのまま nil として扱えば良いので、decode コードもシンプルになる
+- enum / Timestamp / Double などすべての型で同じ方針を採る
+
 ### SKIE は Kotlin のデフォルト引数を Swift に引き出さない
 
 - Kotlin の `fun foo(x: Int, scope: CoroutineScope = MainScope())` や `class Bar(scope: CoroutineScope = MainScope())` のデフォルト値は SKIE 経由で Swift に届かない

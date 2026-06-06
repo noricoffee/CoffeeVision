@@ -76,3 +76,31 @@
 - Swift 側からは「全引数を明示する版」しか見えないため、デフォルト値の意味するインスタンス（例: `MainScope()`）を Swift で作る必要が出る → 結果として **ダミー値を作る hack に走られる**（Phase 2 で `IosMainScope`（dispatcher なし）を Swift で実装してしまったのが実例）
 - 回避策: デフォルト引数を持たせず、**セカンダリコンストラクタ / オーバーロードで「scope 引数なし版」を別途定義**して内部で `MainScope()` を生成する。プライマリ側もデフォルト値を消し、用途（テスト / 本番）でコンストラクタを分ける
 - SKIE 採用プロジェクトでは「Swift から呼ぶ API は **全部明示引数で書く**」を原則にしておくと、デフォルト引数の hack 化リスクを早期に潰せる
+
+---
+
+## 2026-06-06
+
+### Firebase CLI の重複インストールに注意（npm 経由を入れても古い Standalone が PATH 上で先に解決される）
+
+- macOS で `firebase` バイナリが 2 ヶ所に入りうる:
+  - `/opt/homebrew/bin/firebase` → npm 経由（`npm install -g firebase-tools`）の最新版へのシンボリックリンク
+  - `/usr/local/bin/firebase` → 過去に Firebase 公式インストーラ（curl 一発スクリプト）で入れた Standalone Binary。root 所有、サイズ 150MB 級
+- PATH 上で `/usr/local/bin` が `/opt/homebrew/bin` より先になっていると、`firebase --version` は古い Standalone を返し続ける。`npm install -g firebase-tools@latest` を何回叩いても変わらない
+- 切り分け: `which firebase` / `which -a firebase` でフルパスを並べる → 各パスをフルパス指定で `--version` 叩いてバージョンを照合
+- 対処: `sudo rm /usr/local/bin/firebase` で古い Standalone を削除。Standalone は npm 経由とは別経路なので、消しても npm 側の運用には影響しない
+- 教訓: CLI のバージョンを上げたつもりが下のバイナリが残っていて症状が変わらないパターンは Firebase に限らずよくある。`which -a <cmd>` を最初に確認するクセを付ける
+
+### Firebase Storage の新規プロジェクト有効化は Blaze プラン（従量課金）必須
+
+- 2024 年 10 月頃から Firebase の方針変更で、**新規プロジェクト**で Storage を「使用開始」するには Blaze プランへのアップグレード（= クレカ登録）が必要になった。既に有効化済みの古いプロジェクトは Spark のままで使い続けられる
+- 公式 SDK で Storage を触らずに `firebase deploy --only storage` だけ叩いても、`HTTP 404 / Resource 'projects/<id>/locations/global/applications/<id>' was not found` で落ちる。エラー文言に「Storage が未有効化」とは書かれないので原因究明に時間がかかる
+- 無料枠（5GB 容量 / 1GB/日 ダウンロード / 20,000/日 アップロード操作）は Blaze でも維持されるので、個人開発・検証用途なら実質無料
+- 写真機能を実装する直前まで Storage の有効化を遅らせる戦略が有効。`storage.rules` 自体は先回りで書いてリポジトリに残し、`firebase.json` の `storage` キーだけ後から戻す形にすると、Phase 切り替え時の作業量を最小化できる
+
+### Firebase Security Rules はリポジトリ管理が現実的（Console 編集との併用は避ける）
+
+- `firebase.json` / `.firebaserc` / `*.rules` をリポジトリに置き、`firebase deploy --only <target>` で反映する運用は Firestore / Storage / RTDB / Functions すべて共通
+- 差分レビュー / 履歴 / 再現性のメリットが大きく、Console 直接編集と比較してデメリットはほぼない
+- ただし **Console 編集との併用は厳禁**。Console で編集したルールは次の `firebase deploy` で上書き消失する。チーム内で「ルールはリポジトリ管理する」と決めたら Console 側のルールエディタは触らない運用を徹底
+- `.firebase/` キャッシュディレクトリは `.gitignore` で除外する（デプロイ毎に再生成されるため）

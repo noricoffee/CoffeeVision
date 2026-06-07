@@ -73,9 +73,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `build-logic/convention/` プロジェクトを追加し、`kmp.library` / `kmp.feature` / `android.library` Convention Plugin を作成 | `libs.versions.toml` を convention 側から参照できるように |
-| [ ] | `core` モジュール切り出し（Result / Logger / Dispatchers / DI 基盤 / テストヘルパ） | sharedLogic からの移動 |
-| [ ] | `domain` モジュール切り出し（ドメインモデル + Repository インターフェース + UseCase） | sharedLogic からの移動 |
+| [x] | `build-logic/convention/` プロジェクトを追加し、`kmp.library` / `kmp.feature` / `android.library` Convention Plugin を作成 | 2026-06-08 / Phase 2.5 PR1 で追加。precompiled script plugin 方式（`gradlePlugin { plugins.register(...) }` は不使用、`kotlin-dsl` の自動 plugin id 生成に委譲）。`build-logic/settings.gradle.kts` で `versionCatalogs.from(files("../gradle/libs.versions.toml"))` を宣言 |
+| [~] | `core` モジュール切り出し（Result / Logger / Dispatchers / DI 基盤 / テストヘルパ） | 2026-06-08 / Phase 2.5 PR1 で枠と `build.gradle.kts` のみ作成、`CoreMarker` を置いた空殻。AppContainer / VisitRepositoryImpl / Dispatcher ラッパの移送は PR2（data-local と同時、循環依存回避のため） |
+| [x] | `domain` モジュール切り出し（ドメインモデル + Repository インターフェース + UseCase） | 2026-06-08 / Phase 2.5 PR1 で完了。Visit / Cafe / CoffeeItem / FoodItem / Photo / 3 enum + AuthRepository / VisitRepository / RemoteVisitDataSource を `git mv` で移送。`sharedLogic` 側は `api(projects.shared.domain)` で再公開 |
 | [ ] | `data-local` モジュール切り出し（SQLDelight スキーマ + DriverFactory） | sharedLogic からの移動 |
 | [ ] | `data-firebase` モジュール切り出し（Firestore / Auth / Storage Android 実装） | androidMain のみソースを持つ |
 | [ ] | `AppContainer` の依存配線を新モジュール構成に合わせて整理 | iOS / Android 両方 |

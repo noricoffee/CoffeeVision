@@ -77,6 +77,12 @@ firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx" }
 firebase-auth = { module = "com.google.firebase:firebase-auth-ktx" }
 firebase-storage = { module = "com.google.firebase:firebase-storage-ktx" }
 
+# Gradle plugin classpath（build-logic/convention から参照する）
+android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }
+kotlin-gradle-plugin = { module = "org.jetbrains.kotlin:kotlin-gradle-plugin", version.ref = "kotlin" }
+sqldelight-gradle-plugin = { module = "app.cash.sqldelight:gradle-plugin", version.ref = "sqldelight" }
+skie-gradle-plugin = { module = "co.touchlab.skie:gradle-plugin", version.ref = "skie" }
+
 [plugins]
 androidApplication = { id = "com.android.application", version.ref = "agp" }
 androidMultiplatformLibrary = { id = "com.android.kotlin.multiplatform.library", version.ref = "agp" }

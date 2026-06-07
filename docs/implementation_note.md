@@ -68,6 +68,9 @@
 - `AppContainer` は **scope なしの 3 引数セカンダリコンストラクタ** を通常用途（Swift / アプリ起動）とし、4 引数版（scope 注入可）はテスト用途に限定する。SKIE が Kotlin デフォルト引数を Swift に引き出さないため、プライマリのデフォルト値 `= MainScope()` は持たせず用途をコンストラクタ単位で分けている
 - Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期は **WriteBatch + 差分削除**（既存子 ID を取得 → 新配列に含まれないものを batch.delete）で原子化。observe は **案 A**（親 visit リスナ 1 本 + 子は snapshot 受信ごとに `getDocuments` 並列）。`sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番 / decode 時はソートに使ってから破棄。nullable は `null` を入れずキーごと省略。`Photo.localPath` は端末固有値のため Firestore には保存しない
 - Firebase Security Rules はリポジトリ管理（`firestore.rules` / `storage.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。Firestore は path uid のみ検証で 2026-06-06 にデプロイ済。Storage Rules はファイルのみ存在し未デプロイ（新規プロジェクトの Storage 有効化が Blaze プラン必須のため、Phase 3 で写真機能と同時に有効化）
+- `build-logic/convention/` の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`）は **precompiled script plugin 方式**（`src/main/kotlin/*.gradle.kts`）。`gradlePlugin { plugins.register(...) }` は置かず、`kotlin-dsl` の自動 plugin id 生成に任せる。`build-logic/settings.gradle.kts` で `versionCatalogs.from(files("../gradle/libs.versions.toml"))` を宣言して同一カタログを共有
+- `kmp.library` は `jvmToolchain(N)` を付けない。開発機 JDK バージョン依存の罠（Toolchain auto-provisioning 未設定でビルドが落ちる）を避け、`compilerOptions.jvmTarget = JvmTarget.JVM_11` だけで Android 側 JVM target を指定する
+- `shared/core` は PR2 で AppContainer / VisitRepositoryImpl / Dispatcher ラッパが入るまで `CoreMarker` のみの空殻。Kotlin/Native の空モジュール警告回避目的で `internal object CoreMarker` を 1 つ置いている（PR2 で削除予定）
 
 ---
 
@@ -255,6 +258,36 @@ iOS バンドル ID は `com.noricoffee.coffeevision` だが、Android の `appl
 `sharedLogic` のライブラリ namespace（`com.noricoffee.sharedLogic`）と `commonMain` の Kotlin パッケージ（`com.noricoffee.*`）は **applicationId とは別概念** のため、そのまま維持する。共通ライブラリのパッケージは複数アプリから再利用できる名前空間として残しておくのが自然。
 
 トレードオフ: 既存ファイルが少ないうちに統一できたため、影響範囲は MainActivity 1 ファイルのみ。Firebase Console の Android アプリ登録時は新 package で登録すること。
+
+---
+
+### 2026-06-08: Phase 2.5 PR1 — build-logic/convention と shared/{core,domain} の切り出し
+
+- 領域: Build / KMP
+- 関連: `build-logic/**`, `shared/core/**`, `shared/domain/**`, `sharedLogic/build.gradle.kts`, `settings.gradle.kts`, `gradle/libs.versions.toml`
+
+Phase 2.5 を 3 PR に分割するうち、PR1 として「Convention Plugin の足場 + ドメイン層の切り出し」を完了。
+
+**採用:**
+- precompiled script plugin 方式（`build-logic/convention/src/main/kotlin/{kmp.library,kmp.feature,android.library}.gradle.kts`）。`gradlePlugin { plugins.register(...) }` ブロックは置かない（`kotlin-dsl` が自動で plugin id を生成するため、register 併用は descriptor 二重生成で衝突する）
+- `build-logic/settings.gradle.kts` に `versionCatalogs { create("libs") { from(files("../gradle/libs.versions.toml")) } }`。ルート build と `build-logic` build は別 build のため、同じカタログでも両方で個別宣言が必要
+- `gradle/libs.versions.toml` の `[libraries]` に Gradle plugin classpath 用 4 件（`android-gradle-plugin` / `kotlin-gradle-plugin` / `sqldelight-gradle-plugin` / `skie-gradle-plugin`）を追加
+- `shared/domain` に Visit / Cafe / CoffeeItem / FoodItem / Photo / 3 enum + AuthRepository / VisitRepository / RemoteVisitDataSource 計 11 ファイルを `git mv` で移送（パッケージ宣言は `com.noricoffee.domain.*` / `com.noricoffee.repository.*` のまま）
+- `sharedLogic/build.gradle.kts` の `commonMain.dependencies` 先頭に `api(projects.shared.domain)` を追加。残った `AppContainer` / `LocalVisitRepository` / `VisitRepositoryImpl` / `Mapper` が新 domain モジュールを参照できるように再公開
+
+**不採用:**
+- `kmp.library` での `jvmToolchain(17)` 指定。開発機 JDK 26 環境で Toolchain auto-provisioning 未設定によりビルドが落ちる。既存 `sharedLogic` も Toolchain 未指定で動いており、`compilerOptions.jvmTarget = JvmTarget.JVM_11` だけで Android 側 JVM target を指定する方が運用が楽
+- `build-logic` 内での `projects.shared.core` の type-safe project accessor 参照。`build-logic` は別 build のため accessor が生成されない。precompiled script plugin 内では文字列 API `project(":shared:core")` を使う必要がある
+- 既存 `sharedLogic/build.gradle.kts` の Convention Plugin への移行。PR3 で `sharedLogic` モジュール自体を削除予定のため、移行コストを払う価値が薄い
+
+**`shared/core` の暫定空殻判断:**
+- PR1 時点では `AppContainer` / `VisitRepositoryImpl` を `shared/core` に **移さない**。理由は循環依存：`AppDatabase` / `LocalVisitRepository` は `sharedLogic` に残っており、`shared/core` から `sharedLogic` への依存は禁じ手のため
+- Kotlin/Native のリンク段階で空モジュール警告を回避するため、`internal object CoreMarker` を 1 つ置いた。PR2 で AppContainer / VisitRepositoryImpl / Dispatcher ラッパが入ったタイミングで削除
+
+**残課題（`android.library` Convention Plugin の AGP 9 deprecation 警告）:**
+- AGP 9.x で `com.android.build.gradle.LibraryExtension` が deprecated（`com.android.build.api.dsl.LibraryExtension` に置換要請）。`android.library` プラグインは Phase 2.5 では適用側ゼロのため放置。実際に使う側が出てきた段階で DSL を最新版に置き換える
+
+**検証:** Android テスト 12 件グリーン / `:androidApp:assembleDebug` 成功 / `:sharedLogic:linkReleaseFrameworkIosSimulatorArm64` 成功 / Swift から見えるシンボル変化なし（`import SharedLogic` は無変更で動作）
 
 ---
 

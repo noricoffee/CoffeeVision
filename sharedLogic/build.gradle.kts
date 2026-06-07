@@ -43,6 +43,11 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
+            // Phase 2.5: domain モデルと Repository / RemoteVisitDataSource インターフェースは
+            // shared/domain に移送済。残った AppContainer / LocalVisitRepository /
+            // VisitRepositoryImpl / Mapper はここから参照する。
+            api(projects.shared.domain)
+
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.serialization.json)
             implementation(libs.kotlinx.datetime)

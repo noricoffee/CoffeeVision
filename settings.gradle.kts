@@ -2,6 +2,7 @@ rootProject.name = "coffeevision"
 enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")
 
 pluginManagement {
+    includeBuild("build-logic")
     repositories {
         google {
             mavenContent {
@@ -31,3 +32,5 @@ dependencyResolutionManagement {
 include(":androidApp")
 include(":sharedLogic")
 include(":sharedUI")
+include(":shared:core")
+include(":shared:domain")

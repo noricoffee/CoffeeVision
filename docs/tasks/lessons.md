@@ -104,3 +104,33 @@
 - 差分レビュー / 履歴 / 再現性のメリットが大きく、Console 直接編集と比較してデメリットはほぼない
 - ただし **Console 編集との併用は厳禁**。Console で編集したルールは次の `firebase deploy` で上書き消失する。チーム内で「ルールはリポジトリ管理する」と決めたら Console 側のルールエディタは触らない運用を徹底
 - `.firebase/` キャッシュディレクトリは `.gitignore` で除外する（デプロイ毎に再生成されるため）
+
+---
+
+## 2026-06-08
+
+### `includeBuild` + version catalog のパス問題
+
+- `build-logic` のような `includeBuild` 配下の build から `gradle/libs.versions.toml` を参照するには、`build-logic/settings.gradle.kts` で `dependencyResolutionManagement { versionCatalogs { create("libs") { from(files("../gradle/libs.versions.toml")) } } }` を **明示宣言** する
+- 相対パスの基準は `build-logic/` ディレクトリ。ルートの `gradle/libs.versions.toml` を指すには `../gradle/libs.versions.toml`
+- ルート build と `build-logic` build は **別 build** なので、同じカタログファイルを参照していても両方の settings で個別宣言が必要（ルート側はデフォルトの `gradle/libs.versions.toml` 自動検出に任せて OK、`build-logic` 側は明示宣言が必須）
+- これを書き忘れると `build-logic/convention/build.gradle.kts` で `libs.kotlin.gradle.plugin` 等の type-safe accessor が解決できず、`Unresolved reference: libs` で落ちる
+
+### precompiled script plugin と `gradlePlugin { plugins.register(...) }` を併用しない
+
+- `kotlin-dsl` プラグインを使う build では `src/main/kotlin/<id>.gradle.kts` というファイル名から自動的に plugin id `<id>` が生成・登録される
+- ここに加えて `gradlePlugin { plugins.register("<id>") { implementationClass = "..." } }` を書くと plugin descriptor が二重生成されて衝突する（または `implementationClass` を要求される — precompiled script では不要）
+- 「Convention Plugin を 3 つ作る」目的なら、`src/main/kotlin/` にファイルを 3 つ置くだけで足りる。`gradlePlugin` ブロックは書かない
+- 適用側は `plugins { id("kmp.library") }` で参照できる（id はファイル名そのまま）
+
+### Convention Plugin に `jvmToolchain(N)` を入れると開発機の JDK バージョン依存が生まれる
+
+- `kotlin { jvmToolchain(17) }` を Convention Plugin に書くと、開発機に該当 JDK が無い場合 Gradle Toolchain auto-provisioning（`toolchainManagement` + `foojay-resolver-convention`）が未設定だとビルドが落ちる
+- 「現状の開発機 JDK バージョンに依らず動く」を優先するなら `jvmToolchain` は付けず、`compilerOptions.jvmTarget = JvmTarget.JVM_11`（Android 側）/ JS / Native は target ごとに別 API、で JVM target を個別宣言する流儀の方が運用が楽
+- CI で JDK バージョンを固定したくなったら、別途 `toolchainManagement` + `foojay-resolver-convention` を入れて auto-provisioning を有効化する
+
+### `build-logic` 内では `projects.shared.core` の type-safe project accessor が使えない
+
+- ルート `settings.gradle.kts` の `enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")` は **その build 内でのみ有効**
+- `build-logic` は別 build なので `projects.*` accessor が生成されない。precompiled script plugin 内で別プロジェクトを参照するときは文字列 API `project(":shared:core")` を使う
+- 各モジュールの `build.gradle.kts` ではこれまで通り `projects.shared.core` が使える（同じルート build 内のため）

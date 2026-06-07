@@ -62,8 +62,8 @@
 | [x] | `VisitRepository` の Firestore 書き込みを実装（ローカル → クラウドの順） | 2026-06-04 / 2026-06-05 完成 / `RemoteVisitDataSourceIosImpl` で Visit 本体 + Cafe 埋め込み + 子コレクション 3 種（`coffeeItems` / `foodItems` / `photos`）まで実装。WriteBatch で原子化、observe は親リスナ + 子は都度 `getDocuments`。`IosMainScope` hack は別 commit で解消済 |
 | [x] | `IosMainScope` の dispatcher hack を解消（`commonMain` に `CoroutineScope` ファクトリ追加） | 2026-06-05 / `AppContainer` に scope なしのセカンダリコンストラクタを追加、プライマリのデフォルト値は削除。Swift 側は 3 引数版に切り替え、`IosMainScope.swift` を削除。`startSync()` が `Dispatchers.Main` 上で動く正規状態に復帰 |
 | [x] | iOS 側で Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期実装 | 2026-06-05 / WriteBatch で「親 set + 新子 set + 差分削除」を 1 commit 原子化。observe は案 A（親リスナ + 子は都度 `getDocuments` 並列）。`sortOrder` は配列 index を upload 時採番、decode 時はソート用途で破棄。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-05 子コレクション同期エントリ |
-| [ ] | Firestore Security Rules を作成・デプロイ | `request.auth.uid == resource.data.userId` を強制。[`data-model.md`](./data-model.md) §3.3 のルールを Firebase Console に設定 |
-| [ ] | シミュレータ動作確認: 匿名サインイン後の Firestore 書き込み実体確認 | Security Rules 設定後、Phase2VerificationView の書き込みボタンで Firebase Console にデータが届くことを目視 |
+| [x] | Firestore Security Rules を作成・デプロイ | 2026-06-06 / Firestore のみ。`firestore.rules` / `firebase.json` / `.firebaserc` をリポジトリ管理化し `firebase deploy --only firestore:rules` で反映。厳格度は path uid のみ検証（[`data-model.md`](./data-model.md) §3.3 概略案そのまま）。Storage Rules はファイル作成済だが新規プロジェクト Storage 有効化が Blaze プラン必須のため Phase 3 に後ろ倒し |
+| [ ] | シミュレータ動作確認: 匿名サインイン後の Firestore 書き込み実体確認 | Security Rules デプロイ済。Phase2VerificationView の書き込みボタンで Firebase Console にデータが届くことを目視 |
 
 ---
 
@@ -96,6 +96,7 @@
 | [ ] | CoffeeItem の追加 / 編集 UI（モーダル） | |
 | [ ] | FoodItem の追加 / 編集 UI（モーダル） | |
 | [ ] | 星評価入力コンポーネント（StarRatingView）を実装 | |
+| [ ] | Firebase を Blaze プランへアップグレードし Storage 有効化（asia-northeast1）+ `storage.rules` をデプロイ | 写真機能の前段。`firebase.json` に `storage` キーを戻して `firebase deploy --only storage`。`storage.rules` はリポジトリに既存（Phase 2 で先回り作成） |
 | [ ] | 写真ピッカー（PhotosPicker）を組み込み | |
 | [ ] | ローカル保存後、Storage に非同期アップロードする処理 | |
 | [ ] | 各画面のプレビューを実装 | |

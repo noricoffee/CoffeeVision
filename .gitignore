@@ -21,3 +21,4 @@ node_modules/
 # Firebase config files (各自が Firebase Console から取得して配置する)
 GoogleService-Info.plist
 google-services.json
+.firebase/

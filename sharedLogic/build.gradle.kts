@@ -3,8 +3,6 @@ import org.jetbrains.kotlin.gradle.dsl.JvmTarget
 plugins {
     alias(libs.plugins.kotlinMultiplatform)
     alias(libs.plugins.androidMultiplatformLibrary)
-    alias(libs.plugins.kotlinSerialization)
-    alias(libs.plugins.sqldelight)
     alias(libs.plugins.skie)
 }
 
@@ -21,7 +19,17 @@ kotlin {
             baseName = "SharedLogic"
             isStatic = true
             // sqliter (NativeSqliteDriver の依存) が iOS のシステム SQLite に動的リンクするため
+            // data-local 由来の symbol が iOS framework に取り込まれるので維持する
             linkerOpts("-lsqlite3")
+
+            // api(...) だけでは依存先 Kotlin class が Obj-C ヘッダに出ない（Klib 内に含まれても
+            // Swift から見えない）。export(...) を明示して各 shared モジュールの公開 API を
+            // SharedLogic.framework のヘッダに含める。PR3 で shared/framework が umbrella に
+            // なったらこの export 群もそちらに移送する。
+            export(projects.shared.core)
+            export(projects.shared.domain)
+            export(projects.shared.dataLocal)
+            export(projects.shared.dataFirebase)
         }
     }
 
@@ -43,49 +51,13 @@ kotlin {
 
     sourceSets {
         commonMain.dependencies {
-            // Phase 2.5: domain モデルと Repository / RemoteVisitDataSource インターフェースは
-            // shared/domain に移送済。残った AppContainer / LocalVisitRepository /
-            // VisitRepositoryImpl / Mapper はここから参照する。
+            // Phase 2.5 PR2: sharedLogic は Greeting / Platform 残骸 + Umbrella Reexport 役。
+            // 各 shared モジュールを api 依存することで Swift から見える SharedLogic.framework に
+            // 全公開シンボルを export する。PR3 で shared/framework に正式移送予定。
+            api(projects.shared.core)
             api(projects.shared.domain)
-
-            implementation(libs.kotlinx.coroutines.core)
-            implementation(libs.kotlinx.serialization.json)
-            implementation(libs.kotlinx.datetime)
-
-            implementation(libs.sqldelight.runtime)
-            implementation(libs.sqldelight.coroutines.extensions)
-
-            implementation(libs.ktor.client.core)
-            implementation(libs.ktor.client.content.negotiation)
-            implementation(libs.ktor.serialization.kotlinx.json)
-        }
-        commonTest.dependencies {
-            implementation(libs.kotlin.test)
-            implementation(libs.kotlinx.coroutines.test)
-        }
-        iosMain.dependencies {
-            implementation(libs.sqldelight.driver.native)
-            implementation(libs.ktor.client.darwin)
-        }
-        androidMain.dependencies {
-            implementation(libs.sqldelight.driver.android)
-            implementation(libs.ktor.client.okhttp)
-
-            implementation(project.dependencies.platform(libs.firebase.bom))
-            implementation(libs.firebase.firestore)
-            implementation(libs.firebase.auth)
-            implementation(libs.firebase.storage)
-        }
-        getByName("androidHostTest").dependencies {
-            implementation(libs.sqldelight.driver.sqlite)
-        }
-    }
-}
-
-sqldelight {
-    databases {
-        create("AppDatabase") {
-            packageName.set("com.noricoffee.db")
+            api(projects.shared.dataLocal)
+            api(projects.shared.dataFirebase)
         }
     }
 }

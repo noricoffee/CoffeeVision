@@ -70,7 +70,10 @@
 - Firebase Security Rules はリポジトリ管理（`firestore.rules` / `storage.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。Firestore は path uid のみ検証で 2026-06-06 にデプロイ済。Storage Rules はファイルのみ存在し未デプロイ（新規プロジェクトの Storage 有効化が Blaze プラン必須のため、Phase 3 で写真機能と同時に有効化）
 - `build-logic/convention/` の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`）は **precompiled script plugin 方式**（`src/main/kotlin/*.gradle.kts`）。`gradlePlugin { plugins.register(...) }` は置かず、`kotlin-dsl` の自動 plugin id 生成に任せる。`build-logic/settings.gradle.kts` で `versionCatalogs.from(files("../gradle/libs.versions.toml"))` を宣言して同一カタログを共有
 - `kmp.library` は `jvmToolchain(N)` を付けない。開発機 JDK バージョン依存の罠（Toolchain auto-provisioning 未設定でビルドが落ちる）を避け、`compilerOptions.jvmTarget = JvmTarget.JVM_11` だけで Android 側 JVM target を指定する
-- `shared/core` は PR2 で AppContainer / VisitRepositoryImpl / Dispatcher ラッパが入るまで `CoreMarker` のみの空殻。Kotlin/Native の空モジュール警告回避目的で `internal object CoreMarker` を 1 つ置いている（PR2 で削除予定）
+- `shared/core` には `AppContainer` と `VisitRepositoryImpl` が居る。`api(projects.shared.dataLocal)` 経由で `AppDatabase` / `LocalVisitRepository` を取り込み、`api(projects.shared.dataFirebase)` で Firebase Repository インターフェースを再公開する。Result / Logger / Dispatcher ラッパは必要が出てきたフェーズで追加（YAGNI）
+- `shared/data-local` が SQLDelight プラグイン + `AppDatabase` 宣言の単独管理者。Mapper / DriverFactory expect/actual / LocalVisitRepository を含む。`VisitRepositoryImplTest` は `createInMemoryTestSqlDriver` の expect/actual がここに閉じている制約から、振る舞いの所属（`shared/core`）ではなく `data-local` の commonTest に置く妥協配置
+- `shared/data-firebase` は `build.gradle.kts` + Firebase BoM 依存のみの空殻。Android Firebase 実装は未移送（着手は Android Firebase 実装着手時）。iOS 実装は `iosApp` Swift で継続
+- 旧 `sharedLogic` は Phase 2.5 PR2 以降「`Greeting`/`Platform` 残骸 + Umbrella Reexport 専用」モジュール。`commonMain.dependencies` は `api(projects.shared.{core,domain,dataLocal,dataFirebase})` の 4 行のみ、`framework { ... }` ブロックで `export(projects.shared.{core,domain,dataLocal,dataFirebase})` を明示。PR3 で `shared/framework` 移送 + `Greeting`/`Platform` 整理をもって `sharedLogic` 自体を削除予定
 
 ---
 
@@ -288,6 +291,42 @@ Phase 2.5 を 3 PR に分割するうち、PR1 として「Convention Plugin の
 - AGP 9.x で `com.android.build.gradle.LibraryExtension` が deprecated（`com.android.build.api.dsl.LibraryExtension` に置換要請）。`android.library` プラグインは Phase 2.5 では適用側ゼロのため放置。実際に使う側が出てきた段階で DSL を最新版に置き換える
 
 **検証:** Android テスト 12 件グリーン / `:androidApp:assembleDebug` 成功 / `:sharedLogic:linkReleaseFrameworkIosSimulatorArm64` 成功 / Swift から見えるシンボル変化なし（`import SharedLogic` は無変更で動作）
+
+---
+
+### 2026-06-08: Phase 2.5 PR2 — data-local / data-firebase 切り出しと AppContainer の shared/core 移送
+
+- 領域: Build / KMP / iOS Bridge
+- 関連: `shared/data-local/**`, `shared/data-firebase/**`, `shared/core/**`, `sharedLogic/build.gradle.kts`, `settings.gradle.kts`
+
+Phase 2.5 PR2 として、SQLDelight 関連を `shared/data-local` に集約し、Firebase Android 実装の置き場として `shared/data-firebase` を空殻で作成、`AppContainer` / `VisitRepositoryImpl` を `shared/core` に移送した。`sharedLogic` は **Umbrella Reexport 専用** に縮小（`Greeting` / `Platform` 残骸は iOS / sharedUI で参照中のため PR3 で扱う）。
+
+**採用:**
+- SQLDelight プラグインと `AppDatabase` 宣言を `shared/data-local/build.gradle.kts` に集約。`sharedLogic` から SQLDelight プラグインを除去
+- `data-firebase` は `build.gradle.kts` + Firebase BoM/firestore/auth/storage 依存のみ、ソース 0 ファイルでもリンク成功するため空殻で OK
+- `shared/core` の `build.gradle.kts` で `api(projects.shared.{domain,dataLocal,dataFirebase})` を宣言し、`AppContainer` から各層を取り込む
+- 旧 `sharedLogic/build.gradle.kts` を **Reexport 専用化**: `commonMain.dependencies { api(projects.shared.{core,domain,dataLocal,dataFirebase}) }` の 4 行 + `framework { export(projects.shared.{core,domain,dataLocal,dataFirebase}) }` の明示。Ktor / kotlinx-serialization / Firebase Android の直接依存は全削除
+- `VisitRepositoryImplTest` は `shared/data-local/src/commonTest/.../repository/` に配置（タスク指示の `shared/core` commonTest 案は `expect/actual` の見え方制約で頓挫したため妥協配置）
+
+**重要な発見（lessons.md 級の汎用知見、別途追記）:**
+- KMP iOS framework では `commonMain.dependencies { api(projects.shared.other) }` だけでは依存モジュールの Kotlin class が Obj-C ヘッダに出ない。klib への取り込みは保証されるが、Swift 側 `import` で型が見えなくなる
+- `framework { ... export(projects.shared.other) ... }` の **追加の明示が必須**。export 抜けと追加後で `SharedLogic.h` のヘッダ行数が 631 行 → 2412 行に激変する（実測）
+- これは PR3 で `shared/framework` を Umbrella 化する際にも同じ知見が必要
+
+**不採用:**
+- タスク指示の「`VisitRepositoryImplTest` を `shared/core` の commonTest に置く」案: `createInMemoryTestSqlDriver` の `expect/actual` が `data-local` の commonTest/androidHostTest/iosTest に閉じており、他モジュールの commonTest から再利用する標準手段がない（`testFixtures` 導入 or expect 再宣言が必要で PR スコープ超過）
+- SQLDelight プラグインを `sharedLogic` に残す案: 「`AppDatabase` 生成は `data-local` の責務」という整理を優先
+
+**残課題（PR3 で対応）:**
+- `Greeting` / `Platform` 残骸（`sharedLogic/src/{commonMain,iosMain,androidMain}/kotlin/com/noricoffee/`）が `iosApp/iosApp/ContentView.swift` と `sharedUI/src/commonMain/kotlin/com/noricoffee/App.kt` から参照されているため削除できず残置。PR3 でこれらを整理して `sharedLogic` を完全削除する
+- `shared/framework` Umbrella モジュール作成（`export(...)` 群を移送）
+- `sharedLogic` 削除 + iOS 側 Xcode の framework 参照先切り替え（Run Script のターゲット差し替え、Swift `import SharedLogic` は維持）
+- `.github/workflows/ci.yml` の iOS link コマンド差し替え
+
+**検証結果:**
+- `:shared:data-local:testAndroidHostTest`: `LocalVisitRepositoryTest` 5 件 + `VisitRepositoryImplTest` 5 件、計 10 件グリーン
+- `:androidApp:assembleDebug`: 成功
+- `:sharedLogic:linkReleaseFrameworkIosSimulatorArm64`: 成功、`SharedLogic.framework/Headers/SharedLogic.h` で `AppContainer` / `VisitRepository` / `Visit_` 等の主要シンボルの export を確認
 
 ---
 

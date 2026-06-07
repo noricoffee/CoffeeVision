@@ -134,3 +134,16 @@
 - ルート `settings.gradle.kts` の `enableFeaturePreview("TYPESAFE_PROJECT_ACCESSORS")` は **その build 内でのみ有効**
 - `build-logic` は別 build なので `projects.*` accessor が生成されない。precompiled script plugin 内で別プロジェクトを参照するときは文字列 API `project(":shared:core")` を使う
 - 各モジュールの `build.gradle.kts` ではこれまで通り `projects.shared.core` が使える（同じルート build 内のため）
+
+### KMP iOS framework の `export(...)` は `api(...)` 依存とは別に明示が必要
+
+- `commonMain.dependencies { api(projects.shared.other) }` は klib への取り込みを保証するが、`framework { ... }` ブロックで `export(projects.shared.other)` を **追加で明示** しないと Obj-C ヘッダに依存モジュールの class 宣言が出てこない
+- 症状: ビルド・リンク・`import SharedLogic` はすべて成功するのに、Swift から `AppContainer` / `VisitRepository` 等が「Cannot find type in scope」になる。自モジュール内シンボル（`Greeting` 等）だけは引き続き見える
+- 切り分け: `sharedLogic/build/bin/iosSimulatorArm64/releaseFramework/SharedLogic.framework/Headers/SharedLogic.h` を `wc -l` / `grep` で覗く。export 抜けだと数百行、`export(...)` 追加後は数千行に激変する（実測 631 行 → 2412 行）
+- Umbrella framework パターン（`shared/framework` モジュール）でも同じ知見が必要。`export(...)` 群を framework モジュール側に集約する
+
+### `expect/actual` を含む test ヘルパは「ヘルパが置かれているモジュールの内部から閉じる」
+
+- `expect fun createInMemoryTestSqlDriver()` を `shared/data-local` の commonTest に置くと、その actual は同モジュールの `androidHostTest` / `iosTest` にしか書けない。他モジュールの commonTest から再利用する標準手段はない（`testFixtures` 導入 or ヘルパ自体を `commonMain` に置くなど工夫が必要）
+- 結果として「`VisitRepositoryImpl` のテストを `shared/core` 側に置きたい」が、`data-local` の expect/actual ドライバを再利用したいので **テストを `data-local` 側に置く** 妥協が現実解になる
+- 教訓: `expect/actual` は「同モジュール内で完結する」前提で設計する。一度書いた expect/actual を他モジュールから使いまわすコストは高いので、最初から「ヘルパだけ別の共有テストモジュールに切り出す」設計を選ぶか、テストの所属モジュールを実装の所属と切り離す覚悟を持つ

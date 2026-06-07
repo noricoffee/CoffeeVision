@@ -74,11 +74,11 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | `build-logic/convention/` プロジェクトを追加し、`kmp.library` / `kmp.feature` / `android.library` Convention Plugin を作成 | 2026-06-08 / Phase 2.5 PR1 で追加。precompiled script plugin 方式（`gradlePlugin { plugins.register(...) }` は不使用、`kotlin-dsl` の自動 plugin id 生成に委譲）。`build-logic/settings.gradle.kts` で `versionCatalogs.from(files("../gradle/libs.versions.toml"))` を宣言 |
-| [~] | `core` モジュール切り出し（Result / Logger / Dispatchers / DI 基盤 / テストヘルパ） | 2026-06-08 / Phase 2.5 PR1 で枠と `build.gradle.kts` のみ作成、`CoreMarker` を置いた空殻。AppContainer / VisitRepositoryImpl / Dispatcher ラッパの移送は PR2（data-local と同時、循環依存回避のため） |
+| [x] | `core` モジュール切り出し（Result / Logger / Dispatchers / DI 基盤 / テストヘルパ） | 2026-06-08 / PR1 で枠作成、PR2 で AppContainer / VisitRepositoryImpl を移送し `CoreMarker` を削除。Result / Logger / Dispatcher ラッパは未着手（必要が出てきたフェーズで追加） |
 | [x] | `domain` モジュール切り出し（ドメインモデル + Repository インターフェース + UseCase） | 2026-06-08 / Phase 2.5 PR1 で完了。Visit / Cafe / CoffeeItem / FoodItem / Photo / 3 enum + AuthRepository / VisitRepository / RemoteVisitDataSource を `git mv` で移送。`sharedLogic` 側は `api(projects.shared.domain)` で再公開 |
-| [ ] | `data-local` モジュール切り出し（SQLDelight スキーマ + DriverFactory） | sharedLogic からの移動 |
-| [ ] | `data-firebase` モジュール切り出し（Firestore / Auth / Storage Android 実装） | androidMain のみソースを持つ |
-| [ ] | `AppContainer` の依存配線を新モジュール構成に合わせて整理 | iOS / Android 両方 |
+| [x] | `data-local` モジュール切り出し（SQLDelight スキーマ + DriverFactory） | 2026-06-08 / Phase 2.5 PR2 で完了。SQLDelight プラグイン / `AppDatabase` 宣言 / Mapper / DriverFactory expect/actual / LocalVisitRepository を `git mv` で移送。`VisitRepositoryImplTest` は `createInMemoryTestSqlDriver` の expect/actual が data-local に閉じている制約から例外的に data-local の commonTest に配置 |
+| [~] | `data-firebase` モジュール切り出し（Firestore / Auth / Storage Android 実装） | 2026-06-08 / Phase 2.5 PR2 で空殻（`build.gradle.kts` + Firebase BoM 依存のみ）を作成。Android Firebase 実装の移送は Android Firebase 実装の着手時 |
+| [x] | `AppContainer` の依存配線を新モジュール構成に合わせて整理 | 2026-06-08 / Phase 2.5 PR2 で `shared/core` に移送。`api(projects.shared.dataLocal)` 経由で `AppDatabase` / `LocalVisitRepository` を取り込む構成。Swift 側 `import SharedLogic` は無変更（旧 `sharedLogic` が Reexport 層として export） |
 | [ ] | 旧 `sharedLogic` モジュールを削除（`settings.gradle.kts` から除外） | 分割完了後 |
 | [ ] | 分割後ビルド確認: `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug` | CI が通ること。あわせて `.github/workflows/ci.yml` の iOS link コマンドを `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える |
 

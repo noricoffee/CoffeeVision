@@ -172,3 +172,10 @@
 - `xcodebuild` で BUILD SUCCEEDED でも、SourceKit（IDE インデックス）が `import X` を「No such module」と報告することがある
 - 原因はインデックスキャッシュ。`Product → Clean Build Folder` + `~/Library/Developer/Xcode/DerivedData/iosApp-*` 削除で直ることが多い
 - そもそも `import X` が当該ファイル内で使われていなければ **import 自体を削除** するのが最もエレガント（dead code 削除 + SourceKit 黄信号解消）
+
+### KDoc 内に `/*` を含む文字列を書くとネストコメント開始として解釈される
+
+- KDoc（`/** ... */`）の中で glob パターンや path をそのまま書いて `feature/*` のような `/*` シーケンスが現れると、Kotlin コンパイラがネストコメントの開始と解釈し「Unclosed comment」エラーになる
+- 回避: `feature/<name>` / `feature/...` / バッククォートで囲んで `feature/_NAME_` 等、`/*` を文字列リテラル含めて出さないように書き換える
+- バッククォート ``` `feature/*` ``` でも回避できない（コメントは字句的にトークン化されるためバッククォートはエスケープにならない）
+- 単発のミスではなく、glob を「そのまま記載すれば伝わる」と思って書くと踏むパターン。pattern 例を KDoc に載せる用途なら最初から表記を `feature/<name>` で統一する

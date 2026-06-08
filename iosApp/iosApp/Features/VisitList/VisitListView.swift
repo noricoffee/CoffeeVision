@@ -71,8 +71,7 @@ struct VisitListView: View {
         List {
             ForEach(viewModel.visits) { visit in
                 NavigationLink {
-                    // VisitDetail は未実装。準備中プレースホルダを表示
-                    VisitDetailPlaceholderView(visitId: visit.id)
+                    VisitDetailView(visitId: visit.id, appState: appState)
                 } label: {
                     VisitRow(visit: visit)
                 }
@@ -160,24 +159,6 @@ private struct VisitRow: View {
 
     private var accessibilityDescription: String {
         "\(visit.cafe.name), \(formattedDate), \(Int(visit.rating))星"
-    }
-}
-
-// MARK: - VisitDetailPlaceholderView
-
-/// VisitDetail 画面が実装されるまでのプレースホルダ。
-struct VisitDetailPlaceholderView: View {
-    let visitId: String
-
-    var body: some View {
-        ContentUnavailableView(
-            String(localized: "詳細画面は準備中です"),
-            systemImage: "hammer.fill",
-            description: Text(visitId)
-                .font(.caption.monospaced())
-        )
-        .navigationTitle(String(localized: "詳細"))
-        .navigationBarTitleDisplayMode(.inline)
     }
 }
 

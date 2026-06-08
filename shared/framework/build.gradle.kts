@@ -46,6 +46,7 @@ kotlin {
             export(projects.shared.dataLocal)
             export(projects.shared.dataFirebase)
             export(projects.shared.feature.visitList)
+            export(projects.shared.feature.visitDetail)
 
             xcf.add(this)
         }
@@ -68,6 +69,7 @@ kotlin {
             api(projects.shared.dataLocal)
             api(projects.shared.dataFirebase)
             api(projects.shared.feature.visitList)
+            api(projects.shared.feature.visitDetail)
             implementation(libs.kotlinx.coroutines.core)
         }
     }

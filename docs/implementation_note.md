@@ -64,7 +64,7 @@
 - `AppContainer.startInitialSync()` は匿名サインイン → uid 確定 → リモート → ローカル同期購読 を起動コードから 1 行で呼べる。サインアウト時の sync 停止再開は要件発生時に拡張する
 - `applicationId` / iOS バンドル ID は `com.noricoffee.coffeevision` で統一する。共通ライブラリの Android namespace は各モジュール個別（`com.noricoffee.core` / `com.noricoffee.domain` / `com.noricoffee.dataLocal` / `com.noricoffee.dataFirebase` / `com.noricoffee.framework`）で applicationId と分離
 - SKIE 0.10.12 は `shared/framework` umbrella に適用済（Phase 2.5 PR3 で旧 `sharedLogic` から移行）。**SKIE は呼び出し方向限定**で、Swift で Kotlin interface を実装する側は Obj-C 互換シグネチャ（completion handler / Kotlin Flow 戻り値）を実装する必要がある。Swift で `Flow` を作るには `MutableStateFlow` を直接構築するパターンを第一候補とし、詰まったら `iosMain` にラッパを追加する
-- iOS 側 Firebase 実装（`iosApp/iosApp/FirebaseRepositories/`）は Phase 2 で実装済。`SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由（`init(internal:)` が internal アクセスのため直接構築不可）。Visit ドメインモデルは Swift 側で `Visit_`（末尾アンダースコア）として現れる（SQLDelight 生成 `Visit` 行型との衝突回避）
+- iOS 側 Firebase 実装（`iosApp/iosApp/FirebaseRepositories/`）は Phase 2 で実装済。`SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由（`init(internal:)` が internal アクセスのため直接構築不可）。ドメインモデルのうち SQLDelight が同名の行型を生成するものは Swift 側で末尾アンダースコア付きで現れる（現状 `Visit` → `Visit_`、`Photo` → `Photo_`。`CoffeeItem` / `FoodItem` / `Cafe` はそのまま）
 - `AppContainer` は **scope なしの 3 引数セカンダリコンストラクタ** を通常用途（Swift / アプリ起動）とし、4 引数版（scope 注入可）はテスト用途に限定する。SKIE が Kotlin デフォルト引数を Swift に引き出さないため、プライマリのデフォルト値 `= MainScope()` は持たせず用途をコンストラクタ単位で分けている
 - Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期は **WriteBatch + 差分削除**（既存子 ID を取得 → 新配列に含まれないものを batch.delete）で原子化。observe は **案 A**（親 visit リスナ 1 本 + 子は snapshot 受信ごとに `getDocuments` 並列）。`sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番 / decode 時はソートに使ってから破棄。nullable は `null` を入れずキーごと省略。`Photo.localPath` は端末固有値のため Firestore には保存しない
 - Firebase Security Rules はリポジトリ管理（`firestore.rules` / `storage.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。Firestore は path uid のみ検証で 2026-06-06 にデプロイ済。Storage Rules はファイルのみ存在し未デプロイ（新規プロジェクトの Storage 有効化が Blaze プラン必須のため、Phase 3 で写真機能と同時に有効化）
@@ -74,9 +74,10 @@
 - `shared/data-local` が SQLDelight プラグイン + `AppDatabase` 宣言の単独管理者。Mapper / DriverFactory expect/actual / LocalVisitRepository を含む。`VisitRepositoryImplTest` は `createInMemoryTestSqlDriver` の expect/actual がここに閉じている制約から、振る舞いの所属（`shared/core`）ではなく `data-local` の commonTest に置く妥協配置
 - `shared/data-firebase` は `build.gradle.kts` + Firebase BoM 依存のみの空殻。Android Firebase 実装は未移送（着手は Android Firebase 実装着手時）。iOS 実装は `iosApp` Swift で継続
 - 旧 `sharedLogic` モジュールは 2026-06-08 Phase 2.5 PR3 で完全削除済。iOS 向け umbrella は `shared/framework`（baseName / XCFramework 名ともに `SharedLogic`、Swift `import SharedLogic` のまま）。`commonMain.dependencies { api(projects.shared.{core,domain,dataLocal,dataFirebase,feature.visitList}) }` + `framework { export(...) }` 明示 + `linkerOpts("-lsqlite3")`。`assembleSharedLogicXCFramework` で XCFramework 生成、`embedAndSignAppleFrameworkForXcode` を Xcode の Run Script から呼び出し。`sharedUI` も `api(projects.shared.framework)` 経由でこれらを取り込む
-- `settings.gradle.kts` の include は `:androidApp` / `:sharedUI` / `:shared:core` / `:shared:domain` / `:shared:data-local` / `:shared:data-firebase` / `:shared:framework` / `:shared:feature:visit-list` の 8 件。`data-places` / 残りの `feature/*` は Phase 3 進行 / Phase 4 以降で追加予定
+- `settings.gradle.kts` の include は `:androidApp` / `:sharedUI` / `:shared:core` / `:shared:domain` / `:shared:data-local` / `:shared:data-firebase` / `:shared:framework` / `:shared:feature:visit-list` / `:shared:feature:visit-detail` の 9 件。`data-places` / 残りの `feature/visit-editor` は Phase 3 進行で追加予定、`feature/cafe-search` は Phase 4 以降
 - `AppContainer` の ViewModel ファクトリ（`makeVisitListViewModel()` など）は **`shared/framework` の拡張関数として配置**する。`kmp.feature` が `feature -> core` を `api` で自動配線するため `core` から `feature` を参照すると循環依存になる。`framework` は全 shared モジュールを `api` で持つ最上位レイヤーなので循環なし。Swift からは Obj-C category として `appContainer.makeVisitListViewModel()` で呼べる。今後 feature を追加するたびにファクトリ拡張を `shared/framework/.../AppContainerViewModelFactory.kt` に追記する
 - iOS Bridge は `@MainActor @Observable` クラス + `Task { for await s in kotlin.state { apply(s) } }` パターン（`kmp-bridge.md` §推奨パターン）で実装。SKIE 0.10.12 環境では `UIState.visits` は Swift 側で既に `[Visit_]` 型として取得できるため、`as? [Visit_]` キャストは不要（書くと "always succeeds" / "no effect" 警告）
+- Bridge の生存スコープは画面ライフサイクルに応じて 2 パターンを使い分ける: **一覧画面（VisitList）は `AppState` で 1 つ保持**（uid 確定後に 1 度だけ生成、画面再描画でも再生成しない）。**詳細画面（VisitDetail）は `VisitDetailView` 内の `@State` で遷移ごとに生成・破棄**（`init(visitId:appState:)` で `appState.container.makeVisitDetailViewModel()` を呼ぶ、`AppState` にホルダは置かない）。「一覧 = 常時 1 つ」と「Detail = push/pop で新規」のライフサイクルの違いを設計に反映している
 
 ---
 
@@ -443,3 +444,21 @@ Phase 3 着手の縦スライス直後フォロー。`VisitRepositoryImpl.delete
 トレードオフ: `userId` を `onVisitDeleted(id)` の引数に追加する案は Swift 側 Bridge / View の追随が必要なため見送り。VM 内部保持で Swift 側ゼロ変更を実現した。
 
 不採用: `RemoteVisitDataSource.remove` 側で「自分の uid 配下から id で削除」を実装に責任持たせる案も検討したが、iOS Swift 実装が `AuthRepository` 等から自分で uid を取得する結合を生むため不採用。
+
+---
+
+### 2026-06-09: Phase 3 — VisitDetail 縦スライス（feature/visit-detail 切り出し + read-only Form 表示）
+
+- 領域: KMP / iOS / Build
+- 関連: `shared/feature/visit-detail/`, `shared/framework/.../AppContainerViewModelFactory.kt`, `iosApp/iosApp/Features/VisitDetail/`, `iosApp/iosApp/Features/VisitList/VisitListView.swift`
+
+VisitList 縦スライスに続く Phase 3 の第 2 スライス。同じ Phase 3.5「feature 切り出し」と同時に実施した。
+
+- `shared/feature/visit-detail`: `kmp.feature` Convention Plugin 適用の新規モジュール。`VisitDetailViewModel(visitRepository, scope)` + `UIState(visit: Visit?, isLoading, error)` + `onAppear(visitId)` / `onErrorDismissed()`。`observeById(visitId)` を `cancel & relaunch` パターンで購読
+- `shared/framework`: `api(projects.shared.feature.visitDetail)` + `export(...)` 追加。`AppContainerViewModelFactory.kt` に `makeVisitDetailViewModel()` 拡張関数追加、ファイル KDoc を「複数 ViewModel ファクトリ前提」に書き換え（今後 feature 追加時は本ファイルにファクトリを追記する運用）
+- `VisitDetailView`: `Form` ベースの read-only 表示（ヘッダ / 雰囲気 / メモ / コーヒー / フード / 写真プレースホルダ）。`StarsView` / `CoffeeItemRow` / `FoodItemRow` を同ファイル内 `private struct` として定義
+- `VisitListView`: `NavigationLink` 先を `VisitDetailPlaceholderView` から `VisitDetailView(visitId:, appState:)` に差し替え、旧 placeholder struct は削除
+- Bridge の生成方針: `VisitDetailView` 内 `@State` 保持 + `init(visitId:appState:)` で `appState.container.makeVisitDetailViewModel()` を呼ぶ。`AppState` にホルダプロパティを追加しない（一覧画面とパターンを意図的に分ける）
+- enum 表示の暫定: Kotlin `BrewMethod` / `ProcessingMethod` / `RoastLevel` は Swift 側で class として現れ、`.name` で英語小文字（例: `"handdrip"`）を返す。日本語マッピングは別タスク（フェーズ 3 末か Phase 5 仕上げ）
+
+検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` / `xcodebuild -sdk iphonesimulator` 全成功。シミュレータ実機での目視確認は未実施（親に依頼）。

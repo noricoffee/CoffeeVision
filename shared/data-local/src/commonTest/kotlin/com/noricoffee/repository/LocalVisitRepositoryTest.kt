@@ -110,7 +110,7 @@ class LocalVisitRepositoryTest {
 
         val visit = sampleVisit()
         repository.save(visit)
-        repository.delete(visit.id)
+        repository.delete(USER_ID, visit.id)
 
         assertNull(repository.observeById(visit.id).first())
         assertTrue(db.coffeeItemQueries.selectByVisit(visit.id).executeAsList().isEmpty())

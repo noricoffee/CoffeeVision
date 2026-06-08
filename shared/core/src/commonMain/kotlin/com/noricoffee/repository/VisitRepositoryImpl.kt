@@ -66,15 +66,10 @@ class VisitRepositoryImpl(
         runRemote { remote.upload(visit) }
     }
 
-    override suspend fun delete(id: String) {
-        // 削除時の userId はローカル行が消える前に必要。実装は後続フェーズで詰める想定だが、
-        // 暫定として「ローカル削除 → リモート削除」の順序だけはここで担保する。
-        // userId はリモート側で id から逆引きできるか、AuthRepository から取得する設計を選ぶ。
-        local.delete(id)
-        // NOTE: remote.remove は userId を要求する。本メソッドのシグネチャでは取れないため、
-        //       Firestore 実装側で「自分の uid 配下のドキュメントから id で削除」する責任を持つ。
-        //       詳細は実装フェーズで RemoteVisitDataSource の契約を再検討する余地あり。
-        // ここでは Phase 2 の I/F 整備段階として TODO に留め、コンパイル可能な形だけ用意する。
+    // ローカル → リモートの順序を保証する。ローカルが Source of Truth のためローカル削除は必ず先行する。
+    override suspend fun delete(userId: String, id: String) {
+        local.delete(userId, id)
+        runRemote { remote.remove(userId, id) }
     }
 
     /**

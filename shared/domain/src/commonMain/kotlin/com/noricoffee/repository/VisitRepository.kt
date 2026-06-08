@@ -9,5 +9,5 @@ interface VisitRepository {
     fun observeByCafe(userId: String, placeId: String): Flow<List<Visit>>
 
     suspend fun save(visit: Visit)
-    suspend fun delete(id: String)
+    suspend fun delete(userId: String, id: String)
 }

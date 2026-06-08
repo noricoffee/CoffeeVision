@@ -47,6 +47,10 @@ class VisitListViewModel(
     // 既に購読中の Flow の Job。onAppear が複数回呼ばれても二重購読しないために保持する。
     private var observeJob: Job? = null
 
+    // onAppear で受け取った userId を保持し、onVisitDeleted 内で使う。
+    // Swift 側 API (onVisitDeleted(id: String)) を変えないための内部保持。
+    private var currentUserId: String? = null
+
     /**
      * 画面表示時に呼ぶ。[userId] を使って訪問記録の購読を開始する。
      *
@@ -54,6 +58,7 @@ class VisitListViewModel(
      * これにより、タブ切り替えなどで `onAppear` が重複して呼ばれても状態が壊れない。
      */
     fun onAppear(userId: String) {
+        currentUserId = userId
         // 前の購読をキャンセルしてから新たに開始する（userId 変更・再表示の両方に対応）
         observeJob?.cancel()
         observeJob = scope.launch {
@@ -67,11 +72,15 @@ class VisitListViewModel(
     /**
      * 訪問記録を削除する。削除失敗は [UIState.error] に伝播させる。
      *
+     * userId は [onAppear] で受け取った値を内部で保持して使う。
+     * [onAppear] 呼び出し前に本メソッドが呼ばれた場合は黙殺する（uid 未確定）。
+     *
      * @param id 削除対象の [Visit.id]
      */
     fun onVisitDeleted(id: String) {
+        val userId = currentUserId ?: return
         scope.launch {
-            runCatching { visitRepository.delete(id) }
+            runCatching { visitRepository.delete(userId, id) }
                 .onFailure { e ->
                     _state.update { it.copy(error = e.message ?: "delete failed") }
                 }

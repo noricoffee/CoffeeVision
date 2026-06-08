@@ -135,8 +135,45 @@ class VisitRepositoryImplTest {
         assertTrue(fakeRemote.uploaded.isEmpty(), "観測経路はリモートを叩かない")
     }
 
+    @Test
+    fun delete_removes_local_then_remote_in_order() = runTest {
+        local = LocalVisitRepository(db, coroutineContext)
+        fakeRemote = FakeRemoteVisitDataSource()
+        val repo = VisitRepositoryImpl(local, fakeRemote)
+
+        val visit = sampleVisit()
+        repo.save(visit)
+        repo.delete(USER_ID, visit.id)
+
+        // ローカルから削除されている
+        val loaded = local.observeById(visit.id).first()
+        assertTrue(loaded == null, "ローカルから削除されているはず")
+
+        // リモートにも remove が記録されている
+        assertEquals(listOf(USER_ID to visit.id), fakeRemote.removed)
+    }
+
+    @Test
+    fun delete_propagates_remote_failure_by_default() = runTest {
+        local = LocalVisitRepository(db, coroutineContext)
+        fakeRemote = FakeRemoteVisitDataSource(failRemove = true)
+        val repo = VisitRepositoryImpl(local, fakeRemote)
+
+        val visit = sampleVisit()
+        repo.save(visit)
+
+        assertFailsWith<RuntimeException> {
+            repo.delete(USER_ID, visit.id)
+        }
+
+        // ローカルは既に削除されている（Source of Truth はローカル）
+        val loaded = local.observeById(visit.id).first()
+        assertTrue(loaded == null, "ローカルは削除済みのはず")
+    }
+
     private class FakeRemoteVisitDataSource(
         private val failUpload: Boolean = false,
+        private val failRemove: Boolean = false,
     ) : RemoteVisitDataSource {
 
         val uploaded = mutableListOf<Visit>()
@@ -151,6 +188,7 @@ class VisitRepositoryImplTest {
         }
 
         override suspend fun remove(userId: String, id: String) {
+            if (failRemove) throw RuntimeException("remote remove failed")
             removed.add(userId to id)
         }
 

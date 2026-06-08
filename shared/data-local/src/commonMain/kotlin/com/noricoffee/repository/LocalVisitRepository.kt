@@ -106,7 +106,9 @@ class LocalVisitRepository(
         }
     }
 
-    override suspend fun delete(id: String) {
+    override suspend fun delete(userId: String, id: String) {
+        // userId は SQLDelight 側で行レベルセキュリティを将来追加する際に使う想定。
+        // 現状は id のみで削除する。
         db.transaction {
             db.coffeeItemQueries.deleteByVisit(id)
             db.foodItemQueries.deleteByVisit(id)

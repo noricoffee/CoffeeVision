@@ -199,7 +199,7 @@ fun onSaveTapped() {
 
 ## 1.9 expect / actual
 
-- `expect` 宣言は所属するレイヤーのモジュール内に置く（DB 系は `shared/data-local`、Dispatcher / プラットフォーム情報は `shared/core`、現状は `sharedLogic/src/commonMain/.../platform/` に集約）
+- `expect` 宣言は所属するレイヤーのモジュール内に置く（DB 系 `DatabaseDriverFactory` は `shared/data-local`、Dispatcher / プラットフォーム情報は `shared/core` の `platform/` パッケージ）
 - `actual` 実装は `iosMain` / `androidMain` に同名ファイルを置く
 - できる限り **`expect` ではなく抽象インターフェースとコンストラクタ注入** を選ぶ（テスタビリティのため）
 - 詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照
@@ -276,7 +276,7 @@ photos.forEach { storage.upload(it) }
 iosApp/iosApp/
 ├── App/
 │   ├── iOSApp.swift                 // @main・Firebase 初期化
-│   └── AppContainer.swift           // shared/core（現状: sharedLogic）の AppContainer をラップ
+│   └── AppContainer.swift           // shared/core の AppContainer をラップ
 ├── Features/
 │   ├── VisitList/
 │   │   ├── VisitListView.swift

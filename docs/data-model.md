@@ -28,7 +28,7 @@ User (Firebase Auth uid)
 
 # 1. Kotlin ドメインモデル
 
-`sharedLogic/src/commonMain/kotlin/com/noricoffee/domain/` 配下に配置します。
+`shared/domain/src/commonMain/kotlin/com/noricoffee/domain/` 配下に配置します。
 
 ## 1.1 Visit
 
@@ -150,7 +150,7 @@ data class Photo(
 # 2. SQLDelight スキーマ
 
 ローカル DB は **検索・オフライン参照の高速化** が目的。Firestore のキャッシュとは別途に持つ。
-配置: `sharedLogic/src/commonMain/sqldelight/com/noricoffee/db/`
+配置: `shared/data-local/src/commonMain/sqldelight/com/noricoffee/db/`
 
 ## 2.1 Visit.sq
 
@@ -423,7 +423,7 @@ Storage も同じく `users/{uid}/...` パスを uid で制限します。
 
 # 4. Repository 設計
 
-`sharedLogic/src/commonMain/kotlin/com/noricoffee/repository/` 配下。
+インターフェース定義は `shared/domain/src/commonMain/kotlin/com/noricoffee/repository/`、合成実装（`VisitRepositoryImpl` / `LocalVisitRepository`）は `shared/core/src/commonMain/kotlin/com/noricoffee/repository/` および `shared/data-local/src/commonMain/kotlin/com/noricoffee/repository/` に配置。
 
 ## 4.1 インターフェース例
 

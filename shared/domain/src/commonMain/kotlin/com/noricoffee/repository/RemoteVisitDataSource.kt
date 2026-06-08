@@ -7,8 +7,7 @@ import kotlinx.coroutines.flow.Flow
  * Firestore（または同等のリモート KVS）への薄いアダプタ。
  *
  * - `commonMain` には interface のみを置き、実装は各プラットフォームの公式 SDK で行う
- *   （iOS は `iosApp/FirebaseRepositories/`、Android は `sharedLogic/androidMain`。
- *   移行後は `shared/data-firebase/androidMain`）
+ *   （iOS は `iosApp/FirebaseRepositories/`、Android は `shared/data-firebase/androidMain`）
  * - 本データソースは UI から **直接参照されない**。`VisitRepositoryImpl` が
  *   `LocalVisitRepository` と本データソースを合成して、UI には [VisitRepository] 1 本だけを見せる
  *

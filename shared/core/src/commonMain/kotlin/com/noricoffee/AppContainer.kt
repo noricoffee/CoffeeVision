@@ -20,7 +20,7 @@ import kotlinx.coroutines.MainScope
  * - Firebase 関連の実装はプラットフォーム別 SDK を使うため、Repository / RemoteDataSource は
  *   外部から受け取る:
  *   - iOS: Swift で実装したクラスを Kotlin の interface に準拠させて渡す
- *   - Android: `sharedLogic/androidMain` の Kotlin 実装を渡す
+ *   - Android: `shared/data-firebase/androidMain` の Kotlin 実装を渡す
  * - 内部で [LocalVisitRepository]（SQLDelight）と [RemoteVisitDataSource] を合成して
  *   [VisitRepositoryImpl] を組み立て、UI には [VisitRepository] 1 本だけを見せる
  *

@@ -7,7 +7,7 @@ import kotlinx.coroutines.flow.Flow
  *
  * 実装は各プラットフォームの公式 SDK で行う:
  * - iOS: `iosApp/iosApp/FirebaseRepositories/AuthRepositoryIosImpl.swift`
- * - Android: `sharedLogic/androidMain`（移行後は `shared/data-firebase/androidMain`）
+ * - Android: `shared/data-firebase/androidMain`
  *
  * 起動時に [signInAnonymouslyIfNeeded] を呼び、得られた uid を以降のクエリで利用する想定。
  */

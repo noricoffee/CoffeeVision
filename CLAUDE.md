@@ -135,7 +135,7 @@
 - **コンセプト**: 訪れたカフェでのコーヒー・フード体験を記録・振り返るためのモバイルアプリ
 - **プラットフォーム**: iOS（リリース対象）/ Android（KMP 共通レイヤーの検証ターゲット、リリース対象外）
 - **アーキテクチャ**: Kotlin Multiplatform（KMP）+ ネイティブ UI
-- **共通言語**: Kotlin（`shared/*` モジュール群。現状は `sharedLogic` 一枚で、目標構成へ段階的に分割中）
+- **共通言語**: Kotlin（`shared/*` モジュール群。Phase 2.5 で `core` / `domain` / `data-local` / `data-firebase` / `framework` に分割済、`data-places` / `feature/*` は Phase 3 以降で追加予定）
 - **iOS UI**: SwiftUI + MVVM（`@Observable`）
 - **Android UI**: Compose Multiplatform（`feature/visit-list` を 1 画面だけ表示する検証実装）
 - **ローカル DB**: SQLDelight
@@ -146,18 +146,23 @@
 
 ## モジュール構成
 
-### 現状（Phase 1 時点）
+### 現状（Phase 2.5 完了時点）
 
 | モジュール | 役割 |
 |----------|------|
-| `sharedLogic/` | ドメインモデル・リポジトリ・ViewModel・DB・API クライアント等の共通ロジック（一枚に集約） |
+| `build-logic/convention/` | KMP / Android 共通設定の Convention Plugin |
+| `shared/core/` | `AppContainer` / `VisitRepositoryImpl`（合成実装）/ Dispatcher・Logger ラッパ枠 |
+| `shared/domain/` | ドメインモデル + Repository インターフェース + UseCase |
+| `shared/data-local/` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalVisitRepository` |
+| `shared/data-firebase/` | Android Firebase 実装の置き場（現状は空殻、本格移送は Android Firebase 着手時） |
+| `shared/framework/` | iOS 向け Umbrella（`SharedLogic.xcframework` を出力、SKIE 適用先） |
 | `sharedUI/` | Compose Multiplatform 将来枠（当面未着手） |
-| `iosApp/` | SwiftUI エントリポイント |
-| `androidApp/` | Android エントリポイント |
+| `iosApp/` | SwiftUI エントリポイント + Swift Firebase 実装 |
+| `androidApp/` | Android エントリポイント（検証ターゲット） |
 
-### 目標構成（段階的に移行中）
+### 目標構成（Phase 3 以降で追加）
 
-`sharedLogic` を `shared/core` / `shared/domain` / `shared/data-local` / `shared/data-places` / `shared/data-firebase` / `shared/feature/*` / `shared/framework` に分割し、`build-logic/convention/` で共通設定を集約する構成へ移行します。
+Phase 3 で `shared/feature/*`（`visit-list` / `visit-detail` / `visit-editor` 等）、Phase 4 で `shared/data-places` を追加予定。
 
 詳細・移行ステップは [`docs/architecture.md`](./docs/architecture.md) を参照してください。
 
@@ -184,11 +189,11 @@
 
 ### アーキテクチャ
 
-- ドメインモデル・ユースケース・リポジトリ・ViewModel はすべて KMP 共通層（現状: `sharedLogic/commonMain` / 目標: `shared/domain` + `shared/feature/*` + `shared/data-*`）に置く
+- ドメインモデル・ユースケース・リポジトリ・ViewModel はすべて KMP 共通層（`shared/domain` + `shared/feature/*`（Phase 3 以降）+ `shared/data-*`）に置く
 - `feature` 同士の相互依存は禁止。画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
 - iOS / Android 固有実装が必要なものは `expect`/`actual` で表現する（プラットフォーム API ラッパに限定）
 - ViewModel は `kotlinx.coroutines` の `StateFlow` で UI 状態を公開する
-- Firebase は公式プラットフォーム別 SDK を採用。iOS 実装は `iosApp` 側 Swift、Android 実装は `shared/data-firebase/androidMain`（現状は `sharedLogic/androidMain`）。`shared/domain` の Repository インターフェースで非対称性を吸収する
+- Firebase は公式プラットフォーム別 SDK を採用。iOS 実装は `iosApp` 側 Swift、Android 実装は `shared/data-firebase/androidMain`。`shared/domain` の Repository インターフェースで非対称性を吸収する
 - Firestore の同期はオフライン永続化に委ね、独自の同期キューは書かない
 - ローカル DB（SQLDelight）は検索・オフライン参照を高速化する用途で利用する
 
@@ -220,7 +225,7 @@
 - [ ] 副作用は `suspend` 関数または `Flow` として定義されているか
 - [ ] `commonMain` で書ける処理を `iosMain` / `androidMain` に漏らしていないか
 - [ ] `when` で全ケースを網羅しているか
-- [ ] 配置先モジュールが正しいか（モデル / UseCase は `domain`、ViewModel は `feature/*`、DB は `data-local`、Firestore は `data-firebase`。Phase 2 以前は `sharedLogic` 一枚に集約）
+- [ ] 配置先モジュールが正しいか（モデル / UseCase は `domain`、ViewModel は `feature/*`（Phase 3 以降。現状は `core` 経由）、DB は `data-local`、Firestore は `data-firebase`）
 
 ### Swift（iosApp）
 

@@ -38,13 +38,15 @@ import kotlinx.coroutines.MainScope
  * [docs/kmp-bridge.md](../../../../docs/kmp-bridge.md) §CoroutineScope の橋渡し のとおり、
  * 「AppContainer 内で隠蔽する」方針。
  *
- * ## Phase 2 時点の責務
+ * ## Phase 3 時点の責務
  *
  * - 依存配線（ローカル DB + リポジトリ合成）
  * - 起動時の同期開始（[startInitialSync]）
- *
- * ViewModel ファクトリ（`makeVisitListViewModel()` 等）は Phase 3 で ViewModel を作る際に
- * 追加する。Phase 2 ではスタブも置かない（YAGNI）。
+ * - ViewModel ファクトリ: `core → feature` の循環依存を避けるため、ファクトリ関数は
+ *   `shared/framework` の `AppContainerViewModelFactory.kt`（拡張関数）として定義する。
+ *   Kotlin/Native は同モジュール内のレシーバを持つ拡張関数を Obj-C category（インスタンス
+ *   メソッド）として出力するため、Swift 側からは `appContainer.makeVisitListViewModel()` の
+ *   形でそのまま呼べる。
  */
 class AppContainer(
     sqlDriver: SqlDriver,

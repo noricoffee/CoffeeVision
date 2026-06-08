@@ -88,9 +88,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [x] | `AppContainer`（Kotlin）を実装し、iOS の `iOSApp.swift` から起動 | 2026-06-04 / Phase 2 で先行実施（Swift で `AppContainer` を組み立て + `startInitialSync()` 呼び出しまで）。ViewModel ファクトリの追加は Phase 3 の各 ViewModel タスクと一緒に実施 |
-| [ ] | `VisitListViewModel`（Kotlin）と `VisitListViewModelBridge`（Swift）を実装 | |
-| [ ] | ホーム画面（VisitListView）を実装 | |
+| [x] | `AppContainer`（Kotlin）を実装し、iOS の `iOSApp.swift` から起動 | 2026-06-04 / Phase 2 で先行実施（Swift で `AppContainer` を組み立て + `startInitialSync()` 呼び出しまで）。Phase 3（2026-06-09）で `AppContainer.makeVisitListViewModel()` 拡張関数を `shared/framework` に追加（core / feature 循環依存回避のため。詳細は [`implementation_note.md`](./implementation_note.md) 参照） |
+| [x] | `VisitListViewModel`（Kotlin）と `VisitListViewModelBridge`（Swift）を実装 | 2026-06-09 / Kotlin 側は `shared/feature/visit-list` モジュール（Phase 3.5 同時切り出し）に `VisitListViewModel(visitRepository, scope)` + `UIState(visits, isLoading, error)` + `onAppear(userId) / onVisitDeleted(id) / onErrorDismissed()` を実装。Swift 側は `iosApp/iosApp/Features/VisitList/VisitListViewModelBridge.swift` に `@MainActor @Observable` ブリッジを実装。`for await state in kotlin.state` で `SkieSwiftStateFlow` を購読 |
+| [~] | ホーム画面（VisitListView）を実装 | 2026-06-09 / `iosApp/iosApp/Features/VisitList/VisitListView.swift`。`NavigationStack` + 空状態 `ContentUnavailableView` + swipe-to-delete 付き `List` + 行タップで `VisitDetailPlaceholderView` 遷移 + ツールバー `+` で `writeDummyVisit()`。`Phase2VerificationView` は削除済。`xcodebuild -sdk iphonesimulator` 成功。**シミュレータ実機での目視確認後に [x] へ** |
 | [ ] | Visit 詳細画面（VisitDetailView）を実装 | |
 | [ ] | Visit 作成 / 編集画面（VisitEditorView）を実装 | |
 | [ ] | CoffeeItem の追加 / 編集 UI（モーダル） | |
@@ -110,7 +110,7 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | `shared/framework` モジュール作成（iOS 向け Umbrella）+ XCFramework ビルド確認 | 2026-06-08 / Phase 2.5 PR3 dispatch A で前倒し作成、dispatch C でビルド検証完了。XCFramework 名・内部 framework 名ともに `SharedLogic`、`assembleSharedLogicXCFramework` タスクで生成 |
-| [ ] | `feature/visit-list` モジュール切り出し（最初の feature module） | Phase 3 開始時 |
+| [x] | `feature/visit-list` モジュール切り出し（最初の feature module） | 2026-06-09 / Phase 3 着手の縦スライスと同時に分離。`shared/feature/visit-list/build.gradle.kts` で `kmp.feature` Convention Plugin を初適用、`com.noricoffee.feature.visitlist.VisitListViewModel` を配置。`shared/framework` から `api` + `export` 追加、`settings.gradle.kts` に include 追加。`./gradlew :shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 共に成功 |
 | [ ] | `feature/visit-detail` モジュール切り出し | Phase 3 進行中 |
 | [ ] | `feature/visit-editor` モジュール切り出し | Phase 3 進行中 |
 | [ ] | `androidApp` で `feature/visit-list` を Compose の 1 画面として表示 | Phase 3 完了と並行（検証ターゲット） |

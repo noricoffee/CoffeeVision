@@ -6,9 +6,6 @@ import SharedLogic
 @main
 struct iOSApp: App {
 
-    /// Phase 3 で本格的な ViewModel ファクトリを追加する想定の Phase 2 検証用 App 状態。
-    /// `@State` の初期値は `init()` 内で `FirebaseApp.configure()` 後に設定する必要があるため
-    /// 一旦 nil ホルダで宣言し、`init` で確実に注入する。
     @State private var appState: AppState
 
     init() {
@@ -31,7 +28,59 @@ struct iOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            Phase2VerificationView(state: appState)
+            RootView(appState: appState)
+        }
+    }
+}
+
+// MARK: - RootView
+
+/// uid の確定状況に応じてローディング表示と VisitListView を切り替えるルートビュー。
+///
+/// - uid == nil（サインイン中 / 失敗）: ProgressView + 状態テキスト
+/// - uid != nil: VisitListView を表示
+///
+/// `visitListBridge` は AppState 内で lazy に 1 度だけ生成されるため、
+/// RootView の再描画で ViewModel が作り直されることはない。
+@MainActor
+private struct RootView: View {
+
+    var appState: AppState
+
+    var body: some View {
+        if let bridge = appState.visitListBridge, appState.uid != nil {
+            VisitListView(viewModel: bridge, appState: appState)
+        } else {
+            loadingView
+                .task {
+                    await appState.bootstrap()
+                }
+        }
+    }
+
+    private var loadingView: some View {
+        VStack(spacing: 16) {
+            ProgressView()
+            Text(loadingStatusText)
+                .font(.body)
+                .foregroundStyle(.secondary)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color(.systemBackground))
+    }
+
+    private var loadingStatusText: String {
+        switch appState.status {
+        case .idle:
+            return String(localized: "起動中...")
+        case .signingIn:
+            return String(localized: "サインイン中...")
+        case .ready:
+            return String(localized: "準備完了")
+        case .writing:
+            return String(localized: "書き込み中...")
+        case .failed:
+            return String(localized: "起動に失敗しました")
         }
     }
 }

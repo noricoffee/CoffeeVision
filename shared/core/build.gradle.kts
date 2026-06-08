@@ -15,7 +15,6 @@ kotlin {
             api(projects.shared.dataLocal)
             // Repository インターフェースの Android 実装の class path を core 経由で公開
             api(projects.shared.dataFirebase)
-
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {

@@ -30,9 +30,9 @@ dependencyResolutionManagement {
 }
 
 include(":androidApp")
-include(":sharedLogic")
 include(":sharedUI")
 include(":shared:core")
 include(":shared:domain")
 include(":shared:data-local")
 include(":shared:data-firebase")
+include(":shared:framework")

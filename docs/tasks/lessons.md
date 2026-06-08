@@ -147,3 +147,28 @@
 - `expect fun createInMemoryTestSqlDriver()` を `shared/data-local` の commonTest に置くと、その actual は同モジュールの `androidHostTest` / `iosTest` にしか書けない。他モジュールの commonTest から再利用する標準手段はない（`testFixtures` 導入 or ヘルパ自体を `commonMain` に置くなど工夫が必要）
 - 結果として「`VisitRepositoryImpl` のテストを `shared/core` 側に置きたい」が、`data-local` の expect/actual ドライバを再利用したいので **テストを `data-local` 側に置く** 妥協が現実解になる
 - 教訓: `expect/actual` は「同モジュール内で完結する」前提で設計する。一度書いた expect/actual を他モジュールから使いまわすコストは高いので、最初から「ヘルパだけ別の共有テストモジュールに切り出す」設計を選ぶか、テストの所属モジュールを実装の所属と切り離す覚悟を持つ
+
+### KMP の `XCFramework(name)` と framework `baseName` は揃えると warning が消えタスク名も直感的になる
+
+- `binaries.framework { baseName = "X" }` と `XCFramework("Y")` を別々の文字列にすると、最終 XCFramework 名と内部 framework 名の mismatch warning が出る: `w: XCFramework Name Mismatch with Inner Frameworks. ... Framework renaming is not supported yet`
+- 揃えると warning が消えるだけでなく、生成タスクが `assemble<XCFrameworkName>XCFramework`（揃えた名前）となり直感的になる
+- Swift 側の `import` 文は `baseName` 側に固定される（XCFramework 名は関係ない）。既存 Swift コードの import を壊したくないなら、`baseName` を維持して XCFramework 名側を揃える
+- 改名する場合は CI の `.github/workflows/*.yml` の `assemble<Name>XCFramework` タスク名追随を忘れない
+
+### `XCFramework(name)` ヘルパ宣言なしでは `assemble<Name>XCFramework` タスクは生成されない
+
+- iOS framework target に `framework { ... }` ブロックを書くだけだと自動生成されるのは `linkDebugFrameworkIos*` / `linkReleaseFrameworkIos*` まで
+- `assemble<Name>XCFramework` を得るには `import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework` + `val xcf = XCFramework("Name")` を宣言し、各 framework block で `xcf.add(this)` を呼ぶ必要がある
+- 切り分け: `./gradlew :module:tasks --all | grep -iE xcframework` で task 一覧を見ると、ヘルパ未宣言だと該当 task が存在しないことが即わかる
+
+### Umbrella framework 移行で Xcode 側に必要な変更は Run Script 1 行のみ
+
+- 内部 framework `baseName` を維持して umbrella モジュールに切り替えるなら、Xcode 側で変更すべきは `project.pbxproj` の Run Script `./gradlew :<old>:embedAndSignAppleFrameworkForXcode` → `./gradlew :<new>:embedAndSignAppleFrameworkForXcode` の 1 行のみ
+- Framework Search Paths / PBXBuildFile / PBXFrameworksBuildPhase / inputPaths / outputPaths は無変更で OK（`embedAndSignAppleFrameworkForXcode` が `$BUILT_PRODUCTS_DIR` ベースに framework を配置するため、Xcode 側の探索パスは変わらない）
+- Swift 側コードも `import SharedLogic` 等が無変更で動く（内部 framework 名が変わらないため）
+
+### SourceKit の `No such module 'X'` は実ビルド成功と乖離することがある
+
+- `xcodebuild` で BUILD SUCCEEDED でも、SourceKit（IDE インデックス）が `import X` を「No such module」と報告することがある
+- 原因はインデックスキャッシュ。`Product → Clean Build Folder` + `~/Library/Developer/Xcode/DerivedData/iosApp-*` 削除で直ることが多い
+- そもそも `import X` が当該ファイル内で使われていなければ **import 自体を削除** するのが最もエレガント（dead code 削除 + SourceKit 黄信号解消）

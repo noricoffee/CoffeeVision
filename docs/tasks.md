@@ -79,8 +79,8 @@
 | [x] | `data-local` モジュール切り出し（SQLDelight スキーマ + DriverFactory） | 2026-06-08 / Phase 2.5 PR2 で完了。SQLDelight プラグイン / `AppDatabase` 宣言 / Mapper / DriverFactory expect/actual / LocalVisitRepository を `git mv` で移送。`VisitRepositoryImplTest` は `createInMemoryTestSqlDriver` の expect/actual が data-local に閉じている制約から例外的に data-local の commonTest に配置 |
 | [~] | `data-firebase` モジュール切り出し（Firestore / Auth / Storage Android 実装） | 2026-06-08 / Phase 2.5 PR2 で空殻（`build.gradle.kts` + Firebase BoM 依存のみ）を作成。Android Firebase 実装の移送は Android Firebase 実装の着手時 |
 | [x] | `AppContainer` の依存配線を新モジュール構成に合わせて整理 | 2026-06-08 / Phase 2.5 PR2 で `shared/core` に移送。`api(projects.shared.dataLocal)` 経由で `AppDatabase` / `LocalVisitRepository` を取り込む構成。Swift 側 `import SharedLogic` は無変更（旧 `sharedLogic` が Reexport 層として export） |
-| [ ] | 旧 `sharedLogic` モジュールを削除（`settings.gradle.kts` から除外） | 分割完了後 |
-| [ ] | 分割後ビルド確認: `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` + `./gradlew :androidApp:assembleDebug` | CI が通ること。あわせて `.github/workflows/ci.yml` の iOS link コマンドを `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える |
+| [x] | 旧 `sharedLogic` モジュールを削除（`settings.gradle.kts` から除外） | 2026-06-08 / Phase 2.5 PR3 dispatch C で完了。`Greeting` / `Platform` 残骸も同時に削除、`sharedUI/build.gradle.kts` を `api(projects.shared.framework)` に切り替え |
+| [x] | 分割後ビルド確認: `./gradlew :shared:framework:assembleSharedLogicXCFramework` + `./gradlew :androidApp:assembleDebug` | 2026-06-08 / Phase 2.5 PR3 dispatch C で完了。XCFramework 名は `SharedLogic` に統一（baseName と揃えて mismatch warning 解消）。`.github/workflows/ci.yml` も `:shared:data-local:testAndroidHostTest` + `:shared:framework:assembleSharedLogicXCFramework` に差し替え済 |
 
 ---
 
@@ -109,7 +109,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `shared/framework` モジュール作成（iOS 向け Umbrella）+ XCFramework ビルド確認 | Phase 3 開始時 / `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` |
+| [x] | `shared/framework` モジュール作成（iOS 向け Umbrella）+ XCFramework ビルド確認 | 2026-06-08 / Phase 2.5 PR3 dispatch A で前倒し作成、dispatch C でビルド検証完了。XCFramework 名・内部 framework 名ともに `SharedLogic`、`assembleSharedLogicXCFramework` タスクで生成 |
 | [ ] | `feature/visit-list` モジュール切り出し（最初の feature module） | Phase 3 開始時 |
 | [ ] | `feature/visit-detail` モジュール切り出し | Phase 3 進行中 |
 | [ ] | `feature/visit-editor` モジュール切り出し | Phase 3 進行中 |

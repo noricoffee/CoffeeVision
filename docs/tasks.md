@@ -95,7 +95,7 @@
 | [ ] | Visit 作成 / 編集画面（VisitEditorView）を実装 | |
 | [ ] | CoffeeItem の追加 / 編集 UI（モーダル） | |
 | [ ] | FoodItem の追加 / 編集 UI（モーダル） | |
-| [ ] | 星評価入力コンポーネント（StarRatingView）を実装 | |
+| [x] | 星評価入力コンポーネント（StarRatingView）を実装 | 2026-06-09 / `iosApp/iosApp/Components/StarRatingView.swift`。`onChange` の有無で read-only / 編集モードを切替。編集モードは 44pt タップ領域 + `accessibilityAdjustableAction` で VoiceOver Stepper 相当 + `.sensoryFeedback(.selection, trigger: rating)`。VisitListView / VisitDetailView の既存星表示を全置換 |
 | [ ] | Firebase を Blaze プランへアップグレードし Storage 有効化（asia-northeast1）+ `storage.rules` をデプロイ | 写真機能の前段。`firebase.json` に `storage` キーを戻して `firebase deploy --only storage`。`storage.rules` はリポジトリに既存（Phase 2 で先回り作成） |
 | [ ] | 写真ピッカー（PhotosPicker）を組み込み | |
 | [ ] | ローカル保存後、Storage に非同期アップロードする処理 | |

@@ -285,12 +285,19 @@ iosApp/iosApp/
 │   │   ├── VisitEditorView.swift
 │   │   └── VisitEditorViewModelBridge.swift
 │   └── ...
+├── Components/                      // 2 画面以上で共用する汎用 View（StarRatingView 等）
 ├── FirebaseRepositories/            // shared/domain の Repository インターフェースを Swift で実装
 │   ├── VisitRepositoryIosImpl.swift
 │   └── AuthRepositoryIosImpl.swift
 ├── Bridge/                          // Flow / suspend / sealed を Swift から扱うヘルパ
 └── Extensions/
 ```
+
+### `Components/` への配置基準
+
+- 単一機能（Feature）内でしか使わない View は `Features/<Feature>/` 内に `private struct` として置く
+- **2 画面以上で使われる**、または **単体で入力 UI として再利用できる汎用 View**（評価入力、写真サムネ表示、ローディング表示など）は `Components/` に切り出す
+- `Components/` 配下の View はドメインモデル（`shared/domain` の型）に依存してよいが、`AppState` や ViewModel Bridge には依存しないこと（再利用可能性を保つため）
 
 ### View ファイルの構造
 

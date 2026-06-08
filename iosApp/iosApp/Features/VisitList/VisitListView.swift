@@ -147,14 +147,7 @@ private struct VisitRow: View {
     }
 
     private var starRating: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<5, id: \.self) { index in
-                Image(systemName: index < Int(visit.rating) ? "star.fill" : "star")
-                    .font(.caption2)
-                    .foregroundStyle(.yellow)
-            }
-        }
-        .accessibilityHidden(true) // 合成アクセシビリティラベルで代替
+        StarRatingView(rating: Int(visit.rating), size: .caption2)
     }
 
     private var accessibilityDescription: String {

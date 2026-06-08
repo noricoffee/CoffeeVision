@@ -87,9 +87,8 @@ struct VisitDetailView: View {
                 }
 
                 LabeledContent(String(localized: "評価")) {
-                    StarsView(rating: Int(visit.rating))
+                    StarRatingView(rating: Int(visit.rating))
                 }
-                .accessibilityLabel(String(localized: "\(Int(visit.rating))星"))
             }
 
             // 雰囲気
@@ -154,24 +153,6 @@ struct VisitDetailView: View {
     }
 }
 
-// MARK: - StarsView
-
-/// 星評価表示コンポーネント（read-only）。
-private struct StarsView: View {
-    let rating: Int
-
-    var body: some View {
-        HStack(spacing: 2) {
-            ForEach(0..<5, id: \.self) { index in
-                Image(systemName: index < rating ? "star.fill" : "star")
-                    .font(.body)
-                    .foregroundStyle(.yellow)
-            }
-        }
-        .accessibilityHidden(true)
-    }
-}
-
 // MARK: - CoffeeItemRow
 
 /// コーヒーアイテム行コンポーネント。
@@ -191,8 +172,7 @@ private struct CoffeeItemRow: View {
                     .foregroundStyle(.secondary)
             }
 
-            StarsView(rating: Int(coffee.rating))
-                .accessibilityLabel(String(localized: "\(Int(coffee.rating))星"))
+            StarRatingView(rating: Int(coffee.rating), size: .subheadline)
 
             if let notes = coffee.notes, !notes.isEmpty {
                 Text(notes)
@@ -227,8 +207,7 @@ private struct FoodItemRow: View {
             Text(food.name)
                 .font(.headline)
 
-            StarsView(rating: Int(food.rating))
-                .accessibilityLabel(String(localized: "\(Int(food.rating))星"))
+            StarRatingView(rating: Int(food.rating), size: .subheadline)
 
             if let notes = food.notes, !notes.isEmpty {
                 Text(notes)

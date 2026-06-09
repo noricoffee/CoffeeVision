@@ -224,7 +224,8 @@ class VisitRepositoryImplTest {
             photos = listOf(
                 Photo(
                     id = "p1",
-                    localPath = "/tmp/p1.jpg",
+                    fileName = "p1.jpg",
+                    localPath = "visits/visit-1/p1.jpg",
                     remoteUrl = null,
                     width = 1920,
                     height = 1080,

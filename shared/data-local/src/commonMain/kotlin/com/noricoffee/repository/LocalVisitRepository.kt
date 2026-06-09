@@ -95,6 +95,7 @@ class LocalVisitRepository(
                 db.photoQueries.upsert(
                     id = row.id,
                     visit_id = row.visit_id,
+                    file_name = row.file_name,
                     local_path = row.local_path,
                     remote_url = row.remote_url,
                     width = row.width,

@@ -117,6 +117,7 @@ internal fun Food_item.toDomain(): DomainFoodItem = DomainFoodItem(
 internal fun DomainPhoto.toRow(visitId: String, sortOrder: Int): Photo = Photo(
     id = id,
     visit_id = visitId,
+    file_name = fileName,
     local_path = localPath,
     remote_url = remoteUrl,
     width = width?.toLong(),
@@ -127,6 +128,7 @@ internal fun DomainPhoto.toRow(visitId: String, sortOrder: Int): Photo = Photo(
 
 internal fun Photo.toDomain(): DomainPhoto = DomainPhoto(
     id = id,
+    fileName = file_name,
     localPath = local_path,
     remoteUrl = remote_url,
     width = width?.toInt(),

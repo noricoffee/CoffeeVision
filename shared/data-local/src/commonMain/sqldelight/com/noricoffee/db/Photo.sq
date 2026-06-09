@@ -1,6 +1,7 @@
 CREATE TABLE photo (
     id TEXT NOT NULL PRIMARY KEY,
     visit_id TEXT NOT NULL,
+    file_name TEXT,
     local_path TEXT,
     remote_url TEXT,
     width INTEGER,
@@ -17,8 +18,8 @@ SELECT * FROM photo WHERE visit_id = ? ORDER BY sort_order ASC;
 
 upsert:
 INSERT OR REPLACE INTO photo (
-    id, visit_id, local_path, remote_url, width, height, created_at, sort_order
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    id, visit_id, file_name, local_path, remote_url, width, height, created_at, sort_order
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteByVisit:
 DELETE FROM photo WHERE visit_id = ?;

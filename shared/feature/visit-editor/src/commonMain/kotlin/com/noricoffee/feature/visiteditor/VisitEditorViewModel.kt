@@ -3,6 +3,7 @@ package com.noricoffee.feature.visiteditor
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeItem
 import com.noricoffee.domain.FoodItem
+import com.noricoffee.domain.Photo
 import com.noricoffee.domain.Visit
 import com.noricoffee.repository.VisitRepository
 import kotlinx.coroutines.CoroutineScope
@@ -87,6 +88,7 @@ class VisitEditorViewModel(
      * @property notes 自由メモ（任意。最大 2000 文字）
      * @property coffees コーヒーアイテム一覧
      * @property foods フードアイテム一覧
+     * @property photos 写真アイテム一覧
      */
     data class VisitDraft(
         val cafeName: String,
@@ -99,6 +101,7 @@ class VisitEditorViewModel(
         val notes: String,
         val coffees: List<CoffeeItem>,
         val foods: List<FoodItem>,
+        val photos: List<Photo> = emptyList(),
     )
 
     /**
@@ -300,6 +303,35 @@ class VisitEditorViewModel(
         _state.update { it.copy(draft = it.draft.copy(foods = it.draft.foods.filter { f -> f.id != id })) }
     }
 
+    /**
+     * 写真アイテムを追加または更新する。
+     *
+     * 既存リストに [item] と同じ id のアイテムが存在する場合は置換し、
+     * 存在しない場合は末尾に追加する（upsert 挙動）。
+     *
+     * @param item 追加または更新する写真アイテム
+     */
+    fun onPhotoUpserted(item: Photo) {
+        _state.update { state ->
+            val existing = state.draft.photos.indexOfFirst { it.id == item.id }
+            val updated = if (existing >= 0) {
+                state.draft.photos.toMutableList().also { it[existing] = item }
+            } else {
+                state.draft.photos + item
+            }
+            state.copy(draft = state.draft.copy(photos = updated))
+        }
+    }
+
+    /**
+     * 写真アイテムを削除する。
+     *
+     * @param id 削除対象の [Photo.id]
+     */
+    fun onPhotoRemoved(id: String) {
+        _state.update { it.copy(draft = it.draft.copy(photos = it.draft.photos.filter { p -> p.id != id })) }
+    }
+
     // --- 保存 ---
 
     /**
@@ -405,7 +437,7 @@ class VisitEditorViewModel(
             ambiance = draft.ambiance,
             rating = draft.rating,
             notes = draft.notes,
-            photos = emptyList(),
+            photos = draft.photos,
             coffees = draft.coffees,
             foods = draft.foods,
             createdAt = createdAt,
@@ -429,6 +461,7 @@ class VisitEditorViewModel(
             notes = "",
             coffees = emptyList(),
             foods = emptyList(),
+            photos = emptyList(),
         )
     }
 }
@@ -450,4 +483,5 @@ private fun Visit.toDraft(): VisitEditorViewModel.VisitDraft = VisitEditorViewMo
     notes = notes,
     coffees = coffees,
     foods = foods,
+    photos = photos,
 )

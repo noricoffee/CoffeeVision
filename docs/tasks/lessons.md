@@ -204,3 +204,16 @@
 - 既出の「SourceKit `No such module 'X'`」とは別系統で、DerivedData に過去 SDK 向けの broken symlink（`iphonesimulator17.x` 等）が残っていると、SDK アップグレード後にビルドの検索パスがそちらを先に当てて、`.swiftinterface` が見つからず `'.allCases' has no member` 系のエラーになることがある
 - 対処: `~/Library/Developer/Xcode/DerivedData/iosApp-*` を消してから `Product > Clean Build Folder` + 再ビルド
 - 切り分け: `xcodebuild` の `-showBuildSettings` でフレームワーク検索パスを出して、broken symlink が含まれていないかを確認
+
+---
+
+## 2026-06-10
+
+### SQLDelight 2.x の schemaVersion は migration ファイル名で自動決定される
+
+- `build.gradle.kts` の `sqldelight { databases { create("AppDatabase") { ... } } }` に `schemaVersion` の明示指定は **不要**
+- `src/commonMain/sqldelight/migrations/N.sqm`（N は旧バージョン番号）を置くだけで `AppDatabase.Schema.version` が自動的に `N + 1` になる。例: `1.sqm` を置けば Schema.version は `2`、`2.sqm` まで置けば `3`
+- `AndroidSqliteDriver(AppDatabase.Schema, context, dbName)` / `NativeSqliteDriver(AppDatabase.Schema, dbName)` が Schema.version と既存 DB の `user_version` を比較して必要な migration を順次自動実行する
+- migration ファイルの配置先は `.sq` ファイルと同じ `sqldelight` フォルダ内の `migrations/` サブディレクトリ（`src/commonMain/sqldelight/migrations/N.sqm`）。`build.gradle.kts` 側で srcDir 指定は不要
+- migration ファイルの中身は SQL のみ（`.sqm` フォーマット）。例: `ALTER TABLE photo ADD COLUMN file_name TEXT;` のような ALTER 系を素で書ける
+- 既存検証データを残したまま列追加できるため、Phase 中の開発でも端末データを毎回消す必要がない

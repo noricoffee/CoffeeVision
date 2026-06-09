@@ -4,6 +4,7 @@ import kotlinx.datetime.Instant
 
 data class Photo(
     val id: String,
+    val fileName: String?,
     val localPath: String?,
     val remoteUrl: String?,
     val width: Int?,

@@ -240,7 +240,7 @@ List { ... }
 - 一覧では `AsyncImage` または独自のキャッシュ画像 View でサムネイル表示
 - 詳細では `ScrollView(.horizontal)` + `LazyHStack` で複数枚を横スワイプ
 - 全画面表示は `.fullScreenCover` + `MagnificationGesture` でピンチズーム
-- ローカルにキャッシュがあれば優先表示し、Storage URL からの再取得は非同期で行う
+- 写真本体は端末ローカル（Documents 配下）のファイルから読み込む（クラウド同期対象外。詳細は [`requirements.md`](./requirements.md) §7-2）
 
 ---
 

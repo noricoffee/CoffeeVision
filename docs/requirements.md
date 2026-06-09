@@ -51,7 +51,7 @@ Visit とはカフェへの 1 回の訪問記録の単位。1 Visit には 0..N 
 | 内装の雰囲気 | `String`（自由入力） + タグ候補 | ◎ | 「落ち着き」「広い」「写真映え」等のタグも将来検討 |
 | 総合評価 | `Int`（1..5）または `Double`（0.5 刻み） | ◎ | UI は星 5 段階 |
 | メモ | `String`（複数行） | ◎ | |
-| 写真 | 複数の `Photo`（最大 N 枚） | ◎ | ローカル保存 + Firebase Storage へアップロード |
+| 写真 | 複数の `Photo`（最大 N 枚） | ◎ | 端末ローカル（Documents 配下）に保存。iCloud Backup でバックアップ |
 | CoffeeItem 一覧 | `List<CoffeeItem>` | ◎ | 1..N が一般的だが 0 件もあり得る |
 | FoodItem 一覧 | `List<FoodItem>` | ◎ | 0 件もあり得る |
 
@@ -143,8 +143,8 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 | # | 機能 | 優先度 | 備考 |
 |---|------|--------|------|
 | 7-1 | Firestore へのリアルタイム同期 | ◎ | Firestore のオフライン永続化に委譲 |
-| 7-2 | 写真の Firebase Storage アップロード | ◎ | ローカルキャッシュも保持 |
-| 7-3 | 複数端末からの参照 | ○ | 同一アカウントで同期される |
+| 7-2 | 写真は端末ローカル保存のみ | ◎ | クラウド同期対象外。iCloud Backup でバックアップする方針 |
+| 7-3 | 複数端末からの参照（写真以外） | ○ | 同一アカウントで Firestore 同期される。写真は端末ローカルのため引き継ぎ不可 |
 | 7-4 | データのエクスポート（JSON） | △ | |
 
 ---
@@ -168,7 +168,7 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 | アクセシビリティ | VoiceOver 対応・Dynamic Type 対応・最小タップ領域 44pt |
 | オフライン | 完全オフライン動作可能（Firestore のオフライン永続化、ローカル SQLDelight） |
 | 同期 | オンライン復帰時に Firestore が自動で同期する。独自の同期キューは持たない |
-| データ保存 | ローカル: SQLDelight / クラウド: Firestore + Storage |
+| データ保存 | ローカル: SQLDelight + 写真ファイル（Documents 配下） / クラウド: Firestore（写真本体は対象外） |
 | セキュリティ | Firestore Security Rules で `uid` に基づくアクセス制御。API キーは難読化 |
 | プライバシー | 位置情報の利用は Places 検索時のみ。常時取得しない |
 | API キー管理 | `local.properties` から `BuildConfig` 経由で注入。リポジトリにコミットしない |
@@ -198,7 +198,7 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 | `Cafe` | Places API 由来のカフェ情報スナップショット | `place_id` をキーに集約可能 |
 | `CoffeeItem` | 1 杯のコーヒー記録 | `Visit` に従属 |
 | `FoodItem` | フード記録 | `Visit` に従属 |
-| `Photo` | 写真への参照 | ローカルパス + Storage URL |
+| `Photo` | 写真への参照 | Documents 配下からの相対ファイル名（クラウド同期対象外） |
 
 詳細なフィールド定義・SQLDelight / Firestore スキーマは [`data-model.md`](./data-model.md) を参照。
 
@@ -221,3 +221,4 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 |------|---------|
 | 2026-06-02 | 初版作成 |
 | 2026-06-03 | ターゲット OS を iOS 26 以上 / Android 16（API 36）以上 に引き上げ |
+| 2026-06-10 | 写真は端末ローカル保存のみに方針変更（Firebase Storage 採用見送り）。iCloud Backup でバックアップ |

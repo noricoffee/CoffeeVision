@@ -135,15 +135,15 @@ data class FoodItem(
 ```kotlin
 data class Photo(
     val id: String,
-    val localPath: String?,               // 端末内のファイルパス（キャッシュ）
-    val remoteUrl: String?,               // Firebase Storage の HTTPS URL
+    val localPath: String?,               // Documents 配下からの相対ファイル名（例: "visits/{visitId}/{photoId}.jpg"）。iOS Documents URL は起動ごとに変わるため絶対パス禁止
+    val remoteUrl: String?,               // 将来 Firebase Storage 復活用フィールド。現状は常に null
     val width: Int?,
     val height: Int?,
     val createdAt: Instant,
 )
 ```
 
-> ローカル / リモートのどちらかは必ず非 null。両方持っていれば同期済み。
+> 現状は `localPath` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。
 
 ---
 
@@ -315,11 +315,10 @@ users/{uid}
   visits/{visitId}                       # Visit 本体（Cafe / 評価 / メモ）
     coffeeItems/{coffeeItemId}           # サブコレクション
     foodItems/{foodItemId}               # サブコレクション
-    photos/{photoId}                     # サブコレクション（メタ情報のみ）
-
-storage:
-  users/{uid}/visits/{visitId}/photos/{photoId}.jpg   # 写真本体は Storage
+    photos/{photoId}                     # サブコレクション（メタ情報のみ。写真本体は端末ローカル）
 ```
+
+写真本体は Firestore / Storage に同期せず、端末の Documents 配下にのみ保存します（[`requirements.md`](./requirements.md) §7-2）。
 
 ### なぜサブコレクションか
 
@@ -391,7 +390,6 @@ storage:
 ```json
 {
   "id": "uuid-v4",
-  "remoteUrl": "https://firebasestorage.googleapis.com/.../photo.jpg",
   "width": 1920,
   "height": 1080,
   "createdAt": <Timestamp>,
@@ -399,8 +397,8 @@ storage:
 }
 ```
 
-`localPath` は Firestore には保存しません（端末ごとの値のため）。
-ローカル DB のみが持つメタデータです。
+- `localPath` は Firestore には保存しません（端末ごとの値のため。ローカル DB のみが持つメタデータ）
+- `remoteUrl` も Firestore には書きません（Storage 採用見送りのため常に null。Kotlin / SQLDelight スキーマ上のフィールドは将来復活用に残置）
 
 ---
 
@@ -416,8 +414,6 @@ service cloud.firestore {
   }
 }
 ```
-
-Storage も同じく `users/{uid}/...` パスを uid で制限します。
 
 ---
 
@@ -446,13 +442,12 @@ interface VisitRepository {
 - **書き込み** は **SQLDelight → Firestore の順** で実施
   - SQLDelight の書き込み完了で即座に UI 更新
   - Firestore への書き込みは並行で投げ、失敗時は SDK のオフラインキューに任せる
-- **写真** は Storage アップロード完了後に `photo.remoteUrl` を更新する。アップロード中も `localPath` で UI は表示できる
+- **写真** は端末ローカル（Documents 配下）にのみ保存する。Firestore の `photos` サブコレクションには `fileName` / `width` / `height` / `createdAt` などメタデータのみを書き出し、`remoteUrl` は常に null（Storage 採用見送りのため）
 
 ```kotlin
 class VisitRepositoryImpl(
     private val db: AppDatabase,
     private val firestore: Firestore,
-    private val storage: FirebaseStorage,
     private val scope: CoroutineScope,
 ) : VisitRepository {
 

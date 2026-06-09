@@ -237,12 +237,12 @@ fun saves_visit_locally_and_remotely() = runTest {
 
 ```kotlin
 // Good
-// Firestore SDK の 1MB 上限を避けるため、写真本体は Storage に逃がす
-photos.forEach { storage.upload(it) }
+// SKIE は Swift 側で enum を camelCase に変換するため、Firestore には Kotlin の元名（name）で書き出す
+data["brewMethod"] = item.brewMethod.name
 
 // Bad
-// 写真をアップロードする
-photos.forEach { storage.upload(it) }
+// brewMethod を文字列化
+data["brewMethod"] = item.brewMethod.name
 ```
 
 ---

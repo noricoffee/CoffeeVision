@@ -2,6 +2,7 @@ package com.noricoffee.framework
 
 import com.noricoffee.AppContainer
 import com.noricoffee.feature.visitdetail.VisitDetailViewModel
+import com.noricoffee.feature.visiteditor.VisitEditorViewModel
 import com.noricoffee.feature.visitlist.VisitListViewModel
 
 /**
@@ -42,3 +43,15 @@ fun AppContainer.makeVisitListViewModel(): VisitListViewModel =
  */
 fun AppContainer.makeVisitDetailViewModel(): VisitDetailViewModel =
     VisitDetailViewModel(visitRepository, scope)
+
+/**
+ * [VisitEditorViewModel] を生成して返す。
+ *
+ * [AppContainer] が保持する [com.noricoffee.repository.VisitRepository] と
+ * CoroutineScope（内部の MainScope）を自動配線する。
+ *
+ * 新規作成（[VisitEditorViewModel.Mode.Create]）と編集（[VisitEditorViewModel.Mode.Edit]）の
+ * 両モードを同一 ViewModel で扱う。モードの切り替えは [VisitEditorViewModel.onAppear] に渡す。
+ */
+fun AppContainer.makeVisitEditorViewModel(): VisitEditorViewModel =
+    VisitEditorViewModel(visitRepository, scope)

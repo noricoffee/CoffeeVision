@@ -66,8 +66,8 @@
 - SKIE 0.10.12 は `shared/framework` umbrella に適用済（Phase 2.5 PR3 で旧 `sharedLogic` から移行）。**SKIE は呼び出し方向限定**で、Swift で Kotlin interface を実装する側は Obj-C 互換シグネチャ（completion handler / Kotlin Flow 戻り値）を実装する必要がある。Swift で `Flow` を作るには `MutableStateFlow` を直接構築するパターンを第一候補とし、詰まったら `iosMain` にラッパを追加する
 - iOS 側 Firebase 実装（`iosApp/iosApp/FirebaseRepositories/`）は Phase 2 で実装済。`SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由（`init(internal:)` が internal アクセスのため直接構築不可）。ドメインモデルのうち SQLDelight が同名の行型を生成するものは Swift 側で末尾アンダースコア付きで現れる（現状 `Visit` → `Visit_`、`Photo` → `Photo_`。`CoffeeItem` / `FoodItem` / `Cafe` はそのまま）
 - `AppContainer` は **scope なしの 3 引数セカンダリコンストラクタ** を通常用途（Swift / アプリ起動）とし、4 引数版（scope 注入可）はテスト用途に限定する。SKIE が Kotlin デフォルト引数を Swift に引き出さないため、プライマリのデフォルト値 `= MainScope()` は持たせず用途をコンストラクタ単位で分けている
-- Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期は **WriteBatch + 差分削除**（既存子 ID を取得 → 新配列に含まれないものを batch.delete）で原子化。observe は **案 A**（親 visit リスナ 1 本 + 子は snapshot 受信ごとに `getDocuments` 並列）。`sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番 / decode 時はソートに使ってから破棄。nullable は `null` を入れずキーごと省略。`Photo.localPath` は端末固有値のため Firestore には保存しない
-- Firebase Security Rules はリポジトリ管理（`firestore.rules` / `storage.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。Firestore は path uid のみ検証で 2026-06-06 にデプロイ済。Storage Rules はファイルのみ存在し未デプロイ（新規プロジェクトの Storage 有効化が Blaze プラン必須のため、Phase 3 で写真機能と同時に有効化）
+- Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期は **WriteBatch + 差分削除**（既存子 ID を取得 → 新配列に含まれないものを batch.delete）で原子化。observe は **案 A**（親 visit リスナ 1 本 + 子は snapshot 受信ごとに `getDocuments` 並列）。`sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番 / decode 時はソートに使ってから破棄。nullable は `null` を入れずキーごと省略。`Photo.localPath` は端末固有値のため Firestore には保存しない。`Photo.remoteUrl` も常に null（2026-06-10 Storage 採用見送り。写真本体は端末ローカル保存方針）
+- Firebase Security Rules はリポジトリ管理（`firestore.rules` / `storage.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。Firestore は path uid のみ検証で 2026-06-06 にデプロイ済。`storage.rules` はリポジトリ残置のみで未デプロイ（2026-06-10 Storage 採用見送り決定。写真は端末ローカル保存方針のため）
 - `build-logic/convention/` の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`）は **precompiled script plugin 方式**（`src/main/kotlin/*.gradle.kts`）。`gradlePlugin { plugins.register(...) }` は置かず、`kotlin-dsl` の自動 plugin id 生成に任せる。`build-logic/settings.gradle.kts` で `versionCatalogs.from(files("../gradle/libs.versions.toml"))` を宣言して同一カタログを共有
 - `kmp.library` は `jvmToolchain(N)` を付けない。開発機 JDK バージョン依存の罠（Toolchain auto-provisioning 未設定でビルドが落ちる）を避け、`compilerOptions.jvmTarget = JvmTarget.JVM_11` だけで Android 側 JVM target を指定する
 - `shared/core` には `AppContainer` と `VisitRepositoryImpl` が居る。`api(projects.shared.dataLocal)` 経由で `AppDatabase` / `LocalVisitRepository` を取り込み、`api(projects.shared.dataFirebase)` で Firebase Repository インターフェースを再公開する。Result / Logger / Dispatcher ラッパは必要が出てきたフェーズで追加（YAGNI）
@@ -504,3 +504,29 @@ Phase 3 タスク「Visit 作成 / 編集画面（VisitEditorView）を実装」
 - **`CoffeeEditingTarget` / `FoodEditingTarget` enum + `.sheet(item:)`**: 新規 / 編集を 1 つの sheet で扱うため、`enum CoffeeEditingTarget: Identifiable { case new; case existing(CoffeeItem) }` のラッパを Swift 側で定義し、`@State private var coffeeBeingEdited: CoffeeEditingTarget?` で `.sheet(item:)` を駆動。CoffeeItemEditorView 自体はバインディング不要で `initial: CoffeeItem?` + `onSave` クロージャの薄い API を維持できた
 - **検証結果**: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` / `:shared:data-local:testAndroidHostTest`（12 件）/ `xcodebuild -sdk iphonesimulator -scheme iosApp build` 全成功。SourceKit の `No such module 'SharedLogic'` 系警告が一部出るが、`docs/tasks/lessons.md` 既出のキャッシュ問題で実害なし（DerivedData クリアで解消）
 - **シミュレータ目視確認は未実施（ユーザー作業）**: 新規作成 / 編集 / キャンセル / バリデーションエラー / 子要素削除 / フード追加の 6 動線
+
+---
+
+### 2026-06-10: 写真は端末ローカルのみ方針に変更（Firebase Storage 採用見送り）
+
+- 領域: Docs / Firebase / Data Model
+- 関連: `docs/{requirements,data-model,architecture,kmp-bridge,coding-conventions,ui-ux-guidelines,tasks}.md`, `storage.rules`（残置）, `Photo.kt`
+
+写真の保管先を「ローカル + Firebase Storage アップロード」から「**端末ローカルのみ**」に変更。Phase 3 で写真ピッカーを実装する前にユーザーと方針合意して docs を先行更新（実装コードへの影響は写真ピッカー未実装のためゼロ）。
+
+**採用:**
+- 写真本体は端末の Documents 配下に保存（相対ファイル名で管理）。Firestore の `photos` サブコレクションには `fileName` / `width` / `height` / `createdAt` などメタデータのみを書く
+- バックアップは iCloud Backup に委ねる（SQLDelight DB + 写真ファイル）。複数端末同期は諦め
+- `Photo.remoteUrl: String?` フィールドは null 固定で残置（将来 Storage 復活余地 + Firestore スキーマ安定 + 移行コスト最小化）
+- 写真ファイルパスは **相対パス保存に統一**（iOS の Documents URL は起動ごとに変わるため絶対パス禁止）
+
+**採用見送り理由:**
+- 新規 Firebase プロジェクトの Storage 有効化が Blaze プラン（クレカ登録）必須化されており、Phase 3 リリース閾値が高い（[`tasks/lessons.md`](./tasks/lessons.md) 2026-06-06 エントリ）
+- iOS のみリリース方針（[[platform-release-policy]] memory）のため、iCloud Backup で機種変・複数端末・アプリ削除復元のカバー範囲は実用上十分
+- アップロード処理 / リトライ / `remoteUrl` 同期の実装が不要になり Phase 3 が軽くなる
+
+**実装影響:**
+- 現状ゼロ（写真ピッカーが Phase 3 未着手のため）
+- 次の写真ピッカー実装タスクから「Documents 配下にファイル保存 + 相対 `fileName` を `Photo.localPath` に詰める」実装が初登場
+- iOS `RemoteVisitDataSourceIosImpl` の `photos` サブコレクション同期はそのまま残置（書き込まれるデータが「常に `remoteUrl = null`」になるだけ）
+- `storage.rules` ファイル / `Photo.remoteUrl` フィールドを残しているため、将来 Storage を復活させる場合は本決定の逆操作（docs 復元 + `firebase.json` に `storage` キー追加 + Blaze 化 + `firebase deploy --only storage`）で戻せる

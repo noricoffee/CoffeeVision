@@ -96,7 +96,7 @@
 - 2024 年 10 月頃から Firebase の方針変更で、**新規プロジェクト**で Storage を「使用開始」するには Blaze プランへのアップグレード（= クレカ登録）が必要になった。既に有効化済みの古いプロジェクトは Spark のままで使い続けられる
 - 公式 SDK で Storage を触らずに `firebase deploy --only storage` だけ叩いても、`HTTP 404 / Resource 'projects/<id>/locations/global/applications/<id>' was not found` で落ちる。エラー文言に「Storage が未有効化」とは書かれないので原因究明に時間がかかる
 - 無料枠（5GB 容量 / 1GB/日 ダウンロード / 20,000/日 アップロード操作）は Blaze でも維持されるので、個人開発・検証用途なら実質無料
-- 写真機能を実装する直前まで Storage の有効化を遅らせる戦略が有効。`storage.rules` 自体は先回りで書いてリポジトリに残し、`firebase.json` の `storage` キーだけ後から戻す形にすると、Phase 切り替え時の作業量を最小化できる
+- 個人開発で Blaze 化のハードル / 用途を考慮して **Storage 不採用 + 端末ローカル保存** を選ぶ場合は、`firebase.json` から `storage` キーを外して `firestore` のみで運用すれば Spark プランのまま完結する。`storage.rules` ファイルだけ残しておけば将来復活も容易
 
 ### Firebase Security Rules はリポジトリ管理が現実的（Console 編集との併用は避ける）
 

@@ -135,8 +135,8 @@ data class FoodItem(
 ```kotlin
 data class Photo(
     val id: String,
-    val fileName: String?,                // Documents 配下の最終ファイル名（例: "{photoId}.jpg"）。Firestore にも保存し、機種変・iCloud Backup 復元時に `visits/{visitId}/{fileName}` で localPath を再構築できる
-    val localPath: String?,               // Documents 配下からの相対パス（例: "visits/{visitId}/{photoId}.jpg"）。iOS Documents URL は起動ごとに変わるため絶対パス禁止
+    val fileName: String?,                // Documents 配下の最終ファイル名（例: "{photoId}.jpg"）。Firestore にも保存し、機種変・iCloud Backup 復元時に `photos/{fileName}` で localPath を再構築できる
+    val localPath: String?,               // Documents 配下からの相対パス（例: "photos/{photoId}.jpg"）。iOS Documents URL は起動ごとに変わるため絶対パス禁止
     val remoteUrl: String?,               // 将来 Firebase Storage 復活用フィールド。現状は常に null
     val width: Int?,
     val height: Int?,
@@ -144,7 +144,7 @@ data class Photo(
 )
 ```
 
-> 現状は `localPath` / `fileName` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。`localPath` と `fileName` は冗長に見えるが、`localPath` は端末側 DB の即時読み込み用、`fileName` は Firestore メタデータの最小単位（ディレクトリ規約を端末側で組み立て可能にする）として両方持つ。
+> 現状は `localPath` / `fileName` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。写真ファイルは Documents 配下のフラットな `photos/` ディレクトリに置く（visitId 別ディレクトリにしない）。Create モードでも visitId 確定前に写真を保存できる + Visit 削除時は `Visit.photos` の id を順に物理削除する設計。`localPath` と `fileName` は冗長に見えるが、`localPath` は端末側 DB の即時読み込み用、`fileName` は Firestore メタデータの最小単位として両方持つ。
 
 ---
 
@@ -400,7 +400,7 @@ users/{uid}
 }
 ```
 
-- `fileName` は Documents 配下の最終ファイル名（`{photoId}.jpg` 形式を採用）。端末側で `visits/{visitId}/{fileName}` を組み立てて `localPath` を再構築できる
+- `fileName` は Documents 配下の最終ファイル名（`{photoId}.jpg` 形式を採用）。端末側で `photos/{fileName}` を組み立てて `localPath` を再構築できる
 - `localPath` は Firestore には保存しません（端末ごとの値のため。ローカル DB のみが持つメタデータ）
 - `remoteUrl` も Firestore には書きません（Storage 採用見送りのため常に null。Kotlin / SQLDelight スキーマ上のフィールドは将来復活用に残置）
 

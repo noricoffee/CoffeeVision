@@ -16,10 +16,13 @@ extension Photo_: @retroactive Identifiable {}
 struct VisitDetailView: View {
 
     let visitId: String
+    let appState: AppState
     @State private var viewModel: VisitDetailViewModelBridge
+    @State private var isPresentingEditor = false
 
     init(visitId: String, appState: AppState) {
         self.visitId = visitId
+        self.appState = appState
         _viewModel = State(
             initialValue: VisitDetailViewModelBridge(
                 kotlin: appState.container.makeVisitDetailViewModel()
@@ -31,6 +34,16 @@ struct VisitDetailView: View {
         content
             .navigationTitle(viewModel.visit?.cafe.name ?? String(localized: "詳細"))
             .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        isPresentingEditor = true
+                    } label: {
+                        Label(String(localized: "編集"), systemImage: "pencil")
+                    }
+                    .accessibilityLabel(String(localized: "訪問記録を編集"))
+                }
+            }
             .task { viewModel.onAppear(visitId: visitId) }
             .onDisappear { viewModel.onDisappear() }
             .alert(
@@ -45,6 +58,12 @@ struct VisitDetailView: View {
                 }
             } message: {
                 Text(viewModel.error ?? "")
+            }
+            .sheet(isPresented: $isPresentingEditor) {
+                VisitEditorView(
+                    mode: VisitEditorViewModelModeEdit(visitId: visitId),
+                    appState: appState
+                )
             }
     }
 

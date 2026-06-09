@@ -11,11 +11,13 @@ extension Visit_: @retroactive Identifiable {}
 ///
 /// - `NavigationStack` でラップし、大タイトル「訪問記録」を表示する
 /// - 空状態は `ContentUnavailableView`、リストは swipe-to-delete 付き `List` で表示する
-/// - ツールバーの `+` ボタンで暫定ダミー Visit 書き込みを行う（VisitEditor 完成まで）
+/// - ツールバーの `+` ボタンで VisitEditorView（新規作成モード）を sheet で開く
 struct VisitListView: View {
 
     @State var viewModel: VisitListViewModelBridge
     var appState: AppState
+
+    @State private var isPresentingEditor = false
 
     var body: some View {
         NavigationStack {
@@ -42,6 +44,12 @@ struct VisitListView: View {
                     }
                 } message: {
                     Text(viewModel.error ?? "")
+                }
+                .sheet(isPresented: $isPresentingEditor) {
+                    VisitEditorView(
+                        mode: VisitEditorViewModelModeCreate.shared,
+                        appState: appState
+                    )
                 }
         }
     }
@@ -96,7 +104,7 @@ struct VisitListView: View {
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .navigationBarTrailing) {
             Button {
-                Task { await appState.writeDummyVisit() }
+                isPresentingEditor = true
             } label: {
                 Label(
                     String(localized: "訪問記録を追加"),

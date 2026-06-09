@@ -77,8 +77,6 @@ private struct RootView: View {
             return String(localized: "サインイン中...")
         case .ready:
             return String(localized: "準備完了")
-        case .writing:
-            return String(localized: "書き込み中...")
         case .failed:
             return String(localized: "起動に失敗しました")
         }

@@ -1,5 +1,6 @@
 import SwiftUI
 import SharedLogic
+import UIKit
 
 // MARK: - Identifiable 拡張
 
@@ -144,17 +145,22 @@ struct VisitDetailView: View {
                 }
             }
 
-            // 写真（Phase 3 後半で実装予定）
+            // 写真
             if !visit.photos.isEmpty {
                 Section(String(localized: "写真")) {
-                    Text(
-                        String(
-                            format: String(localized: "写真表示は Phase 3 後半で実装予定（%d 枚保存中）"),
-                            visit.photos.count
-                        )
-                    )
-                    .font(.footnote)
-                    .foregroundStyle(.secondary)
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        LazyHStack(spacing: 8) {
+                            ForEach(Array(visit.photos.enumerated()), id: \.element.id) { index, photo in
+                                PhotoDetailCell(
+                                    photo: photo,
+                                    index: index + 1,
+                                    total: visit.photos.count
+                                )
+                            }
+                        }
+                        .padding(.vertical, 4)
+                    }
+                    .frame(height: 136)
                 }
             }
         }
@@ -236,6 +242,41 @@ private struct FoodItemRow: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - PhotoDetailCell
+
+/// 詳細画面の写真表示セル。
+private struct PhotoDetailCell: View {
+
+    let photo: Photo_
+    let index: Int
+    let total: Int
+
+    var body: some View {
+        Group {
+            if let fileName = photo.fileName,
+               let uiImage = PhotoFileStore.loadImage(fileName: fileName) {
+                Image(uiImage: uiImage)
+                    .resizable()
+                    .scaledToFill()
+                    .frame(width: 120, height: 120)
+                    .clipped()
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(.secondarySystemBackground))
+                    .frame(width: 120, height: 120)
+                    .overlay {
+                        Image(systemName: "photo.badge.exclamationmark")
+                            .foregroundStyle(.secondary)
+                    }
+            }
+        }
+        .accessibilityLabel(
+            String(format: String(localized: "写真 %d/%d 枚目"), index, total)
+        )
     }
 }
 

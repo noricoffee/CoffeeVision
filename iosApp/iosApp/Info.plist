@@ -4,5 +4,7 @@
 <dict>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>カフェで撮った写真を訪問記録に添えるため、写真ライブラリへのアクセスを使用します</string>
 </dict>
 </plist>

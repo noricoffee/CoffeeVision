@@ -107,6 +107,14 @@ final class VisitEditorViewModelBridge {
         kotlin.onFoodRemoved(id: id)
     }
 
+    func onPhotoUpserted(item: Photo_) {
+        kotlin.onPhotoUpserted(item: item)
+    }
+
+    func onPhotoRemoved(id: String) {
+        kotlin.onPhotoRemoved(id: id)
+    }
+
     // MARK: - 保存 / エラー転送
 
     func onSaveTapped() {

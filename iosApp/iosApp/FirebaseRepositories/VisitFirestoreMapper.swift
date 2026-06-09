@@ -222,7 +222,8 @@ enum VisitFirestoreMapper {
 
     /// `Photo` を `photos/{id}` 用の Firestore document に変換する。
     /// `localPath` は端末固有値のため Firestore には保存しない。
-    /// Storage への写真本体 upload は Phase 3 / 4 で別途実装するため、現状は `remoteUrl` が nil でもメタ情報のみ保存する。
+    /// `fileName` は機種変・iCloud Backup 復元時に `localPath` を再構築できるよう Firestore にも保存する。
+    /// Storage への写真本体 upload は採用見送りのため、`remoteUrl` は常に nil（フィールドは将来用に残置）。
     static func toDocument(_ photo: Photo_, sortOrder: Int) -> [String: Any] {
         let createdAtDate = Date(
             timeIntervalSince1970: TimeInterval(photo.createdAt.toEpochMilliseconds()) / 1000.0
@@ -232,6 +233,7 @@ enum VisitFirestoreMapper {
             "createdAt": Timestamp(date: createdAtDate),
             "sortOrder": sortOrder,
         ]
+        if let fileName = photo.fileName { dict["fileName"] = fileName }
         if let remoteUrl = photo.remoteUrl { dict["remoteUrl"] = remoteUrl }
         if let width = photo.width { dict["width"] = width.intValue }
         if let height = photo.height { dict["height"] = height.intValue }
@@ -240,6 +242,7 @@ enum VisitFirestoreMapper {
 
     /// Firestore document を `Photo` + `sortOrder` のペアに変換する。
     /// `localPath` は Firestore に存在しないので常に nil（端末側 DB のみが保持）。
+    /// `fileName` は Firestore に保存されている場合に読み取る。
     static func photoFromDocument(_ data: [String: Any]) -> (photo: Photo_, sortOrder: Int)? {
         guard
             let id = data["id"] as? String,
@@ -259,6 +262,7 @@ enum VisitFirestoreMapper {
 
         let photo = Photo_(
             id: id,
+            fileName: data["fileName"] as? String,
             localPath: nil,
             remoteUrl: data["remoteUrl"] as? String,
             width: width,

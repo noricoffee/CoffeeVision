@@ -1,5 +1,6 @@
 import SwiftUI
 import SharedLogic
+import PhotosUI
 
 // MARK: - シート用 Identifiable ラッパ
 
@@ -66,6 +67,15 @@ struct VisitEditorView: View {
     @State private var coffeeBeingEdited: CoffeeEditingTarget?
     @State private var foodBeingEdited: FoodEditingTarget?
 
+    /// 新規追加分の写真データ（photoId → JPEG Data）。保存ボタン押下時に Documents に書き出す。
+    @State private var pendingImageData: [String: Data] = [:]
+    /// Editor 内で削除した既存写真の fileName。保存成功後に Documents から物理削除する。
+    @State private var removedFileNames: Set<String> = []
+    /// PhotosPicker の選択状態。選択処理後に [] にリセットする。
+    @State private var selectedPickerItems: [PhotosPickerItem] = []
+    /// 写真保存処理中の error（保存失敗時に alert 表示）。
+    @State private var photoSaveError: String?
+
     // MARK: - Init
 
     init(mode: any VisitEditorViewModelMode, appState: AppState) {
@@ -85,6 +95,7 @@ struct VisitEditorView: View {
             Form {
                 cafeSection
                 visitSection
+                photosSection
                 coffeeSection
                 foodSection
             }
@@ -112,8 +123,29 @@ struct VisitEditorView: View {
             }
             .onChange(of: viewModel.savedVisitId) { _, newValue in
                 if newValue != nil {
+                    // 保存成功後に Editor 内で削除した既存写真ファイルを物理削除する
+                    for fileName in removedFileNames {
+                        try? PhotoFileStore.delete(fileName: fileName)
+                    }
                     dismiss()
                 }
+            }
+            .onChange(of: selectedPickerItems) { _, newItems in
+                guard !newItems.isEmpty else { return }
+                Task {
+                    await handlePickerSelection(newItems)
+                }
+            }
+            .alert(
+                String(localized: "写真の保存に失敗しました"),
+                isPresented: Binding(
+                    get: { photoSaveError != nil },
+                    set: { if !$0 { photoSaveError = nil } }
+                )
+            ) {
+                Button(String(localized: "OK")) { photoSaveError = nil }
+            } message: {
+                Text(photoSaveError ?? "")
             }
             .sheet(item: $coffeeBeingEdited) { target in
                 CoffeeItemEditorView(
@@ -293,6 +325,116 @@ struct VisitEditorView: View {
         }
     }
 
+    // MARK: - 写真 Section
+
+    private var photosSection: some View {
+        Section(String(localized: "写真")) {
+            if !viewModel.draft.photos.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    LazyHStack(spacing: 8) {
+                        ForEach(viewModel.draft.photos) { photo in
+                            PhotoThumbnailCell(
+                                photo: photo,
+                                pendingData: pendingImageData[photo.id],
+                                onDelete: {
+                                    handlePhotoDelete(photo: photo)
+                                }
+                            )
+                        }
+                    }
+                    .padding(.vertical, 4)
+                }
+                .frame(height: 116)
+            }
+
+            PhotosPicker(
+                selection: $selectedPickerItems,
+                maxSelectionCount: 10,
+                matching: .images
+            ) {
+                Label(String(localized: "写真を追加"), systemImage: "plus")
+            }
+            .accessibilityLabel(String(localized: "写真を追加"))
+        }
+    }
+
+    // MARK: - 写真操作
+
+    /// PhotosPicker 選択後の処理。Data 取得 → JPEG 変換 → Photo_ 生成 → VM に通知。
+    private func handlePickerSelection(_ items: [PhotosPickerItem]) async {
+        for item in items {
+            guard let data = try? await item.loadTransferable(type: Data.self),
+                  let uiImage = UIImage(data: data),
+                  let jpegData = uiImage.jpegData(compressionQuality: 0.85) else {
+                continue
+            }
+
+            let photoId = UUID().uuidString.lowercased()
+            let fileName = "\(photoId).jpg"
+            let localPath = "photos/\(fileName)"
+
+            let widthPx = Int32(uiImage.size.width * uiImage.scale)
+            let heightPx = Int32(uiImage.size.height * uiImage.scale)
+
+            let epochMillis = Int64(Date().timeIntervalSince1970 * 1000)
+            let createdAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+                epochMilliseconds: epochMillis
+            )
+
+            let photo = Photo_(
+                id: photoId,
+                fileName: fileName,
+                localPath: localPath,
+                remoteUrl: nil,
+                width: KotlinInt(value: widthPx),
+                height: KotlinInt(value: heightPx),
+                createdAt: createdAt
+            )
+
+            pendingImageData[photoId] = jpegData
+            viewModel.onPhotoUpserted(item: photo)
+        }
+        selectedPickerItems = []
+    }
+
+    /// × ボタン押下時の写真削除処理。
+    private func handlePhotoDelete(photo: Photo_) {
+        if pendingImageData.removeValue(forKey: photo.id) != nil {
+            // 新規追加分: メモリから消すだけ。Documents にはまだ書かれていない
+        } else {
+            // 既存写真: 保存成功後に物理削除するため fileName を記録
+            if let fileName = photo.fileName {
+                removedFileNames.insert(fileName)
+            }
+        }
+        viewModel.onPhotoRemoved(id: photo.id)
+    }
+
+    /// 保存ボタン押下時の処理。
+    /// pendingImageData を Documents に書き出してから VM の onSaveTapped を呼ぶ。
+    private func saveWithPhotoFlush() async {
+        // pendingImageData を Documents に書き出す
+        var flushedFileNames: [String] = []
+        do {
+            for photo in viewModel.draft.photos {
+                guard let data = pendingImageData[photo.id],
+                      let fileName = photo.fileName else { continue }
+                try PhotoFileStore.save(data: data, fileName: fileName)
+                flushedFileNames.append(fileName)
+            }
+        } catch {
+            // 書き出し失敗: 既に書いた分を rollback してエラー表示
+            for fileName in flushedFileNames {
+                try? PhotoFileStore.delete(fileName: fileName)
+            }
+            photoSaveError = error.localizedDescription
+            return
+        }
+
+        // 全ファイル書き出し成功後に保存
+        viewModel.onSaveTapped()
+    }
+
     // MARK: - ツールバー
 
     @ToolbarContentBuilder
@@ -304,7 +446,9 @@ struct VisitEditorView: View {
         }
         ToolbarItem(placement: .navigationBarTrailing) {
             Button(String(localized: "保存")) {
-                viewModel.onSaveTapped()
+                Task {
+                    await saveWithPhotoFlush()
+                }
             }
             .disabled(viewModel.isSaving)
         }
@@ -374,6 +518,58 @@ private struct FoodItemSummaryRow: View {
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
+    }
+}
+
+// MARK: - PhotoThumbnailCell
+
+/// 写真セクション内の 1 枚サムネイルセル（削除ボタン付き）。
+private struct PhotoThumbnailCell: View {
+
+    let photo: Photo_
+    /// 新規追加分の未保存 JPEG データ（既存写真では nil）。
+    let pendingData: Data?
+    let onDelete: () -> Void
+
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            thumbnailImage
+                .frame(width: 100, height: 100)
+                .clipped()
+                .cornerRadius(8)
+
+            Button(action: onDelete) {
+                Image(systemName: "xmark.circle.fill")
+                    .symbolRenderingMode(.palette)
+                    .foregroundStyle(.white, .black.opacity(0.6))
+                    .font(.title3)
+            }
+            .accessibilityLabel(String(localized: "写真を削除"))
+            .padding(4)
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(localized: "写真"))
+    }
+
+    @ViewBuilder
+    private var thumbnailImage: some View {
+        if let data = pendingData, let uiImage = UIImage(data: data) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+        } else if let fileName = photo.fileName,
+                  let uiImage = PhotoFileStore.loadImage(fileName: fileName) {
+            Image(uiImage: uiImage)
+                .resizable()
+                .scaledToFill()
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.secondarySystemBackground))
+                .overlay {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .foregroundStyle(.secondary)
+                }
+        }
     }
 }
 

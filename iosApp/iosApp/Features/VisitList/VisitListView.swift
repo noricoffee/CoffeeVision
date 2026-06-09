@@ -85,6 +85,12 @@ struct VisitListView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
+                        // Visit 削除前に紐付く写真ファイルを Documents から物理削除する
+                        for photo in visit.photos {
+                            if let fileName = photo.fileName {
+                                try? PhotoFileStore.delete(fileName: fileName)
+                            }
+                        }
                         viewModel.onVisitDeleted(id: visit.id)
                     } label: {
                         Label(

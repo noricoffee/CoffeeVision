@@ -66,7 +66,7 @@
 - SKIE 0.10.12 は `shared/framework` umbrella に適用済（Phase 2.5 PR3 で旧 `sharedLogic` から移行）。**SKIE は呼び出し方向限定**で、Swift で Kotlin interface を実装する側は Obj-C 互換シグネチャ（completion handler / Kotlin Flow 戻り値）を実装する必要がある。Swift で `Flow` を作るには `MutableStateFlow` を直接構築するパターンを第一候補とし、詰まったら `iosMain` にラッパを追加する
 - iOS 側 Firebase 実装（`iosApp/iosApp/FirebaseRepositories/`）は Phase 2 で実装済。`SkieSwiftFlow<T>` の Swift 側構築は `_unconditionallyBridgeFromObjectiveC(SkieKotlinFlow(callbackFlow))` 経由（`init(internal:)` が internal アクセスのため直接構築不可）。ドメインモデルのうち SQLDelight が同名の行型を生成するものは Swift 側で末尾アンダースコア付きで現れる（現状 `Visit` → `Visit_`、`Photo` → `Photo_`。`CoffeeItem` / `FoodItem` / `Cafe` はそのまま）
 - `AppContainer` は **scope なしの 3 引数セカンダリコンストラクタ** を通常用途（Swift / アプリ起動）とし、4 引数版（scope 注入可）はテスト用途に限定する。SKIE が Kotlin デフォルト引数を Swift に引き出さないため、プライマリのデフォルト値 `= MainScope()` は持たせず用途をコンストラクタ単位で分けている
-- Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期は **WriteBatch + 差分削除**（既存子 ID を取得 → 新配列に含まれないものを batch.delete）で原子化。observe は **案 A**（親 visit リスナ 1 本 + 子は snapshot 受信ごとに `getDocuments` 並列）。`sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番 / decode 時はソートに使ってから破棄。nullable は `null` を入れずキーごと省略。`Photo.localPath` は端末固有値のため Firestore には保存しない。`Photo.remoteUrl` も常に null（2026-06-10 Storage 採用見送り。写真本体は端末ローカル保存方針）
+- Visit 子コレクション（`coffeeItems` / `foodItems` / `photos`）の Firestore 同期は **WriteBatch + 差分削除**（既存子 ID を取得 → 新配列に含まれないものを batch.delete）で原子化。observe は **案 A**（親 visit リスナ 1 本 + 子は snapshot 受信ごとに `getDocuments` 並列）。`sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番 / decode 時はソートに使ってから破棄。nullable は `null` を入れずキーごと省略。`Photo.localPath` は端末固有値のため Firestore には保存しない。`Photo.fileName` は `{photoId}.jpg` 形式で Firestore にも保存し、復元時に `visits/{visitId}/{fileName}` で localPath を再構築できるようにする。`Photo.remoteUrl` は常に null（2026-06-10 Storage 採用見送り。写真本体は端末ローカル保存方針）
 - Firebase Security Rules はリポジトリ管理（`firestore.rules` / `storage.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。Firestore は path uid のみ検証で 2026-06-06 にデプロイ済。`storage.rules` はリポジトリ残置のみで未デプロイ（2026-06-10 Storage 採用見送り決定。写真は端末ローカル保存方針のため）
 - `build-logic/convention/` の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`）は **precompiled script plugin 方式**（`src/main/kotlin/*.gradle.kts`）。`gradlePlugin { plugins.register(...) }` は置かず、`kotlin-dsl` の自動 plugin id 生成に任せる。`build-logic/settings.gradle.kts` で `versionCatalogs.from(files("../gradle/libs.versions.toml"))` を宣言して同一カタログを共有
 - `kmp.library` は `jvmToolchain(N)` を付けない。開発機 JDK バージョン依存の罠（Toolchain auto-provisioning 未設定でビルドが落ちる）を避け、`compilerOptions.jvmTarget = JvmTarget.JVM_11` だけで Android 側 JVM target を指定する
@@ -507,7 +507,30 @@ Phase 3 タスク「Visit 作成 / 編集画面（VisitEditorView）を実装」
 
 ---
 
-### 2026-06-10: 写真は端末ローカルのみ方針に変更（Firebase Storage 採用見送り）
+### 2026-06-10: 写真ピッカー縦スライスの事前設計
+
+- 領域: Docs / KMP / iOS
+- 関連: 実装予定 `shared/{domain,data-local,feature/visit-editor}/`, `iosApp/iosApp/Features/{VisitEditor,VisitDetail}/`, `iosApp/iosApp/FirebaseRepositories/VisitFirestoreMapper.swift`, `docs/data-model.md`
+
+Phase 3 残タスク「写真ピッカー組み込み + Documents 保存」+「Photo メタデータ（fileName / width / height）を SQLDelight + Firestore に永続化」を 1 縦スライスで進めるにあたり、サブエージェント dispatch 前に親が固めた設計判断。
+
+- **fileName セマンティクス**: `{photoId}.jpg` を採用。`localPath` = `visits/{visitId}/{fileName}` を端末側で組み立てる。`fileName` を Firestore に保存することで、機種変・iCloud Backup 復元時に `localPath` を端末側で再構築可能。`localPath` と `fileName` は冗長に見えるが、`localPath` は SQLDelight DB の即時読み込み用 / `fileName` は Firestore メタデータの最小単位として両方持つ
+- **画像形式は JPEG 統一**: PhotosPicker の戻り値は HEIC のことが多い。`UIImage` 経由で `jpegData(compressionQuality: 0.85)` に変換して Documents 配下に保存する。圧縮品質 0.85 はファイルサイズと画質のバランス取り
+- **PhotosPicker（iOS 16+）採用**: `PHPickerViewController` ではなく SwiftUI ネイティブの `PhotosPicker(selection: $items, maxSelectionCount: 10, matching: .images)`。`PhotosPickerItem.loadTransferable(type: Data.self)` で `Data` を取得 → `UIImage` 経由で JPEG 化
+- **Documents 配下のディレクトリ規約**: `<Documents>/visits/{visitId}/{photoId}.jpg`。`visitId` が確定する前（VisitEditor が新規モードで save 未完了）でも一時保存できるよう、visitId は `VisitEditorViewModel.buildVisit()` で決定済みのものを Swift 側から受け取る or `VisitEditorView` 側で `currentVisitId`（Create モードでも新規 UUID を初期化時に確定）を保持する 2 案ある。**Create モードで `init` 時に新規 UUID を発番**して保持し、Save 時に同じ UUID を Visit.id として使う案を採用（Editor.draft.id と同等の暗黙 ID を Swift 側で持つ）
+- **SQLDelight migration**: 開発中検証データの DB 互換のため、`schemaVersion` を 2 に上げて `shared/data-local/src/commonMain/sqldelight/migrations/1.sqm` で `ALTER TABLE photo ADD COLUMN file_name TEXT;` を追加する。リリース前ではあるが既に Phase 2-3 で `writeDummyVisit()` や VisitEditor で書いたデータが端末に残っている前提で migration を書く
+- **画像表示（VisitDetailView）**: `Documents URL + localPath`（or `visits/{visitId}/{fileName}` で組み立て）で `Image(uiImage: UIImage(contentsOfFile: url.path)!)` で表示。表示は単純な horizontal `ScrollView` + `LazyHStack` で 3-4 枚並べる軽量 UI。サムネイル / 拡大表示は別タスク
+- **削除時の orphan ファイル削除**: 画面上で写真を削除（onPhotoRemoved）+ Visit ごと削除（VisitRepository.delete）時に、Documents 配下の物理ファイルも消す。Visit 削除側は iOS Swift の `VisitListView.onDelete` ハンドラの直前 / 後で Documents から `visits/{visitId}/` ディレクトリごと削除する
+- **保存タイミング**: PhotosPicker で選択 → Documents 保存 → `Photo` インスタンス作成 → `onPhotoUpserted(item:)` で VM に push の流れ。Documents 保存は **PhotosPicker 選択時に即実行**（保存ボタンを押すまで待たない）。途中キャンセル時のクリーンアップは「`onDisappear` で `savedVisitId == nil` なら orphan として削除」案も検討したが、Editor で「保存せずに閉じた」場合は一時 visitId 配下を消す処理を入れる
+- **VisitFirestoreMapper.fileName**: 既存 `width` / `height` と同じ nullable パターンで `if let fileName = photo.fileName { dict["fileName"] = fileName }` 追加。decode 側も同様
+- **enum 日本語化は別タスクのまま据え置き**: 写真ピッカースライスとは独立。Picker 等の表示は `.name`（英語）のまま
+
+トレードオフ:
+- `localPath` と `fileName` の冗長性: SQLDelight DB だけ見ると `fileName` がなくても `localPath` から basename を抽出すれば取れる。ただし「Firestore に保存するのは `fileName` のみ」の規約があるため、ドメインモデルに `fileName` を独立フィールドとして持たせる方が往復経路が単純になる
+- 一時保存中のファイルが Editor キャンセル時に残るリスク: Phase 3 では「`onDisappear` で `savedVisitId == nil` なら `visits/{visitId}/` をクリーンアップ」案を採用（実装側で対応）
+- Create モード で `init` 時に発番した `visitId` を VM に渡す伝搬: VisitEditorViewModel 側で `Mode.Create(visitId: String)` を受け取る形に拡張するか、Bridge 経由でメソッドを増やす。実装側で最終形を決める
+
+
 
 - 領域: Docs / Firebase / Data Model
 - 関連: `docs/{requirements,data-model,architecture,kmp-bridge,coding-conventions,ui-ux-guidelines,tasks}.md`, `storage.rules`（残置）, `Photo.kt`

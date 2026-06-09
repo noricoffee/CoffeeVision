@@ -135,7 +135,8 @@ data class FoodItem(
 ```kotlin
 data class Photo(
     val id: String,
-    val localPath: String?,               // Documents 配下からの相対ファイル名（例: "visits/{visitId}/{photoId}.jpg"）。iOS Documents URL は起動ごとに変わるため絶対パス禁止
+    val fileName: String?,                // Documents 配下の最終ファイル名（例: "{photoId}.jpg"）。Firestore にも保存し、機種変・iCloud Backup 復元時に `visits/{visitId}/{fileName}` で localPath を再構築できる
+    val localPath: String?,               // Documents 配下からの相対パス（例: "visits/{visitId}/{photoId}.jpg"）。iOS Documents URL は起動ごとに変わるため絶対パス禁止
     val remoteUrl: String?,               // 将来 Firebase Storage 復活用フィールド。現状は常に null
     val width: Int?,
     val height: Int?,
@@ -143,7 +144,7 @@ data class Photo(
 )
 ```
 
-> 現状は `localPath` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。
+> 現状は `localPath` / `fileName` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。`localPath` と `fileName` は冗長に見えるが、`localPath` は端末側 DB の即時読み込み用、`fileName` は Firestore メタデータの最小単位（ディレクトリ規約を端末側で組み立て可能にする）として両方持つ。
 
 ---
 
@@ -272,6 +273,7 @@ DELETE FROM food_item WHERE id = ?;
 CREATE TABLE photo (
     id TEXT NOT NULL PRIMARY KEY,
     visit_id TEXT NOT NULL,
+    file_name TEXT,
     local_path TEXT,
     remote_url TEXT,
     width INTEGER,
@@ -288,8 +290,8 @@ SELECT * FROM photo WHERE visit_id = ? ORDER BY sort_order ASC;
 
 upsert:
 INSERT OR REPLACE INTO photo (
-    id, visit_id, local_path, remote_url, width, height, created_at, sort_order
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    id, visit_id, file_name, local_path, remote_url, width, height, created_at, sort_order
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteByVisit:
 DELETE FROM photo WHERE visit_id = ?;
@@ -390,6 +392,7 @@ users/{uid}
 ```json
 {
   "id": "uuid-v4",
+  "fileName": "550e8400-e29b-41d4-a716-446655440000.jpg",
   "width": 1920,
   "height": 1080,
   "createdAt": <Timestamp>,
@@ -397,6 +400,7 @@ users/{uid}
 }
 ```
 
+- `fileName` は Documents 配下の最終ファイル名（`{photoId}.jpg` 形式を採用）。端末側で `visits/{visitId}/{fileName}` を組み立てて `localPath` を再構築できる
 - `localPath` は Firestore には保存しません（端末ごとの値のため。ローカル DB のみが持つメタデータ）
 - `remoteUrl` も Firestore には書きません（Storage 採用見送りのため常に null。Kotlin / SQLDelight スキーマ上のフィールドは将来復活用に残置）
 

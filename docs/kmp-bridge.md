@@ -57,6 +57,7 @@ plugins {
 | `suspend fun save(visit: Visit)` | `func save(visit: Visit) async throws` |
 | `fun observe(): Flow<List<Visit>>` | `SkieSwiftFlow<List<Visit>>`（`AsyncSequence` 準拠）→ `for await x in flow` |
 | `sealed class Result { object Loading; data class Success(...) }` | `enum Result { case loading; case success(...) }`（Swift の `switch` で網羅性チェックが効く） |
+| `enum class BrewMethod { HandDrip, FullCity, ... }` | `@frozen enum BrewMethod: Hashable, CaseIterable { case handDrip, fullCity, ... }` — case 名は **camelCase 変換**。全列挙は `.allCases`（CaseIterable）、Obj-C ヘッダの `.entries` は Swift 側からは使わない。`.name` プロパティで Kotlin 側の元名（`"HandDrip"`）を取得可能 |
 
 ### ⚠ 重要: SKIE は「呼び出し方向限定」
 

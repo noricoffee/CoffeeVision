@@ -179,3 +179,28 @@
 - 回避: `feature/<name>` / `feature/...` / バッククォートで囲んで `feature/_NAME_` 等、`/*` を文字列リテラル含めて出さないように書き換える
 - バッククォート ``` `feature/*` ``` でも回避できない（コメントは字句的にトークン化されるためバッククォートはエスケープにならない）
 - 単発のミスではなく、glob を「そのまま記載すれば伝わる」と思って書くと踏むパターン。pattern 例を KDoc に載せる用途なら最初から表記を `feature/<name>` で統一する
+
+---
+
+## 2026-06-09
+
+### SKIE EnumInterop: Kotlin `enum class` は Swift の `@frozen enum` に変換される（case 名は camelCase）
+
+- SKIE 0.10.12 は Kotlin の `enum class`（`BrewMethod` / `ProcessingMethod` / `RoastLevel` 等）を Swift の `@frozen enum : Hashable, CaseIterable` に EnumInterop 変換する
+- **case 名は camelCase 変換**: `HandDrip` → `.handDrip`、`FullCity` → `.fullCity`。Kotlin 側のキャメル分割位置をそのまま採用する
+- **全ケース列挙は `.allCases`**: `CaseIterable` 準拠のため `BrewMethod.allCases` で取れる。Obj-C ヘッダ（`.h`）に存在する `.entries` プロパティは Swift からは使えない / 使わない
+- **元名へのアクセス**: `.name` プロパティが残るので Kotlin 側の元名文字列（`"HandDrip"` 等）が必要なら経由できる
+- Picker 等で使うパターン: `ForEach(BrewMethod.allCases, id: \.name) { value in Text(value.name).tag(value as BrewMethod?) }`
+
+### Swift 側の SKIE 型は `.swiftinterface` を見る（`.h` は Obj-C 互換用で実態と乖離する）
+
+- SKIE が生成する Swift API の真実は `shared/framework/build/.../SharedLogic.framework/Modules/SharedLogic.swiftmodule/*.swiftinterface`
+- `SharedLogic.framework/Headers/SharedLogic.h`（Obj-C ヘッダ）は Obj-C 互換の生 API で、SKIE 変換後の Swift API（`@frozen enum` / `async throws` / `SkieSwiftFlow` 等）は出てこない
+- 「`.h` に `BrewMethodEntries` が見えるから Swift から `BrewMethod.entries` で呼べるはず」と思ったら Swift 側からは「no member」エラーになる、というのが典型的な踏み方
+- 切り分け順: `grep` で `.swiftinterface` を見る → ない場合のみ `.h` を見る
+
+### Xcode の DerivedData が古い symlink を掴むとビルド成功と SourceKit が乖離する別パターン
+
+- 既出の「SourceKit `No such module 'X'`」とは別系統で、DerivedData に過去 SDK 向けの broken symlink（`iphonesimulator17.x` 等）が残っていると、SDK アップグレード後にビルドの検索パスがそちらを先に当てて、`.swiftinterface` が見つからず `'.allCases' has no member` 系のエラーになることがある
+- 対処: `~/Library/Developer/Xcode/DerivedData/iosApp-*` を消してから `Product > Clean Build Folder` + 再ビルド
+- 切り分け: `xcodebuild` の `-showBuildSettings` でフレームワーク検索パスを出して、broken symlink が含まれていないかを確認

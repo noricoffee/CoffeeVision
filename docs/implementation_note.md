@@ -74,10 +74,11 @@
 - `shared/data-local` が SQLDelight プラグイン + `AppDatabase` 宣言の単独管理者。Mapper / DriverFactory expect/actual / LocalVisitRepository を含む。`VisitRepositoryImplTest` は `createInMemoryTestSqlDriver` の expect/actual がここに閉じている制約から、振る舞いの所属（`shared/core`）ではなく `data-local` の commonTest に置く妥協配置
 - `shared/data-firebase` は `build.gradle.kts` + Firebase BoM 依存のみの空殻。Android Firebase 実装は未移送（着手は Android Firebase 実装着手時）。iOS 実装は `iosApp` Swift で継続
 - 旧 `sharedLogic` モジュールは 2026-06-08 Phase 2.5 PR3 で完全削除済。iOS 向け umbrella は `shared/framework`（baseName / XCFramework 名ともに `SharedLogic`、Swift `import SharedLogic` のまま）。`commonMain.dependencies { api(projects.shared.{core,domain,dataLocal,dataFirebase,feature.visitList}) }` + `framework { export(...) }` 明示 + `linkerOpts("-lsqlite3")`。`assembleSharedLogicXCFramework` で XCFramework 生成、`embedAndSignAppleFrameworkForXcode` を Xcode の Run Script から呼び出し。`sharedUI` も `api(projects.shared.framework)` 経由でこれらを取り込む
-- `settings.gradle.kts` の include は `:androidApp` / `:sharedUI` / `:shared:core` / `:shared:domain` / `:shared:data-local` / `:shared:data-firebase` / `:shared:framework` / `:shared:feature:visit-list` / `:shared:feature:visit-detail` の 9 件。`data-places` / 残りの `feature/visit-editor` は Phase 3 進行で追加予定、`feature/cafe-search` は Phase 4 以降
+- `settings.gradle.kts` の include は `:androidApp` / `:sharedUI` / `:shared:core` / `:shared:domain` / `:shared:data-local` / `:shared:data-firebase` / `:shared:framework` / `:shared:feature:visit-list` / `:shared:feature:visit-detail` / `:shared:feature:visit-editor` の 10 件。`data-places` は Phase 4、`feature/cafe-search` は Phase 4 以降
 - `AppContainer` の ViewModel ファクトリ（`makeVisitListViewModel()` など）は **`shared/framework` の拡張関数として配置**する。`kmp.feature` が `feature -> core` を `api` で自動配線するため `core` から `feature` を参照すると循環依存になる。`framework` は全 shared モジュールを `api` で持つ最上位レイヤーなので循環なし。Swift からは Obj-C category として `appContainer.makeVisitListViewModel()` で呼べる。今後 feature を追加するたびにファクトリ拡張を `shared/framework/.../AppContainerViewModelFactory.kt` に追記する
 - iOS Bridge は `@MainActor @Observable` クラス + `Task { for await s in kotlin.state { apply(s) } }` パターン（`kmp-bridge.md` §推奨パターン）で実装。SKIE 0.10.12 環境では `UIState.visits` は Swift 側で既に `[Visit_]` 型として取得できるため、`as? [Visit_]` キャストは不要（書くと "always succeeds" / "no effect" 警告）
-- Bridge の生存スコープは画面ライフサイクルに応じて 2 パターンを使い分ける: **一覧画面（VisitList）は `AppState` で 1 つ保持**（uid 確定後に 1 度だけ生成、画面再描画でも再生成しない）。**詳細画面（VisitDetail）は `VisitDetailView` 内の `@State` で遷移ごとに生成・破棄**（`init(visitId:appState:)` で `appState.container.makeVisitDetailViewModel()` を呼ぶ、`AppState` にホルダは置かない）。「一覧 = 常時 1 つ」と「Detail = push/pop で新規」のライフサイクルの違いを設計に反映している
+- Bridge の生存スコープは画面ライフサイクルに応じて 2 パターンを使い分ける: **一覧画面（VisitList）は `AppState` で 1 つ保持**（uid 確定後に 1 度だけ生成、画面再描画でも再生成しない）。**詳細画面（VisitDetail）/ 編集画面（VisitEditor）は View 内の `@State` で遷移ごとに生成・破棄**（それぞれ `appState.container.makeVisitDetailViewModel()` / `makeVisitEditorViewModel()` を呼ぶ、`AppState` にホルダは置かない）。「一覧 = 常時 1 つ」と「Detail / Editor = push/sheet ごとに新規」のライフサイクルの違いを設計に反映している
+- `AppState` は bootstrap（匿名サインイン + startInitialSync）と `visitListBridge` 保持に責務を絞り、書き込み系のダミー動作（旧 `writeDummyVisit()` / `Status.writing` / `lastWroteVisitId`）は VisitEditor 完成と同時に削除済。新規 / 編集の動線は `VisitEditorView` の sheet 起動が単一エントリ
 
 ---
 
@@ -462,3 +463,44 @@ VisitList 縦スライスに続く Phase 3 の第 2 スライス。同じ Phase 
 - enum 表示の暫定: Kotlin `BrewMethod` / `ProcessingMethod` / `RoastLevel` は Swift 側で class として現れ、`.name` で英語小文字（例: `"handdrip"`）を返す。日本語マッピングは別タスク（フェーズ 3 末か Phase 5 仕上げ）
 
 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` / `xcodebuild -sdk iphonesimulator` 全成功。シミュレータ実機での目視確認は未実施（親に依頼）。
+
+---
+
+### 2026-06-09: VisitEditorViewModel の設計（事前確定）
+
+- 領域: KMP / iOS
+- 関連: 実装予定 `shared/feature/visit-editor/`, `shared/framework/.../AppContainerViewModelFactory.kt`, `iosApp/iosApp/Features/VisitEditor/`
+
+Phase 3 タスク「Visit 作成 / 編集画面（VisitEditorView）を実装」+ Phase 3.5「`feature/visit-editor` 切り出し」+ CoffeeItem / FoodItem モーダルを 1 縦スライスで進めるにあたり、サブエージェント dispatch 前に親が固めた設計判断。仕様判断（カフェ手入力 / モーダル同梱 / 写真ピッカー省略）はユーザー Plan 承認済み。
+
+- **Mode は `sealed interface Mode { Create / Edit(visitId) }`**: 1 つの ViewModel で新規 / 編集を扱う（画面構造が共通のため別 VM に割らない）
+- **VisitDraft を Visit と分離**: `Visit` は `id` / `userId` / `createdAt` / `updatedAt` / `cafe.placeId` 等 UI で編集しない値を含むため、UI 用 `VisitDraft` data class を別途持つ。save 時に draft からドメイン `Visit` を組み立てる
+- **Edit モード初期化は `observeById(visitId).first()` で 1 回取得**: 継続購読にすると他端末更新が編集中の draft を上書きする事故が起き得るため避ける。MVP は last-write-wins（`updatedAt = now` で上書き）で十分
+- **Save 時 Visit 構築**: Create は `id` / `createdAt` / `cafe.placeId` を新規 UUID 採番、`updatedAt = now`。Edit は `id` / `createdAt` / `cafe.placeId` を既存維持し `updatedAt` のみ now で上書き
+- **カフェ手入力の暫定 placeId**: Places API は Phase 4 まで無いため UUID v4 で採番。Phase 4 着手時に「手入力 placeId → Google placeId」のマッピング or 個別差し替えが要件となる（Phase 4 課題として下のサマリにも記載）
+- **バリデーション**: `data-model.md` §7 に従い ViewModel 集約。`cafeName` 非空 + 200 文字、`rating` 1..5（0 は未入力エラー）、`ambiance` 200 文字、`notes` 2000 文字。失敗時は `UIState.error` に詰めて `isSaving` を解除
+- **保存完了 → View dismiss の合図**: `UIState.savedVisitId` に保存後の id を入れる。Swift 側は `onChange(of: viewModel.savedVisitId)` で `dismiss()`。`isSaving` トグル + `error` 詰めとあわせて View からは観測だけで完結
+- **CoffeeItem / FoodItem モーダルは独立 Bridge を作らない**: 子モーダルは View 内 `@State` で編集中値を持ち、保存クロージャで親 VM の `onCoffeeUpserted` / `onFoodUpserted` に渡す。state を親 VM に集約する原則を守る。`Bridge` を増やすと「並行編集中の状態管理」が複雑化するため
+
+トレードオフ:
+- 編集中に他端末更新が反映されない: MVP ではユーザー 1 名想定で許容。複数端末同時編集の競合検知は将来の issue
+- カフェ手入力 placeId と Google placeId が将来混在する: Phase 4 で差し替えロジックが必要
+
+---
+
+### 2026-06-09: VisitEditor 縦スライス完了時の実装側追加判断
+
+- 領域: KMP / iOS / Build
+- 関連: `shared/feature/visit-editor/`, `shared/framework/.../AppContainerViewModelFactory.kt`, `iosApp/iosApp/Features/VisitEditor/`, `iosApp/iosApp/{AppState,iOSApp}.swift`, `iosApp/iosApp/Features/{VisitList,VisitDetail}/`
+
+前エントリ「VisitEditorViewModel の設計（事前確定）」の実装で追加で固まった判断と発見をまとめる。
+
+- **`currentInitialVisit` を private プロパティで保持**: Edit モードで `observeById(visitId).first()` から得た初期 Visit は `private var currentInitialVisit: Visit?` として ViewModel 内部に隠蔽し、save 時に `id` / `placeId` / `createdAt` を引き出す。UIState に含める案は「UI で観測・表示しない内部値を Swift 側公開型に出すのは不適切」として不採用
+- **`onDisappear()` を VisitEditorViewModel に追加**: visit-list / visit-detail には無いが、Editor は `loadJob` + `saveJob` の 2 本を持ち、特に保存中の画面離脱時のリソースリーク防止が重要なため例外的に追加した。既存 VM への追随修正は YAGNI で見送り
+- **`@OptIn(ExperimentalUuidApi::class)` はクラスレベル付与**: `Uuid.random()` 呼び出しが複数あるため、関数単位より一括付与が運用しやすい
+- **`validate()` の戻り値型は `String?`**: 失敗時のエラーメッセージを直接返す。`sealed interface ValidationResult` 案より呼び出し側が `if (error != null)` 1 行で完結する単純さを優先
+- **SKIE `sealed interface Mode` の Swift 分岐は `is` キャストを採用**: SKIE SealedInterop で `onEnum(of:)` パターンマッチも生成されるが、ナビゲーションタイトル等の 2 分岐のみの判定では `is VisitEditorViewModelModeCreate` の方が読みやすい。3 分岐以上になったら `onEnum(of:)` 側に切り替える
+- **SKIE EnumInterop の発見を kmp-bridge.md / lessons.md に昇格**: `BrewMethod` 等の Kotlin `enum class` が Swift 側で `@frozen enum: Hashable, CaseIterable`（case 名 camelCase）になる仕様を `kmp-bridge.md` §SKIE 適用後の見え方テーブルに追記、関連の「`.h` ではなく `.swiftinterface` を見る」「Picker 用 `ForEach(BrewMethod.allCases, id: \.name)`」を `tasks/lessons.md` に追記。同種の安定知見は今後も lessons / kmp-bridge へ即昇格する
+- **`CoffeeEditingTarget` / `FoodEditingTarget` enum + `.sheet(item:)`**: 新規 / 編集を 1 つの sheet で扱うため、`enum CoffeeEditingTarget: Identifiable { case new; case existing(CoffeeItem) }` のラッパを Swift 側で定義し、`@State private var coffeeBeingEdited: CoffeeEditingTarget?` で `.sheet(item:)` を駆動。CoffeeItemEditorView 自体はバインディング不要で `initial: CoffeeItem?` + `onSave` クロージャの薄い API を維持できた
+- **検証結果**: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` / `:shared:data-local:testAndroidHostTest`（12 件）/ `xcodebuild -sdk iphonesimulator -scheme iosApp build` 全成功。SourceKit の `No such module 'SharedLogic'` 系警告が一部出るが、`docs/tasks/lessons.md` 既出のキャッシュ問題で実害なし（DerivedData クリアで解消）
+- **シミュレータ目視確認は未実施（ユーザー作業）**: 新規作成 / 編集 / キャンセル / バリデーションエラー / 子要素削除 / フード追加の 6 動線

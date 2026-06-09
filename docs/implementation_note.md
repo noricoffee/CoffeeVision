@@ -521,14 +521,18 @@ Phase 3 残タスク「写真ピッカー組み込み + Documents 保存」+「P
 - **SQLDelight migration**: 開発中検証データの DB 互換のため、`schemaVersion` を 2 に上げて `shared/data-local/src/commonMain/sqldelight/migrations/1.sqm` で `ALTER TABLE photo ADD COLUMN file_name TEXT;` を追加する。リリース前ではあるが既に Phase 2-3 で `writeDummyVisit()` や VisitEditor で書いたデータが端末に残っている前提で migration を書く
 - **画像表示（VisitDetailView）**: `Documents URL + localPath`（or `visits/{visitId}/{fileName}` で組み立て）で `Image(uiImage: UIImage(contentsOfFile: url.path)!)` で表示。表示は単純な horizontal `ScrollView` + `LazyHStack` で 3-4 枚並べる軽量 UI。サムネイル / 拡大表示は別タスク
 - **削除時の orphan ファイル削除**: 画面上で写真を削除（onPhotoRemoved）+ Visit ごと削除（VisitRepository.delete）時に、Documents 配下の物理ファイルも消す。Visit 削除側は iOS Swift の `VisitListView.onDelete` ハンドラの直前 / 後で Documents から `visits/{visitId}/` ディレクトリごと削除する
-- **保存タイミング**: PhotosPicker で選択 → Documents 保存 → `Photo` インスタンス作成 → `onPhotoUpserted(item:)` で VM に push の流れ。Documents 保存は **PhotosPicker 選択時に即実行**（保存ボタンを押すまで待たない）。途中キャンセル時のクリーンアップは「`onDisappear` で `savedVisitId == nil` なら orphan として削除」案も検討したが、Editor で「保存せずに閉じた」場合は一時 visitId 配下を消す処理を入れる
+- **保存タイミング**: PhotosPicker で選択 → 一時 `Data` をメモリ保持（`pendingImageData: [String: Data]`） + `Photo` インスタンス作成 → `onPhotoUpserted(item:)` で VM に push。Documents への物理書き出しは **保存ボタン押下時にまとめて実行**。Editor 内で削除した既存写真は `removedFileNames` に貯めて VM `savedVisitId` 確定後にまとめて物理削除。これでキャンセル時の orphan ファイル発生をゼロにできる（途中までは Documents に何も書かない）
 - **VisitFirestoreMapper.fileName**: 既存 `width` / `height` と同じ nullable パターンで `if let fileName = photo.fileName { dict["fileName"] = fileName }` 追加。decode 側も同様
 - **enum 日本語化は別タスクのまま据え置き**: 写真ピッカースライスとは独立。Picker 等の表示は `.name`（英語）のまま
 
 トレードオフ:
 - `localPath` と `fileName` の冗長性: SQLDelight DB だけ見ると `fileName` がなくても `localPath` から basename を抽出すれば取れる。ただし「Firestore に保存するのは `fileName` のみ」の規約があるため、ドメインモデルに `fileName` を独立フィールドとして持たせる方が往復経路が単純になる
-- 一時保存中のファイルが Editor キャンセル時に残るリスク: Phase 3 では「`onDisappear` で `savedVisitId == nil` なら `visits/{visitId}/` をクリーンアップ」案を採用（実装側で対応）
-- Create モード で `init` 時に発番した `visitId` を VM に渡す伝搬: VisitEditorViewModel 側で `Mode.Create(visitId: String)` を受け取る形に拡張するか、Bridge 経由でメソッドを増やす。実装側で最終形を決める
+- 残オーファンの境界条件: 「`saveWithPhotoFlush` で Documents 書き出し成功 → VM 保存エラー」の状態でユーザーが閉じた場合のみ、書き出し済みファイルが残る。`onDisappear` での自動 cleanup は「エラー alert 表示中の一時 dismiss」と区別しにくいため見送り。Phase 5 仕上げ候補
+
+実装後追記（2026-06-10）:
+- Create モード visitId の Swift 側事前発番は **不要**だった。`photos/` フラットディレクトリ規約により VisitEditorViewModel の Mode 拡張も不要
+- VisitEditor 実装は `pendingImageData` (新規分メモリ保持) + `removedFileNames` (既存削除分の遅延物理削除) の 2 状態で完結。保存ボタンの順序は「pendingImageData 書き出し → VM.onSaveTapped → savedVisitId onChange で removedFileNames 物理削除 + dismiss」
+- iOS デプロイメントターゲット 26.0 のため PhotosPicker の `@available(iOS 16, *)` ガード不要
 
 
 

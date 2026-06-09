@@ -209,6 +209,19 @@
 
 ## 2026-06-10
 
+### PhotosPicker の `selection` バインディングは選択処理後に必ず空配列にリセットする
+
+- SwiftUI の `PhotosPicker(selection: $items, ...)` は、ユーザーが同じアイテムを再選択しても `selection` が前回と同一なら `onChange(of: items)` が発火しない
+- 結果として「一度選択した写真と全く同じ写真をもう一度選んだとき」「選択 → 削除 → 同じ写真をもう一度選んだとき」に 2 回目以降が無視される
+- 回避: `onChange(of: selectedPickerItems)` のハンドラ末尾で `selectedPickerItems = []` する。次の選択は必ず空 → 非空への遷移になるため確実に発火する
+- 「選択結果をメモリで処理（Data 読み込み + ドメインモデル作成）した後にバインディングをクリア」のパターンが iOS 16+ のレシピ通り
+
+### SourceKit の `No such module 'SharedLogic'` は実ビルドが通っていれば無視可（既出）
+
+- 本プロジェクトでは Phase 2.5 以降頻発する。`xcodebuild` は BUILD SUCCEEDED でも IDE のインデックスだけ赤くなる
+- 詳細は同ファイル既出の「SourceKit の `No such module 'X'` は実ビルド成功と乖離することがある」エントリ参照
+- Phase 3 写真ピッカー実装時にも複数ファイルで同警告が出たが、`xcodebuild` 成功確認で問題ないと判断した
+
 ### SQLDelight 2.x の schemaVersion は migration ファイル名で自動決定される
 
 - `build.gradle.kts` の `sqldelight { databases { create("AppDatabase") { ... } } }` に `schemaVersion` の明示指定は **不要**

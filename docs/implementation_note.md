@@ -507,6 +507,33 @@ Phase 3 タスク「Visit 作成 / 編集画面（VisitEditorView）を実装」
 
 ---
 
+### 2026-06-11: Phase 3.5 Android 検証スライスの事前設計
+
+- 領域: Android / KMP / Build
+- 関連: 実装予定 `shared/data-firebase/androidMain/`, `androidApp/`, `sharedUI/src/commonMain/kotlin/com/noricoffee/`
+
+Phase 3.5 残タスク「androidApp で feature/visit-list を Compose の 1 画面として表示」+「Android 側で data-firebase の observe 経由 Firestore 読み取りが動くことを確認」を 1 スライスで進めるにあたり、サブエージェント dispatch 前に親が固めた設計判断。
+
+Android は **リリース対象外の KMP 共通レイヤー検証ターゲット**。iOS と機能パリティを目指さず、「VisitListViewModel が Android でも動く + Firestore observe が往復する」を 1 画面で証明する最小実装に絞る。
+
+- **Android Firebase 実装の置き場**: `shared/data-firebase/src/androidMain/kotlin/com/noricoffee/repository/` 直下に `AuthRepositoryAndroidImpl.kt` / `RemoteVisitDataSourceAndroidImpl.kt` / `VisitFirestoreMapper.kt`（iOS Swift マッパと等価な Kotlin 実装）を新規作成
+- **iOS 側との非対称性は是認**: iOS は Swift で `AuthRepositoryIosImpl` / `RemoteVisitDataSourceIosImpl` を書いている。Android は Kotlin で `AuthRepositoryAndroidImpl` / `RemoteVisitDataSourceAndroidImpl` を書く。両者は `AuthRepository` / `RemoteVisitDataSource` インターフェースに準拠して `AppContainer` に渡される
+- **Android の `observeChanges` は `callbackFlow` で実装**: `FirebaseFirestore.collection.addSnapshotListener` を `callbackFlow { ... awaitClose { listener.remove() } }` でラップ。iOS 側 SKIE 経由の SkieSwiftFlow とは対称な「素の Kotlin Flow」
+- **書き込みは WriteBatch で原子化**: iOS と同じく、親 visit set + 3 子コレクション set + 既存子 ID との差分 delete を 1 commit に。`Tasks.await(batch.commit())` で suspend 化（`kotlinx-coroutines-play-services` が必要なら使うか、シンプルに `await` ラッパを自前で書く）
+- **AppContainer の Android 構築**: `CoffeeVisionApp`（Application）クラスを `androidApp` 新規追加し、`FirebaseApp.initializeApp(context)` → `FirebaseFirestore.firestoreSettings` で `PersistentCacheSettings`（オフライン永続化）有効化 → `DatabaseDriverFactory(context).create()` で SQL Driver 作成 → `AppContainer(sqlDriver, RemoteVisitDataSourceAndroidImpl(), AuthRepositoryAndroidImpl())` を構築 → `companion object` の `lateinit var appContainer: AppContainer` に保持 → `scope.launch { appContainer.startInitialSync() }` で sign-in + sync 開始
+- **AndroidManifest.xml に Application クラス指定**: `<application android:name=".CoffeeVisionApp" ... >` を追加
+- **androidApp/build.gradle.kts の依存追加**: `alias(libs.plugins.googleServices)` プラグイン適用 + `implementation(projects.shared.framework)`（`makeVisitListViewModel()` を呼ぶため）+ `implementation(platform(libs.firebase.bom))` + `implementation(libs.firebase.auth)` + `implementation(libs.firebase.firestore)`。`google-services` プラグインがファイル末尾で apply するパターンも検証
+- **Compose 1 画面の置き場**: `sharedUI/src/commonMain/kotlin/com/noricoffee/VisitListScreen.kt` を新規追加し、`@Composable fun VisitListScreen(appContainer: AppContainer)` を定義。既存 `App()` Composable は壊さない（iOS で参照されていないか不明なため安全側）。`MainActivity.setContent { MaterialTheme { VisitListScreen(CoffeeVisionApp.appContainer) } }` で呼ぶ
+- **VisitListScreen の内容**: `val viewModel = remember { appContainer.makeVisitListViewModel() }` + `val state by viewModel.state.collectAsState()` + `LaunchedEffect(Unit) { val uid = appContainer.startInitialSync(); viewModel.onAppear(uid) }`（または `authRepository.observeUserId()` を購読）。`LazyColumn` で `state.visits` を簡素に表示（カフェ名 + visitedOn + rating）。削除 / 編集 / 詳細遷移は実装しない（検証範囲外）
+- **enum 日本語化 / 写真表示 / Swipe to delete / 編集モーダル**: いずれも検証範囲外。Android は MVP で必要最小限のみ
+- **VisitFirestoreMapper.kt（Android Kotlin 版）の API 設計**: `object VisitFirestoreMapper` の static メソッドとして `toDocument(visit: Visit): Map<String, Any?>` / `fromDocument(data: Map<String, Any?>): Visit?` / 子コレクション系も同様。iOS Swift 版と同等のフィールド扱い（nullable はキー省略 / Photo の localPath は Firestore に書かない / fileName は書く）
+
+トレードオフ:
+- iOS 側マッパは Swift で書き、Android 側マッパは Kotlin で書く。両側で同じ Firestore スキーマを扱うが、コード重複が発生する。`commonMain` に Kotlin マッパを置いて両プラットフォームで共有する案も検討できるが、Firebase SDK のオブジェクト型（`Timestamp` 等）がプラットフォーム依存のため、共通化のコストが高い。Phase 3.5 では「両側別実装で OK」と割り切る
+- Android で `Tasks.await(...)`: `kotlinx-coroutines-play-services` を入れる or `suspendCancellableCoroutine` で薄く自前ラップする。シンプル化のため後者で開始し、必要なら依存追加に切り替える
+- `CoffeeVisionApp.appContainer` の Singleton 化: テストしやすさを犠牲にするが Phase 3.5 検証では構わない。本格的な DI（Hilt / Koin）は Phase 5 以降の課題
+- 写真の Documents/photos/ ファイル保存は iOS のみ実装。Android では Photo の `localPath` / `fileName` は Firestore から取れたメタデータをそのまま `LocalVisitRepository` 経由で SQLDelight に書くだけで、画像本体は持たない（検証スコープ外）
+
 ### 2026-06-11: SwiftUI Preview は「戦略 B（ダミー Demo）」+ PreviewSamples 集約
 
 - 領域: iOS

@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -6,6 +7,14 @@ plugins {
     alias(libs.plugins.composeCompiler)
     alias(libs.plugins.googleServices)
 }
+
+// local.properties から Places API キーを読み取る。
+// ファイルが存在しない（CI 環境）または `placesApiKey` キーが未設定の場合は空文字を使う。
+val placesApiKey: String = runCatching {
+    val props = Properties()
+    props.load(project.rootProject.file("local.properties").reader())
+    props.getProperty("placesApiKey", "")
+}.getOrDefault("")
 
 kotlin {
     compilerOptions {
@@ -41,6 +50,12 @@ android {
         targetSdk = libs.versions.android.targetSdk.get().toInt()
         versionCode = 1
         versionName = "1.0"
+
+        buildConfigField("String", "PLACES_API_KEY", "\"$placesApiKey\"")
+    }
+
+    buildFeatures {
+        buildConfig = true
     }
     packaging {
         resources {

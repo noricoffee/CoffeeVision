@@ -1,8 +1,10 @@
 package com.noricoffee
 
 import app.cash.sqldelight.db.SqlDriver
+import com.noricoffee.data.places.createCafeRepository
 import com.noricoffee.db.AppDatabase
 import com.noricoffee.repository.AuthRepository
+import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.LocalVisitRepository
 import com.noricoffee.repository.RemoteVisitDataSource
 import com.noricoffee.repository.VisitRepository
@@ -29,7 +31,7 @@ import kotlinx.coroutines.MainScope
  * 通常用途（iOS / Android のアプリ起動時）では **scope 引数なし** のセカンダリコンストラクタを
  * 使い、内部で [MainScope]（`SupervisorJob() + Dispatchers.Main`）を生成させること。
  * Swift から見える初期化シグネチャは
- * `init(sqlDriver:remoteVisitDataSource:authRepository:)` になる。
+ * `init(sqlDriver:remoteVisitDataSource:authRepository:placesApiKey:)` になる。
  *
  * scope を引数で受け取るプライマリコンストラクタは **テスト用途専用**（`TestDispatcher` の
  * 差し替え等）。Kotlin のデフォルト引数は SKIE 経由で Swift には引き出されないため、デフォルト
@@ -38,7 +40,7 @@ import kotlinx.coroutines.MainScope
  * [docs/kmp-bridge.md](../../../../docs/kmp-bridge.md) §CoroutineScope の橋渡し のとおり、
  * 「AppContainer 内で隠蔽する」方針。
  *
- * ## Phase 3 時点の責務
+ * ## Phase 4 時点の責務
  *
  * - 依存配線（ローカル DB + リポジトリ合成）
  * - 起動時の同期開始（[startInitialSync]）
@@ -47,11 +49,14 @@ import kotlinx.coroutines.MainScope
  *   Kotlin/Native は同モジュール内のレシーバを持つ拡張関数を Obj-C category（インスタンス
  *   メソッド）として出力するため、Swift 側からは `appContainer.makeVisitListViewModel()` の
  *   形でそのまま呼べる。
+ * - Places API: `placesApiKey` を受け取り、`PlacesClient` / `CafeRepository` を内部で組み立てる。
+ *   キーは Android は BuildConfig 経由、iOS は Info.plist 経由（スライス 2 で整備）で渡す。
  */
 class AppContainer(
     sqlDriver: SqlDriver,
     private val remoteVisitDataSource: RemoteVisitDataSource,
     val authRepository: AuthRepository,
+    val placesApiKey: String,
     val scope: CoroutineScope,
 ) {
 
@@ -60,15 +65,20 @@ class AppContainer(
      *
      * 内部で [MainScope]（= `SupervisorJob() + Dispatchers.Main`）を生成し、プライマリ
      * コンストラクタに委譲する。Swift からはこのシグネチャを使うこと。
+     *
+     * Swift 側の呼び出しシグネチャ:
+     * `init(sqlDriver:remoteVisitDataSource:authRepository:placesApiKey:)`
      */
     constructor(
         sqlDriver: SqlDriver,
         remoteVisitDataSource: RemoteVisitDataSource,
         authRepository: AuthRepository,
+        placesApiKey: String,
     ) : this(
         sqlDriver = sqlDriver,
         remoteVisitDataSource = remoteVisitDataSource,
         authRepository = authRepository,
+        placesApiKey = placesApiKey,
         scope = MainScope(),
     )
 
@@ -80,6 +90,8 @@ class AppContainer(
         local = localVisitRepository,
         remote = remoteVisitDataSource,
     )
+
+    val cafeRepository: CafeRepository = createCafeRepository(apiKey = placesApiKey)
 
     /**
      * 匿名サインインを起こし、確定した uid でリモート → ローカルの同期購読を開始する。

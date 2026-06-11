@@ -39,7 +39,9 @@ final class AppState {
         self.container = AppContainer(
             sqlDriver: sqlDriver,
             remoteVisitDataSource: remoteDataSource,
-            authRepository: authRepo
+            authRepository: authRepo,
+            // TODO(スライス 2): xcconfig / Info.plist 経由で実 API キーを注入する
+            placesApiKey: ""
         )
     }
 

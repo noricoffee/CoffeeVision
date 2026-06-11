@@ -53,6 +53,7 @@ class CoffeeVisionApp : Application() {
             sqlDriver = sqlDriver,
             remoteVisitDataSource = RemoteVisitDataSourceAndroidImpl(),
             authRepository = AuthRepositoryAndroidImpl(),
+            placesApiKey = BuildConfig.PLACES_API_KEY,
         )
 
         // 4. 匿名サインイン + 初期同期開始

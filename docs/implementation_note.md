@@ -79,6 +79,7 @@
 - iOS Bridge は `@MainActor @Observable` クラス + `Task { for await s in kotlin.state { apply(s) } }` パターン（`kmp-bridge.md` §推奨パターン）で実装。SKIE 0.10.12 環境では `UIState.visits` は Swift 側で既に `[Visit_]` 型として取得できるため、`as? [Visit_]` キャストは不要（書くと "always succeeds" / "no effect" 警告）
 - Bridge の生存スコープは画面ライフサイクルに応じて 2 パターンを使い分ける: **一覧画面（VisitList）は `AppState` で 1 つ保持**（uid 確定後に 1 度だけ生成、画面再描画でも再生成しない）。**詳細画面（VisitDetail）/ 編集画面（VisitEditor）は View 内の `@State` で遷移ごとに生成・破棄**（それぞれ `appState.container.makeVisitDetailViewModel()` / `makeVisitEditorViewModel()` を呼ぶ、`AppState` にホルダは置かない）。「一覧 = 常時 1 つ」と「Detail / Editor = push/sheet ごとに新規」のライフサイクルの違いを設計に反映している
 - `AppState` は bootstrap（匿名サインイン + startInitialSync）と `visitListBridge` 保持に責務を絞り、書き込み系のダミー動作（旧 `writeDummyVisit()` / `Status.writing` / `lastWroteVisitId`）は VisitEditor 完成と同時に削除済。新規 / 編集の動線は `VisitEditorView` の sheet 起動が単一エントリ
+- Phase 4（Places API）は 5 スライス分割: ①KMP 基盤（data-places + PlacesClient + CafeRepository + AppContainer 配線）→ ②iOS UI（CafeSearchView + VisitEditor 統合 + xcconfig 連携）→ ③ CoreLocation + Nearby + Detail → ④写真都度取得 → ⑤ feature/cafe-search 切り出し。**Places API (New) v1** を採用、料金最適化のため `X-Goog-FieldMask` で取得フィールドを明示する。API キーは **`AppContainer` のコンストラクタ引数として外部から注入**（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Firebase Repository インスタンス注入と同じパターン
 
 ---
 
@@ -611,3 +612,115 @@ Phase 3 残タスク「写真ピッカー組み込み + Documents 保存」+「P
 - 次の写真ピッカー実装タスクから「Documents 配下にファイル保存 + 相対 `fileName` を `Photo.localPath` に詰める」実装が初登場
 - iOS `RemoteVisitDataSourceIosImpl` の `photos` サブコレクション同期はそのまま残置（書き込まれるデータが「常に `remoteUrl = null`」になるだけ）
 - `storage.rules` ファイル / `Photo.remoteUrl` フィールドを残しているため、将来 Storage を復活させる場合は本決定の逆操作（docs 復元 + `firebase.json` に `storage` キー追加 + Blaze 化 + `firebase deploy --only storage`）で戻せる
+
+---
+
+### 2026-06-11: Phase 4 着手の事前設計（スライス分割と API キー注入経路）
+
+- 領域: KMP / iOS / Android / Build / Docs
+- 関連: 実装予定 `shared/data-places/`, `shared/domain/.../CafeRepository.kt`, `shared/core/.../AppContainer.kt`, `local.properties`, `androidApp/build.gradle.kts`, `iosApp/Configuration/`
+
+Phase 4（Places API / カフェ検索）に着手する。Phase 4 は要件項目数が多く（Text/Nearby/Detail 検索 + 位置情報 + 写真 + UI + モジュール分割）、1 dispatch で全部を進めるとビルド検証粒度が粗くなる。**5 スライスに分割**して進める方針を固めた。
+
+**スライス分割**:
+
+1. **スライス 1（KMP 基盤）**: `data-places` モジュール作成 + Ktor / Serialization セットアップ + `PlacesClient` interface（`commonMain`）+ Places API New v1 の `places:searchText` 実装 + DTO + `CafeRepository` interface（`shared/domain`）+ `CafeRepositoryImpl` + `AppContainer` への API キー注入経路。**UI 統合・位置情報・写真取得はスコープ外**
+2. **スライス 2（iOS UI 検証）**: `CafeSearchView`（テキスト検索のみ）+ `VisitEditor` 統合（「カフェを検索」ボタン → 検索画面 → 選択結果でフィールド自動入力）。Bridge と Search ViewModel は `shared/core` 経由で配線（feature 切り出しは最終スライス）
+3. **スライス 3（位置情報 + Nearby + Detail）**: CoreLocation 連携 + Place Details 補完 + Nearby Search
+4. **スライス 4（写真都度取得）**: Place Photo Media API（`places/{placeId}/photos/{photoName}/media`）。Cafe.photoReferences をキーに表示時取得する `PlacePhotoLoader`（iOS 側で URLSession 経由）
+5. **スライス 5（feature 切り出し）**: `shared/feature/cafe-search` モジュール切り出し + `AppContainer.makeCafeSearchViewModel()` 拡張関数を `shared/framework` に追加
+
+**Places API バージョン**: **Places API (New) v1 を採用**
+
+- エンドポイント: `https://places.googleapis.com/v1/places:searchText`（POST）/ `places:searchNearby`（POST）/ `places/{placeId}`（GET）/ `places/{placeId}/photos/{photoName}/media`（GET）
+- 認証: `X-Goog-Api-Key: <APIキー>` ヘッダー
+- 取得フィールド指定: `X-Goog-FieldMask: places.id,places.displayName,places.formattedAddress,places.location,places.websiteUri,places.googleMapsUri,places.photos` 必須（指定しないとリクエストエラー）
+- リクエストボディ: `{"textQuery": "...", "includedType": "cafe", "languageCode": "ja"}` 形式
+- 不採用: **Places API (Legacy)**（Text Search / Nearby Search / Place Details）。理由は新規プロジェクトは New 推奨で料金体系も New に集約、フィールドマスクで明示課金できる方が運用上望ましいため
+
+**API キー管理方針**:
+
+- `local.properties` に `placesApiKey=AIza...` を 1 行追加（`.gitignore` 済、コミットしない）
+- **採用: `AppContainer` のコンストラクタ引数として外部から注入する経路**
+  - Android: `androidApp/build.gradle.kts` で `local.properties` を読み取り → `buildConfigField("String", "PLACES_API_KEY", "\"...\"")` で BuildConfig 注入 → `CoffeeVisionApp.onCreate()` で `AppContainer(..., placesApiKey = BuildConfig.PLACES_API_KEY)` 渡し
+  - iOS: `Configuration/Secrets.xcconfig`（`.gitignore` 済）に `PLACES_API_KEY = AIza...` を 1 行 → `iosApp.xcconfig` に `#include "Secrets.xcconfig"` → `Info.plist` に `<key>PLACES_API_KEY</key><string>$(PLACES_API_KEY)</string>` → Swift 側 `Bundle.main.object(forInfoDictionaryKey: "PLACES_API_KEY") as? String` → `AppContainer` 構築時に渡し
+  - 採用理由: Firebase の Repository インスタンス注入と同じパターン。KMP コア（`commonMain`）は API キーを知らなくてよく、テスト時もダミーキーを渡せる
+- **不採用**:
+  - `local.properties` を直接 KMP コードから読み込む案: Gradle 用ファイルのため runtime からは読めない / 全プラットフォームで一貫しない
+  - 環境変数注入案: iOS の Run Scheme 環境変数は実機ビルドで効かないため不採用
+  - キーを直接 Kotlin ソースに hardcode する案: コミットすると Google API Console から失効指示が来る + .gitignore 漏れリスク
+
+**`data-places` モジュール構成**:
+
+- `shared/data-places/build.gradle.kts`: `kmp.library` Convention Plugin 適用 + `kotlinSerialization` プラグイン適用
+- 依存:
+  - `commonMain`: `kotlinx-coroutines-core`, `kotlinx-serialization-json`, `ktor-client-core`, `ktor-client-content-negotiation`, `ktor-serialization-kotlinx-json`, `api(projects.shared.domain)`
+  - `iosMain`: `ktor-client-darwin`
+  - `androidMain`: `ktor-client-okhttp`
+- パッケージ: `com.noricoffee.data.places.*`
+
+**コンポーネント設計**:
+
+- `PlacesClient` interface（`commonMain`、`shared/data-places`）
+  - `suspend fun searchText(query: String): List<PlaceSummary>`（スライス 1）
+  - 後続スライスで `searchNearby(lat, lng, radius)` / `getDetails(placeId)` / `photoMediaUrl(placeId, photoName, maxSize)` 追加
+- `PlaceSummary` data class（`commonMain`）: Places API New の `places.id` / `places.displayName.text` / `places.formattedAddress` / `places.location.{latitude,longitude}` / `places.websiteUri` / `places.googleMapsUri` / `places.photos[].name` をフラットにマッピング
+- DTO: `SearchTextRequest` / `SearchTextResponse` / `PlaceDto` / `LocationDto` / `DisplayNameDto` / `PhotoDto` を `@Serializable` で定義（API スキーマに従いプロパティ名は camelCase / Json.ignoreUnknownKeys = true）
+- `PlacesClientImpl(httpClient: HttpClient, apiKey: String)` で実装。`Json { ignoreUnknownKeys = true; explicitNulls = false }` でゆるい decode
+- `CafeRepository` interface（`shared/domain`）: `suspend fun searchText(query: String): List<Cafe>`。実装は `data-places` 側
+- `CafeRepositoryImpl(placesClient: PlacesClient)` を `shared/data-places/commonMain` に実装。`PlaceSummary` → `Cafe` 変換（`photoReferences` には `places.photos[].name` を入れる。形式は `"places/{placeId}/photos/{photoReference}"`、表示時は Photo Media API へ `?key=...&maxHeightPx=...` で叩く）
+- HttpClient ファクトリ: `commonMain` に `internal expect fun createPlacesHttpClient(): HttpClient`、`iosMain`（darwin engine）/ `androidMain`（okhttp engine）で `actual`
+
+**AppContainer 配線**:
+
+- `AppContainer` の **プライマリコンストラクタに `placesApiKey: String` 引数を追加**（既存 3 引数セカンダリも 4 引数版に追随。テスト用 5 引数版で scope 注入可）
+- 内部で `createPlacesHttpClient()` → `PlacesClientImpl(httpClient, placesApiKey)` → `CafeRepositoryImpl(placesClient)` → `val cafeRepository: CafeRepository` を公開
+- Phase 4 後続スライスで `makeCafeSearchViewModel(): CafeSearchViewModel` を `shared/framework` の拡張関数として追加（Phase 3 の `VisitListViewModel` ファクトリと同じパターン）
+
+**スライス 1 範囲外（明示）**:
+
+- iOS / Android の検索 UI（`CafeSearchView` / Compose 検証）→ スライス 2
+- `VisitEditor` との統合（手入力 → 検索ベース）→ スライス 2
+- CoreLocation 連携 → スライス 3
+- Place Details / Nearby Search 実装 → スライス 3
+- Photo Media API（都度取得）→ スライス 4
+- `feature/cafe-search` 切り出し → スライス 5
+- 既存 `Cafe.placeId` が「Places API 由来 / VisitEditor 手入力の UUID」を識別する仕組み → 必要が出た時に「`placeId` の先頭が `ChIJ` から始まる」等のヒューリスティクスで判定するが、現状は混在のまま許容
+
+**トレードオフ**:
+
+- スライス 1 で UI まで作らない: dispatch の規模を抑え、ビルド検証可能な単位（KMP 基盤のみ）に分けるため。UI 統合は次スライスに送る
+- スライス 1 ではキーが未設定でもビルドが通る: `placesApiKey` が空文字でも HttpClient 構築は成功する（実 API 呼び出し時に 401 になるだけ）。CI 上で実 API キーを必要としないメリットを優先
+- `shared/data-places/commonMain` への `kotlinx-serialization-json` 依存: 既存 `shared/data-local` の `Mapper.kt` も `kotlinx-serialization` を使っているため新規依存は libs.versions.toml で宣言済（再利用のみ）
+
+**iOS 側の xcconfig 整備の注意（スライス 1 で実施するか議論）**:
+
+- iOS の API キー注入（`Secrets.xcconfig` + Info.plist 連携）は **iOS UI 実装（スライス 2）と同時に進める方が自然**。スライス 1 では Android 側のみ BuildConfig 整備して KMP 配線を完了し、iOS は AppContainer 構築時にハードコード空文字（後で xcconfig 経由に差し替え）でビルド検証する暫定対応とする
+- スライス 2 で iOS 側 `Secrets.xcconfig` + Info.plist + AppState 経由の AppContainer 構築を確定する
+
+---
+
+### 2026-06-11: Phase 4 スライス 1 実装後追記（KMP `internal` とモジュール間アクセス、SKIE 警告）
+
+- 領域: KMP / Build / iOS Bridge
+- 関連: `shared/data-places/src/commonMain/kotlin/com/noricoffee/data/places/{PlacesHttpClient.kt,PlacesModule.kt}`, `shared/core/.../AppContainer.kt`
+
+スライス 1 実装で固まった追加判断と発見。
+
+**KMP `internal` 可視性とモジュール境界**:
+
+- `createPlacesHttpClient()` を `internal expect` にすると、`api` 依存の別モジュール（`shared/core`）から直接呼べない。KMP の `internal` 可視性は「同一 Gradle モジュール内」に閉じるため、`api` 依存で classpath に乗っていても **別モジュールからはアクセス不可**
+- 採用: `PlacesModule.kt` にパブリックなファクトリ関数 `fun createCafeRepository(apiKey: String): CafeRepository` を置き、`AppContainer` はこれ経由で `CafeRepository` を組み立てる設計。これで `HttpClient` のエンジン選択（Darwin / OkHttp）と `PlacesClient` の構築詳細が `data-places` モジュール内に閉じる
+- 同パターンは将来 `data-firebase` の Android 実装本格移送時にも適用可能（Firestore 設定詳細を Android 内に閉じてファクトリ関数を公開）
+
+**Ktor を `framework` に `export` した際の SKIE 警告**:
+
+- `shared/framework/build.gradle.kts` で `export(projects.shared.dataPlaces)` を追加すると Ktor が XCFramework に取り込まれ、`Ktor_httpHttpStatusCode.description` が Swift の `description()` と名前衝突して SKIE が `description_` にリネームする警告が出る。ビルドは通る
+- 現状は UI から `HttpStatusCode` を直接参照しないため放置。スライス 2 で UI から扱う必要が出たら `@ObjCName("description")` 相当の Kotlin 側調整で解消する
+
+**`AppContainer` コンストラクタ拡張**:
+
+- プライマリコンストラクタに `placesApiKey: String` を **`authRepository` の次・`scope` の前** に挿入
+- セカンダリ（scope なし）も 4 引数に拡張（`placesApiKey` 追加）
+- Swift / Android 双方の構築コードを同スライスで追随（`AppState.swift` は暫定空文字 `placesApiKey: ""`）
+- 既存の引数順は保持。今後 `cafeRepository` 関連で追加引数が出る場合も末尾追加を原則とする

@@ -15,6 +15,8 @@ kotlin {
             api(projects.shared.dataLocal)
             // Repository インターフェースの Android 実装の class path を core 経由で公開
             api(projects.shared.dataFirebase)
+            // AppContainer が PlacesClient / CafeRepository を内部で組み立てるため
+            api(projects.shared.dataPlaces)
             implementation(libs.kotlinx.coroutines.core)
         }
         commonTest.dependencies {

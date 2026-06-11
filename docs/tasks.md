@@ -119,16 +119,68 @@
 
 ## フェーズ 4: Places API（カフェ検索）
 
+> 2026-06-11 着手。5 スライスに分割して進める。詳細設計は [`implementation_note.md`](./implementation_note.md) 2026-06-11 Phase 4 エントリ参照。Places API は **New v1**（`places.googleapis.com/v1/...`）を採用、`X-Goog-FieldMask` で取得フィールド明示。
+
+### Phase 0 未完了の前段タスク
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | **モジュール分割**: `data-places` モジュール切り出し（Phase 4 開始時） | Ktor + Places クライアントをここに集約 |
-| [ ] | Ktor Client + Kotlinx Serialization のセットアップ | `data-places` モジュール内 |
-| [ ] | `PlacesClient`（Text Search / Nearby Search / Place Details） | `data-places` モジュール内 |
-| [ ] | `CafeRepository` 経由で ViewModel から呼び出せるようにする | I/F は `domain` モジュールに |
-| [ ] | カフェ検索画面（CafeSearchView） | テキスト検索 |
-| [ ] | 現在地検索（CoreLocation 連携。位置情報の利用許可ダイアログ対応） | |
-| [ ] | Places API 規約に従い、写真は都度取得する実装にする | キャッシュしない |
-| [ ] | **モジュール分割**: `feature/cafe-search` モジュール切り出し（Phase 4 完了直後） | |
+| [x] | `local.properties` での API キー管理を整える（Places） | 2026-06-11 / スライス 1 で `placesApiKey=` を追加 + `androidApp/build.gradle.kts` で local.properties 読み取り → `BuildConfig.PLACES_API_KEY` 注入 → `CoffeeVisionApp.onCreate()` で `AppContainer` 構築時に渡す経路を確立。iOS 側 xcconfig 経由はスライス 2 で実施。Firebase 側はファイル配置で完了済 |
+
+### スライス 1: KMP 基盤（data-places + PlacesClient + CafeRepository + AppContainer 配線）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | **モジュール分割**: `data-places` モジュール作成（`kmp.library` Convention Plugin 適用） | 2026-06-11 / Ktor + Places クライアントを集約。namespace `com.noricoffee.dataPlaces` |
+| [x] | `gradle/libs.versions.toml`: Ktor 系・kotlinx-serialization の既存宣言で十分か確認 | 2026-06-11 / 既存宣言で十分、追加なし |
+| [x] | `shared/data-places/build.gradle.kts`: `kmp.library` + `kotlinSerialization` 適用、commonMain（ktor-client-core / content-negotiation / serialization-kotlinx-json）/ iosMain（darwin engine）/ androidMain（okhttp engine）依存追加 | 2026-06-11 |
+| [x] | `commonMain` に `expect fun createPlacesHttpClient(): HttpClient`、`iosMain` / `androidMain` で `actual` 実装 | 2026-06-11 / `internal expect` 採用、外部公開は `createCafeRepository()` ファクトリ経由 |
+| [x] | `commonMain` に Places API New v1 用 DTO（`SearchTextRequest` / `SearchTextResponse` / `PlaceDto` / `LocationDto` / `DisplayNameDto` / `PhotoDto`）を `@Serializable` で定義 | 2026-06-11 / `Json.ignoreUnknownKeys = true` + `explicitNulls = false` |
+| [x] | `commonMain` に `PlaceSummary` data class（DTO のフラット化）+ `PlacesClient` interface（`suspend fun searchText(query: String): List<PlaceSummary>`）+ `PlacesClientImpl(httpClient, apiKey)` 実装 | 2026-06-11 / `X-Goog-Api-Key` + `X-Goog-FieldMask` + `places:searchText` POST |
+| [x] | `shared/domain` に `CafeRepository` interface 追加（`suspend fun searchText(query: String): List<Cafe>`） | 2026-06-11 / `com.noricoffee.repository.CafeRepository` |
+| [x] | `shared/data-places/commonMain` に `CafeRepositoryImpl(placesClient)` 実装（`PlaceSummary` → `Cafe` 変換、`photoReferences` = `places.photos[].name` リスト） | 2026-06-11 |
+| [x] | `shared/core/AppContainer`: コンストラクタに `placesApiKey: String` 引数追加（プライマリ / セカンダリ両方）。`cafeRepository: CafeRepository` を public 公開 | 2026-06-11 / `placesApiKey` は `authRepository` の次・`scope` の前に挿入。`createCafeRepository(apiKey)` ファクトリ経由で構築 |
+| [x] | `shared/framework`: `api(projects.shared.dataPlaces)` + `export(projects.shared.dataPlaces)` 追加 | 2026-06-11 / SKIE 警告（`Ktor_httpHttpStatusCode.description` → `description_` リネーム）が出るが UI 未参照のため放置 |
+| [x] | `settings.gradle.kts`: `include(":shared:data-places")` 追加 | 2026-06-11 |
+| [x] | `androidApp/build.gradle.kts`: `local.properties` から `placesApiKey` を読み取り → `buildConfigField` で `PLACES_API_KEY` を注入 | 2026-06-11 / `import java.util.Properties` + `buildFeatures { buildConfig = true }` |
+| [x] | `CoffeeVisionApp.onCreate()`: `AppContainer(..., placesApiKey = BuildConfig.PLACES_API_KEY)` で構築 | 2026-06-11 |
+| [x] | `iOSApp.swift` / `AppState.swift`: 暫定で空文字（`""`）を `placesApiKey` に渡してビルドだけ通す（xcconfig 経由はスライス 2 で実施） | 2026-06-11 / `AppState.swift` でコメント付きの暫定対応 |
+| [x] | 検証: `./gradlew :shared:framework:assembleSharedLogicXCFramework`、`./gradlew :androidApp:assembleDebug`、`./gradlew :shared:data-local:testAndroidHostTest`、`xcodebuild -sdk iphonesimulator` 全成功 | 2026-06-11 / data-local test 12 件グリーン、4 ビルド全成功 |
+
+### スライス 2: iOS UI（CafeSearchView + VisitEditor 統合 + xcconfig 連携）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | iOS の API キー注入（`Configuration/Secrets.xcconfig` + `iosApp.xcconfig` + Info.plist + Bundle.main 経由） | `Secrets.xcconfig` は `.gitignore` 追加 |
+| [ ] | `shared/core` に `CafeSearchViewModel(cafeRepository, scope)` を追加（または `shared/feature/cafe-search` 切り出しまで `shared/core` の暫定置き場） | `UIState(query, results, isLoading, error)` + `onQueryChanged` / `onSearchTapped` |
+| [ ] | iOS `Features/CafeSearch/CafeSearchView.swift` + `CafeSearchViewModelBridge.swift` 実装 | |
+| [ ] | `VisitEditorView` 統合: 「カフェを検索」ボタン → `CafeSearchView` 起動 → 選択結果で `cafeName` / `cafeAddress` / `placeId` 等を `VisitEditorViewModel` に流し込む | 手入力モードも残置 |
+| [ ] | カフェ検索結果から選択時、`VisitEditorViewModel` に新しい「Places 由来 Cafe」を渡す API を追加（`onPlacesCafeSelected(cafe: Cafe)` 等） | placeId は Google placeId を維持 |
+
+### スライス 3: 位置情報 + Nearby + Detail
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `PlacesClient` に `searchNearby(lat, lng, radiusMeters): List<PlaceSummary>` 追加 | |
+| [ ] | `PlacesClient` に `getDetails(placeId): PlaceSummary` 追加（住所 / 営業時間補完用） | |
+| [ ] | `CafeRepository` に対応メソッド追加 | |
+| [ ] | iOS CoreLocation 連携: `Info.plist` に `NSLocationWhenInUseUsageDescription` 追加 + `CLLocationManager` ラッパで現在地取得 → `CafeSearchViewModel.onUseCurrentLocationTapped()` | |
+
+### スライス 4: 写真都度取得（Photo Media API）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `PlacesClient` に `photoMediaUrl(photoName, maxWidthPx?, maxHeightPx?): String` 追加（Photo Media API のリダイレクト URL を得る） | キャッシュしない |
+| [ ] | iOS 側 `PlacePhotoLoader`（URLSession + AsyncImage 連携）実装 | |
+| [ ] | `CafeSearchView` の結果セルに 1 枚目の写真サムネ表示 | |
+
+### スライス 5: feature 切り出し（Phase 4 完了直後）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | **モジュール分割**: `shared/feature/cafe-search` モジュール切り出し（`CafeSearchViewModel` を移送） | `kmp.feature` Convention Plugin 適用 |
+| [ ] | `shared/framework`: `api(projects.shared.feature.cafeSearch)` + `export` 追加、`AppContainer.makeCafeSearchViewModel()` 拡張関数を `AppContainerViewModelFactory.kt` に追加 | |
+| [ ] | `settings.gradle.kts`: `include(":shared:feature:cafe-search")` 追加 | |
 
 ---
 

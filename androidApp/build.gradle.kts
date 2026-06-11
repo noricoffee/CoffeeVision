@@ -4,6 +4,7 @@ plugins {
     alias(libs.plugins.androidApplication)
     alias(libs.plugins.composeMultiplatform)
     alias(libs.plugins.composeCompiler)
+    alias(libs.plugins.googleServices)
 }
 
 kotlin {
@@ -13,11 +14,21 @@ kotlin {
 }
 dependencies {
     implementation(projects.sharedUI)
+    implementation(projects.shared.framework)
+    implementation(projects.shared.core)
+    implementation(projects.shared.dataFirebase)
+    implementation(projects.shared.dataLocal)
 
     implementation(libs.androidx.activity.compose)
+    implementation(libs.compose.material3)
+    implementation(libs.compose.runtime)
 
     implementation(libs.compose.uiToolingPreview)
     debugImplementation(libs.compose.uiTooling)
+
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.auth)
+    implementation(libs.firebase.firestore)
 }
 
 android {

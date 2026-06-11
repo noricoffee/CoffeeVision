@@ -507,6 +507,19 @@ Phase 3 タスク「Visit 作成 / 編集画面（VisitEditorView）を実装」
 
 ---
 
+### 2026-06-11: SwiftUI Preview は「戦略 B（ダミー Demo）」+ PreviewSamples 集約
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/PreviewSupport/PreviewSamples.swift`, `iosApp/iosApp/Features/{VisitList,VisitDetail,VisitEditor}/`, `iosApp/iosApp/Components/StarRatingView.swift`
+
+各画面の SwiftUI Preview 実装で採用した方針メモ。
+
+- **戦略 B 採用**: 本体 View は `AppState` / `AppContainer` / Kotlin VM を要求する Bridge を強く要求するため、Preview で本物の Bridge を構築するのは過剰。本体 View ロジックには手を入れず、`#Preview` ブロック内で「同等構造のダミー Demo」を書く方針を採った
+- **PreviewSamples の集約**: `iosApp/iosApp/PreviewSupport/PreviewSamples.swift` に `Visit_` / `CoffeeItem` / `FoodItem` / `Photo_` のダミーデータを `static let` で定義し、Preview 間で共有。`Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds` / `Kotlinx_datetimeLocalDate(year:monthNumber:dayOfMonth:)` で日時を作成するヘルパも置く
+- **写真セルは Preview Canvas で常に placeholder 表示**: `samplePhotos[0].fileName` が指すファイルは Preview 環境の Documents に存在しないため、`PhotoDetailCell` / `PhotoThumbnailCell` は `photo.badge.exclamationmark` placeholder になる。Preview 用に UIImage を inject する仕組みは作らない（割に合わない）
+- **コード重複の容認**: 本体 View の `cafeSection` などの ViewBuilder を Preview から直接呼べないため、Form Section の構造を Preview Demo で手書き再掲する。本体の構造が変わった際は Preview 側も追従が必要。Phase 5 で `private struct Content` 抽出リファクタを行えば解消可能だが、MVP では割り切る
+- **`#Preview` 件数**: VisitList 3 / VisitDetail 5 / VisitEditor 5 / CoffeeItemEditor 2 / FoodItemEditor 2 / StarRating 2 = 計 19 件。各画面の主要サブビュー（行 / セル）+ 本体 Demo + 編集モードバリエーションをカバー
+
 ### 2026-06-10: 写真ピッカー縦スライスの事前設計
 
 - 領域: Docs / KMP / iOS

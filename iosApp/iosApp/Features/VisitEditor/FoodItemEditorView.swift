@@ -93,6 +93,13 @@ struct FoodItemEditorView: View {
 
 // MARK: - Preview
 
-#Preview {
+#Preview("新規") {
     FoodItemEditorView(initial: nil, onSave: { _ in })
+}
+
+#Preview("編集（クッキー）") {
+    FoodItemEditorView(
+        initial: PreviewSamples.sampleFoodItems[2],
+        onSave: { _ in }
+    )
 }

@@ -153,6 +153,13 @@ struct CoffeeItemEditorView: View {
 
 // MARK: - Preview
 
-#Preview {
+#Preview("新規") {
     CoffeeItemEditorView(initial: nil, onSave: { _ in })
+}
+
+#Preview("編集（HandDrip サンプル）") {
+    CoffeeItemEditorView(
+        initial: PreviewSamples.sampleCoffeeItems[0],
+        onSave: { _ in }
+    )
 }

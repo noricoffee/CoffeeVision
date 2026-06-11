@@ -169,9 +169,67 @@ private struct VisitRow: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Preview (VisitRow 単体)
 
-#Preview {
-    Text(String(localized: "VisitListView preview placeholder"))
-        .padding()
+#Preview("VisitRow") {
+    List {
+        VisitRow(visit: PreviewSamples.sampleVisit)
+        VisitRow(visit: PreviewSamples.sampleVisitWithoutPhotos)
+        VisitRow(visit: PreviewSamples.sampleVisitMinimal)
+    }
+}
+
+// MARK: - Preview (空状態)
+
+#Preview("空状態") {
+    NavigationStack {
+        ContentUnavailableView(
+            String(localized: "まだ訪問記録がありません"),
+            systemImage: "cup.and.saucer",
+            description: Text(String(localized: "右上の + ボタンで訪問記録を追加してみましょう"))
+        )
+        .navigationTitle(String(localized: "訪問記録"))
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                } label: {
+                    Label(
+                        String(localized: "訪問記録を追加"),
+                        systemImage: "plus"
+                    )
+                    .labelStyle(.iconOnly)
+                }
+                .accessibilityLabel(String(localized: "訪問記録を追加"))
+            }
+        }
+    }
+}
+
+// MARK: - Preview (一覧 Demo)
+
+#Preview("一覧 Demo") {
+    NavigationStack {
+        List {
+            ForEach(PreviewSamples.sampleVisits) { visit in
+                VisitRow(visit: visit)
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle(String(localized: "訪問記録"))
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                } label: {
+                    Label(
+                        String(localized: "訪問記録を追加"),
+                        systemImage: "plus"
+                    )
+                    .labelStyle(.iconOnly)
+                }
+                .accessibilityLabel(String(localized: "訪問記録を追加"))
+            }
+        }
+    }
 }

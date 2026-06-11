@@ -81,22 +81,42 @@ struct StarRatingView: View {
 
 // MARK: - Preview
 
-#Preview {
+#Preview("Read-only (rating 0〜5)") {
     VStack(alignment: .leading, spacing: 16) {
-        StarRatingView(rating: 0)
-        StarRatingView(rating: 3, size: .caption2)
-        StarRatingView(rating: 5, size: .title2)
-        StatefulEditorPreview()
+        ForEach(0...5, id: \.self) { value in
+            HStack(spacing: 8) {
+                Text("\(value)星")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .frame(width: 32, alignment: .trailing)
+                StarRatingView(rating: value)
+            }
+        }
     }
     .padding()
 }
 
-private struct StatefulEditorPreview: View {
+#Preview("編集モード") {
+    VStack(alignment: .leading, spacing: 16) {
+        StarRatingViewEditorPreview()
+    }
+    .padding()
+}
+
+private struct StarRatingViewEditorPreview: View {
     @State private var rating = 3
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("編集モード: \(rating)").font(.caption).foregroundStyle(.secondary)
+            Text("現在の評価: \(rating)星")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             StarRatingView(rating: rating, onChange: { rating = $0 })
+            Divider()
+            Text("サイズバリエーション（編集モード）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            StarRatingView(rating: rating, size: .caption2, onChange: { rating = $0 })
+            StarRatingView(rating: rating, size: .title2, onChange: { rating = $0 })
         }
     }
 }

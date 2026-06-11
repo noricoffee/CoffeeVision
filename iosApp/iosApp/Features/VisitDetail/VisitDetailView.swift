@@ -280,8 +280,120 @@ private struct PhotoDetailCell: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Preview (CoffeeItemRow 単体)
 
-#Preview {
-    Text("VisitDetailView preview placeholder")
+#Preview("CoffeeItemRow") {
+    List {
+        CoffeeItemRow(coffee: PreviewSamples.sampleCoffeeItems[0])
+        CoffeeItemRow(coffee: PreviewSamples.sampleCoffeeItems[1])
+        CoffeeItemRow(coffee: PreviewSamples.sampleCoffeeItems[2])
+    }
+}
+
+// MARK: - Preview (FoodItemRow 単体)
+
+#Preview("FoodItemRow") {
+    List {
+        FoodItemRow(food: PreviewSamples.sampleFoodItems[0])
+        FoodItemRow(food: PreviewSamples.sampleFoodItems[1])
+    }
+}
+
+// MARK: - Preview (PhotoDetailCell 単体)
+
+#Preview("PhotoDetailCell - fileName あり") {
+    ScrollView(.horizontal) {
+        LazyHStack(spacing: 8) {
+            // fileName は存在するが実ファイルは Preview 環境に無いため placeholder 表示になる
+            PhotoDetailCell(
+                photo: PreviewSamples.samplePhotos[0],
+                index: 1,
+                total: 2
+            )
+            PhotoDetailCell(
+                photo: PreviewSamples.samplePhotos[1],
+                index: 2,
+                total: 2
+            )
+        }
+        .padding()
+    }
+    .frame(height: 160)
+}
+
+#Preview("PhotoDetailCell - fileName nil") {
+    ScrollView(.horizontal) {
+        LazyHStack(spacing: 8) {
+            PhotoDetailCell(
+                photo: PreviewSamples.samplePhotos[2],
+                index: 1,
+                total: 1
+            )
+        }
+        .padding()
+    }
+    .frame(height: 160)
+}
+
+// MARK: - Preview (詳細画面 Form Demo)
+
+#Preview("詳細 Form Demo") {
+    let visit = PreviewSamples.sampleVisit
+    NavigationStack {
+        Form {
+            Section {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(visit.cafe.name)
+                        .font(.title3)
+                    if let address = visit.cafe.address {
+                        Text(address)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .padding(.vertical, 4)
+
+                LabeledContent(String(localized: "訪問日")) {
+                    let d = visit.visitedOn
+                    Text(String(format: "%04d/%02d/%02d",
+                                Int(d.year), Int(d.monthNumber), Int(d.dayOfMonth)))
+                }
+
+                LabeledContent(String(localized: "評価")) {
+                    StarRatingView(rating: Int(visit.rating))
+                }
+            }
+
+            Section(String(localized: "雰囲気")) {
+                Text(visit.ambiance).font(.body)
+            }
+
+            Section(String(localized: "メモ")) {
+                Text(visit.notes).font(.body)
+            }
+
+            Section(String(localized: "コーヒー")) {
+                ForEach(visit.coffees) { coffee in
+                    CoffeeItemRow(coffee: coffee)
+                }
+            }
+
+            Section(String(localized: "フード")) {
+                ForEach(visit.foods) { food in
+                    FoodItemRow(food: food)
+                }
+            }
+        }
+        .navigationTitle(visit.cafe.name)
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button {
+                } label: {
+                    Label(String(localized: "編集"), systemImage: "pencil")
+                }
+                .accessibilityLabel(String(localized: "訪問記録を編集"))
+            }
+        }
+    }
 }

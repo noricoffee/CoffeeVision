@@ -573,8 +573,134 @@ private struct PhotoThumbnailCell: View {
     }
 }
 
-// MARK: - Preview
+// MARK: - Preview (CoffeeItemSummaryRow 単体)
 
-#Preview {
-    Text("VisitEditorView preview placeholder")
+#Preview("CoffeeItemSummaryRow") {
+    List {
+        CoffeeItemSummaryRow(coffee: PreviewSamples.sampleCoffeeItems[0])
+        CoffeeItemSummaryRow(coffee: PreviewSamples.sampleCoffeeItems[1])
+        CoffeeItemSummaryRow(coffee: PreviewSamples.sampleCoffeeItems[2])
+    }
+}
+
+// MARK: - Preview (FoodItemSummaryRow 単体)
+
+#Preview("FoodItemSummaryRow") {
+    List {
+        FoodItemSummaryRow(food: PreviewSamples.sampleFoodItems[0])
+        FoodItemSummaryRow(food: PreviewSamples.sampleFoodItems[1])
+    }
+}
+
+// MARK: - Preview (PhotoThumbnailCell 単体)
+
+#Preview("PhotoThumbnailCell") {
+    ScrollView(.horizontal) {
+        LazyHStack(spacing: 8) {
+            // pendingData が nil かつ fileName あり → placeholder 表示（Preview では実ファイル無し）
+            PhotoThumbnailCell(
+                photo: PreviewSamples.samplePhotos[0],
+                pendingData: nil,
+                onDelete: {}
+            )
+            // fileName nil → placeholder 表示
+            PhotoThumbnailCell(
+                photo: PreviewSamples.samplePhotos[2],
+                pendingData: nil,
+                onDelete: {}
+            )
+        }
+        .padding()
+    }
+    .frame(height: 140)
+}
+
+// MARK: - Preview (新規作成 Form Demo)
+
+#Preview("新規作成 Demo") {
+    NavigationStack {
+        Form {
+            Section(String(localized: "カフェ")) {
+                Text("Blue Bottle 三軒茶屋").foregroundStyle(.secondary)
+                Text("東京都世田谷区太子堂4-1-22").foregroundStyle(.secondary)
+            }
+            Section(String(localized: "訪問")) {
+                LabeledContent(String(localized: "訪問日")) {
+                    Text("2026/06/02")
+                }
+                LabeledContent(String(localized: "評価")) {
+                    StarRatingView(rating: 0)
+                }
+            }
+            Section(String(localized: "コーヒー")) {
+                Label(String(localized: "コーヒーを追加"), systemImage: "plus")
+                    .accessibilityLabel(String(localized: "コーヒーを追加"))
+            }
+            Section(String(localized: "フード")) {
+                Label(String(localized: "フードを追加"), systemImage: "plus")
+                    .accessibilityLabel(String(localized: "フードを追加"))
+            }
+        }
+        .navigationTitle(String(localized: "新規訪問"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(String(localized: "キャンセル")) {}
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(String(localized: "保存")) {}
+                    .disabled(true)
+            }
+        }
+    }
+}
+
+// MARK: - Preview (編集 Form Demo)
+
+#Preview("訪問の編集 Demo") {
+    let visit = PreviewSamples.sampleVisit
+    NavigationStack {
+        Form {
+            Section(String(localized: "カフェ")) {
+                Text(visit.cafe.name)
+                if let address = visit.cafe.address {
+                    Text(address).foregroundStyle(.secondary)
+                }
+            }
+            Section(String(localized: "訪問")) {
+                let d = visit.visitedOn
+                LabeledContent(String(localized: "訪問日")) {
+                    Text(String(format: "%04d/%02d/%02d",
+                                Int(d.year), Int(d.monthNumber), Int(d.dayOfMonth)))
+                }
+                LabeledContent(String(localized: "評価")) {
+                    StarRatingView(rating: Int(visit.rating))
+                }
+            }
+            Section(String(localized: "コーヒー")) {
+                ForEach(visit.coffees) { coffee in
+                    CoffeeItemSummaryRow(coffee: coffee)
+                }
+                Label(String(localized: "コーヒーを追加"), systemImage: "plus")
+                    .accessibilityLabel(String(localized: "コーヒーを追加"))
+            }
+            Section(String(localized: "フード")) {
+                ForEach(visit.foods) { food in
+                    FoodItemSummaryRow(food: food)
+                }
+                Label(String(localized: "フードを追加"), systemImage: "plus")
+                    .accessibilityLabel(String(localized: "フードを追加"))
+            }
+        }
+        .navigationTitle(String(localized: "訪問の編集"))
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbar {
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(String(localized: "キャンセル")) {}
+            }
+            ToolbarItem(placement: .navigationBarTrailing) {
+                Button(String(localized: "保存")) {}
+            }
+        }
+    }
 }

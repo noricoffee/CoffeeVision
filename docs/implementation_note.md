@@ -507,6 +507,20 @@ Phase 3 タスク「Visit 作成 / 編集画面（VisitEditorView）を実装」
 
 ---
 
+### 2026-06-11: Phase 3.5 Android Firebase 実装の追加判断（実装後追記）
+
+- 領域: Android / KMP / Build
+- 関連: `shared/data-firebase/src/androidMain/`, `androidApp/`, `sharedUI/`
+
+Phase 3.5 Android 検証スライス実装で確定した追加判断。事前設計エントリ（後述）の補足。
+
+- **`kotlinx-datetime` は `domain` 側が `implementation` のため `androidMain` に届かない**: `shared/data-firebase/build.gradle.kts` と `sharedUI/build.gradle.kts` の `androidMain` / `commonMain` に個別に `implementation(libs.kotlinx.datetime)` を追加。KMP の `androidMain` は JVM classpath として扱われるため、推移的依存の `api` / `implementation` 区別が strict に効く。他モジュールが `androidMain` / `commonMain` で `kotlinx-datetime` の型を直接使う場合も同様に追加が必要
+- **`Tasks.await` は `suspendCancellableCoroutine` で自前ラップ**: `kotlinx-coroutines-play-services` 不採用。10 行のヘルパで十分。`addOnSuccessListener` / `addOnFailureListener` を両方設定して成功・失敗パスをハンドル。キャンセル時は Firebase Task のキャンセルはできないがコールバック無視で安全に破棄
+- **`androidApp` に `compose.material3` / `compose.runtime` の直接依存が必要**: `sharedUI` が transitively に含むが、`androidApp` の直接 Kotlin ソースから `MaterialTheme` / `Text` を使う場合は明示依存が必要
+- **二重 `startInitialSync` 呼び出し**: `CoffeeVisionApp.onCreate()` と `VisitListScreen.LaunchedEffect` の両方で呼んでいる。`signInAnonymouslyIfNeeded()` は既存 uid をそのまま返すだけ、`startSync()` は Firestore listener を起動するが SQLDelight `upsert` が idempotent なため実害なし。将来「uid-first 表示」設計（`authRepository.observeUserId().filterNotNull().first()` で uid 待機）に変えれば整理可能だが Phase 3.5 検証スコープでは見送り
+- **callbackFlow 内 coroutine 起動**: `callbackFlow` の ProducerScope は `CoroutineScope` を実装しているため `this.launch(Dispatchers.IO) {}` が使える。`val flowScope = this` でスコープを取り出してリスナーコールバック内から `flowScope.launch` するパターンが Android `observeChanges` で採用された
+- **iOS / Android で Firestore Mapper は別実装**: iOS は Swift、Android は Kotlin で対称に書く（同じ Firestore スキーマを扱うがコード重複あり）。`commonMain` への共通化は Firebase SDK のオブジェクト型（`Timestamp` 等）がプラットフォーム依存のため割が合わない
+
 ### 2026-06-11: Phase 3.5 Android 検証スライスの事前設計
 
 - 領域: Android / KMP / Build

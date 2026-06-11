@@ -222,6 +222,32 @@
 - 詳細は同ファイル既出の「SourceKit の `No such module 'X'` は実ビルド成功と乖離することがある」エントリ参照
 - Phase 3 写真ピッカー実装時にも複数ファイルで同警告が出たが、`xcodebuild` 成功確認で問題ないと判断した
 
+### KMP `androidMain` で kotlinx-datetime 等 `implementation` 宣言のライブラリは推移しない
+
+- `shared/domain` が `kotlinx-datetime` を `implementation` で宣言している場合、`api` 依存で `domain` を取り込んでいても `androidMain` の Kotlin ソースからは `Instant` / `LocalDate` が見えない（コンパイルエラー）
+- 対処: 使う側モジュールの `androidMain.dependencies { implementation(libs.kotlinx.datetime) }` に個別追加する。`commonMain` 側でも同様
+- 同じことが他の `implementation` 宣言ライブラリ（`kotlinx-coroutines-core` 等）にも起きる。KMP の `androidMain` は JVM classpath として扱われるため、推移的依存の `api` / `implementation` 区別が strict に効く
+- 公開 API（`Visit` data class が `Instant` プロパティを持つなど）の型として `kotlinx-datetime` が露出するなら `domain` 側で `api` 宣言に変えるべきだが、影響範囲が広がるため判断は慎重に
+
+### callbackFlow 内での coroutine 起動は ProducerScope を取り出して使う
+
+- `callbackFlow { ... }` の ProducerScope は `CoroutineScope` を実装しているため、ブロック内で `this.launch(Dispatchers.IO) {}` が使える
+- リスナーコールバック（非 suspend）から suspend 処理（子コレクション取得など）を起こす場合は `val flowScope = this` でスコープを保持 → コールバック内で `flowScope.launch { ... }` するパターンが安全
+- `GlobalScope` は使わない（ライフサイクルが callbackFlow と切り離されて、リスナー削除後も走り続けるリスク）
+
+### Firebase Android SDK の `Task<T>` は `suspendCancellableCoroutine` で十分薄くラップできる
+
+- `kotlinx-coroutines-play-services` を依存追加せずに、約 10 行のヘルパで `Task<T>.await(): T` を書ける
+- 実装パターン:
+  ```kotlin
+  suspend fun <T> Task<T>.await(): T = suspendCancellableCoroutine { cont ->
+      addOnSuccessListener { cont.resume(it) }
+      addOnFailureListener { cont.resumeWithException(it) }
+  }
+  ```
+- Firebase Task のキャンセル自体はできないが、`invokeOnCancellation` でコールバック側無視で安全に破棄可能
+- 将来本格的にキャンセル制御が必要になれば `kotlinx-coroutines-play-services:1.10.2` への切り替えは 1 行依存追加で済む
+
 ### SQLDelight 2.x の schemaVersion は migration ファイル名で自動決定される
 
 - `build.gradle.kts` の `sqldelight { databases { create("AppDatabase") { ... } } }` に `schemaVersion` の明示指定は **不要**

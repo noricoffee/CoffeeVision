@@ -3,13 +3,15 @@ import SharedLogic
 
 /// カフェ検索画面。`VisitEditorView` の `.sheet` で起動される前提。
 ///
-/// - テキスト検索（Places API searchText）のみ実装。Nearby / Photo は後続スライスで追加
+/// - テキスト検索（Places API searchText）と現在地周辺検索（CoreLocation + Nearby Search）を実装
 /// - `onCafeSelected` クロージャでカフェを選択し、呼び出し元が sheet を閉じる
 struct CafeSearchView: View {
 
     // MARK: - Properties
 
     @State private var bridge: CafeSearchViewModelBridge
+    @State private var locationManager = LocationManager()
+    @State private var showingLocationDeniedAlert: Bool = false
     @Environment(\.dismiss) private var dismiss
     let onCafeSelected: (Cafe) -> Void
 
@@ -53,11 +55,21 @@ struct CafeSearchView: View {
                     }
                 }
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button(String(localized: "検索")) {
-                        bridge.onSearchTapped()
+                    HStack(spacing: 8) {
+                        Button {
+                            handleNearbyTapped()
+                        } label: {
+                            Image(systemName: "location.fill")
+                        }
+                        .accessibilityLabel(String(localized: "現在地で検索"))
+                        .disabled(bridge.isLoading)
+
+                        Button(String(localized: "検索")) {
+                            bridge.onSearchTapped()
+                        }
+                        .disabled(bridge.query.isEmpty || bridge.isLoading)
+                        .accessibilityLabel(String(localized: "検索"))
                     }
-                    .disabled(bridge.query.isEmpty || bridge.isLoading)
-                    .accessibilityLabel(String(localized: "検索"))
                 }
             }
             .overlay {
@@ -66,6 +78,14 @@ struct CafeSearchView: View {
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
                         .background(.ultraThinMaterial)
                         .accessibilityLabel(String(localized: "検索中"))
+                }
+            }
+            .onChange(of: locationManager.lastLocation?.latitude) { _, _ in
+                if let loc = locationManager.lastLocation {
+                    bridge.onNearbySearchRequested(
+                        latitude: loc.latitude,
+                        longitude: loc.longitude
+                    )
                 }
             }
             .alert(
@@ -81,9 +101,47 @@ struct CafeSearchView: View {
             } message: {
                 Text(bridge.error ?? "")
             }
+            .alert(
+                String(localized: "位置情報が利用できません"),
+                isPresented: $showingLocationDeniedAlert
+            ) {
+                Button(String(localized: "設定を開く")) {
+                    if let url = URL(string: UIApplication.openSettingsURLString) {
+                        UIApplication.shared.open(url)
+                    }
+                }
+                Button(String(localized: "キャンセル"), role: .cancel) {}
+            } message: {
+                Text(String(localized: "位置情報の利用を許可するには、設定アプリで CoffeeVision の位置情報サービスを有効にしてください。"))
+            }
+            .alert(
+                String(localized: "位置情報の取得に失敗しました"),
+                isPresented: Binding(
+                    get: { locationManager.error != nil },
+                    set: { if !$0 { locationManager.clearError() } }
+                )
+            ) {
+                Button(String(localized: "OK")) {
+                    locationManager.clearError()
+                }
+            } message: {
+                Text(locationManager.error?.localizedDescription ?? "")
+            }
             .onDisappear {
                 bridge.cancel()
             }
+        }
+    }
+
+    // MARK: - Actions
+
+    private func handleNearbyTapped() {
+        switch locationManager.authorizationStatus {
+        case .denied, .restricted:
+            showingLocationDeniedAlert = true
+        default:
+            locationManager.resetLastLocation()
+            locationManager.requestLocation()
         }
     }
 

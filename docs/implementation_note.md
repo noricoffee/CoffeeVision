@@ -82,6 +82,7 @@
 - Phase 4（Places API）は 5 スライス分割: ①KMP 基盤（data-places + PlacesClient + CafeRepository + AppContainer 配線）→ ②iOS UI（CafeSearchView + VisitEditor 統合 + xcconfig 連携）→ ③ CoreLocation + Nearby + Detail → ④写真都度取得 → ⑤ feature/cafe-search 切り出し。**Places API (New) v1** を採用、料金最適化のため `X-Goog-FieldMask` で取得フィールドを明示する。API キーは **`AppContainer` のコンストラクタ引数として外部から注入**（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Firebase Repository インスタンス注入と同じパターン
 - iOS の xcconfig は **`Base.xcconfig` を base configuration とし、先頭で `#include "Config.xcconfig"`（必須、bundle ID / TEAM_ID / `-lsqlite3` リンク等を継承）+ `#include? "Secrets.xcconfig"`（任意、PLACES_API_KEY ローカル設定）の 3 段構造**。`Secrets.xcconfig` は `.gitignore` 追加済（コミット禁止）。Info.plist の `$(PLACES_API_KEY)` で展開 → `Bundle.main.object(forInfoDictionaryKey:)` で Swift から取得 → `AppContainer` へ注入。既存 xcconfig がある環境で新規 xcconfig を base にする場合は必ず `#include` 継承を確認すること
 - `CafeSearchViewModel` は **`shared/core/.../feature/cafesearch/` の暫定置き場**（Phase 4 スライス 5 で `shared/feature/cafe-search` に移送予定）。Phase 3 で `VisitListViewModel` 等を `feature/` に切り出す前と同じく、feature 切り出しを後回しにして UI 実装を先行する方針
+- Places API DTO は `PlacesListResponse` を Text Search / Nearby Search で共用（レスポンス構造が同形のため）。`FIELD_MASK`（リスト系、接頭辞 `places.` あり）と `DETAILS_FIELD_MASK`（`getDetails` GET 専用、接頭辞なし）は別定数。`CafeSearchViewModel.onNearbySearchRequested` は `radiusMeters` 引数を持たず 500m 固定（SKIE デフォルト引数制約により VM 内で隠蔽）
 
 ---
 
@@ -857,3 +858,161 @@ Phase 4（Places API / カフェ検索）に着手する。Phase 4 は要件項�
 - pbxproj の xcconfig 参照は `baseConfigurationReferenceAnchor`（`PBXFileSystemSynchronizedRootGroup` の UUID）+ `baseConfigurationReferenceRelativePath`（ファイル名）の 2 行で済む。`PBXFileReference` を個別作成する旧形式と互換
 - 既存の `Config.xcconfig` も同形式で登録されており、`Base.xcconfig` / `Secrets.xcconfig` / `README.md` は同一 `Configuration` グループ配下に自動認識される
 - 追加ファイルを pbxproj に明示登録する必要がない（Xcode が自動同期）
+
+---
+
+### 2026-06-13: Phase 4 スライス 3 の事前設計（CoreLocation + Nearby Search + Place Details）
+
+- 領域: KMP / iOS / Build
+- 関連: 実装予定 `shared/data-places/.../PlacesClient.kt`, `shared/domain/.../CafeRepository.kt`, `shared/core/.../CafeSearchViewModel.kt`, `iosApp/iosApp/Utilities/LocationManager.swift`, `iosApp/iosApp/Info.plist`, `iosApp/iosApp/Features/CafeSearch/CafeSearchView.swift`
+
+スライス 2-B で CafeSearchView のテキスト検索が動くようになった。本スライスは「現在地周辺のカフェ検索」と「Place Details」を加える。スコープは 2 段（KMP 側 + iOS 側）で分ける。
+
+**Nearby Search API（Places API New v1）**:
+
+- エンドポイント: `POST https://places.googleapis.com/v1/places:searchNearby`
+- 認証ヘッダー: `X-Goog-Api-Key` / `X-Goog-FieldMask`（Text Search と同じ FieldMask を使い回す）
+- リクエストボディ（JSON）:
+  ```json
+  {
+    "includedTypes": ["cafe"],
+    "maxResultCount": 20,
+    "languageCode": "ja",
+    "locationRestriction": {
+      "circle": {
+        "center": {"latitude": <lat>, "longitude": <lng>},
+        "radius": <radius_meters>
+      }
+    }
+  }
+  ```
+- `radius` の単位はメートル。デフォルト 500m を採用（カフェ歩き圏想定）
+- `maxResultCount` は 20（API 上限）を使う
+- レスポンス構造は Text Search と同じ `places: [...]` 配列なので、既存 `SearchTextResponse` → `SearchNearbyResponse` の DTO を分けるか、共通の `PlacesListResponse` にまとめる。**実装判断は kmp-engineer に委ねる**（既存 `SearchTextResponse` を `PlacesListResponse` にリネームして両方で再利用する案 / 別 DTO 案いずれも可、判断理由をレポートに記録すること）
+
+**Place Details API（Places API New v1）**:
+
+- エンドポイント: `GET https://places.googleapis.com/v1/places/{placeId}`
+- 認証ヘッダー: `X-Goog-Api-Key` / `X-Goog-FieldMask`
+- FieldMask: Text/Nearby の `places.*` 接頭辞が **不要**（単一 place 取得のため）。スキーマは `id,displayName,formattedAddress,location,websiteUri,googleMapsUri,photos` を指定（接頭辞なし）
+- リクエストボディなし
+- レスポンスは `PlaceDto` 単体（`places` 配列ではない）
+- スライス 3 では API のみ実装し、**UI への組み込みは行わない**。要件 5-3「カフェ詳細（住所・写真・営業時間）」のうち営業時間表示は将来タスク（VisitEditor が住所欠落カフェを保存しないようにする補完用途を想定）
+
+**`PlacesClient` の API 追加**:
+
+```kotlin
+interface PlacesClient {
+    suspend fun searchText(query: String): List<PlaceSummary>           // 既存
+    suspend fun searchNearby(latitude: Double, longitude: Double, radiusMeters: Double = 500.0): List<PlaceSummary>
+    suspend fun getDetails(placeId: String): PlaceSummary
+}
+```
+
+- `searchNearby` の `radiusMeters` はデフォルト引数で 500m
+- `getDetails` の戻り値 `PlaceSummary` は単一値（`List<PlaceSummary>` でなく `PlaceSummary` 直接）
+- SKIE は Kotlin デフォルト引数を Swift に引き出さないため、Swift 側から呼ぶ際は明示的に `radiusMeters: 500.0` を渡すが、現状 iOS 側で呼ぶのは `CafeRepository` 経由なのでこのケースは生じない
+
+**`CafeRepository` の API 追加**:
+
+```kotlin
+interface CafeRepository {
+    suspend fun searchText(query: String): List<Cafe>                    // 既存
+    suspend fun searchNearby(latitude: Double, longitude: Double, radiusMeters: Double = 500.0): List<Cafe>
+    suspend fun getDetails(placeId: String): Cafe
+}
+```
+
+- 戻り値は `Cafe` ドメインモデル（`PlaceSummary` → `Cafe` 変換は既存 `toCafe()` 拡張関数を再利用）
+- `getDetails` は **単一 `Cafe`**（見つからない場合は API 側で 404 → 例外伝播）
+
+**`CafeSearchViewModel` への API 追加**:
+
+- 新規メソッド: `fun onNearbySearchRequested(latitude: Double, longitude: Double)`
+- 効果: 既存 `searchJob` を `cancel()` → 新ジョブで `cafeRepository.searchNearby(latitude, longitude)` を呼び `results` を更新
+- `UIState.query` は更新しない（テキスト検索バーは「現在地検索」の入力ソースではない、別系統のクエリとして扱う）
+- 失敗時は既存 `onSearchTapped` と同じく `error` 詰め
+- **位置情報の取得自体は iOS 側の責務**（Kotlin VM は座標を受け取るだけ）。CoreLocation を `expect`/`actual` で抽象化する案は不採用（複雑度に対して見合わない、Android は検証ターゲットのみで現在地検索を実装しないため）
+
+**iOS `LocationManager` ラッパ設計**:
+
+- 配置: `iosApp/iosApp/Utilities/LocationManager.swift`
+- 構造: `@MainActor @Observable final class LocationManager: NSObject, CLLocationManagerDelegate`
+- 公開プロパティ:
+  - `authorizationStatus: CLAuthorizationStatus`
+  - `lastLocation: CLLocationCoordinate2D?`
+  - `error: Error?`
+- メソッド:
+  - `func requestPermission()` — `manager.requestWhenInUseAuthorization()` を呼ぶ
+  - `func requestLocation()` — `manager.requestLocation()` を呼ぶ（1 回限り取得）。許可がまだなら先に `requestWhenInUseAuthorization()` を呼ぶ
+- Delegate コールバック:
+  - `locationManagerDidChangeAuthorization(_:)` で `authorizationStatus` 更新
+  - `locationManager(_:didUpdateLocations:)` で `lastLocation` 更新
+  - `locationManager(_:didFailWithError:)` で `error` 更新
+- **使用方針**: 完全に 1 回限りの単発取得（continuous 監視はしない）。許可ダイアログは初回タップ時に出る
+
+**`Info.plist` 追加**:
+
+- `<key>NSLocationWhenInUseUsageDescription</key>`
+- `<string>近くのカフェを検索するために、現在地を一時的に使用します。</string>`
+
+**`CafeSearchView` への UI 追加**:
+
+- toolbar の検索ボタンの **隣** に `Button { handleNearbyTapped() } label: { Image(systemName: "location.fill") }` を追加
+- `handleNearbyTapped()`:
+  - `locationManager.requestLocation()` を呼ぶ
+  - `.onChange(of: locationManager.lastLocation)` で取得した座標を `bridge.onNearbySearchRequested(latitude:, longitude:)` に渡す
+  - `lastLocation` をリセットする（同じ座標で連続検索したいときに反応するように `nil` に戻す）
+- 位置情報拒否時は `locationManager.authorizationStatus == .denied` を見て alert で「設定アプリで位置情報を有効化してください」と案内する
+- `LocationManager` は `CafeSearchView` 内 `@State private var locationManager = LocationManager()` で保持（sheet ライフサイクルに紐付ける）
+
+**スコープ外（明示）**:
+
+- Place Details の UI 表示 → スライス 5 以降 or Phase 5
+- 位置情報の継続監視（地図画面で現在位置追従など） → 必要が出てきたら
+- 「位置情報を許可しないユーザー」向けの代替フロー（IP ベース概略位置など） → 仕様に無いため不要
+- Android 側の現在地検索 → リリース対象外、Phase 6 任意タスク
+- `feature/cafe-search` モジュール切り出し → スライス 5
+
+**トレードオフ**:
+
+- CoreLocation を `expect`/`actual` で抽象化しない: Android で `FusedLocationProviderClient` のラッパを書く必要が出るが、Android は検証ターゲットで現在地検索を実装しないため、KMP 抽象化は YAGNI
+- 単発取得（continuous なし）: 検索のたびに新しい座標を取得する方が UX として直感的（移動した場合に追従できる）。バッテリ消費も最小
+- 半径 500m 固定: 都市部のカフェ密度では 500m で 20 件取れる想定。スライダ等で可変にする UI は MVP 不要
+- Place Details は API のみ実装: 「使い道のない API を実装するのは YAGNI 違反」だが、要件 5-3 に明記されているため Phase 4 のうちに API は揃えておく。UI 統合は次フェーズ判断
+
+---
+
+### 2026-06-13: Phase 4 スライス 3-B 実装後追記（`@Observable` ユーティリティの状態リセット / `nonisolated` delegate）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Utilities/LocationManager.swift`, `iosApp/iosApp/Features/CafeSearch/CafeSearchView.swift`
+
+スライス 3-B 実装で固まった追加判断と発見。
+
+**`@Observable` クラスの状態リセットは `private(set)` + リセットメソッド方式**:
+
+- `LocationManager` の `error` / `lastLocation` は外部書き込み禁止（`private(set)`）にして、View 側からのリセットは `resetLastLocation()` / `clearError()` 公開メソッド経由
+- 当初の設計案では `locationManager.error = nil` を View から直接代入する想定だったが、`private(set)` 制約に引っかかるためメソッド化が必要だった
+- このパターンは「`@Observable` のユーティリティクラスで、View から状態リセットが必要なプロパティ」が出てきた場合の標準パターンとして以後の Bridge / Manager 系に適用する
+  - 例: `CafeSearchViewModelBridge.error` は Kotlin 側で `onErrorDismissed()` を呼ぶ転送が既に同パターン
+  - 例: `LocationManager.lastLocation` も `.onChange` の再トリガ用に `resetLastLocation()` で明示リセット
+
+**`CLLocationManagerDelegate` メソッドの `nonisolated` 必須**:
+
+- CoreLocation のデリゲートコールバックは MainActor 外（背景スレッド）から呼ばれるため、`@MainActor` クラスに準拠させる場合は **デリゲートメソッドすべてを `nonisolated` で宣言**する必要がある
+- 内部の `@MainActor` プロパティ更新は `Task { @MainActor in ... }` でメインアクター上に戻して反映
+- 同パターンは将来 `UIImagePickerControllerDelegate` 等の他フレームワーク Delegate 連携でも踏襲
+
+**SourceKit の `'authorizedWhenInUse' is unavailable in macOS` 警告**:
+
+- `iosApp` ターゲットは iOS 専用だが、SourceKit のインデックス処理がプラットフォーム判定を誤ることがある（DerivedData の状態次第）
+- `xcodebuild -sdk iphonesimulator` での実ビルドは正しい iOS Simulator ターゲットを使用するため警告は出ず BUILD SUCCEEDED
+- DerivedData クリア / Xcode 再起動で SourceKit 警告は解消する
+- `#if canImport(UIKit)` 等のガードは不要（iosApp ターゲットが iOS 専用と pbxproj で定義されているため）
+
+**現在地検索ボタンの配置**:
+
+- toolbar の右側を `HStack { 現在地ボタン; 検索ボタン }` で並べる構成を採用
+- 不採用: leading 配置（NavigationStack のキャンセル / 戻るボタンと干渉）
+- 「現在地」と「キーワード検索」は同列の検索開始操作のため、右側にまとめてユーザーがどちらも 1 タップで起こせる UX を優先

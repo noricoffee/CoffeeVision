@@ -53,6 +53,15 @@ final class CafeSearchViewModelBridge {
         kotlin.onErrorDismissed()
     }
 
+    /// 現在地周辺のカフェを検索する。`CafeSearchViewModel.onNearbySearchRequested` に転送する。
+    ///
+    /// - Parameters:
+    ///   - latitude: 現在地の緯度（CoreLocation から取得）
+    ///   - longitude: 現在地の経度（CoreLocation から取得）
+    func onNearbySearchRequested(latitude: Double, longitude: Double) {
+        kotlin.onNearbySearchRequested(latitude: latitude, longitude: longitude)
+    }
+
     // MARK: - Private
 
     private func startObservation() {

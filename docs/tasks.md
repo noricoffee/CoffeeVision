@@ -163,12 +163,19 @@
 
 ### スライス 3: 位置情報 + Nearby + Detail
 
+> 2026-06-13 着手。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-13 Phase 4 スライス 3 エントリ参照。3-A（KMP 側）→ 3-B（iOS 側）の 2 段で dispatch する。
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `PlacesClient` に `searchNearby(lat, lng, radiusMeters): List<PlaceSummary>` 追加 | |
-| [ ] | `PlacesClient` に `getDetails(placeId): PlaceSummary` 追加（住所 / 営業時間補完用） | |
-| [ ] | `CafeRepository` に対応メソッド追加 | |
-| [ ] | iOS CoreLocation 連携: `Info.plist` に `NSLocationWhenInUseUsageDescription` 追加 + `CLLocationManager` ラッパで現在地取得 → `CafeSearchViewModel.onUseCurrentLocationTapped()` | |
+| [x] | `PlacesClient` に `searchNearby(latitude, longitude, radiusMeters = 500.0): List<PlaceSummary>` 追加 | 2026-06-13 / `places:searchNearby` POST、`locationRestriction.circle.center` + `radius` + `includedTypes: ["cafe"]` |
+| [x] | `PlacesClient` に `getDetails(placeId): PlaceSummary` 追加 | 2026-06-13 / `places/{placeId}` GET、`DETAILS_FIELD_MASK` 別定数（接頭辞 `places.` なし） |
+| [x] | `CafeRepository` に対応メソッド追加（`searchNearby` / `getDetails`） | 2026-06-13 / 既存 `toCafe()` 拡張関数を再利用 |
+| [x] | `CafeSearchViewModel` に `onNearbySearchRequested(latitude, longitude)` 追加 | 2026-06-13 / `searchJob` 再起動パターン、`UIState.query` は更新しない、`radiusMeters` は VM 内で 500m 固定（SKIE デフォルト引数制約） |
+| [x] | iOS `LocationManager`（`Utilities/LocationManager.swift`）新規実装 | 2026-06-13 / `@MainActor @Observable`、`requestLocation()` 1 回限り取得、`CLLocationManagerDelegate` の `nonisolated` 準拠。`error` / `lastLocation` は `private(set)` + `resetLastLocation()` / `clearError()` メソッド経由でリセット |
+| [x] | `Info.plist` に `NSLocationWhenInUseUsageDescription` 追加 | 2026-06-13 / 「近くのカフェを検索するために、現在地を一時的に使用します。」 |
+| [x] | `CafeSearchView` の toolbar に「現在地検索」ボタン（`location.fill`）追加 | 2026-06-13 / `HStack` で検索ボタンと並べる構成、`.onChange(of: locationManager.lastLocation?.latitude)` で座標を Bridge に転送、許可拒否時と取得失敗時の 2 系統 alert |
+| [x] | `CafeSearchViewModelBridge` に `onNearbySearchRequested` 転送追加 | 2026-06-13 / 既存 `onSearchTapped` と同位置 |
+| [x] | 検証: `./gradlew :shared:framework:assembleSharedLogicXCFramework`、`./gradlew :androidApp:assembleDebug`、`./gradlew :shared:data-local:testAndroidHostTest`、`xcodebuild -sdk iphonesimulator` 全成功 | 2026-06-13 / スライス 3-A で gradle 系 / スライス 3-B で xcodebuild 確認 |
 
 ### スライス 4: 写真都度取得（Photo Media API）
 

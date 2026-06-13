@@ -6,5 +6,7 @@
 	<true/>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>カフェで撮った写真を訪問記録に添えるため、写真ライブラリへのアクセスを使用します</string>
+	<key>PLACES_API_KEY</key>
+	<string>$(PLACES_API_KEY)</string>
 </dict>
 </plist>

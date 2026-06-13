@@ -1,0 +1,16 @@
+// Base.xcconfig
+// iosApp ターゲットのベース Build Configuration。
+//
+// 既存の Config.xcconfig（PRODUCT_BUNDLE_IDENTIFIER / TEAM_ID / OTHER_LDFLAGS = -lsqlite3 等）を
+// 継承する必要があるため、必ず先頭で取り込む。
+#include "Config.xcconfig"
+
+// Google Places API キー設定。
+// Secrets.xcconfig がある場合はそちらで PLACES_API_KEY を上書きする。
+// ファイルが存在しない場合（CI 環境等）はそのままビルドが通る（空文字フォールバック）。
+#include? "Secrets.xcconfig"
+
+// PLACES_API_KEY をビルド変数として宣言（Secrets.xcconfig 不在時のフォールバック）。
+// Secrets.xcconfig が無い場合は空文字になり、アプリは起動するが Places API は 401 を返す。
+// Info.plist の $(PLACES_API_KEY) で参照する。
+PLACES_API_KEY =

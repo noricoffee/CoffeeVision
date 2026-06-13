@@ -149,13 +149,17 @@
 
 ### スライス 2: iOS UI（CafeSearchView + VisitEditor 統合 + xcconfig 連携）
 
+> 2026-06-12 着手。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-12 Phase 4 スライス 2 エントリ参照。Kotlin 側（VM 追加 + VisitEditor API 拡張）→ iOS 側（xcconfig + UI 実装）の順で 2 段に分けて dispatch する。
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | iOS の API キー注入（`Configuration/Secrets.xcconfig` + `iosApp.xcconfig` + Info.plist + Bundle.main 経由） | `Secrets.xcconfig` は `.gitignore` 追加 |
-| [ ] | `shared/core` に `CafeSearchViewModel(cafeRepository, scope)` を追加（または `shared/feature/cafe-search` 切り出しまで `shared/core` の暫定置き場） | `UIState(query, results, isLoading, error)` + `onQueryChanged` / `onSearchTapped` |
-| [ ] | iOS `Features/CafeSearch/CafeSearchView.swift` + `CafeSearchViewModelBridge.swift` 実装 | |
-| [ ] | `VisitEditorView` 統合: 「カフェを検索」ボタン → `CafeSearchView` 起動 → 選択結果で `cafeName` / `cafeAddress` / `placeId` 等を `VisitEditorViewModel` に流し込む | 手入力モードも残置 |
-| [ ] | カフェ検索結果から選択時、`VisitEditorViewModel` に新しい「Places 由来 Cafe」を渡す API を追加（`onPlacesCafeSelected(cafe: Cafe)` 等） | placeId は Google placeId を維持 |
+| [x] | iOS の API キー注入（`Configuration/Secrets.xcconfig` + `Base.xcconfig` + Info.plist + Bundle.main 経由） | 2026-06-12 / `Secrets.xcconfig` は `.gitignore` 追加、`?` 付き include で不在時もビルド継続。`Base.xcconfig` は既存 `Config.xcconfig`（bundle ID / `-lsqlite3` リンク等）を `#include "Config.xcconfig"` で継承する形に親が修正 |
+| [x] | `shared/core` に `CafeSearchViewModel(cafeRepository, scope)` を追加（`com.noricoffee.feature.cafesearch` パッケージ、スライス 5 で `shared/feature/cafe-search` へ移送予定） | 2026-06-12 / `UIState(query, results, isLoading, error)` + `onQueryChanged` / `onSearchTapped` / `onErrorDismissed`、`searchJob` 再起動パターン |
+| [x] | `shared/framework` に `AppContainer.makeCafeSearchViewModel()` 拡張関数を追加 | 2026-06-12 / `AppContainerViewModelFactory.kt` 末尾追記 |
+| [x] | `VisitEditorViewModel` に `onPlacesCafeSelected(cafe: Cafe)` 追加 + `_state` に `selectedPlaceId: String?` 追加 + `buildVisit()` 分岐更新 | 2026-06-12 / Create モード時は `selectedPlaceId ?: UUID 採番`、Edit モードは `currentInitialVisit.cafe.placeId` 優先（カフェ差し替えはスライス 3 以降） |
+| [x] | iOS `Features/CafeSearch/CafeSearchView.swift` + `CafeSearchViewModelBridge.swift` 実装 | 2026-06-12 / `.searchable` + `.onSubmit(of:.search)` + toolbar 検索ボタン採用（HIG 準拠）+ `ContentUnavailableView` 空状態 + Preview 2 件 |
+| [x] | `VisitEditorView` 統合: 「カフェを検索」ボタン → `CafeSearchView` を sheet 起動 → 選択結果で `onPlacesCafeSelected` を呼び `dismiss` | 2026-06-12 / `cafeSection` のカフェ名 TextField 直上にボタン配置、`@State isCafeSearchPresented` 管理。手入力モードも残置 |
+| [x] | 検証: `./gradlew :shared:framework:assembleSharedLogicXCFramework`、`./gradlew :androidApp:assembleDebug`、`./gradlew :shared:data-local:testAndroidHostTest`、`xcodebuild -sdk iphonesimulator` 全成功 | 2026-06-12 / `Base.xcconfig` の `Config.xcconfig` 継承修正後の再ビルドで bundle ID = `com.noricoffee.coffeevision` 確認、BUILD SUCCEEDED |
 
 ### スライス 3: 位置情報 + Nearby + Detail
 

@@ -66,6 +66,7 @@ struct VisitEditorView: View {
 
     @State private var coffeeBeingEdited: CoffeeEditingTarget?
     @State private var foodBeingEdited: FoodEditingTarget?
+    @State private var isCafeSearchPresented: Bool = false
 
     /// 新規追加分の写真データ（photoId → JPEG Data）。保存ボタン押下時に Documents に書き出す。
     @State private var pendingImageData: [String: Data] = [:]
@@ -159,6 +160,12 @@ struct VisitEditorView: View {
                     onSave: { viewModel.onFoodUpserted(item: $0) }
                 )
             }
+            .sheet(isPresented: $isCafeSearchPresented) {
+                CafeSearchView(appState: appState) { cafe in
+                    viewModel.onPlacesCafeSelected(cafe: cafe)
+                    isCafeSearchPresented = false
+                }
+            }
             .overlay {
                 if viewModel.isSaving {
                     ProgressView()
@@ -173,6 +180,13 @@ struct VisitEditorView: View {
 
     private var cafeSection: some View {
         Section(String(localized: "カフェ")) {
+            Button {
+                isCafeSearchPresented = true
+            } label: {
+                Label(String(localized: "カフェを検索"), systemImage: "magnifyingglass")
+            }
+            .accessibilityLabel(String(localized: "カフェを検索"))
+
             TextField(
                 String(localized: "カフェ名（必須）"),
                 text: Binding(

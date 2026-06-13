@@ -256,3 +256,11 @@
 - migration ファイルの配置先は `.sq` ファイルと同じ `sqldelight` フォルダ内の `migrations/` サブディレクトリ（`src/commonMain/sqldelight/migrations/N.sqm`）。`build.gradle.kts` 側で srcDir 指定は不要
 - migration ファイルの中身は SQL のみ（`.sqm` フォーマット）。例: `ALTER TABLE photo ADD COLUMN file_name TEXT;` のような ALTER 系を素で書ける
 - 既存検証データを残したまま列追加できるため、Phase 中の開発でも端末データを毎回消す必要がない
+
+### 既存 xcconfig がある環境で新規 xcconfig を base configuration に差し替える際の継承漏れ
+
+- Xcode プロジェクトの `XCBuildConfiguration` で `baseConfigurationReference` を別 xcconfig に差し替えると、**既存 xcconfig の設定は引き継がれない**。`baseConfigurationReference` は「上書き」ではなく「差し替え」のため、`PRODUCT_BUNDLE_IDENTIFIER` / `TEAM_ID` / `OTHER_LDFLAGS` 等の必須設定が一斉に消える
+- `xcodebuild` がたまたま BUILD SUCCEEDED するケースがあるが（DerivedData キャッシュ + KMP framework 側の linkerOpts 等で間接的に sqlite3 リンクが効くなど）、初回クリーンビルド or 別環境で破綻する
+- 回避策: 新規 xcconfig の先頭で `#include "既存.xcconfig"`（必須 include）を書いて継承する。または既存 xcconfig 側に追記する
+- 検証手順: 差し替え後の bundle ID が想定通りか `xcodebuild` ログの `--bundle-identifier ...` を必ず確認する（変更前後で bundle ID が変わっていないこと）
+- 教訓の発生源: Phase 4 スライス 2-B で `Base.xcconfig` を新規追加して base に差し替えた際、既存 `Config.xcconfig` の `PRODUCT_BUNDLE_IDENTIFIER` / `OTHER_LDFLAGS = -lsqlite3` の継承が落ちた。事後検出 → `Base.xcconfig` 先頭に `#include "Config.xcconfig"` 追加で復旧

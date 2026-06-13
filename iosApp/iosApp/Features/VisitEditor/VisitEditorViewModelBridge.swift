@@ -115,6 +115,17 @@ final class VisitEditorViewModelBridge {
         kotlin.onPhotoRemoved(id: id)
     }
 
+    // MARK: - Places API 統合
+
+    /// Places API 検索でカフェを選択した際に呼ぶ。
+    ///
+    /// Kotlin の `onPlacesCafeSelected(cafe:)` に転送し、
+    /// draft の cafeName / cafeAddress / cafeWebsiteUrl / cafeMapsUrl を上書きする。
+    /// Create モードでは UIState.selectedPlaceId も更新され、保存時に Google placeId が使われる。
+    func onPlacesCafeSelected(cafe: Cafe) {
+        kotlin.onPlacesCafeSelected(cafe: cafe)
+    }
+
     // MARK: - 保存 / エラー転送
 
     func onSaveTapped() {

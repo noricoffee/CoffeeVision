@@ -80,6 +80,8 @@
 - Bridge の生存スコープは画面ライフサイクルに応じて 2 パターンを使い分ける: **一覧画面（VisitList）は `AppState` で 1 つ保持**（uid 確定後に 1 度だけ生成、画面再描画でも再生成しない）。**詳細画面（VisitDetail）/ 編集画面（VisitEditor）は View 内の `@State` で遷移ごとに生成・破棄**（それぞれ `appState.container.makeVisitDetailViewModel()` / `makeVisitEditorViewModel()` を呼ぶ、`AppState` にホルダは置かない）。「一覧 = 常時 1 つ」と「Detail / Editor = push/sheet ごとに新規」のライフサイクルの違いを設計に反映している
 - `AppState` は bootstrap（匿名サインイン + startInitialSync）と `visitListBridge` 保持に責務を絞り、書き込み系のダミー動作（旧 `writeDummyVisit()` / `Status.writing` / `lastWroteVisitId`）は VisitEditor 完成と同時に削除済。新規 / 編集の動線は `VisitEditorView` の sheet 起動が単一エントリ
 - Phase 4（Places API）は 5 スライス分割: ①KMP 基盤（data-places + PlacesClient + CafeRepository + AppContainer 配線）→ ②iOS UI（CafeSearchView + VisitEditor 統合 + xcconfig 連携）→ ③ CoreLocation + Nearby + Detail → ④写真都度取得 → ⑤ feature/cafe-search 切り出し。**Places API (New) v1** を採用、料金最適化のため `X-Goog-FieldMask` で取得フィールドを明示する。API キーは **`AppContainer` のコンストラクタ引数として外部から注入**（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Firebase Repository インスタンス注入と同じパターン
+- iOS の xcconfig は **`Base.xcconfig` を base configuration とし、先頭で `#include "Config.xcconfig"`（必須、bundle ID / TEAM_ID / `-lsqlite3` リンク等を継承）+ `#include? "Secrets.xcconfig"`（任意、PLACES_API_KEY ローカル設定）の 3 段構造**。`Secrets.xcconfig` は `.gitignore` 追加済（コミット禁止）。Info.plist の `$(PLACES_API_KEY)` で展開 → `Bundle.main.object(forInfoDictionaryKey:)` で Swift から取得 → `AppContainer` へ注入。既存 xcconfig がある環境で新規 xcconfig を base にする場合は必ず `#include` 継承を確認すること
+- `CafeSearchViewModel` は **`shared/core/.../feature/cafesearch/` の暫定置き場**（Phase 4 スライス 5 で `shared/feature/cafe-search` に移送予定）。Phase 3 で `VisitListViewModel` 等を `feature/` に切り出す前と同じく、feature 切り出しを後回しにして UI 実装を先行する方針
 
 ---
 
@@ -724,3 +726,134 @@ Phase 4（Places API / カフェ検索）に着手する。Phase 4 は要件項�
 - セカンダリ（scope なし）も 4 引数に拡張（`placesApiKey` 追加）
 - Swift / Android 双方の構築コードを同スライスで追随（`AppState.swift` は暫定空文字 `placesApiKey: ""`）
 - 既存の引数順は保持。今後 `cafeRepository` 関連で追加引数が出る場合も末尾追加を原則とする
+
+---
+
+### 2026-06-12: Phase 4 スライス 2 の事前設計（CafeSearchViewModel + VisitEditor 統合 + iOS xcconfig）
+
+- 領域: KMP / iOS / Build
+- 関連: 実装予定 `shared/core/.../CafeSearchViewModel.kt`, `shared/feature/visit-editor/.../VisitEditorViewModel.kt`, `shared/framework/.../AppContainerViewModelFactory.kt`, `iosApp/Configuration/Secrets.xcconfig`, `iosApp/iosApp/Features/CafeSearch/`, `iosApp/iosApp/Features/VisitEditor/VisitEditorView.swift`
+
+スライス 2 着手前の親による仕様確定。スライス 1 で KMP 基盤（data-places / PlacesClient / CafeRepository）が動くようになったため、本スライスは「Places API を実画面から呼べる状態」と「VisitEditor が検索結果を取り込める状態」を作る。スライス 3 以降（CoreLocation / Photo / feature 切り出し）はスコープ外。
+
+**`CafeSearchViewModel` の置き場と API**:
+
+- **配置**: `shared/core/src/commonMain/kotlin/com/noricoffee/feature/cafesearch/CafeSearchViewModel.kt`（スライス 5 で `shared/feature/cafe-search` に移送する暫定置き場）。`shared/core` 配置の理由は、Phase 3 で `VisitListViewModel` 等を切り出す前と同じく「feature module を増やすより `core` 暫定で UI 実装を先行する」方針。スライス 5 の git mv で移送する想定
+- **コンストラクタ**: `class CafeSearchViewModel(private val cafeRepository: CafeRepository, private val scope: CoroutineScope)`
+- **`UIState`**:
+  - `val query: String = ""`
+  - `val results: List<Cafe> = emptyList()`
+  - `val isLoading: Boolean = false`
+  - `val error: String? = null`
+- **API**:
+  - `fun onQueryChanged(query: String)` — `query` を更新するのみ（検索は実行しない）
+  - `fun onSearchTapped()` — 現在の `query` で `cafeRepository.searchText(query)` を呼び、`results` を更新。`isLoading` トグル + `runCatching` で `error` 詰め
+  - `fun onErrorDismissed()` — `error` を null に戻す
+- **検索ジョブ管理**: `private var searchJob: Job?` を保持し、再タップ時は前回を `cancel()` してから再起動
+- **`onAppear` は持たない**: 検索結果は初期空でよく、明示タップで初回検索が走る方が消費 API 量を制御しやすい。SwiftUI 側も任意の `.task` 不要
+
+**`VisitEditorViewModel` への統合 API 追加**:
+
+- 新規メソッド: `fun onPlacesCafeSelected(cafe: Cafe)`
+- 効果: `_state.value.draft` の `cafeName` / `cafeAddress` / `cafeWebsiteUrl` / `cafeMapsUrl` を `cafe` のフィールドで上書きする。`Cafe.address` / `websiteUrl` / `mapsUrl` が null の場合は空文字を入れる（既存の手入力フィールドが nullable でなく String のため）
+- **`placeId` の扱い**: Edit モード時の保持パターンを壊さないため、`currentInitialVisit` 経由でなく **`_state` に `selectedPlaceId: String?` を新規追加して保持**。`buildVisit()` の Create モード分岐で `selectedPlaceId != null` なら UUID 採番ではなく `selectedPlaceId` を使う。Edit モード時は既存 `placeId` を維持する既存ロジックを保つ
+  - これにより「VisitEditor 起動 → Places 検索選択 → Create 保存」フローで Google placeId が保存される
+  - 手入力のまま保存した場合は従来通り UUID 採番（Phase 4 完了時点でも混在する）
+- 位置情報（latitude / longitude）/ `photoReferences` は draft に保持しない（VisitDraft は表示フィールドのみを持つ原則を保つ）。代わりに `_state` に `pendingCafeLocation` 等の内部値を持つ案もあるが、現状 UI 表示しないためスライス 4（写真）まで省略
+- **トレードオフ**: Cafe ドメインの全フィールドを VisitDraft に持たせるリッチ案より、UI が表示するフィールドだけ draft、隠れ値（placeId / location / photoReferences）は `_state` 直下に持つ案を採用。`Visit` を組み立てる責務は `buildVisit()` に一元化する設計を保つ
+
+**`AppContainer` ファクトリ拡張**:
+
+- `shared/framework/.../AppContainerViewModelFactory.kt` に `fun AppContainer.makeCafeSearchViewModel(): CafeSearchViewModel = CafeSearchViewModel(cafeRepository, scope)` を追記。既存の `makeVisitListViewModel` / `makeVisitDetailViewModel` / `makeVisitEditorViewModel` と同パターン
+
+**iOS `CafeSearchView` の構造**:
+
+- 配置: `iosApp/iosApp/Features/CafeSearch/{CafeSearchView,CafeSearchViewModelBridge}.swift`
+- `CafeSearchView` は `.sheet` で起動される前提。内部に `NavigationStack` ラップ
+- `CafeSearchViewModelBridge` は `@MainActor @Observable`、`for await s in kotlin.state { apply(s) }` パターン（既存 Bridge と同じ）
+- API: `init(appState:onCafeSelected:)`。`onCafeSelected: (Cafe) -> Void` を保持し、結果セルタップで呼ぶ → 親が `dismiss()` + `onPlacesCafeSelected(cafe:)` を呼ぶ
+- 検索バー: `TextField` + 検索ボタン（フォーカス時 `.submitLabel(.search)`、`onSubmit` で `onSearchTapped()`）
+- 結果セル: 簡素な VStack（カフェ名 + 住所）。写真は表示しない（スライス 4）
+- 空状態: 初回起動時は `ContentUnavailableView` で「カフェ名で検索してください」表示
+- `error` は alert 表示
+- Preview: ダミー `[Cafe]` を渡す Demo を 2 件追加（結果あり / 空状態）
+
+**`VisitEditorView` 統合**:
+
+- カフェ Section の `カフェ名（必須）` TextField の上または下に **`Button { isCafeSearchPresented = true } label: { Label("カフェを検索", systemImage: "magnifyingglass") }`** を追加
+- `@State private var isCafeSearchPresented: Bool = false` を追加
+- `.sheet(isPresented: $isCafeSearchPresented) { CafeSearchView(appState: appState) { cafe in viewModel.onPlacesCafeSelected(cafe: cafe); isCafeSearchPresented = false } }` を追加
+- 手入力モードは残置（カフェ名 TextField はそのまま編集可能）
+- Edit モードでも検索ボタンは表示（カフェを差し替えたいケースを許容）
+
+**iOS API キー注入経路**:
+
+- 採用: **`Configuration/Secrets.xcconfig` を新規作成して `PLACES_API_KEY = AIza...` を 1 行**。`.gitignore` に `iosApp/Configuration/Secrets.xcconfig` を追加してコミットしない
+- `iosApp/Configuration/Base.xcconfig` も新設して `#include? "Secrets.xcconfig"` を書き、ベースファイルとしてプロジェクトの Build Settings から参照する
+  - `?` 付き include により Secrets.xcconfig が存在しない CI 環境でもビルドが落ちないようにする（CI 上で空キーフォールバック）
+- `Base.xcconfig` で `INFOPLIST_KEY_PLACES_API_KEY = $(PLACES_API_KEY)` 形式の指定、または `Info.plist` に `<key>PLACES_API_KEY</key><string>$(PLACES_API_KEY)</string>` を追加
+- Swift 側: `Bundle.main.object(forInfoDictionaryKey: "PLACES_API_KEY") as? String ?? ""` で取得、`AppState` の `bootstrap()` で `AppContainer(..., placesApiKey: ...)` に渡す
+- スライス 1 の `placesApiKey: ""` 暫定コードを上記呼び出しに差し替える
+- `Configuration/` ディレクトリは `iosApp/Configuration/` 配下に作成し、Xcode プロジェクトに `Configuration` グループとして登録
+
+**ビルド検証**:
+
+- `./gradlew :shared:framework:assembleSharedLogicXCFramework`
+- `./gradlew :androidApp:assembleDebug`
+- `./gradlew :shared:data-local:testAndroidHostTest`
+- `cd iosApp && xcodebuild -sdk iphonesimulator -scheme iosApp build`
+
+**スコープ外（明示）**:
+
+- CoreLocation（現在地検索）→ スライス 3
+- Place Details 補完 → スライス 3
+- Photo Media API（写真表示）→ スライス 4
+- `feature/cafe-search` モジュール切り出し → スライス 5
+- 検索結果の保存（最近検索したカフェなど）→ 必要が出てきたフェーズで検討
+- enum 日本語化（既存タスクとして並存）
+
+**トレードオフ**:
+
+- `selectedPlaceId` を `_state` に持つ vs `VisitDraft` に持つ: `VisitDraft` を「表示フィールドのみ」に保つ既存規約を守るため `_state` 直下を採用。ただし `currentInitialVisit` と並んで「draft 以外の隠し状態」が増えるため、スライス 5 や Phase 5 で `EditorContext` 等の集約クラスを検討する余地あり
+- `CafeSearchView` を sheet で開く vs `NavigationLink` で push: VisitEditor 自身が sheet なので二重 sheet になるが、SwiftUI iOS 17+ では問題なく動く。NavigationLink 案だと VisitEditor の NavigationStack のスタックに積み上がり戻り遷移が複雑化するため sheet 採用
+- 初回起動時の自動検索: 行わない。タップで初回検索が走る方が API 消費を制御できる
+- `Secrets.xcconfig` の include に `?` を付ける: ファイル不在時もビルドが通る（CI 環境想定）。スライス 1 で `placesApiKey: ""` 暫定にしたのと同じ「キー無しでもビルドだけは通る」原則を維持
+
+---
+
+### 2026-06-12: Phase 4 スライス 2-B 実装後追記（xcconfig 継承 / `.searchable` 採用 / `@MainActor` deinit 制約）
+
+- 領域: iOS / Build / Docs
+- 関連: `iosApp/Configuration/{Base,Config,Secrets}.xcconfig`, `iosApp/iosApp.xcodeproj/project.pbxproj`, `iosApp/iosApp/Features/CafeSearch/`
+
+スライス 2-B 実装で固まった追加判断と発見。
+
+**xcconfig の継承構造（重要）**:
+
+- iOS の `iosApp` ターゲットには **既存 `Config.xcconfig`** があり、`PRODUCT_BUNDLE_IDENTIFIER` / `TEAM_ID` / `PRODUCT_NAME` / `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` / `OTHER_LDFLAGS = $(inherited) -lsqlite3` を持つ（最後はスライス 1 から動いていた sqliter リンクに必須）
+- 採用: 新規 `Base.xcconfig` の先頭で `#include "Config.xcconfig"`（必須 include、不在時エラー）→ `#include? "Secrets.xcconfig"`（任意 include、不在時無視）→ `PLACES_API_KEY =` フォールバック宣言、の 3 段構造
+- pbxproj の `baseConfigurationReferenceRelativePath` は `Base.xcconfig` に差し替え。`Config.xcconfig` は **直接参照されないが Base から `#include` 経由で必ず継承される**
+- 不採用:
+  - 既存 `Config.xcconfig` に `PLACES_API_KEY` 関連を直接追記する案: 「アプリ識別 / リンカ設定」と「API キー」が同居して可読性が下がる
+  - `Base.xcconfig` だけで bundle ID 等を再宣言する案: `Config.xcconfig` を「アプリ識別の単一情報源」として残しておくほうが、将来の TEAM_ID / バージョン管理時に触る場所が 1 つに集約される
+- 失敗履歴（親が事後修正）: ios-engineer 初回実装で `Base.xcconfig` が `Config.xcconfig` を継承していなかった。`xcodebuild` はキャッシュと KMP framework 側の `linkerOpts("-lsqlite3")` で通っていたが、初回クリーンビルド + bundle ID 解決で破綻するリスクがあった。親が `#include "Config.xcconfig"` を追加して継承を復活、再ビルドで `com.noricoffee.coffeevision` の bundle ID 出力を確認した
+- 今後の教訓（lessons.md 級）: 既存 `Configuration/` ディレクトリに xcconfig がある場合、新規 xcconfig は **必ず既存ファイルを `#include` で継承するか、Build Settings 経由でマージするかを検討してから差し替える**。pbxproj の `baseConfigurationReference` 差し替えは「上書き」になるため、既存設定が消える事故が起きる
+
+**iOS Bridge の deinit 制約**:
+
+- `@MainActor @Observable` クラスの `deinit` は **non-isolated** 扱いになるため、`@MainActor` プロパティ（`observationTask` 等）にアクセスできない
+- 採用: `deinit` を持たず、`func cancel()` を公開して `.onDisappear { bridge.cancel() }` から呼ぶパターン（既存 `VisitListViewModelBridge` / `VisitEditorViewModelBridge` と統一）
+- 同パターンは Phase 5 以降の新規 Bridge にも適用
+
+**`.searchable` 採用（HIG 準拠の検索 UI）**:
+
+- 採用: `NavigationStack { ... }.searchable(text: ..., prompt: ...)` + `.onSubmit(of: .search)` + toolbar の補助検索ボタン
+- 不採用: 仕様メモの `TextField + .submitLabel(.search) + .onSubmit` 単独構成
+- 理由: `.searchable` は NavigationStack 統合の検索バーとして HIG 準拠 / VoiceOver 対応 / Dynamic Type 自動対応が得られる。フォーカス管理も SwiftUI が引き受ける
+- 影響: Phase 4 後続スライス（CoreLocation 現在地検索ボタンの追加）も `.searchable` の toolbar / leading 領域に補完できる
+
+**Xcode 16.2 の `PBXFileSystemSynchronizedRootGroup` 形式**:
+
+- pbxproj の xcconfig 参照は `baseConfigurationReferenceAnchor`（`PBXFileSystemSynchronizedRootGroup` の UUID）+ `baseConfigurationReferenceRelativePath`（ファイル名）の 2 行で済む。`PBXFileReference` を個別作成する旧形式と互換
+- 既存の `Config.xcconfig` も同形式で登録されており、`Base.xcconfig` / `Secrets.xcconfig` / `README.md` は同一 `Configuration` グループ配下に自動認識される
+- 追加ファイルを pbxproj に明示登録する必要がない（Xcode が自動同期）

@@ -42,6 +42,42 @@ enum PreviewSamples {
         )
     }
 
+    // MARK: - Cafe（カフェ検索 Preview 用）
+
+    /// Places API 検索結果のサンプルカフェ一覧（CafeSearchView の Preview 用）。
+    static let sampleCafes: [Cafe] = [
+        Cafe(
+            placeId: "ChIJsampleBluBottle",
+            name: "Blue Bottle 三軒茶屋",
+            address: "東京都世田谷区太子堂4-1-22",
+            latitude: KotlinDouble(value: 35.6448),
+            longitude: KotlinDouble(value: 139.6694),
+            photoReferences: [],
+            websiteUrl: "https://bluebottlecoffee.jp/",
+            mapsUrl: "https://maps.google.com/?cid=sample1"
+        ),
+        Cafe(
+            placeId: "ChIJsampleSteamers",
+            name: "Streamer Coffee Company 原宿",
+            address: "東京都渋谷区神宮前3-17-11",
+            latitude: KotlinDouble(value: 35.6699),
+            longitude: KotlinDouble(value: 139.7072),
+            photoReferences: [],
+            websiteUrl: nil,
+            mapsUrl: "https://maps.google.com/?cid=sample2"
+        ),
+        Cafe(
+            placeId: "ChIJsampleFuglen",
+            name: "Fuglen Tokyo",
+            address: "東京都渋谷区富ヶ谷1-16-11",
+            latitude: nil,
+            longitude: nil,
+            photoReferences: [],
+            websiteUrl: "https://fuglencoffee.jp/",
+            mapsUrl: nil
+        ),
+    ]
+
     // MARK: - Photo
 
     static let samplePhotos: [Photo_] = [

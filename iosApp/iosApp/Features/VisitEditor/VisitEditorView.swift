@@ -61,6 +61,10 @@ struct VisitEditorView: View {
     let mode: any VisitEditorViewModelMode
     let appState: AppState
 
+    /// カフェ詳細画面から起動した場合に pre-fill するカフェ。
+    /// 非 nil のとき `.task` 内で `viewModel.onPlacesCafeSelected(cafe:)` を呼ぶ。
+    let initialCafe: Cafe?
+
     @State private var viewModel: VisitEditorViewModelBridge
     @Environment(\.dismiss) private var dismiss
 
@@ -79,9 +83,23 @@ struct VisitEditorView: View {
 
     // MARK: - Init
 
+    /// 通常の VisitEditor 起動（カフェ pre-fill なし）。
     init(mode: any VisitEditorViewModelMode, appState: AppState) {
         self.mode = mode
         self.appState = appState
+        self.initialCafe = nil
+        _viewModel = State(
+            initialValue: VisitEditorViewModelBridge(
+                kotlin: appState.container.makeVisitEditorViewModel()
+            )
+        )
+    }
+
+    /// CafeDetailView から起動するときに使うイニシャライザ。カフェを pre-fill する。
+    init(mode: any VisitEditorViewModelMode, appState: AppState, initialCafe: Cafe?) {
+        self.mode = mode
+        self.appState = appState
+        self.initialCafe = initialCafe
         _viewModel = State(
             initialValue: VisitEditorViewModelBridge(
                 kotlin: appState.container.makeVisitEditorViewModel()
@@ -105,6 +123,10 @@ struct VisitEditorView: View {
             .toolbar { toolbarContent }
             .task {
                 viewModel.onAppear(mode: mode, userId: appState.uid ?? "")
+                // CafeDetailView から起動した場合はカフェを pre-fill する
+                if let cafe = initialCafe {
+                    viewModel.onPlacesCafeSelected(cafe: cafe)
+                }
             }
             .onDisappear {
                 viewModel.onDisappear()
@@ -161,9 +183,11 @@ struct VisitEditorView: View {
                 )
             }
             .sheet(isPresented: $isCafeSearchPresented) {
-                CafeSearchView(appState: appState) { cafe in
-                    viewModel.onPlacesCafeSelected(cafe: cafe)
-                    isCafeSearchPresented = false
+                NavigationStack {
+                    CafeSearchView(appState: appState) { cafe in
+                        viewModel.onPlacesCafeSelected(cafe: cafe)
+                        isCafeSearchPresented = false
+                    }
                 }
             }
             .overlay {

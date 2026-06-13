@@ -9,49 +9,39 @@ extension Visit_: @retroactive Identifiable {}
 
 /// 訪問記録一覧画面。
 ///
-/// - `NavigationStack` でラップし、大タイトル「訪問記録」を表示する
-/// - 空状態は `ContentUnavailableView`、リストは swipe-to-delete 付き `List` で表示する
-/// - ツールバーの `+` ボタンで VisitEditorView（新規作成モード）を sheet で開く
+/// - RootTabView の NavigationStack 内に配置されるため、自身では NavigationStack を持たない
+/// - 新規 Visit の作成導線は「マップ / 検索 → カフェ詳細 → + Visit を追加」に一本化されたため、
+///   toolbar `+` ボタンと VisitEditorView sheet は撤去済み
+/// - 既存 Visit の詳細は NavigationLink で VisitDetailView に push する
 struct VisitListView: View {
 
     @State var viewModel: VisitListViewModelBridge
     var appState: AppState
 
-    @State private var isPresentingEditor = false
-
     var body: some View {
-        NavigationStack {
-            content
-                .navigationTitle(String(localized: "訪問記録"))
-                .navigationBarTitleDisplayMode(.large)
-                .toolbar { toolbarContent }
-                .task {
-                    guard let uid = appState.uid else { return }
-                    viewModel.onAppear(userId: uid)
+        content
+            .navigationTitle(String(localized: "訪問記録"))
+            .navigationBarTitleDisplayMode(.large)
+            .task {
+                guard let uid = appState.uid else { return }
+                viewModel.onAppear(userId: uid)
+            }
+            .onDisappear {
+                viewModel.onDisappear()
+            }
+            .alert(
+                String(localized: "エラー"),
+                isPresented: Binding(
+                    get: { viewModel.error != nil },
+                    set: { if !$0 { viewModel.onErrorDismissed() } }
+                )
+            ) {
+                Button(String(localized: "OK")) {
+                    viewModel.onErrorDismissed()
                 }
-                .onDisappear {
-                    viewModel.onDisappear()
-                }
-                .alert(
-                    String(localized: "エラー"),
-                    isPresented: Binding(
-                        get: { viewModel.error != nil },
-                        set: { if !$0 { viewModel.onErrorDismissed() } }
-                    )
-                ) {
-                    Button(String(localized: "OK")) {
-                        viewModel.onErrorDismissed()
-                    }
-                } message: {
-                    Text(viewModel.error ?? "")
-                }
-                .sheet(isPresented: $isPresentingEditor) {
-                    VisitEditorView(
-                        mode: VisitEditorViewModelModeCreate.shared,
-                        appState: appState
-                    )
-                }
-        }
+            } message: {
+                Text(viewModel.error ?? "")
+            }
     }
 
     // MARK: - コンテンツ
@@ -71,7 +61,9 @@ struct VisitListView: View {
         ContentUnavailableView(
             String(localized: "まだ訪問記録がありません"),
             systemImage: "cup.and.saucer",
-            description: Text(String(localized: "右上の + ボタンで訪問記録を追加してみましょう"))
+            description: Text(
+                String(localized: "マップまたは検索タブからカフェを選んで訪問記録を追加しましょう")
+            )
         )
     }
 
@@ -102,25 +94,6 @@ struct VisitListView: View {
             }
         }
         .listStyle(.plain)
-    }
-
-    // MARK: - ツールバー
-
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .navigationBarTrailing) {
-            Button {
-                isPresentingEditor = true
-            } label: {
-                Label(
-                    String(localized: "訪問記録を追加"),
-                    systemImage: "plus"
-                )
-                .labelStyle(.iconOnly)
-            }
-            .accessibilityLabel(String(localized: "訪問記録を追加"))
-            .disabled(appState.uid == nil)
-        }
     }
 }
 
@@ -186,23 +159,12 @@ private struct VisitRow: View {
         ContentUnavailableView(
             String(localized: "まだ訪問記録がありません"),
             systemImage: "cup.and.saucer",
-            description: Text(String(localized: "右上の + ボタンで訪問記録を追加してみましょう"))
+            description: Text(
+                String(localized: "マップまたは検索タブからカフェを選んで訪問記録を追加しましょう")
+            )
         )
         .navigationTitle(String(localized: "訪問記録"))
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                } label: {
-                    Label(
-                        String(localized: "訪問記録を追加"),
-                        systemImage: "plus"
-                    )
-                    .labelStyle(.iconOnly)
-                }
-                .accessibilityLabel(String(localized: "訪問記録を追加"))
-            }
-        }
     }
 }
 
@@ -218,18 +180,5 @@ private struct VisitRow: View {
         .listStyle(.plain)
         .navigationTitle(String(localized: "訪問記録"))
         .navigationBarTitleDisplayMode(.large)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button {
-                } label: {
-                    Label(
-                        String(localized: "訪問記録を追加"),
-                        systemImage: "plus"
-                    )
-                    .labelStyle(.iconOnly)
-                }
-                .accessibilityLabel(String(localized: "訪問記録を追加"))
-            }
-        }
     }
 }

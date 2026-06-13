@@ -7,7 +7,7 @@ import SharedLogic
 /// - 起動時に Swift 側で `AuthRepositoryIosImpl` / `RemoteVisitDataSourceIosImpl` を組み立て、
 ///   Kotlin の `AppContainer` に注入する
 /// - `AppContainer.startInitialSync()` を呼び、得られた uid を保持する
-/// - `visitListBridge` を lazy で 1 回だけ生成し、VisitListView に渡す
+/// - `visitListBridge` / `mapBridge` を lazy で 1 回だけ生成し、各 View に渡す
 @MainActor
 @Observable
 final class AppState {
@@ -21,9 +21,13 @@ final class AppState {
     ///
     /// `@Observable` マクロは `lazy var` をサポートしないため `Optional` で初期化し、
     /// `bootstrap()` 完了後に 1 度だけ生成する。
-    /// `RootView` は uid が確定してから VisitListView を表示するため、
-    /// このプロパティが nil のまま参照されることはない。
     private(set) var visitListBridge: VisitListViewModelBridge?
+
+    /// MapTabView 用の ViewModel ブリッジ。
+    ///
+    /// マップタブは TabView 常時生存のため `visitListBridge` と同等のライフサイクルで管理する。
+    /// `bootstrap()` 完了後（uid 確定後）に 1 度だけ生成する。
+    private(set) var mapBridge: MapViewModelBridge?
 
     enum Status: Equatable {
         case idle
@@ -50,7 +54,7 @@ final class AppState {
 
     /// 匿名サインイン + 同期購読を起動する。`RootView` の `.task` から呼ぶ。
     ///
-    /// 成功時に `visitListBridge` を 1 度だけ生成する。
+    /// 成功時に `visitListBridge` と `mapBridge` を 1 度だけ生成する。
     /// 既に生成済み（bootstrap 再呼び出し）の場合は再生成しない。
     func bootstrap() async {
         status = .signingIn
@@ -61,6 +65,10 @@ final class AppState {
             // VisitListViewModelBridge を 1 度だけ生成する
             if visitListBridge == nil {
                 visitListBridge = VisitListViewModelBridge(kotlin: container.makeVisitListViewModel())
+            }
+            // MapViewModelBridge を 1 度だけ生成する（uid が必要）
+            if mapBridge == nil {
+                mapBridge = MapViewModelBridge(viewModel: container.makeMapViewModel(userId: uid))
             }
             print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
         } catch {

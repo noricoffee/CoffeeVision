@@ -1,7 +1,11 @@
 package com.noricoffee.framework
 
 import com.noricoffee.AppContainer
+import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
+import com.noricoffee.feature.cafedetail.CafeDetailViewModel
 import com.noricoffee.feature.cafesearch.CafeSearchViewModel
+import com.noricoffee.feature.map.MapViewModel
 import com.noricoffee.feature.visitdetail.VisitDetailViewModel
 import com.noricoffee.feature.visiteditor.VisitEditorViewModel
 import com.noricoffee.feature.visitlist.VisitListViewModel
@@ -69,3 +73,52 @@ fun AppContainer.makeVisitEditorViewModel(): VisitEditorViewModel =
  */
 fun AppContainer.makeCafeSearchViewModel(): CafeSearchViewModel =
     CafeSearchViewModel(cafeRepository, scope)
+
+/**
+ * [MapViewModel] を生成して返す。
+ *
+ * [AppContainer] が保持する [com.noricoffee.repository.VisitRepository] /
+ * [com.noricoffee.repository.CafeRepository] と CoroutineScope（内部の MainScope）を自動配線する。
+ * [ObserveVisitedCafesUseCase] のインスタンスはファクトリ内で都度生成する（DI コンテナ化は YAGNI）。
+ *
+ * ## Bridge のライフサイクル
+ * マップタブは TabBar 常時生存のため、`AppState` で 1 つだけ生成・保持すること（`visitListBridge` と同等）。
+ *
+ * @param userId 現在サインイン中のユーザー ID（`AppState.uid` を渡す）
+ */
+fun AppContainer.makeMapViewModel(userId: String): MapViewModel =
+    MapViewModel(
+        observeVisitedCafesUseCase = ObserveVisitedCafesUseCase(visitRepository),
+        cafeRepository = cafeRepository,
+        userId = userId,
+        scope = scope,
+    )
+
+/**
+ * [CafeDetailViewModel] を生成して返す。
+ *
+ * [AppContainer] が保持する [com.noricoffee.repository.VisitRepository] と
+ * CoroutineScope（内部の MainScope）を自動配線する。
+ *
+ * ## Bridge のライフサイクル
+ * カフェ詳細画面は NavigationStack push ごとに新規生成・pop で破棄すること（`VisitDetailView` と同等）。
+ * `AppState` にホルダープロパティを追加せず、View 内 `@State` で保持する。
+ *
+ * @param placeId 対象カフェの Google Places ID
+ * @param initialCafe マップピン / 検索結果から渡される Cafe スナップショット。
+ *                    未訪問カフェの場合に過去 Visit がなくてもカフェ情報を表示するために使う。
+ *                    訪問済みの場合は最新 Visit の cafe で上書きされる
+ * @param userId 現在サインイン中のユーザー ID（`AppState.uid` を渡す）
+ */
+fun AppContainer.makeCafeDetailViewModel(
+    placeId: String,
+    initialCafe: Cafe?,
+    userId: String,
+): CafeDetailViewModel =
+    CafeDetailViewModel(
+        visitRepository = visitRepository,
+        placeId = placeId,
+        initialCafe = initialCafe,
+        userId = userId,
+        scope = scope,
+    )

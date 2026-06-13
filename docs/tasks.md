@@ -193,6 +193,36 @@
 | [ ] | `shared/framework`: `api(projects.shared.feature.cafeSearch)` + `export` 追加、`AppContainer.makeCafeSearchViewModel()` 拡張関数を `AppContainerViewModelFactory.kt` に追加 | |
 | [ ] | `settings.gradle.kts`: `include(":shared:feature:cafe-search")` 追加 | |
 
+### スライス 6: 画面構成リファクタ（TabBar 化 + マップ + カフェ詳細統合）
+
+> 2026-06-13 着手。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-13「画面構成を TabBar 化（Map / Visits / Search）+ カフェ詳細統合」エントリ参照。6-A（KMP 側）→ 6-B（iOS 側）の 2 段で dispatch する。
+
+#### 6-A: KMP 側（ドメイン + ViewModel + AppContainer factory）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared/domain` に `VisitedCafe(cafe, lastVisitedAt, visitCount, averageRating)` 集計モデル追加 | 2026-06-14 / `shared/domain/.../model/VisitedCafe.kt` |
+| [x] | `shared/domain` に `ObserveVisitedCafesUseCase` 追加（`VisitRepository.observeAll(userId).map { group by place_id }`） | 2026-06-14 / `placeId` 集約 + `lastVisitedAt desc` ソート、`rating=0` は未評価扱いで平均から除外、全 0 なら null |
+| [x] | `shared/core/.../feature/map/MapViewModel` 追加（`StateFlow<MapUiState>` で訪問済みカフェ + 周辺 Places を公開、フィルタトグル受け） | 2026-06-14 / `init` で `observeVisitedCafesUseCase(userId)` 購読、`onLocationUpdated(lat,lng)` は `searchJob` 再起動パターン |
+| [x] | `shared/core/.../feature/cafedetail/CafeDetailViewModel(placeId)` 追加（`VisitRepository.observeAll` を place_id でフィルタ + Cafe スナップショット公開） | 2026-06-14 / 過去 Visit あれば最新 `visit.cafe`、なければ `initialCafe`。`isLoading` は初回 emit まで true |
+| [x] | `shared/framework/AppContainerViewModelFactory.kt` に `makeMapViewModel()` / `makeCafeDetailViewModel(placeId)` 拡張関数追加 | 2026-06-14 / `makeMapViewModel(userId)` / `makeCafeDetailViewModel(placeId, initialCafe, userId)` の 2 拡張関数 |
+| [x] | `commonTest` で `ObserveVisitedCafesUseCase` の集計ロジックをテスト | 2026-06-14 / 9 件追加（空 / 単一 / グループ化 / ソート / lastVisitedAt / 最新スナップショット採用 / rating=0 除外 / 全 0 で null / 複数 placeId） |
+| [x] | 検証: `./gradlew :shared:framework:assembleSharedLogicXCFramework :androidApp:assembleDebug :shared:domain:test :shared:core:test :shared:data-local:testAndroidHostTest` 全成功 | 2026-06-14 / 全成功（`shared:core/build.gradle.kts` に `kotlinx-datetime` 明示追加。`domain` が `implementation` 持ちで Android JVM 側に届かなかったため） |
+
+#### 6-B: iOS 側（RootTabView + MapTabView + CafeDetailView + 既存 View 改修）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `iosApp/iosApp/RootTabView.swift` 新設（`TabView` + 3 タブ定義、`Tab` / `Tab(role: .search)`） | 2026-06-14 / iOS 26 新 API。Search タブの NavigationStack に `navigationDestination(for: CafeDetailRoute.self)` |
+| [x] | `iosApp/iosApp/Features/Map/MapTabView.swift` + `MapViewModelBridge.swift` 新設（MapKit `Map` + 2 種 Annotation + フィルタトグル Menu） | 2026-06-14 / 訪問済み = ブラウン `cup.and.saucer.fill`、周辺 = グレー `mappin`。`CafeDetailRoute` は同ファイルに定義 |
+| [x] | `iosApp/iosApp/Features/CafeDetail/CafeDetailView.swift` + `CafeDetailViewModelBridge.swift` 新設（カフェ情報 + 過去 Visit 一覧 + `+ Visit を追加` ボタン） | 2026-06-14 / sheet で VisitEditor 起動、`initialCafe` pre-filled。空状態は中央 + ツールバーの両方に追加ボタン |
+| [x] | `iOSApp.swift`: `RootView` の表示先を `VisitListView` → `RootTabView` に切替 | 2026-06-14 / `RootView` → `AppRootView` にリネーム、起動条件に `mapBridge != nil` を追加 |
+| [x] | `AppState.swift`: `mapBridge` を追加（visitListBridge と同等の lazy 管理）、`makeCafeDetailViewModel(placeId)` の factory パス確認 | 2026-06-14 / `bootstrap()` で uid 確定後に `makeMapViewModel(userId:)` を 1 度だけ生成。CafeDetail は View 内 `@State` で都度生成 |
+| [x] | `VisitListView.swift`: toolbar `+` と `isPresentingEditor` sheet を撤去 | 2026-06-14 / 自身の `NavigationStack` も撤去（Tab 配下に NavigationStack あり）。空状態文言をマップ / 検索タブ誘導に変更 |
+| [x] | `CafeSearchView.swift`: `onCafeSelected` を Optional 化、未指定時は `NavigationLink` で CafeDetailView へ push する分岐追加 | 2026-06-14 / ルートモード用 `init(appState:)` を追加。VisitEditor からの sheet 経路は `VisitEditorView` 側で `NavigationStack { CafeSearchView(...) }` ラップ必須（ルート化の副作用） |
+| [x] | `LocationManager` の利用追加（マップ初期カメラ位置の現在地中心化、未許可時は訪問済みカフェ bounding box） | 2026-06-14 / 取得は AsyncStream ポーリング（0.1s × 30 回）。fallback 順は 現在地 → 訪問済み bounding box → 東京駅デフォルト |
+| [x] | 検証: `xcodebuild -sdk iphonesimulator` 成功、シミュレータで TabBar 表示 / マップピン / ピンタップ → CafeDetail → + → VisitEditor / Search タブで検索結果タップ → CafeDetail のフロー目視確認 | 2026-06-14 / BUILD SUCCEEDED。シミュレータ目視確認はユーザー作業 |
+
 ---
 
 ## フェーズ 5: 仕上げ

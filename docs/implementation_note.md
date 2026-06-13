@@ -83,6 +83,8 @@
 - iOS の xcconfig は **`Base.xcconfig` を base configuration とし、先頭で `#include "Config.xcconfig"`（必須、bundle ID / TEAM_ID / `-lsqlite3` リンク等を継承）+ `#include? "Secrets.xcconfig"`（任意、PLACES_API_KEY ローカル設定）の 3 段構造**。`Secrets.xcconfig` は `.gitignore` 追加済（コミット禁止）。Info.plist の `$(PLACES_API_KEY)` で展開 → `Bundle.main.object(forInfoDictionaryKey:)` で Swift から取得 → `AppContainer` へ注入。既存 xcconfig がある環境で新規 xcconfig を base にする場合は必ず `#include` 継承を確認すること
 - `CafeSearchViewModel` は **`shared/core/.../feature/cafesearch/` の暫定置き場**（Phase 4 スライス 5 で `shared/feature/cafe-search` に移送予定）。Phase 3 で `VisitListViewModel` 等を `feature/` に切り出す前と同じく、feature 切り出しを後回しにして UI 実装を先行する方針
 - Places API DTO は `PlacesListResponse` を Text Search / Nearby Search で共用（レスポンス構造が同形のため）。`FIELD_MASK`（リスト系、接頭辞 `places.` あり）と `DETAILS_FIELD_MASK`（`getDetails` GET 専用、接頭辞なし）は別定数。`CafeSearchViewModel.onNearbySearchRequested` は `radiusMeters` 引数を持たず 500m 固定（SKIE デフォルト引数制約により VM 内で隠蔽）
+- iOS のルートは TabBar 構成（iOS 26 `TabView` 新 API）。3 タブで `Tab "マップ"` / `Tab "訪問"` / `Tab(role: .search)` の順、`role: .search` は TabBar 右端固定。新規 Visit 作成は **マップ / 検索 → カフェ詳細 → 「+ Visit を追加」** に導線を一本化し、VisitList の `+` ボタンは撤去。カフェ詳細画面は要件の「カフェ別 Visit 一覧画面」を統合する 1 画面
+- `MapViewModel` / `CafeDetailViewModel` は `CafeSearchViewModel` と同じく **`shared/core/.../feature/` の暫定置き場**（Phase 3 後の feature 切り出しで `shared/feature/map` / `shared/feature/cafe-detail` に移送予定）。Bridge のライフサイクルは `mapBridge` = AppState 1 つ保持（TabView は常時 3 タブ生存）、`CafeDetailViewModelBridge` = View 内 `@State` で push ごとに生成（`place_id` 依存）
 
 ---
 
@@ -1016,3 +1018,73 @@ interface CafeRepository {
 - toolbar の右側を `HStack { 現在地ボタン; 検索ボタン }` で並べる構成を採用
 - 不採用: leading 配置（NavigationStack のキャンセル / 戻るボタンと干渉）
 - 「現在地」と「キーワード検索」は同列の検索開始操作のため、右側にまとめてユーザーがどちらも 1 タップで起こせる UX を優先
+
+---
+
+### 2026-06-13: 画面構成を TabBar 化（Map / Visits / Search）+ カフェ詳細統合
+
+- 領域: iOS / Shared / Docs
+- 関連: `iosApp/iosApp/{iOSApp,AppState,RootTabView}.swift`, `iosApp/iosApp/Features/{Map,CafeDetail,VisitList,CafeSearch}/**`, `shared/core/.../feature/{map,cafedetail}/`, `shared/domain/.../{model/VisitedCafe.kt, usecase/ObserveVisitedCafesUseCase.kt}`, `docs/requirements.md`
+
+iOS の画面構成を `RootView → VisitListView` の単一画面から、iOS 26 `TabView` 新 API（`Tab` / `Tab(role: .search)`）を活用した 3 タブ構成にリファクタする決定。
+
+**新しいルート構造**:
+
+- **Tab 1 マップ**（`systemImage: "map"`）: 訪問済みカフェ（ブラウンピン）+ 現在地周辺 Places（グレーピン）を同時表示。toolbar の `Menu` 配下に 2 つの `Toggle`（訪問済み / 周辺）でフィルタ切替
+- **Tab 2 訪問**（`systemImage: "list.bullet"`）: 既存 `VisitListView`。`+` ボタンと `isPresentingEditor` sheet は撤去
+- **Tab 3 検索**（`role: .search`）: 既存 `CafeSearchView` をルート化。NavigationStack + `.searchable` + 現在地検索ボタン
+
+**新規 Visit 作成導線の一本化**:
+
+- マップピンタップ / 検索結果タップ → CafeDetailView push → 「+ Visit を追加」ボタン → VisitEditorView sheet（カフェ pre-filled）
+- VisitListView からの直接作成は撤去（ユーザー指示）
+- CafeDetailView は要件 `requirements.md` の「カフェ別 Visit 一覧画面」を統合し、Cafe スナップショット + 過去 Visit 一覧 + 追加ボタンを 1 画面に集約
+
+**マップ初期カメラ位置**:
+
+- 現在地許可済み → 現在地中心
+- 未許可 → 訪問済みカフェの bounding box（fit）
+- 両方なければデフォルト座標（東京駅相当）
+
+**KMP 側の追加**:
+
+- `ObserveVisitedCafesUseCase`: `VisitRepository.observeAll(userId)` を `groupBy { place_id }` → `VisitedCafe(cafe, lastVisitedAt, visitCount, averageRating)` 集約。Visit 一覧の派生情報なので `shared/domain/usecase` に配置
+- `VisitedCafe` 集計モデル: `shared/domain/model/`
+- `MapViewModel` / `CafeDetailViewModel`: `CafeSearchViewModel` と同じく `shared/core/.../feature/{map, cafedetail}/` の暫定配置。Phase 3 後の feature 切り出しで `shared/feature/map` / `shared/feature/cafe-detail` に移送予定
+- `AppContainer` に `makeMapViewModel()` / `makeCafeDetailViewModel(placeId)` factory を追加（`shared/framework` の拡張関数として置く、既存 `makeVisitListViewModel` 等と同パターン）
+
+**Bridge ライフサイクル**:
+
+- `mapBridge` = AppState 1 つ保持（TabView は 3 タブ常時生存。`visitListBridge` と同じく bootstrap 完了時に 1 度だけ生成）
+- `CafeDetailViewModelBridge` = CafeDetailView 内 `@State` で push ごとに生成（`place_id` 依存のため、`CafeSearchViewModelBridge` と同パターン）
+
+**`role: .search` の挙動**:
+
+- iOS 26 では `Tab(role: .search)` が TabBar 右端に固定配置
+- 中身は `NavigationStack` ルート + `.searchable`。テキスト入力時に iOS 26 標準の検索 UI 展開動作に乗る
+
+**温存する既存導線**:
+
+- `VisitEditorView → CafeSearchView (sheet)` の callback 経路は残す（編集モードでカフェ変更が必要なため）。`CafeSearchView` の `onCafeSelected` を Optional 化し、未指定（= ルート用途）時は内部 `NavigationLink` で CafeDetailView へ push する分岐を追加
+
+**影響**:
+
+- `requirements.md` 画面一覧（L178-189）を Tab 構成に書き換え、カフェ別 Visit 一覧を「カフェ詳細画面」に統合明記
+- `iOSApp.swift` の `RootView` 表示先が `VisitListView` → `RootTabView` に切替
+- `AppState` に `mapBridge` 追加（visitListBridge と同等の lazy 管理）
+- `VisitListView` の toolbar `+` と sheet を撤去（既存 sheet 起点が一本化されたため）
+
+**トレードオフ**:
+
+- マップ + Places 周辺ピンの同時描画は MapKit `Annotation` を 2 種類重ねる構成。ピン数が増えた場合のクラスタリングは初期実装では入れない（必要が出てきたら後追い）
+- マップ初期カメラ位置の「訪問済み bounding box fit」は許可なし時の fallback。実装段階で SwiftUI `Map(initialPosition:)` の `MKMapRect` 指定で実現する。位置情報許可後は中心を現在地に切替
+- **`VisitedCafe.cafe` は「最新訪問のスナップショット勝ち」採用**（同 `placeId` で過去店舗名 / 住所が変わっていた場合、最新訪問のものに上書きされる）。`Visit` 自体には訪問時点のスナップショットが残るため履歴は失われないが、`VisitedCafe` 集計レベルでは過去スナップショットは見えない。要件として「あの時のカフェ名」を集計表示したくなった時点で再検討する
+- **`ObserveVisitedCafesUseCase` の `lastVisitedAt` は `Visit.visitedOn`（LocalDate）を UTC 0:00 の Instant に変換した値**。ソート用なので日本時間の「当日」感覚とは微妙にズレるが、ソート精度は維持される。iOS 表示で日付を出す用途には使わず、`visitedOn: LocalDate` を直接使うこと
+- **`rating == 0` は未評価として `averageRating` 算出から除外**（全 Visit が 0 なら null）。`Visit.rating` の型が non-nullable Int なため、0 をセンチネル扱いする実装上の判断
+
+**実装上の補足**:
+
+- `shared/core/build.gradle.kts` に `implementation(libs.kotlinx.datetime)` を明示追加した（`MapViewModel` / `CafeDetailViewModel` が `LocalDate` を直接扱うため）。`shared/domain` は `kotlinx-datetime` を `implementation` 持ちのため transitively には Android JVM 側に届かず、コンパイル成功時でも実行時 NoClassDefFoundError になり得る。`shared/core` から直接利用する箇所では明示依存が必要
+- `CafeSearchView` をルート化（`onCafeSelected` Optional 化）した副作用として、**VisitEditor の sheet で起動する側は `NavigationStack { CafeSearchView(...) }` でラップする必要がある**。理由: ルート化により `CafeSearchView` 自体は `NavigationStack` を持たない素の View になったため、sheet 起動時に親 NavigationStack がいないと `.navigationTitle` / `.searchable` / `.toolbar` がレンダリングされない。Tab 起動時は RootTabView の NavigationStack が親になるので不要
+- `MapTabView` の位置情報取得は `LocationManager.lastLocation` を **AsyncStream ポーリング（0.1s × 30 回 = 最大 3 秒）** で監視。`@Observable` を `.task` 内で安全に観察する手段として現実的だが、最大 3 秒の遅延が生じる。位置情報が取れなかった場合は訪問済み bounding box → 東京駅デフォルトに fallback
+- `RootTabView` への切替で iOS `iOSApp.swift` の `private struct RootView` を **`AppRootView` にリネーム**（既存コードとの可視性衝突回避）。`bootstrap()` 完了の判定条件に `mapBridge != nil` を追加した（visitListBridge と同等扱い）

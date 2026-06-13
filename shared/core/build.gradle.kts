@@ -18,6 +18,8 @@ kotlin {
             // AppContainer が PlacesClient / CafeRepository を内部で組み立てるため
             api(projects.shared.dataPlaces)
             implementation(libs.kotlinx.coroutines.core)
+            // MapViewModel / CafeDetailViewModel で kotlinx.datetime.LocalDate を使うため
+            implementation(libs.kotlinx.datetime)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

@@ -28,28 +28,30 @@ struct iOSApp: App {
 
     var body: some Scene {
         WindowGroup {
-            RootView(appState: appState)
+            AppRootView(appState: appState)
         }
     }
 }
 
-// MARK: - RootView
+// MARK: - AppRootView
 
-/// uid の確定状況に応じてローディング表示と VisitListView を切り替えるルートビュー。
+/// uid の確定状況に応じてローディング表示と RootTabView を切り替えるルートビュー。
 ///
 /// - uid == nil（サインイン中 / 失敗）: ProgressView + 状態テキスト
-/// - uid != nil: VisitListView を表示
+/// - uid != nil かつ visitListBridge / mapBridge が準備完了: RootTabView を表示
 ///
-/// `visitListBridge` は AppState 内で lazy に 1 度だけ生成されるため、
-/// RootView の再描画で ViewModel が作り直されることはない。
+/// `visitListBridge` と `mapBridge` は AppState 内で lazy に 1 度だけ生成されるため、
+/// AppRootView の再描画で ViewModel が作り直されることはない。
 @MainActor
-private struct RootView: View {
+private struct AppRootView: View {
 
     var appState: AppState
 
     var body: some View {
-        if let bridge = appState.visitListBridge, appState.uid != nil {
-            VisitListView(viewModel: bridge, appState: appState)
+        if appState.uid != nil,
+           appState.visitListBridge != nil,
+           appState.mapBridge != nil {
+            RootTabView(appState: appState)
         } else {
             loadingView
                 .task {

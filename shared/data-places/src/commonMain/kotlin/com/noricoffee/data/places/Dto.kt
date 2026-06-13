@@ -18,13 +18,50 @@ internal data class SearchTextRequest(
 )
 
 /**
- * Places API (New) v1 `places:searchText` レスポンス。
+ * Places API (New) v1 `places:searchText` / `places:searchNearby` 共通レスポンス。
  *
+ * Text Search と Nearby Search は同じ `{"places": [...]}` 構造のため共用する。
  * `ignoreUnknownKeys = true` で decode するため、FieldMask 対象外フィールドは無視される。
  */
 @Serializable
-internal data class SearchTextResponse(
+internal data class PlacesListResponse(
     val places: List<PlaceDto> = emptyList(),
+)
+
+/**
+ * Places API (New) v1 `places:searchNearby` リクエストボディ。
+ *
+ * POST `https://places.googleapis.com/v1/places:searchNearby`
+ * ヘッダ:
+ *   `X-Goog-Api-Key: <apiKey>`
+ *   `X-Goog-FieldMask: places.id,places.displayName,...`（Text Search と同じ定数を再利用）
+ */
+@Serializable
+internal data class SearchNearbyRequest(
+    val includedTypes: List<String> = listOf("cafe"),
+    val maxResultCount: Int = 20,
+    val languageCode: String = "ja",
+    val locationRestriction: LocationRestrictionDto,
+)
+
+/** `locationRestriction` オブジェクト。中心点と半径を持つ円で検索範囲を指定する。 */
+@Serializable
+internal data class LocationRestrictionDto(
+    val circle: CircleDto,
+)
+
+/** `circle` オブジェクト。中心緯度経度と半径（メートル）を指定する。 */
+@Serializable
+internal data class CircleDto(
+    val center: LatLngDto,
+    val radius: Double,
+)
+
+/** 緯度経度オブジェクト。`searchNearby` のリクエストで使用する。 */
+@Serializable
+internal data class LatLngDto(
+    val latitude: Double,
+    val longitude: Double,
 )
 
 /** 1 件の Place エントリ。 */

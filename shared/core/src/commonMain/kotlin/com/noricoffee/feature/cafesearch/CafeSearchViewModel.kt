@@ -92,6 +92,34 @@ class CafeSearchViewModel(
     }
 
     /**
+     * 現在地周辺のカフェを検索する。
+     *
+     * [CafeRepository.searchNearby] を実行し、結果を [UIState.results] に反映する。
+     * 検索半径は 500m 固定（将来 UI からスライダ等で渡せるようにする際は引数追加で対応）。
+     * [UIState.query] はテキスト検索のクエリとは独立しているため更新しない。
+     *
+     * 前回の検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
+     * 検索中は [UIState.isLoading] が true になり、完了後 false に戻る。
+     * エラーが発生した場合は [UIState.error] にメッセージを詰める。
+     *
+     * @param latitude 現在地の緯度
+     * @param longitude 現在地の経度
+     */
+    fun onNearbySearchRequested(latitude: Double, longitude: Double) {
+        searchJob?.cancel()
+        searchJob = scope.launch {
+            _state.update { it.copy(isLoading = true, error = null) }
+            runCatching { cafeRepository.searchNearby(latitude, longitude) }
+                .onSuccess { results ->
+                    _state.update { it.copy(results = results, isLoading = false) }
+                }
+                .onFailure { e ->
+                    _state.update { it.copy(isLoading = false, error = e.message ?: "近隣検索に失敗しました") }
+                }
+        }
+    }
+
+    /**
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {

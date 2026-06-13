@@ -22,6 +22,16 @@ class CafeRepositoryImpl(
     override suspend fun searchText(query: String): List<Cafe> =
         placesClient.searchText(query).map { it.toCafe() }
 
+    override suspend fun searchNearby(
+        latitude: Double,
+        longitude: Double,
+        radiusMeters: Double,
+    ): List<Cafe> =
+        placesClient.searchNearby(latitude, longitude, radiusMeters).map { it.toCafe() }
+
+    override suspend fun getDetails(placeId: String): Cafe =
+        placesClient.getDetails(placeId).toCafe()
+
     private fun PlaceSummary.toCafe(): Cafe = Cafe(
         placeId = id,
         name = displayName,

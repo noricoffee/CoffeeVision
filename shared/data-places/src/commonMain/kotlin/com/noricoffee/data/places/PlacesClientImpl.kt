@@ -3,6 +3,7 @@ package com.noricoffee.data.places
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
@@ -42,7 +43,7 @@ class PlacesClientImpl(
     }
 
     override suspend fun searchText(query: String): List<PlaceSummary> {
-        val response: SearchTextResponse = client.post(SEARCH_TEXT_URL) {
+        val response: PlacesListResponse = client.post(SEARCH_TEXT_URL) {
             contentType(ContentType.Application.Json)
             header("X-Goog-Api-Key", apiKey)
             header("X-Goog-FieldMask", FIELD_MASK)
@@ -58,6 +59,42 @@ class PlacesClientImpl(
         return response.places.map { it.toPlaceSummary() }
     }
 
+    override suspend fun searchNearby(
+        latitude: Double,
+        longitude: Double,
+        radiusMeters: Double,
+    ): List<PlaceSummary> {
+        val response: PlacesListResponse = client.post(SEARCH_NEARBY_URL) {
+            contentType(ContentType.Application.Json)
+            header("X-Goog-Api-Key", apiKey)
+            header("X-Goog-FieldMask", FIELD_MASK)
+            setBody(
+                SearchNearbyRequest(
+                    locationRestriction = LocationRestrictionDto(
+                        circle = CircleDto(
+                            center = LatLngDto(
+                                latitude = latitude,
+                                longitude = longitude,
+                            ),
+                            radius = radiusMeters,
+                        )
+                    )
+                )
+            )
+        }.body()
+
+        return response.places.map { it.toPlaceSummary() }
+    }
+
+    override suspend fun getDetails(placeId: String): PlaceSummary {
+        val placeDto: PlaceDto = client.get("$PLACES_BASE_URL/$placeId") {
+            header("X-Goog-Api-Key", apiKey)
+            header("X-Goog-FieldMask", DETAILS_FIELD_MASK)
+        }.body()
+
+        return placeDto.toPlaceSummary()
+    }
+
     private fun PlaceDto.toPlaceSummary(): PlaceSummary = PlaceSummary(
         id = id,
         displayName = displayName?.text ?: "",
@@ -70,10 +107,22 @@ class PlacesClientImpl(
     )
 
     private companion object {
-        const val SEARCH_TEXT_URL =
-            "https://places.googleapis.com/v1/places:searchText"
+        const val PLACES_BASE_URL = "https://places.googleapis.com/v1/places"
+        const val SEARCH_TEXT_URL = "$PLACES_BASE_URL:searchText"
+        const val SEARCH_NEARBY_URL = "$PLACES_BASE_URL:searchNearby"
+
+        /** Text Search / Nearby Search 共通 FieldMask（接頭辞 `places.` あり）。 */
         const val FIELD_MASK =
             "places.id,places.displayName,places.formattedAddress," +
                 "places.location,places.websiteUri,places.googleMapsUri,places.photos"
+
+        /**
+         * Place Details 用 FieldMask（接頭辞 `places.` なし）。
+         *
+         * 単一 Place 取得（GET `places/{placeId}`）は接頭辞なしで書く必要がある。
+         * リスト取得系（searchText / searchNearby）と接頭辞ルールが異なるため別定数にする。
+         */
+        const val DETAILS_FIELD_MASK =
+            "id,displayName,formattedAddress,location,websiteUri,googleMapsUri,photos"
     }
 }

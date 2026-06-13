@@ -113,6 +113,11 @@ class VisitEditorViewModel(
      * @property isSaving 保存処理実行中かどうか
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      * @property savedVisitId 保存成功時に非 null になる。Swift 側はこれを監視して画面を dismiss する
+     * @property selectedPlaceId Places API 検索で選択したカフェの Google placeId。
+     *   Create モードで [onPlacesCafeSelected] が呼ばれた場合のみ非 null になる。
+     *   Edit モードで [onPlacesCafeSelected] を呼んでも本プロパティは更新されるが、
+     *   [buildVisit] の Edit 分岐は [currentInitialVisit] の placeId を優先するため実際には使われない
+     *   （カフェの差し替えはスライス 3 以降で検討する）。
      */
     data class UIState(
         val mode: Mode = Mode.Create,
@@ -121,6 +126,7 @@ class VisitEditorViewModel(
         val isSaving: Boolean = false,
         val error: String? = null,
         val savedVisitId: String? = null,
+        val selectedPlaceId: String? = null,
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -241,6 +247,41 @@ class VisitEditorViewModel(
     /** 自由メモを更新する。 */
     fun onNotesChanged(text: String) {
         _state.update { it.copy(draft = it.draft.copy(notes = text)) }
+    }
+
+    /**
+     * Places API 検索結果からカフェを選択した際に呼ぶ。
+     *
+     * [cafe] の各フィールドで [UIState.draft] の表示フィールド（カフェ名 / 住所 / WebサイトURL / MapsURL）
+     * を上書きし、[UIState.selectedPlaceId] に Google placeId を保持する。
+     *
+     * ## placeId の扱い
+     *
+     * - **Create モード**: [buildVisit] がこの [UIState.selectedPlaceId] を使って Google placeId で
+     *   保存する（UUID 採番は行わない）
+     * - **Edit モード**: [UIState.selectedPlaceId] は更新されるが、[buildVisit] の Edit 分岐は
+     *   [currentInitialVisit] の placeId を優先するため実質的に使われない。
+     *   カフェ差し替え（既存 placeId を新しい Google placeId に置き換える）はスライス 3 以降で検討する
+     *
+     * ## nullable フィールドの扱い
+     *
+     * [Cafe.address] / [Cafe.websiteUrl] / [Cafe.mapsUrl] が null の場合は空文字を設定する
+     * （[VisitDraft] の対応フィールドは nullable でなく String のため）。
+     *
+     * @param cafe Places API 検索から選択したカフェ情報
+     */
+    fun onPlacesCafeSelected(cafe: Cafe) {
+        _state.update {
+            it.copy(
+                draft = it.draft.copy(
+                    cafeName = cafe.name,
+                    cafeAddress = cafe.address ?: "",
+                    cafeWebsiteUrl = cafe.websiteUrl ?: "",
+                    cafeMapsUrl = cafe.mapsUrl ?: "",
+                ),
+                selectedPlaceId = cafe.placeId,
+            )
+        }
     }
 
     // --- 子要素操作 ---
@@ -396,7 +437,9 @@ class VisitEditorViewModel(
     /**
      * draft と [Mode] から保存用の [Visit] を組み立てる。
      *
-     * - [Mode.Create]: id / placeId を新規 UUID で採番し、createdAt / updatedAt を now で設定する
+     * - [Mode.Create]: id を新規 UUID で採番し、createdAt / updatedAt を now で設定する。
+     *   placeId は [UIState.selectedPlaceId]（Places API 選択）が非 null の場合はそれを使い、
+     *   手入力の場合は新規 UUID を採番する
      * - [Mode.Edit]: [currentInitialVisit] から id / placeId / createdAt を引き継ぎ、updatedAt を now で更新する
      */
     private fun buildVisit(draft: VisitDraft, userId: String): Visit {
@@ -405,7 +448,7 @@ class VisitEditorViewModel(
         val (id, placeId, createdAt) = when (mode) {
             is Mode.Create -> Triple(
                 kotlin.uuid.Uuid.random().toString(),
-                kotlin.uuid.Uuid.random().toString(),
+                _state.value.selectedPlaceId ?: kotlin.uuid.Uuid.random().toString(),
                 now,
             )
             is Mode.Edit -> {

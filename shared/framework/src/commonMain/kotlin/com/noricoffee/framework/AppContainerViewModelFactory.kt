@@ -1,6 +1,7 @@
 package com.noricoffee.framework
 
 import com.noricoffee.AppContainer
+import com.noricoffee.feature.cafesearch.CafeSearchViewModel
 import com.noricoffee.feature.visitdetail.VisitDetailViewModel
 import com.noricoffee.feature.visiteditor.VisitEditorViewModel
 import com.noricoffee.feature.visitlist.VisitListViewModel
@@ -55,3 +56,16 @@ fun AppContainer.makeVisitDetailViewModel(): VisitDetailViewModel =
  */
 fun AppContainer.makeVisitEditorViewModel(): VisitEditorViewModel =
     VisitEditorViewModel(visitRepository, scope)
+
+/**
+ * [CafeSearchViewModel] を生成して返す。
+ *
+ * [AppContainer] が保持する [com.noricoffee.repository.CafeRepository] と
+ * CoroutineScope（内部の MainScope）を自動配線する。
+ *
+ * 本 ViewModel はスライス 5 で `shared/feature/cafe-search` に移送するまでの暫定として
+ * `shared/core` に配置している。スライス 5 の git mv 後も本ファクトリ関数の配置と
+ * シグネチャは変わらない（移送先モジュールの import パスのみ更新する）。
+ */
+fun AppContainer.makeCafeSearchViewModel(): CafeSearchViewModel =
+    CafeSearchViewModel(cafeRepository, scope)

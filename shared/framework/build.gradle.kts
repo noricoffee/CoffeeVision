@@ -49,6 +49,9 @@ kotlin {
             export(projects.shared.feature.visitList)
             export(projects.shared.feature.visitDetail)
             export(projects.shared.feature.visitEditor)
+            export(projects.shared.feature.cafeSearch)
+            export(projects.shared.feature.map)
+            export(projects.shared.feature.cafeDetail)
 
             xcf.add(this)
         }
@@ -74,6 +77,9 @@ kotlin {
             api(projects.shared.feature.visitList)
             api(projects.shared.feature.visitDetail)
             api(projects.shared.feature.visitEditor)
+            api(projects.shared.feature.cafeSearch)
+            api(projects.shared.feature.map)
+            api(projects.shared.feature.cafeDetail)
             implementation(libs.kotlinx.coroutines.core)
         }
     }

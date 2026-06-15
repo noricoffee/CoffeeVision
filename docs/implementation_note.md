@@ -1193,3 +1193,29 @@ iOS 17+ の `Map(selection:)` + `MapFeature` API で Apple Maps の標準 POI（
 - iOS 側: `AppState.init` で `container` をローカル変数に格納してから `self.container` / `self.placePhotoLoader` の順に代入する必要があった。`@Observable` マクロが「全 stored property 初期化前の self アクセス禁止」制約を持つため。同パターンが今後も出る可能性あり
 - iOS 側: SKIE が Kotlin `Int?` を `KotlinInt?` として公開（`.swiftinterface` 確認済）。Swift から `KotlinInt(int: Int32(maxWidthPx))` でラップして渡す
 - iOS 側: `AsyncImagePhase` は enum でなく struct のため網羅チェックが効かない。`@unknown default` の明示が必要（`default` 禁止規約の例外として許容）
+
+---
+
+### 2026-06-15: `kmp.feature` Convention Plugin と feature module の依存追加ルール（スライス 5 で確認）
+
+- 領域: Build / KMP
+- 関連: `build-logic/convention/src/main/kotlin/kmp.feature.gradle.kts`, `shared/feature/*/build.gradle.kts`
+
+スライス 5 で `cafe-search` / `map` / `cafe-detail` を切り出したときに改めて整理した、`kmp.feature` Convention Plugin の挙動と feature module ごとに必要な手動追加。
+
+**Convention Plugin が自動配線するもの**:
+- `api(project(":shared:domain"))`
+- `api(project(":shared:core"))`
+
+**Convention Plugin が自動配線しないもの（各 feature で必要に応じて手動追加）**:
+- `kotlinx-coroutines-core`（全 feature 必須）
+- `kotlinx-datetime`（`Visit.visitedOn: LocalDate` や `VisitedCafe.lastVisitedAt: Instant` を直接参照する feature。`domain` 経由のトランジティブ依存だけでは Kotlin 側でコンパイル通らない）
+- `commonTest` 依存（`kotlin.test` / `kotlinx.coroutines.test`）。テストを書く feature module は自前追加
+
+**現在のステータス**:
+- `shared/feature/{visit-list,visit-detail}`: coroutines-core のみ
+- `shared/feature/{visit-editor,map,cafe-detail}`: coroutines-core + kotlinx-datetime
+- `shared/feature/cafe-search`: coroutines-core のみ
+- `shared/feature/map`: 唯一の commonTest 持ち（kotlin.test + coroutines.test）
+
+将来 commonTest を持つ feature が増えるようなら、`kmp.feature` Convention Plugin に `commonTest` 依存も組み込む案を検討する（今は 1 件だけなので手動追加で十分）。

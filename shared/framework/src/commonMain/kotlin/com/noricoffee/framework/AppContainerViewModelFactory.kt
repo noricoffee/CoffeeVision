@@ -66,10 +66,6 @@ fun AppContainer.makeVisitEditorViewModel(): VisitEditorViewModel =
  *
  * [AppContainer] が保持する [com.noricoffee.repository.CafeRepository] と
  * CoroutineScope（内部の MainScope）を自動配線する。
- *
- * 本 ViewModel はスライス 5 で `shared/feature/cafe-search` に移送するまでの暫定として
- * `shared/core` に配置している。スライス 5 の git mv 後も本ファクトリ関数の配置と
- * シグネチャは変わらない（移送先モジュールの import パスのみ更新する）。
  */
 fun AppContainer.makeCafeSearchViewModel(): CafeSearchViewModel =
     CafeSearchViewModel(cafeRepository, scope)

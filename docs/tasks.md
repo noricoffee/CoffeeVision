@@ -189,11 +189,16 @@
 
 ### スライス 5: feature 切り出し（Phase 4 完了直後）
 
+> スライス 4 までに `shared/core/.../feature/` の暫定置き場に 3 つの ViewModel（`CafeSearchViewModel` / `MapViewModel` / `CafeDetailViewModel`）が溜まっているため、本スライスでまとめて専用 feature モジュールに切り出す。`AppContainerViewModelFactory.kt` の関数シグネチャ（`makeCafeSearchViewModel` / `makeMapViewModel` / `makeCafeDetailViewModel`）は変えない（iOS Bridge への影響ゼロ）。
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | **モジュール分割**: `shared/feature/cafe-search` モジュール切り出し（`CafeSearchViewModel` を移送） | `kmp.feature` Convention Plugin 適用 |
-| [ ] | `shared/framework`: `api(projects.shared.feature.cafeSearch)` + `export` 追加、`AppContainer.makeCafeSearchViewModel()` 拡張関数を `AppContainerViewModelFactory.kt` に追加 | |
-| [ ] | `settings.gradle.kts`: `include(":shared:feature:cafe-search")` 追加 | |
+| [x] | **モジュール分割**: `shared/feature/cafe-search` モジュール切り出し（`CafeSearchViewModel` を `git mv` で移送） | 2026-06-15 / namespace `com.noricoffee.feature.cafesearch`、`kmp.feature` Convention Plugin 適用 |
+| [x] | **モジュール分割**: `shared/feature/map` モジュール切り出し（`MapViewModel` + `MapViewModelPoiLookupTest` を `git mv` で移送） | 2026-06-15 / namespace `com.noricoffee.feature.map`、`kotlinx-datetime` + commonTest 依存（`kotlin.test` / `kotlinx.coroutines.test`）追加。テスト 7 件 pass |
+| [x] | **モジュール分割**: `shared/feature/cafe-detail` モジュール切り出し（`CafeDetailViewModel` を `git mv` で移送） | 2026-06-15 / namespace `com.noricoffee.feature.cafedetail`、`kotlinx-datetime` 追加（`Visit.visitedOn` sort 用） |
+| [x] | `shared/framework`: 3 モジュール分の `api(...)` + `export(...)` を追加、`AppContainerViewModelFactory.kt` は KDoc 整理（関数シグネチャ不変） | 2026-06-15 / Swift `import SharedLogic` 側の ABI は無変化 |
+| [x] | `settings.gradle.kts`: 3 件 include 追加（`:shared:feature:cafe-search` / `:shared:feature:map` / `:shared:feature:cafe-detail`） | 2026-06-15 |
+| [x] | `shared/core` 側の暫定置き場ディレクトリ（`com/noricoffee/feature/{cafesearch,map,cafedetail}/`）を削除 + `shared/core/build.gradle.kts` から `kotlinx-datetime` を削除 | 2026-06-15 / 暫定置き場の空ディレクトリ削除、`core` 側で `datetime` を使う他コードがないため依存も移送 |
 
 ### スライス 6: 画面構成リファクタ（TabBar 化 + マップ + カフェ詳細統合）
 

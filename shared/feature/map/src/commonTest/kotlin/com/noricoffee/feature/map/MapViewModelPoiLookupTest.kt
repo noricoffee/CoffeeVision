@@ -80,6 +80,12 @@ class MapViewModelPoiLookupTest {
             websiteUrl = null,
             mapsUrl = null,
         )
+
+        override suspend fun photoMediaUrl(
+            photoName: String,
+            maxWidthPx: Int?,
+            maxHeightPx: Int?,
+        ): String = "https://fake.example.com/photo"
     }
 
     private fun makeCafe(placeId: String = "test-place-id"): Cafe = Cafe(

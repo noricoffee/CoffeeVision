@@ -21,11 +21,6 @@ import kotlinx.coroutines.launch
  *   [MapUiState.nearbyPlaces] として公開する
  * - [onShowVisitedToggled] / [onShowNearbyToggled] でマップ上のピン表示 / 非表示を切り替える
  *
- * ## 暫定配置について
- *
- * 本クラスは `shared/feature/map` モジュール切り出し後に移送する予定の暫定置き場として
- * `shared/core` に配置している（[com.noricoffee.feature.cafesearch.CafeSearchViewModel] と同じパターン）。
- *
  * ## CoroutineScope の注意
  *
  * [scope] は外部（[com.noricoffee.AppContainer] のファクトリメソッド）から注入する。

@@ -18,12 +18,6 @@ import kotlinx.coroutines.launch
  * - 検索結果は [UIState.results] に反映され、ローディング中は [UIState.isLoading] が true になる
  * - エラーは [UIState.error] に詰め、[onErrorDismissed] で null に戻す
  *
- * ## 暫定配置について
- *
- * 本クラスはスライス 5 で `shared/feature/cafe-search` モジュールに移送する予定の暫定置き場として
- * `shared/core` に配置している。Phase 3 で `VisitListViewModel` 等を feature module に切り出す前と
- * 同じパターン（UI 実装を先行し、feature 切り出しは後続スライスで行う）。
- *
  * ## CoroutineScope の注意
  *
  * [scope] は外部（[com.noricoffee.AppContainer] のファクトリメソッド）から注入する。

@@ -20,11 +20,6 @@ import kotlinx.coroutines.launch
  * - 過去 Visit がない場合（未訪問カフェ）は [initialCafe] を [CafeDetailUiState.cafe] に採用する
  *   （マップピンや検索結果からタップしたとき）
  *
- * ## 暫定配置について
- *
- * 本クラスは `shared/feature/cafe-detail` モジュール切り出し後に移送する予定の暫定置き場として
- * `shared/core` に配置している（[com.noricoffee.feature.cafesearch.CafeSearchViewModel] と同じパターン）。
- *
  * ## CoroutineScope の注意
  *
  * [scope] は外部（[com.noricoffee.AppContainer] のファクトリメソッド）から注入する。

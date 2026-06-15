@@ -1135,3 +1135,61 @@ iOS 17+ の `Map(selection:)` + `MapFeature` API で Apple Maps の標準 POI（
 - `MapTabView` が自身で `NavigationStack(path: $navigationPath)` を保有する構造に変更し、`RootTabView` 側の外側 NavigationStack を撤去（Map タブのみ自己完結 / Search タブは引き続き `RootTabView` 内の NavigationStack）。理由: `navigationPath.append` でのプログラマティック push を実現するため `path` バインディングが必要だが、`MapTabView` の外側から渡すと API が増える割に得るメリットが小さい
 - `MapFeature` は iOS 26 SDK で `#if compiler(>=5.3) && $NonescapableTypes` ガード経由で公開されており、Xcode 26 (Swift 6.x) ターゲットで条件を満たし BUILD SUCCEEDED
 - `bridge.error`（周辺検索エラー）と `bridge.poiLookupError`（POI ルックアップエラー）の 2 系統 `.alert` が `MapTabView` に共存。同時発火は稀だが、SwiftUI で複数 `.alert` modifier を並べた際の同時表示挙動は非決定的。問題が出たら sealed `AlertKind` + `.alert(item:)` の単一 modifier に集約する
+
+---
+
+### 2026-06-15: Phase 4 スライス 4 の事前設計（Photo Media API による写真都度取得）
+
+- 領域: KMP / iOS / Places
+- 関連: `shared/data-places/.../PlacesClient.kt`, `shared/domain/.../repository/CafeRepository.kt`, `iosApp/iosApp/Utilities/PlacePhotoLoader.swift`（新規予定）, `iosApp/iosApp/Features/CafeSearch/CafeSearchView.swift`
+
+カフェ検索結果セルに Places 側の店舗写真（1 枚目）をサムネ表示する。Cafe.photoReferences（= `places/{placeId}/photos/{photoRef}` 形式の name 文字列）を Photo Media API に投げて表示用 URL を得る。
+
+**Photo Media API の呼び方**: `skipHttpRedirect=true` 採用
+
+- 採用: `GET https://places.googleapis.com/v1/{photoName}/media?skipHttpRedirect=true&maxWidthPx={W}` + ヘッダ `X-Goog-Api-Key`、レスポンスは JSON `{"name": "...", "photoUri": "https://lh3.googleusercontent.com/..."}`。`photoUri` を AsyncImage に渡す
+- 不採用: `?key=API_KEY&maxWidthPx={W}` で 302 リダイレクトを AsyncImage に直接フォローさせる方式
+  - API キーが画像 URL に埋め込まれ、システムログ / プロキシ / スクリーンキャプチャ等から露出する経路が増える
+  - 既存 PlacesClient 全メソッドが `X-Goog-Api-Key` ヘッダ統一のため、URL 埋め込みだけ別系統になるのも一貫性が悪い
+  - `photoUri` は時限付き署名 URL（Google Photos CDN）で漏洩耐性が相対的に高い
+
+**SKIE オーバーロード方針**: スライス 7 と同じパターン
+
+- KMP `PlacesClient.photoMediaUrl(photoName, maxWidthPx, maxHeightPx)` を 1 つだけ定義（全引数必須、`maxWidthPx` / `maxHeightPx` は `Int?` で nullable）
+- `Int?` は SKIE 経由で Swift `KotlinInt?` になる。デフォルト引数は Swift に出ないため、Swift 側からは常に 3 引数で呼ぶ
+- iOS の典型用途は「リストセル用に幅 200px」「カフェ詳細用に大きめ」程度。`maxWidthPx` だけ指定 + `maxHeightPx = nil` で十分
+
+**キャッシュ方針**: 永続キャッシュなし
+
+- Places 利用規約上、Photo Media の永続キャッシュは禁止（時限署名 URL の expiry 前提）
+- `URLSession`（AsyncImage 内部）の標準 HTTP キャッシュ（メモリ + ディスク短期）のみ許容。明示的なディスクキャッシュやアプリ側保存はしない
+- `photoUri` JSON レスポンス自体も保持しない（毎表示時に Photo Media API を再叩き）
+
+**iOS 構造**: 薄いローダー + AsyncImage ラッパ Component
+
+- `PlacePhotoLoader`: `@MainActor` `final class`。`CafeRepository` を init で受け、`func fetchUrl(photoName: String, maxWidthPx: Int) async throws -> URL` を提供。状態は持たない（URL を返すだけのファクトリ）
+- `PlacePhotoThumbnail` SwiftUI View: `photoName` + `maxWidthPx` + `loader` を受け、`.task` で URL を取得 → AsyncImage で表示。empty / failure phase 両方とも SF Symbols `photo` プレースホルダ
+- `AppState` に `placePhotoLoader: PlacePhotoLoader` を `init` で組み立て（uid 不要なので bootstrap 前から利用可能）。`CafeSearchView` には `appState` 経由で渡す
+
+**CafeSearchView 結果セル統合**:
+
+- `CafeRow` を `name` + `address` + 左側に 56pt 正方形サムネに変更（横並び HStack）
+- `cafe.photoReferences.first` がある場合のみ `PlacePhotoThumbnail` を出す。空の場合は同サイズの placeholder（角丸 + secondary 背景）
+- 既存 Preview は loader を nil 渡しできるよう設計（Preview ではプレースホルダ固定）
+
+**スライス 5 への影響**: 当スライスで追加する API は全て `shared/data-places` + `shared/domain` 配下のみ。`shared/feature/cafe-search` への移送（スライス 5）には影響しない。
+
+**スコープ外（フォローアップ候補）**:
+
+- `CafeDetailView` への写真 carousel 表示
+- 同 Place の複数枚（`photoReferences[1..]`）表示
+- 取得失敗時の再試行 UI（現状は SF Symbols プレースホルダで終端）
+
+**実装補足（スライス 4 完了時点）**:
+
+- KMP 側: `PLACES_MEDIA_BASE_URL = "https://places.googleapis.com/v1"` を別定数化（既存 `PLACES_BASE_URL = "https://places.googleapis.com/v1/places"` と組み合わせると `photoName` 先頭の `places/` と重複するため）。`photoName` は URL encode せず Ktor `get("...$photoName/media")` で直接埋め込み
+- KMP 側: `commonTest` 用に `ktor-client-mock` を `libs.versions.toml` + `shared/data-places/build.gradle.kts` に追加。MockEngine で URL path / `X-Goog-Api-Key` ヘッダ / null パラメータ省略を検証
+- iOS 側: `PlacePhotoLoader` は `any CafeRepository` を保持（SKIE 生成の Swift protocol を existential type で受ける）。状態を持たないため `@Observable` は不要、`@MainActor` のみ
+- iOS 側: `AppState.init` で `container` をローカル変数に格納してから `self.container` / `self.placePhotoLoader` の順に代入する必要があった。`@Observable` マクロが「全 stored property 初期化前の self アクセス禁止」制約を持つため。同パターンが今後も出る可能性あり
+- iOS 側: SKIE が Kotlin `Int?` を `KotlinInt?` として公開（`.swiftinterface` 確認済）。Swift から `KotlinInt(int: Int32(maxWidthPx))` でラップして渡す
+- iOS 側: `AsyncImagePhase` は enum でなく struct のため網羅チェックが効かない。`@unknown default` の明示が必要（`default` 禁止規約の例外として許容）

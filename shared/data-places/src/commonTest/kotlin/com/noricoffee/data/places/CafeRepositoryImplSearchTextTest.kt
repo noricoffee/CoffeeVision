@@ -63,6 +63,12 @@ class CafeRepositoryImplSearchTextTest {
                 googleMapsUri = null,
                 photoNames = emptyList(),
             )
+
+        override suspend fun photoMediaUrl(
+            photoName: String,
+            maxWidthPx: Int?,
+            maxHeightPx: Int?,
+        ): String = ""
     }
 
     private val fakePlacesClient = FakePlacesClient()

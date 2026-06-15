@@ -7,7 +7,7 @@ import com.noricoffee.domain.LocationBias
  *
  * スライス 3 で `searchNearby` / `getDetails` を追加済。
  * スライス 7-A で `searchText(query, locationBias)` オーバーロードを追加。
- * `photoMediaUrl` はスライス 4 で追加予定。
+ * スライス 4 で `photoMediaUrl` を追加済。
  */
 interface PlacesClient {
 
@@ -67,4 +67,27 @@ interface PlacesClient {
      */
     @Throws(Exception::class)
     suspend fun getDetails(placeId: String): PlaceSummary
+
+    /**
+     * 写真の表示用 URL を取得する（Photo Media API）。
+     *
+     * GET `https://places.googleapis.com/v1/{photoName}/media?skipHttpRedirect=true&maxWidthPx=...&maxHeightPx=...`
+     * ヘッダ: `X-Goog-Api-Key: <apiKey>`
+     *
+     * `photoName` は `"places/{placeId}/photos/{photoRef}"` 形式（[PlaceSummary.photoNames] の要素）。
+     * `skipHttpRedirect=true` を付けることでリダイレクトせず JSON を返し、`photoUri` フィールドに
+     * Google CDN の時限署名 URL が入る。Places 利用規約により永続キャッシュは禁止。
+     *
+     * @param photoName `"places/{placeId}/photos/{photoRef}"` 形式の写真名
+     * @param maxWidthPx 最大幅（px）。null の場合はクエリパラメータを付与しない
+     * @param maxHeightPx 最大高さ（px）。null の場合はクエリパラメータを付与しない
+     * @return 時限署名 URL 文字列（Google CDN: lh3.googleusercontent.com 等）
+     * @throws Exception API 呼び出し失敗時
+     */
+    @Throws(Exception::class)
+    suspend fun photoMediaUrl(
+        photoName: String,
+        maxWidthPx: Int?,
+        maxHeightPx: Int?,
+    ): String
 }

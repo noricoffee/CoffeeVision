@@ -117,6 +117,23 @@ class PlacesClientImpl(
         return placeDto.toPlaceSummary()
     }
 
+    override suspend fun photoMediaUrl(
+        photoName: String,
+        maxWidthPx: Int?,
+        maxHeightPx: Int?,
+    ): String {
+        val response: PhotoMediaResponse = client.get("$PLACES_MEDIA_BASE_URL/$photoName/media") {
+            header("X-Goog-Api-Key", apiKey)
+            url {
+                parameters.append("skipHttpRedirect", "true")
+                if (maxWidthPx != null) parameters.append("maxWidthPx", maxWidthPx.toString())
+                if (maxHeightPx != null) parameters.append("maxHeightPx", maxHeightPx.toString())
+            }
+        }.body()
+
+        return response.photoUri
+    }
+
     private fun PlaceDto.toPlaceSummary(): PlaceSummary = PlaceSummary(
         id = id,
         displayName = displayName?.text ?: "",
@@ -132,6 +149,17 @@ class PlacesClientImpl(
         const val PLACES_BASE_URL = "https://places.googleapis.com/v1/places"
         const val SEARCH_TEXT_URL = "$PLACES_BASE_URL:searchText"
         const val SEARCH_NEARBY_URL = "$PLACES_BASE_URL:searchNearby"
+
+        /**
+         * Photo Media API のベース URL。
+         *
+         * `photoName` は `"places/{placeId}/photos/{photoRef}"` 形式なので、
+         * `"$PLACES_MEDIA_BASE_URL/$photoName/media"` とすると
+         * `"https://places.googleapis.com/v1/places/{placeId}/photos/{photoRef}/media"` になる。
+         *
+         * `PLACES_BASE_URL` と同じドメイン配下のため、`PLACES_BASE_URL` を流用している。
+         */
+        const val PLACES_MEDIA_BASE_URL = "https://places.googleapis.com/v1"
 
         /** Text Search / Nearby Search 共通 FieldMask（接頭辞 `places.` あり）。 */
         const val FIELD_MASK =

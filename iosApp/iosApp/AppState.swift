@@ -29,6 +29,11 @@ final class AppState {
     /// `bootstrap()` 完了後（uid 確定後）に 1 度だけ生成する。
     private(set) var mapBridge: MapViewModelBridge?
 
+    /// Google Places Photo Media API から写真 URL を取得するローダー。
+    ///
+    /// uid 不要なので `init` で即座に生成する（`bootstrap()` 前から利用可能）。
+    private(set) var placePhotoLoader: PlacePhotoLoader
+
     enum Status: Equatable {
         case idle
         case signingIn
@@ -44,12 +49,15 @@ final class AppState {
         // Secrets.xcconfig が存在しない場合（CI 環境等）は空文字フォールバック。
         // 空文字の場合もアプリは起動するが Places API 呼び出しは 401 を返す。
         let placesApiKey = (Bundle.main.object(forInfoDictionaryKey: "PLACES_API_KEY") as? String) ?? ""
-        self.container = AppContainer(
+        let container = AppContainer(
             sqlDriver: sqlDriver,
             remoteVisitDataSource: remoteDataSource,
             authRepository: authRepo,
             placesApiKey: placesApiKey
         )
+        self.container = container
+        // uid 不要なので bootstrap() 前から利用可能
+        self.placePhotoLoader = PlacePhotoLoader(repository: container.cafeRepository)
     }
 
     /// 匿名サインイン + 同期購読を起動する。`RootView` の `.task` から呼ぶ。

@@ -179,11 +179,13 @@
 
 ### スライス 4: 写真都度取得（Photo Media API）
 
+> 2026-06-15 着手・完了。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-15 Phase 4 スライス 4 エントリ参照。`skipHttpRedirect=true` で `photoUri` JSON を取得する方式を採用（`?key=` URL 埋め込み方式は不採用）。永続キャッシュは禁止（規約）。
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `PlacesClient` に `photoMediaUrl(photoName, maxWidthPx?, maxHeightPx?): String` 追加（Photo Media API のリダイレクト URL を得る） | キャッシュしない |
-| [ ] | iOS 側 `PlacePhotoLoader`（URLSession + AsyncImage 連携）実装 | |
-| [ ] | `CafeSearchView` の結果セルに 1 枚目の写真サムネ表示 | |
+| [x] | `PlacesClient` に `photoMediaUrl(photoName, maxWidthPx?, maxHeightPx?): String` 追加（Photo Media API のリダイレクト URL を得る） | 2026-06-15 / `PlacesClient` + `CafeRepository` + `CafeRepositoryImpl` 追加、`PhotoMediaResponse` DTO 追加、`PLACES_MEDIA_BASE_URL` 定数導入。MockEngine テスト 4 件 pass。キャッシュなし（規約） |
+| [x] | iOS 側 `PlacePhotoLoader`（URLSession + AsyncImage 連携）実装 | 2026-06-15 / `iosApp/iosApp/Utilities/PlacePhotoLoader.swift` 新規（`@MainActor` 状態なしクラス）+ `iosApp/iosApp/Components/PlacePhotoThumbnail.swift` 新規（empty / success / failure 3 phase、SF Symbols `photo` プレースホルダ）+ `AppState.placePhotoLoader` 追加（init で組み立て、uid 不要） |
+| [x] | `CafeSearchView` の結果セルに 1 枚目の写真サムネ表示 | 2026-06-15 / `CafeRow` を VStack → HStack（左 56pt サムネ + 右テキスト）に変更、`maxWidthPx = 200`（56pt @3x 想定）、角丸 8pt。`photoReferences.first` 不在時は同サイズ placeholder。Preview 2 件も追随。シミュレータ目視確認はユーザー作業 |
 
 ### スライス 5: feature 切り出し（Phase 4 完了直後）
 

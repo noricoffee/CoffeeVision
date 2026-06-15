@@ -36,6 +36,12 @@ class CafeRepositoryImpl(
     override suspend fun getDetails(placeId: String): Cafe =
         placesClient.getDetails(placeId).toCafe()
 
+    override suspend fun photoMediaUrl(
+        photoName: String,
+        maxWidthPx: Int?,
+        maxHeightPx: Int?,
+    ): String = placesClient.photoMediaUrl(photoName, maxWidthPx, maxHeightPx)
+
     private fun PlaceSummary.toCafe(): Cafe = Cafe(
         placeId = id,
         name = displayName,

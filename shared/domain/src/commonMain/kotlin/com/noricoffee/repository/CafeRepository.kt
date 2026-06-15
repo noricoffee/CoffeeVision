@@ -63,4 +63,25 @@ interface CafeRepository {
      */
     @Throws(Exception::class)
     suspend fun getDetails(placeId: String): Cafe
+
+    /**
+     * 写真の表示用 URL を取得する（Photo Media API）。
+     *
+     * GET `https://places.googleapis.com/v1/{photoName}/media?skipHttpRedirect=true&maxWidthPx=...&maxHeightPx=...`
+     *
+     * `photoName` は `Cafe.photoReferences` の要素（`"places/{placeId}/photos/{photoRef}"` 形式）。
+     * 返値は Google CDN の時限署名 URL。Places 利用規約により永続キャッシュは禁止。
+     *
+     * @param photoName `"places/{placeId}/photos/{photoRef}"` 形式の写真名
+     * @param maxWidthPx 最大幅（px）。null の場合はサイズ未指定
+     * @param maxHeightPx 最大高さ（px）。null の場合はサイズ未指定
+     * @return 時限署名 URL 文字列
+     * @throws Exception API 呼び出し失敗時
+     */
+    @Throws(Exception::class)
+    suspend fun photoMediaUrl(
+        photoName: String,
+        maxWidthPx: Int?,
+        maxHeightPx: Int?,
+    ): String
 }

@@ -115,3 +115,19 @@ internal data class PhotoDto(
     val widthPx: Int? = null,
     val heightPx: Int? = null,
 )
+
+/**
+ * Photo Media API レスポンス。
+ *
+ * GET `https://places.googleapis.com/v1/{photoName}/media?skipHttpRedirect=true&...`
+ * ヘッダ:
+ *   `X-Goog-Api-Key: <apiKey>`
+ *
+ * `skipHttpRedirect=true` を付けることでリダイレクトせず JSON レスポンスを返す。
+ * `photoUri` は Google CDN（lh3.googleusercontent.com 等）の時限署名 URL。
+ */
+@Serializable
+internal data class PhotoMediaResponse(
+    val name: String? = null,
+    val photoUri: String,
+)

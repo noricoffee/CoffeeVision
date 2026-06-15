@@ -23,6 +23,9 @@ struct CafeSearchView: View {
     /// コールバックモードのみ非 nil。nil のときはルートモード（NavigationLink で push）。
     let onCafeSelected: ((Cafe) -> Void)?
 
+    /// 写真サムネ表示に使うローダー。`AppState` から取得する。
+    let photoLoader: PlacePhotoLoader
+
     // MARK: - Init
 
     /// コールバックモード（VisitEditorView の sheet 経由）。
@@ -32,6 +35,7 @@ struct CafeSearchView: View {
                 kotlin: appState.container.makeCafeSearchViewModel()
             )
         )
+        self.photoLoader = appState.placePhotoLoader
         self.onCafeSelected = onCafeSelected
     }
 
@@ -42,6 +46,7 @@ struct CafeSearchView: View {
                 kotlin: appState.container.makeCafeSearchViewModel()
             )
         )
+        self.photoLoader = appState.placePhotoLoader
         self.onCafeSelected = nil
     }
 
@@ -190,7 +195,7 @@ struct CafeSearchView: View {
                 Button {
                     callback(cafe)
                 } label: {
-                    CafeRow(cafe: cafe)
+                    CafeRow(cafe: cafe, loader: photoLoader)
                 }
                 .accessibilityLabel(cafe.name)
             }
@@ -200,7 +205,7 @@ struct CafeSearchView: View {
                 NavigationLink(
                     value: CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
                 ) {
-                    CafeRow(cafe: cafe)
+                    CafeRow(cafe: cafe, loader: photoLoader)
                 }
                 .accessibilityLabel(cafe.name)
             }
@@ -210,21 +215,48 @@ struct CafeSearchView: View {
 
 // MARK: - CafeRow
 
-/// カフェ検索結果の 1 行。名前（headline）+ 住所（secondary）を表示する。
+/// カフェ検索結果の 1 行。左側に 56pt サムネ + 右側に名前（headline）+ 住所（secondary）を表示する。
+///
+/// `loader` が nil の場合（Preview 用）はサムネが常にプレースホルダ表示になる。
 private struct CafeRow: View {
 
     let cafe: Cafe
+    let loader: PlacePhotoLoader?
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(cafe.name)
-                .font(.headline)
-                .foregroundStyle(.primary)
-            if let address = cafe.address, !address.isEmpty {
-                Text(address)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
+        HStack(spacing: 12) {
+            // サムネイル（56pt 正方形・角丸 8pt）
+            Group {
+                if let photoName = cafe.photoReferences.first, !photoName.isEmpty {
+                    PlacePhotoThumbnail(
+                        photoName: photoName,
+                        maxWidthPx: 200,
+                        loader: loader
+                    )
+                } else {
+                    ZStack {
+                        Color(.secondarySystemBackground)
+                        Image(systemName: "photo")
+                            .foregroundStyle(.secondary)
+                    }
+                }
             }
+            .frame(width: 56, height: 56)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+
+            // テキスト情報
+            VStack(alignment: .leading, spacing: 4) {
+                Text(cafe.name)
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+                if let address = cafe.address, !address.isEmpty {
+                    Text(address)
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Spacer(minLength: 0)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -236,11 +268,12 @@ private struct CafeRow: View {
 #Preview("検索結果あり") {
     let sampleCafes = PreviewSamples.sampleCafes
     NavigationStack {
+        // loader nil でサムネはプレースホルダ表示（Preview 環境では PlacePhotoLoader 不要）
         List(sampleCafes, id: \.placeId) { cafe in
             Button {
                 // 選択デモ（何もしない）
             } label: {
-                CafeRow(cafe: cafe)
+                CafeRow(cafe: cafe, loader: nil)
             }
             .accessibilityLabel(cafe.name)
         }

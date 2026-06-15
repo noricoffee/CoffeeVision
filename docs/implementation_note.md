@@ -1088,3 +1088,50 @@ iOS の画面構成を `RootView → VisitListView` の単一画面から、iOS 
 - `CafeSearchView` をルート化（`onCafeSelected` Optional 化）した副作用として、**VisitEditor の sheet で起動する側は `NavigationStack { CafeSearchView(...) }` でラップする必要がある**。理由: ルート化により `CafeSearchView` 自体は `NavigationStack` を持たない素の View になったため、sheet 起動時に親 NavigationStack がいないと `.navigationTitle` / `.searchable` / `.toolbar` がレンダリングされない。Tab 起動時は RootTabView の NavigationStack が親になるので不要
 - `MapTabView` の位置情報取得は `LocationManager.lastLocation` を **AsyncStream ポーリング（0.1s × 30 回 = 最大 3 秒）** で監視。`@Observable` を `.task` 内で安全に観察する手段として現実的だが、最大 3 秒の遅延が生じる。位置情報が取れなかった場合は訪問済み bounding box → 東京駅デフォルトに fallback
 - `RootTabView` への切替で iOS `iOSApp.swift` の `private struct RootView` を **`AppRootView` にリネーム**（既存コードとの可視性衝突回避）。`bootstrap()` 完了の判定条件に `mapBridge != nil` を追加した（visitListBridge と同等扱い）
+
+---
+
+### 2026-06-15: マップ画面に Apple Maps POI タップで Visit 追加する動線
+
+- 領域: iOS / KMP / Places
+- 関連: `iosApp/iosApp/Features/Map/MapTabView.swift`, `iosApp/iosApp/Features/Map/MapViewModelBridge.swift`, `shared/data-places/.../PlacesClient.kt`, `shared/domain/.../repository/CafeRepository.kt`, `shared/core/.../feature/map/MapViewModel.kt`
+
+iOS 17+ の `Map(selection:)` + `MapFeature` API で Apple Maps の標準 POI（地図上のカフェ / 飲食店アイコン）タップを検知し、Google Places に照合してカフェ詳細に進める動線を追加する。CoffeeVision が描画する 2 種類のピン（訪問済み / 周辺）と別軸の発見導線として並列。
+
+**カテゴリフィルタ**: `MapFeature.kind == .pointOfInterest` かつ `MapFeature.pointOfInterestCategory` が `.cafe` / `.restaurant` / `.bakery` のいずれかのときのみ反応する。それ以外の POI（公園 / ガソリンスタンド等）のタップは無視（selection を nil リセット）。
+
+**Google Places 照合方式**: `searchText(name, locationBias=circle(POI座標, 500m))` で名前一致 + 近接の両条件をサーバ側で評価。
+
+- 不採用: iOS 側で `searchText(name)` の結果を距離フィルタ（同名チェーン店が広範囲で返る場合に効率劣化 + 誤マッチ可能性）
+- 不採用: `searchNearby(POI座標, 500m)` の結果を name フィルタ（Nearby は name 絞り込みできず無関係カフェが混ざる）
+
+**MapFeature の `featureIdentifier` は使わない**: Apple Maps の internal identifier で Google Places の `placeId` と互換性なし。ルックアップ結果の Google `placeId` を採用することで、`VisitedCafe` 集計や CafeDetail の過去 Visit 紐付けと整合する。
+
+**UI 動線**: タップ → ProgressView オーバーレイ → CafeDetailView に**プログラマティック push**（`NavigationPath` に append）。既存の描画ピンタップ（`NavigationLink(value:)` 経由）と push 経路が違うが、両方とも最終的に `navigationDestination(for: CafeDetailRoute.self)` で `CafeDetailView` を出す。確認 sheet は挟まない（CafeDetailView 自体が「カフェ情報 + 過去 Visit + 追加ボタン」の確認画面の役割を兼ねる）。
+
+**ヒットなしの fallback**: `searchText` 結果が空 → alert で「該当するカフェが見つかりませんでした」。ネットワークエラー → alert で「カフェ情報の取得に失敗しました: {error}」。手入力 fallback は今回スコープ外（必要が出たら別タスク）。
+
+**KMP の API 拡張**:
+
+- `PlacesClient.searchText(query: String, locationBias: LocationBias?)` に拡張（`SearchTextRequest` DTO に `locationBias.circle.center` + `radius` を追加）
+- `CafeRepository.searchText` も同シグネチャに拡張（Optional の `LocationBias` 引数）
+- SKIE デフォルト引数制約のため、Swift 側からは「位置バイアスなし版」「あり版」のオーバーロード 2 つで露出させる方針（既存 `searchNearby` の `radiusMeters` 隠蔽パターンと統一）
+- `MapViewModel` に `onPoiTapped(name, latitude, longitude)` / `onPoiLookupConsumed()` を追加、`UIState` に `isLookingUpPoi: Bool` / `poiLookupResult: Cafe?` / `poiLookupError: String?` を追加
+
+**トレードオフ**:
+
+- POI 1 タップごとに Places `searchText` リクエストが 1 回発生（料金 / レイテンシ）。誤タップしても課金される
+- 同名近接店舗が複数ある場合（同じビルに 2 店舗等）の 1 件目採用が誤マッチになり得る。CafeDetailView 上で「違うカフェだった」と気付ける UX で許容
+
+**実装補足（スライス 7-A 完了時点）**:
+
+- `LocationBias` は `shared/domain` パッケージ（`com.noricoffee.domain`）に配置。Repository インターフェースのシグネチャとして `CafeRepository.kt` と同じ階層
+- `PlacesClientImpl.searchTextInternal(query, locationBias: LocationBiasDto?)` に HTTP 構築ロジックを集約し、2 オーバーロードから委譲する DRY 構造を採用
+- `LocationBiasDto` は `SearchNearbyRequest` が使う `CircleDto` / `LatLngDto` を再利用（Places API New v1 の `locationBias.circle` と `locationRestriction.circle` が同一 JSON 構造のため）
+- Swift から呼ぶ際は `bridge.onPoiTapped(name:latitude:longitude:)` の 3 引数のみ（`locationBias` の `radiusMeters = 500.0` は VM 内部固定）
+
+**実装補足（スライス 7-B 完了時点）**:
+
+- `MapTabView` が自身で `NavigationStack(path: $navigationPath)` を保有する構造に変更し、`RootTabView` 側の外側 NavigationStack を撤去（Map タブのみ自己完結 / Search タブは引き続き `RootTabView` 内の NavigationStack）。理由: `navigationPath.append` でのプログラマティック push を実現するため `path` バインディングが必要だが、`MapTabView` の外側から渡すと API が増える割に得るメリットが小さい
+- `MapFeature` は iOS 26 SDK で `#if compiler(>=5.3) && $NonescapableTypes` ガード経由で公開されており、Xcode 26 (Swift 6.x) ターゲットで条件を満たし BUILD SUCCEEDED
+- `bridge.error`（周辺検索エラー）と `bridge.poiLookupError`（POI ルックアップエラー）の 2 系統 `.alert` が `MapTabView` に共存。同時発火は稀だが、SwiftUI で複数 `.alert` modifier を並べた際の同時表示挙動は非決定的。問題が出たら sealed `AlertKind` + `.alert(item:)` の単一 modifier に集約する

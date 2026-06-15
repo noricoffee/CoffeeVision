@@ -1,15 +1,18 @@
 package com.noricoffee.data.places
 
+import com.noricoffee.domain.LocationBias
+
 /**
  * Google Places API (New) v1 のクライアントインターフェース。
  *
  * スライス 3 で `searchNearby` / `getDetails` を追加済。
+ * スライス 7-A で `searchText(query, locationBias)` オーバーロードを追加。
  * `photoMediaUrl` はスライス 4 で追加予定。
  */
 interface PlacesClient {
 
     /**
-     * テキストクエリでカフェを検索する。
+     * テキストクエリでカフェを検索する（位置バイアスなし）。
      *
      * POST `https://places.googleapis.com/v1/places:searchText`
      *
@@ -19,6 +22,21 @@ interface PlacesClient {
      */
     @Throws(Exception::class)
     suspend fun searchText(query: String): List<PlaceSummary>
+
+    /**
+     * テキストクエリでカフェを検索する（位置バイアスあり）。
+     *
+     * POST `https://places.googleapis.com/v1/places:searchText`
+     *
+     * SKIE がデフォルト引数を Swift に引き出さないため、バイアスなし版と別のオーバーロードにする。
+     *
+     * @param query 検索キーワード（例: Apple Maps POI の表示名）
+     * @param locationBias 検索結果を優先するエリア（中心座標 + 半径）
+     * @return 検索結果の [PlaceSummary] リスト。0 件の場合は空リスト
+     * @throws Exception API 呼び出し失敗時
+     */
+    @Throws(Exception::class)
+    suspend fun searchText(query: String, locationBias: LocationBias): List<PlaceSummary>
 
     /**
      * 現在地の周辺にあるカフェを検索する。

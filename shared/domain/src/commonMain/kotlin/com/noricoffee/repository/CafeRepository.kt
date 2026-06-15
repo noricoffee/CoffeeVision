@@ -1,6 +1,7 @@
 package com.noricoffee.repository
 
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.LocationBias
 
 /**
  * カフェ情報の Repository インターフェース。
@@ -14,7 +15,7 @@ import com.noricoffee.domain.Cafe
 interface CafeRepository {
 
     /**
-     * テキストクエリでカフェを検索する。
+     * テキストクエリでカフェを検索する（位置バイアスなし）。
      *
      * @param query 検索キーワード（例: "渋谷 コーヒー"）
      * @return 検索結果の [Cafe] リスト。0 件の場合は空リスト
@@ -22,6 +23,20 @@ interface CafeRepository {
      */
     @Throws(Exception::class)
     suspend fun searchText(query: String): List<Cafe>
+
+    /**
+     * テキストクエリでカフェを検索する（位置バイアスあり）。
+     *
+     * Apple Maps POI タップ連携など、特定の座標の近傍で名前照合したいケースで使用する。
+     * SKIE がデフォルト引数を Swift に引き出さないため、バイアスなし版と 2 つのオーバーロードに分けている。
+     *
+     * @param query 検索キーワード（例: POI の表示名）
+     * @param locationBias 検索結果を優先するエリア（中心座標 + 半径）
+     * @return 検索結果の [Cafe] リスト。0 件の場合は空リスト
+     * @throws Exception API 呼び出し失敗時
+     */
+    @Throws(Exception::class)
+    suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe>
 
     /**
      * 現在地の周辺にあるカフェを検索する。

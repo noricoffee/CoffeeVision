@@ -16,9 +16,7 @@ struct RootTabView: View {
     var body: some View {
         TabView {
             Tab(String(localized: "マップ"), systemImage: "map") {
-                NavigationStack {
-                    MapTabView(appState: appState)
-                }
+                MapTabView(appState: appState)
             }
 
             Tab(String(localized: "訪問"), systemImage: "list.bullet") {

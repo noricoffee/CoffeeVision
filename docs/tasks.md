@@ -223,6 +223,32 @@
 | [x] | `LocationManager` の利用追加（マップ初期カメラ位置の現在地中心化、未許可時は訪問済みカフェ bounding box） | 2026-06-14 / 取得は AsyncStream ポーリング（0.1s × 30 回）。fallback 順は 現在地 → 訪問済み bounding box → 東京駅デフォルト |
 | [x] | 検証: `xcodebuild -sdk iphonesimulator` 成功、シミュレータで TabBar 表示 / マップピン / ピンタップ → CafeDetail → + → VisitEditor / Search タブで検索結果タップ → CafeDetail のフロー目視確認 | 2026-06-14 / BUILD SUCCEEDED。シミュレータ目視確認はユーザー作業 |
 
+### スライス 7: マップ画面 Apple Maps POI タップで Visit 追加
+
+> 2026-06-15 着手。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-15「マップ画面に Apple Maps POI タップで Visit 追加する動線」エントリ参照。7-A（KMP）→ 7-B（iOS）の 2 段で dispatch する。
+
+#### 7-A: KMP 側（searchText に locationBias 追加 + MapViewModel POI lookup API）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared/data-places/.../PlacesClient.searchText` に `locationBias: LocationBias?` 引数を追加（`SearchTextRequest` DTO に `locationBias.circle.center` + `radius` を追加） | 2026-06-15 / SKIE 用に 2 オーバーロード公開。`LocationBiasDto` は既存 `CircleDto` / `LatLngDto` を再利用。`PlacesClientImpl.searchTextInternal` で集約 |
+| [x] | `shared/domain/.../repository/CafeRepository.searchText` に対応引数を追加 | 2026-06-15 / `LocationBias` は `com.noricoffee.domain` 直下に新規追加 |
+| [x] | `shared/data-places/.../CafeRepositoryImpl.searchText` を追随 | 2026-06-15 |
+| [x] | `shared/core/.../feature/map/MapViewModel` に `onPoiTapped(name, latitude, longitude)` / `onPoiLookupConsumed()` 追加、`UIState` に `isLookingUpPoi` / `poiLookupResult` / `poiLookupError` を追加 | 2026-06-15 / `onPoiLookupErrorDismissed()` も追加。`poiLookupJob` の再起動パターン |
+| [x] | `commonTest` で `searchText` の locationBias リクエスト形成 + `onPoiTapped` の状態遷移をテスト | 2026-06-15 / data-places 4 件 + core 7 件 全 pass |
+| [x] | 検証: `./gradlew :shared:framework:assembleSharedLogicXCFramework :androidApp:assembleDebug :shared:domain:test :shared:core:test :shared:data-local:testAndroidHostTest` 全成功 | 2026-06-15 / 全成功 |
+
+#### 7-B: iOS 側（MapTabView selection 連携 + Bridge 拡張）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `MapTabView`: `Map(position:selection:)` に切替、`MapFeature?` の `@State` を持つ | 2026-06-15 / iOS 17+ API、`#if compiler(>=5.3) && $NonescapableTypes` ガード経由で iOS 26 SDK で解決 |
+| [x] | `MapTabView`: `.onChange(of: selection)` で `.cafe` / `.restaurant` / `.bakery` のみ受け入れ、`bridge.onPoiTapped(name, lat, lng)` を呼ぶ | 2026-06-15 / カテゴリ外は selection nil リセット、`poiSelectionChanged` に分離 |
+| [x] | `MapTabView`: `navigationPath: NavigationPath` を持ち、`bridge.poiLookupResult` の購読で `CafeDetailRoute` を append | 2026-06-15 / プログラマティック push。NavigationStack を `MapTabView` 内に閉じる構造に変更（`RootTabView` 側の外側 NavigationStack を撤去） |
+| [x] | `MapTabView`: `isLookingUpPoi` 中は ProgressView オーバーレイ、`poiLookupError` で alert | 2026-06-15 / `.ultraThinMaterial` 背景。`error` / `poiLookupError` の 2 alert 共存（同時発火は稀） |
+| [x] | `MapViewModelBridge`: `onPoiTapped` / `onPoiLookupConsumed` 転送 + `isLookingUpPoi` / `poiLookupResult` / `poiLookupError` の Swift プロパティ追加 | 2026-06-15 / `onPoiLookupErrorDismissed` も追加 |
+| [x] | 検証: `xcodebuild -sdk iphonesimulator` 成功 | 2026-06-15 / BUILD SUCCEEDED。シミュレータ目視確認はユーザー作業 |
+
 ---
 
 ## フェーズ 5: 仕上げ

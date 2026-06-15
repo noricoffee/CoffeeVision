@@ -23,6 +23,12 @@ final class MapViewModelBridge {
     private(set) var isLoadingNearby: Bool = false
     private(set) var error: String?
 
+    // MARK: - POI ルックアップ状態
+
+    private(set) var isLookingUpPoi: Bool = false
+    private(set) var poiLookupResult: Cafe? = nil
+    private(set) var poiLookupError: String? = nil
+
     // MARK: - Init
 
     init(viewModel: MapViewModel) {
@@ -60,6 +66,25 @@ final class MapViewModelBridge {
         kotlin.onErrorDismissed()
     }
 
+    // MARK: - POI ルックアップアクション
+
+    /// Apple Maps の標準 POI がタップされたときに呼ぶ。
+    /// Places API で名前 + 位置バイアスによる照合を開始する。
+    func onPoiTapped(name: String, latitude: Double, longitude: Double) {
+        kotlin.onPoiTapped(name: name, latitude: latitude, longitude: longitude)
+    }
+
+    /// POI ルックアップ結果を画面遷移（push）で消費したあとに呼ぶ。
+    /// `poiLookupResult` を nil にリセットして次のタップを受け入れる状態に戻す。
+    func onPoiLookupConsumed() {
+        kotlin.onPoiLookupConsumed()
+    }
+
+    /// POI ルックアップエラーアラートを閉じたときに呼ぶ。
+    func onPoiLookupErrorDismissed() {
+        kotlin.onPoiLookupErrorDismissed()
+    }
+
     // MARK: - Private
 
     private func startObservation() {
@@ -80,5 +105,8 @@ final class MapViewModelBridge {
         self.showNearby = state.showNearby
         self.isLoadingNearby = state.isLoadingNearby
         self.error = state.error
+        self.isLookingUpPoi = state.isLookingUpPoi
+        self.poiLookupResult = state.poiLookupResult
+        self.poiLookupError = state.poiLookupError
     }
 }

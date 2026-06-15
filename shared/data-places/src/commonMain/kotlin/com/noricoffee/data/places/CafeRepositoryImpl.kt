@@ -1,6 +1,7 @@
 package com.noricoffee.data.places
 
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.LocationBias
 import com.noricoffee.repository.CafeRepository
 
 /**
@@ -21,6 +22,9 @@ class CafeRepositoryImpl(
 
     override suspend fun searchText(query: String): List<Cafe> =
         placesClient.searchText(query).map { it.toCafe() }
+
+    override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> =
+        placesClient.searchText(query, locationBias).map { it.toCafe() }
 
     override suspend fun searchNearby(
         latitude: Double,

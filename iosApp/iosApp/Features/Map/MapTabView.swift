@@ -28,7 +28,9 @@ struct CafeDetailRoute: Hashable {
 ///
 /// - MapKit の `Map` に訪問済みカフェ（brown）と周辺カフェ（gray）の Annotation を表示する
 /// - フィルタトグルで各種ピンの表示 / 非表示を切り替える
-/// - ピンタップで `CafeDetailView` へ push する（NavigationStack は Tab 配下 RootTabView が提供）
+/// - カスタムピンタップで `CafeDetailView` へ push する（`NavigationLink(value:)` 経由）
+/// - Apple Maps 標準 POI タップ → Places ルックアップ → `CafeDetailView` プログラマティック push
+/// - 自身が `NavigationStack(path: $navigationPath)` を保持するため RootTabView 側の NavigationStack は不要
 /// - 現在地取得は `LocationManager` 経由
 struct MapTabView: View {
 
@@ -38,43 +40,81 @@ struct MapTabView: View {
     @State private var locationManager = LocationManager()
     @State private var didSetInitialCamera = false
 
+    /// Apple Maps 標準 POI タップ検知用の選択状態。
+    @State private var mapFeatureSelection: MapFeature? = nil
+
+    /// POI ルックアップ結果などのプログラマティック push 用 NavigationPath。
+    @State private var navigationPath = NavigationPath()
+
     // MARK: - Body
 
     var body: some View {
-        Group {
-            if let bridge = appState.mapBridge {
-                mapContent(bridge: bridge)
-                    .navigationTitle(String(localized: "マップ"))
-                    .navigationBarTitleDisplayMode(.inline)
-                    .toolbar { filterToolbar(bridge: bridge) }
-                    .navigationDestination(for: CafeDetailRoute.self) { route in
-                        CafeDetailView(
-                            placeId: route.placeId,
-                            initialCafe: route.initialCafe,
-                            appState: appState
-                        )
-                    }
-                    .overlay(alignment: .bottom) {
-                        if bridge.isLoadingNearby {
-                            loadingBanner
+        NavigationStack(path: $navigationPath) {
+            Group {
+                if let bridge = appState.mapBridge {
+                    mapContent(bridge: bridge)
+                        .navigationTitle(String(localized: "マップ"))
+                        .navigationBarTitleDisplayMode(.inline)
+                        .toolbar { filterToolbar(bridge: bridge) }
+                        .navigationDestination(for: CafeDetailRoute.self) { route in
+                            CafeDetailView(
+                                placeId: route.placeId,
+                                initialCafe: route.initialCafe,
+                                appState: appState
+                            )
                         }
-                    }
-                    .alert(
-                        String(localized: "エラー"),
-                        isPresented: Binding(
-                            get: { bridge.error != nil },
-                            set: { if !$0 { bridge.onErrorDismissed() } }
-                        )
-                    ) {
-                        Button(String(localized: "OK")) { bridge.onErrorDismissed() }
-                    } message: {
-                        Text(bridge.error ?? "")
-                    }
-                    .task {
-                        await setupLocation(bridge: bridge)
-                    }
-            } else {
-                ProgressView()
+                        .overlay(alignment: .bottom) {
+                            if bridge.isLoadingNearby {
+                                loadingBanner
+                            }
+                        }
+                        .overlay {
+                            if bridge.isLookingUpPoi {
+                                ProgressView()
+                                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                                    .background(.ultraThinMaterial)
+                            }
+                        }
+                        .alert(
+                            String(localized: "エラー"),
+                            isPresented: Binding(
+                                get: { bridge.error != nil },
+                                set: { if !$0 { bridge.onErrorDismissed() } }
+                            )
+                        ) {
+                            Button(String(localized: "OK")) { bridge.onErrorDismissed() }
+                        } message: {
+                            Text(bridge.error ?? "")
+                        }
+                        .alert(
+                            String(localized: "カフェが見つかりませんでした"),
+                            isPresented: Binding(
+                                get: { bridge.poiLookupError != nil },
+                                set: { if !$0 { bridge.onPoiLookupErrorDismissed() } }
+                            )
+                        ) {
+                            Button(String(localized: "OK")) { bridge.onPoiLookupErrorDismissed() }
+                        } message: {
+                            Text(bridge.poiLookupError ?? "")
+                        }
+                        .onChange(of: mapFeatureSelection) { _, newSelection in
+                            poiSelectionChanged(newSelection, bridge: bridge)
+                        }
+                        .onChange(of: bridge.poiLookupResult) { _, result in
+                            if let cafe = result {
+                                navigationPath.append(
+                                    CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
+                                )
+                                bridge.onPoiLookupConsumed()
+                                mapFeatureSelection = nil
+                            }
+                        }
+                        .task {
+                            await setupLocation(bridge: bridge)
+                        }
+                } else {
+                    ProgressView()
+                }
             }
         }
     }
@@ -83,7 +123,7 @@ struct MapTabView: View {
 
     @ViewBuilder
     private func mapContent(bridge: MapViewModelBridge) -> some View {
-        Map(position: $cameraPosition) {
+        Map(position: $cameraPosition, selection: $mapFeatureSelection) {
             // 訪問済みカフェピン（ブラウン）
             if bridge.showVisited {
                 ForEach(bridge.visitedCafes, id: \.cafe.placeId) { visitedCafe in
@@ -211,6 +251,34 @@ struct MapTabView: View {
                     .accessibilityLabel(String(localized: "表示フィルタ"))
             }
         }
+    }
+
+    // MARK: - POI 選択ハンドラ
+
+    /// Apple Maps 標準 POI タップ時に呼ばれる。
+    /// `.cafe` / `.restaurant` / `.bakery` のみ受け入れ、それ以外は selection を nil リセット。
+    private func poiSelectionChanged(_ selection: MapFeature?, bridge: MapViewModelBridge) {
+        guard let feature = selection else { return }
+        guard feature.kind == .pointOfInterest else {
+            mapFeatureSelection = nil
+            return
+        }
+        guard let category = feature.pointOfInterestCategory else {
+            mapFeatureSelection = nil
+            return
+        }
+
+        let allowedCategories: Set<MKPointOfInterestCategory> = [.cafe, .restaurant, .bakery]
+        guard allowedCategories.contains(category) else {
+            mapFeatureSelection = nil
+            return
+        }
+
+        bridge.onPoiTapped(
+            name: feature.title ?? "",
+            latitude: feature.coordinate.latitude,
+            longitude: feature.coordinate.longitude
+        )
     }
 
     // MARK: - 位置情報セットアップ

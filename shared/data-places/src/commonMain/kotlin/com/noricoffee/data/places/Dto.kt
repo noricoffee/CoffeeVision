@@ -9,12 +9,25 @@ import kotlinx.serialization.Serializable
  * ヘッダ:
  *   `X-Goog-Api-Key: <apiKey>`
  *   `X-Goog-FieldMask: places.id,places.displayName,...`
+ *
+ * [locationBias] が null の場合、`explicitNulls = false` の Json 設定によりフィールドは省略される。
  */
 @Serializable
 internal data class SearchTextRequest(
     val textQuery: String,
     val includedType: String = "cafe",
     val languageCode: String = "ja",
+    val locationBias: LocationBiasDto? = null,
+)
+
+/**
+ * `searchText` の `locationBias` オブジェクト。
+ *
+ * Places API (New) v1 の仕様: `{"circle": {"center": {"latitude": ..., "longitude": ...}, "radius": ...}}`
+ */
+@Serializable
+internal data class LocationBiasDto(
+    val circle: CircleDto,
 )
 
 /**

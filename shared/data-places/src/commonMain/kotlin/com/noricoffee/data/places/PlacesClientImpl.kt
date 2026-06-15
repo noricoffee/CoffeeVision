@@ -1,5 +1,6 @@
 package com.noricoffee.data.places
 
+import com.noricoffee.domain.LocationBias
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
@@ -42,7 +43,27 @@ class PlacesClientImpl(
         }
     }
 
-    override suspend fun searchText(query: String): List<PlaceSummary> {
+    override suspend fun searchText(query: String): List<PlaceSummary> =
+        searchTextInternal(query = query, locationBias = null)
+
+    override suspend fun searchText(query: String, locationBias: LocationBias): List<PlaceSummary> =
+        searchTextInternal(
+            query = query,
+            locationBias = LocationBiasDto(
+                circle = CircleDto(
+                    center = LatLngDto(
+                        latitude = locationBias.latitude,
+                        longitude = locationBias.longitude,
+                    ),
+                    radius = locationBias.radiusMeters,
+                )
+            ),
+        )
+
+    private suspend fun searchTextInternal(
+        query: String,
+        locationBias: LocationBiasDto?,
+    ): List<PlaceSummary> {
         val response: PlacesListResponse = client.post(SEARCH_TEXT_URL) {
             contentType(ContentType.Application.Json)
             header("X-Goog-Api-Key", apiKey)
@@ -52,6 +73,7 @@ class PlacesClientImpl(
                     textQuery = query,
                     includedType = "cafe",
                     languageCode = "ja",
+                    locationBias = locationBias,
                 )
             )
         }.body()

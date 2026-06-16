@@ -284,6 +284,22 @@
 
 ---
 
+## docs / 設計判断バックログ（後回し可）
+
+> 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。
+
+| 状態 | ID | タスク | 着手目安 / 備考 |
+|------|----|------|----------------|
+| [ ] | B-1 | マルチデバイス書き込みの競合解決方針を明文化（`updatedAt` での last-writer-wins 等）。現状 remote→local は `INSERT OR REPLACE` で世代比較なし | 複数端末同期（要件 7-3、優先度○）を実装・検証する段階。単一端末では実害なし |
+| [ ] | B-2 | ViewModel テスト方針の整理。規約（architecture / coding-conventions）は「VM は runTest でテスト」だが主要 VM が未テスト。規約を実態に合わせるか、テストを足すか決める | CI を本格運用するとき / 新規 VM 追加時 |
+| [ ] | B-3 | `requirements.md` の「API キーは難読化」を実態（Google Cloud 側のキー制限ベース。Info.plist / BuildConfig は平文）に修正 | リリース準備フェーズ（doc 修正のみで完結、判断不要） |
+| [ ] | B-4 | `rating=0`=「未評価」の暗黙 sentinel を仕様化（`Visit.rating` を nullable にするか 0 を明記するか）。`ObserveVisitedCafesUseCase` が 0 を平均除外している | 集計まわりを次に触るとき。現状動作に実害なし |
+| [ ] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 最初の PR を出すタイミングで自然解消 |
+| [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
+| [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
+
+---
+
 ## レビューセクション（PR / 振り返り用テンプレート）
 
 新しい PR をマージしたら、以下をコピーして追記してください。
@@ -353,5 +369,5 @@
 - 動作確認:
   - docs のみ（コード / ビルド / CI 変更なし）。grep 検証で `visits/{visitId}` 写真パス残存ゼロ / 現状記述の「予定」語ゼロ / `settings.gradle.kts`（14 include）と doc のモジュール一覧一致を確認
 - 残課題 / フォローアップ:
-  - 🟠整合パック（A-4 kmp-bridge の `SharedFramework` 表記 / A-5 data-model の Repository 例 / A-6 requirements リリース方針 / A-7 GitLive リンク）未着手
-  - 🟠設計判断パック（B-1 マルチデバイス競合解決 / B-2 ViewModel テスト方針 / B-3 API キー難読化→制限ベース / B-4 rating=0 sentinel / B-5 CI 未グリーン）未着手
+  - 🟠整合パック（A-4〜A-7）→ 2026-06-16 完了（コミット `7c86ab5`）
+  - 🟠設計判断パック（B 系）/ C-1 / D-1 → 後回し可。本ファイル上部の「docs / 設計判断バックログ（後回し可）」節に移管

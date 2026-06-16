@@ -79,27 +79,8 @@ struct MapTabView: View {
                                     .background(.ultraThinMaterial)
                             }
                         }
-                        .alert(
-                            String(localized: "エラー"),
-                            isPresented: Binding(
-                                get: { bridge.error != nil },
-                                set: { if !$0 { bridge.onErrorDismissed() } }
-                            )
-                        ) {
-                            Button(String(localized: "OK")) { bridge.onErrorDismissed() }
-                        } message: {
-                            Text(bridge.error ?? "")
-                        }
-                        .alert(
-                            String(localized: "カフェが見つかりませんでした"),
-                            isPresented: Binding(
-                                get: { bridge.poiLookupError != nil },
-                                set: { if !$0 { bridge.onPoiLookupErrorDismissed() } }
-                            )
-                        ) {
-                            Button(String(localized: "OK")) { bridge.onPoiLookupErrorDismissed() }
-                        } message: {
-                            Text(bridge.poiLookupError ?? "")
+                        .errorToast(message: activeToast(bridge: bridge)?.message) {
+                            activeToast(bridge: bridge)?.dismiss()
                         }
                         .onChange(of: mapFeatureSelection) { _, newSelection in
                             poiSelectionChanged(newSelection, bridge: bridge)
@@ -121,6 +102,22 @@ struct MapTabView: View {
                 }
             }
         }
+    }
+
+    // MARK: - エラートースト集約
+
+    /// 複数のエラー源を優先順位付きで単一トーストに集約する。
+    ///
+    /// `bridge.error`（一般エラー）を `poiLookupError`（POI 検索失敗）より優先する。
+    /// `.errorToast` は 1 つしか付けられないため、body から 1 個だけ渡す。
+    private func activeToast(bridge: MapViewModelBridge) -> (message: String, dismiss: () -> Void)? {
+        if let e = bridge.error {
+            return (e, { bridge.onErrorDismissed() })
+        }
+        if let e = bridge.poiLookupError {
+            return (e, { bridge.onPoiLookupErrorDismissed() })
+        }
+        return nil
     }
 
     // MARK: - マップコンテンツ

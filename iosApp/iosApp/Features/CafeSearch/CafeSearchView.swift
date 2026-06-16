@@ -114,19 +114,11 @@ struct CafeSearchView: View {
                 )
             }
         }
-        .alert(
-            String(localized: "エラー"),
-            isPresented: Binding(
-                get: { bridge.error != nil },
-                set: { if !$0 { bridge.onErrorDismissed() } }
-            )
-        ) {
-            Button(String(localized: "OK")) {
-                bridge.onErrorDismissed()
-            }
-        } message: {
-            Text(bridge.error ?? "")
+        // 非致命エラー（検索失敗 / 位置取得失敗）はトーストで表示
+        .errorToast(message: activeToast?.message) {
+            activeToast?.dismiss()
         }
+        // アクション付き alert（設定アプリへ誘導）は alert のまま維持
         .alert(
             String(localized: "位置情報が利用できません"),
             isPresented: $showingLocationDeniedAlert
@@ -140,22 +132,24 @@ struct CafeSearchView: View {
         } message: {
             Text(String(localized: "位置情報の利用を許可するには、設定アプリで CoffeeVision の位置情報サービスを有効にしてください。"))
         }
-        .alert(
-            String(localized: "位置情報の取得に失敗しました"),
-            isPresented: Binding(
-                get: { locationManager.error != nil },
-                set: { if !$0 { locationManager.clearError() } }
-            )
-        ) {
-            Button(String(localized: "OK")) {
-                locationManager.clearError()
-            }
-        } message: {
-            Text(locationManager.error?.localizedDescription ?? "")
-        }
         .onDisappear {
             bridge.cancel()
         }
+    }
+
+    // MARK: - エラートースト集約
+
+    /// 複数のエラー源を優先順位付きで単一トーストに集約する。
+    ///
+    /// `bridge.error`（検索失敗）を `locationManager.error`（位置取得失敗）より優先する。
+    private var activeToast: (message: String, dismiss: () -> Void)? {
+        if let e = bridge.error {
+            return (e, { bridge.onErrorDismissed() })
+        }
+        if let e = locationManager.error {
+            return (e.localizedDescription, { locationManager.clearError() })
+        }
+        return nil
     }
 
     // MARK: - Actions

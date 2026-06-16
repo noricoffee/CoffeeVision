@@ -29,18 +29,8 @@ struct VisitListView: View {
             .onDisappear {
                 viewModel.onDisappear()
             }
-            .alert(
-                String(localized: "エラー"),
-                isPresented: Binding(
-                    get: { viewModel.error != nil },
-                    set: { if !$0 { viewModel.onErrorDismissed() } }
-                )
-            ) {
-                Button(String(localized: "OK")) {
-                    viewModel.onErrorDismissed()
-                }
-            } message: {
-                Text(viewModel.error ?? "")
+            .errorToast(message: viewModel.error) {
+                viewModel.onErrorDismissed()
             }
     }
 

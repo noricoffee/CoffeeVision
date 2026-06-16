@@ -265,7 +265,7 @@
 | [x] | 設定画面（テーマ切り替え / バージョン表示 / ライセンス表示） | 2026-06-16 実装完了 / `iosApp/iosApp/Features/Settings/{AppAppearance,SettingsView,LicensesView}.swift` 新規 + `iOSApp.swift`（`AppRootView` に `@AppStorage("appAppearance")` + `.preferredColorScheme`）+ `MapTabView.swift`（Menu フィルタ撤去 → マップを `.ignoresSafeArea()` で全画面化 + ナビバー非表示、`ZStack(alignment: .top)` で歯車フローティングボタン（→ `.sheet(SettingsView)`）と `FilterChip` 行をマップに重ねる）。テーマ = システム/ライト/ダークの 3 値を `@AppStorage` で永続化しアプリ全体に即時反映。ライセンスは OSS 7 件（Apache-2.0）の静的リスト。**サインアウトは見送り**（匿名のみ→記録孤立リスク、アカウントアップグレード後のフォローアップ）。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。**シミュレータ目視確認はユーザー作業**。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-16 エントリ参照 |
 | [ ] | アカウントアップグレード（匿名 → メール / SNS）の UI | |
 | [ ] | アカウント削除フロー | |
-| [ ] | エラーバナー / トースト共通コンポーネント | |
+| [x] | エラーバナー / トースト共通コンポーネント | 2026-06-16 実装完了 / `iosApp/iosApp/Components/ErrorToast.swift`（新規・`View.errorToast(message:onDismiss:)`、上部スライドイン + 4 秒自動消去 + タップ/上スワイプ手動消去、`AccessibilityNotification.Announcement` で VoiceOver 対応、`accessibilityReduceMotion` 対応）。非致命エラー（VisitList / VisitDetail / Map の error+poiLookupError / CafeSearch の error+位置取得失敗 / 起動同期失敗 `lastError`）をトースト化。複数エラー源は `activeToast` で集約。致命（VisitEditor 保存失敗）とアクション可能（位置情報許可拒否→設定誘導）は `.alert` 据え置き。`AppState.clearLastError()` 追加で未表示だった `lastError` を露出。KMP 変更なし。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。**シミュレータ目視確認はユーザー作業**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-16 errorToast エントリ参照 |
 | [ ] | アクセシビリティ通し検証（VoiceOver / Dynamic Type / Reduce Motion） | |
 | [ ] | App Icon / Launch Screen / アプリ表示名の整備 | |
 | [ ] | App Store Connect 用メタデータ準備 | |
@@ -359,6 +359,22 @@
 - 残課題 / フォローアップ:
   - サインアウト（匿名→記録孤立リスクのため見送り）はアカウントアップグレード（次タスク）実装後に設定画面のアカウントセクションへ追加する
   - ライセンスは名称 + ライセンス名表示まで。全文表示は将来タスク
+
+### 2026-06-16 - Phase 5 エラートースト共通コンポーネント
+- 変更点:
+  - `iosApp/iosApp/Components/ErrorToast.swift`（新規）: `ToastBanner`（SF Symbol `exclamationmark.triangle.fill` + メッセージ、`.regularMaterial` + 角丸 12pt + shadow、タップ/上スワイプで消去）+ `ErrorToastModifier`（`.overlay(alignment: .top)` / `.task(id: message)` で 4 秒自動消去 / Reduce Motion 対応 / `AccessibilityNotification.Announcement` 投稿）+ `View.errorToast(message:onDismiss:)` + Preview 2 件
+  - `VisitListView.swift` / `VisitDetailView.swift`: 末尾の `.alert("エラー", ...)` を `.errorToast` に置換
+  - `MapTabView.swift`: `bridge.error` + `bridge.poiLookupError` の 2 alert を撤去 → `activeToast(bridge:)` 集約で 1 トーストに
+  - `CafeSearchView.swift`: `bridge.error` + `locationManager.error` の 2 alert を撤去 → `activeToast` 集約。位置情報許可拒否 alert（設定誘導）は据え置き
+  - `AppState.swift`: `clearLastError()` 追加。`iOSApp.swift` の `AppRootView` に root レベル `errorToast(message: appState.lastError)` を付与し、従来未表示だった起動同期失敗を露出
+  - `VisitEditorView.swift` の保存失敗 / 写真保存失敗 alert は致命的なので変更なし
+- 動作確認:
+  - `xcodebuild -sdk iphonesimulator -scheme iosApp build` → BUILD SUCCEEDED（今回変更分の新規 warning ゼロ。SourceKit の `No such module` / `systemBackground` 診断はビルドコンテキスト不在による偽陽性で実ビルドは成功）
+  - KMP / gradle 変更なし（各 Bridge の既存 `error` / `onErrorDismissed()` を流用）
+  - シミュレータ目視確認はユーザー作業（トースト表示/自動消去/手動消去、VoiceOver アナウンス、Reduce Motion、VisitEditor は alert 維持、位置情報許可拒否は alert）
+- 残課題 / フォローアップ:
+  - 成功トースト（保存完了など）は現状スコープ外。必要なら `errorToast` を一般化した `toast` バリアント追加を検討
+  - 複数エラー同時表示はスタックせず優先度 1 件のみ表示する仕様。キュー表示が要るなら別途設計
 
 ### 2026-06-16 - docs 精査 & 基盤 doc を Phase 5 実態に同期（最優先パック）
 - 変更点:

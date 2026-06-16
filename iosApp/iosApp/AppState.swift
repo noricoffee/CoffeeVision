@@ -60,6 +60,14 @@ final class AppState {
         self.placePhotoLoader = PlacePhotoLoader(repository: container.cafeRepository)
     }
 
+    /// 起動時エラー（lastError）を消去する。
+    ///
+    /// `lastError` は `private(set)` のため外部からの nil 代入はできない。
+    /// `AppRootView` の `.errorToast(onDismiss:)` から呼ぶ。
+    func clearLastError() {
+        lastError = nil
+    }
+
     /// 匿名サインイン + 同期購読を起動する。`RootView` の `.task` から呼ぶ。
     ///
     /// 成功時に `visitListBridge` と `mapBridge` を 1 度だけ生成する。

@@ -56,12 +56,18 @@ private struct AppRootView: View {
            appState.mapBridge != nil {
             RootTabView(appState: appState)
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
+                .errorToast(message: appState.lastError) {
+                    appState.clearLastError()
+                }
         } else {
             loadingView
                 .task {
                     await appState.bootstrap()
                 }
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
+                .errorToast(message: appState.lastError) {
+                    appState.clearLastError()
+                }
         }
     }
 

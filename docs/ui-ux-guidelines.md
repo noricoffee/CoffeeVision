@@ -308,8 +308,11 @@ List { ... }
 
 ## エラー表示
 
-- 致命的でないエラー（同期失敗など）は **画面上にバナー or トーストで控えめに表示**
-- 致命的なエラー（保存失敗など）は `.alert` で確認を求める
+- 致命的でないエラー（同期失敗・検索失敗など）は **画面上にバナー or トーストで控えめに表示**
+  - 共通コンポーネント `View.errorToast(message:onDismiss:)`（`iosApp/iosApp/Components/ErrorToast.swift`）を使う。上部スライドイン / 約 4 秒で自動消去 + タップ・上スワイプで手動消去
+  - 複数のエラー源がある画面（例: Map の `bridge.error` + `bridge.poiLookupError`、CafeSearch の `bridge.error` + `locationManager.error`）は `activeToast` で優先順位付き単一値に集約し、`.errorToast` は 1 つだけ付ける（`.overlay(alignment: .top)` の衝突回避）
+  - 表示時に `AccessibilityNotification.Announcement` を投稿（VoiceOver 対応済）。`accessibilityReduceMotion` true 時は opacity のみで遷移
+- 致命的なエラー（保存失敗など）、およびアクションを伴うエラー（位置情報許可拒否 → 設定アプリ誘導など）は `.alert` で確認を求める
 - ネットワーク不通は「オフライン」表示にとどめ、Firestore の自動同期に任せる
 
 ---

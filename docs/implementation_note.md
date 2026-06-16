@@ -1244,3 +1244,28 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - KMP 変更なし。フィルタ state（`MapViewModel.UIState.showVisited / showNearby`）と Bridge メソッドは既存をそのまま流用。本タスクは iOS 完結（ios-engineer 単独 dispatch）。
 - テーマは `enum AppAppearance(system/light/dark)` + `@AppStorage("appAppearance")` を `AppRootView`（`iOSApp.swift`）の `.preferredColorScheme` で適用し、TabView・sheet 含むアプリ全体に効かせる。
 - ライセンスは MVP では利用 OSS（Firebase iOS SDK / SQLDelight / Ktor / kotlinx 各種 / SKIE、いずれも Apache-2.0）の静的リスト + ライセンス名表示まで。全文表示は将来タスク。
+
+---
+
+### 2026-06-16: エラートースト共通コンポーネント（errorToast）と非致命エラーの移行
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Components/ErrorToast.swift`（新規）, 各 feature View, `iosApp/iosApp/AppState.swift`, `iosApp/iosApp/iOSApp.swift`
+
+`ui-ux-guidelines.md` のエラー表示方針（非致命=バナー/トースト、致命=alert）に対し従来は全エラーが `.alert` に倒れていた。Phase 5 で共通トースト `View.errorToast(message:onDismiss:)` を新設し、非致命エラーを移行した。
+
+**使い分けの基準**:
+- 非致命（同期失敗 / 検索失敗 / 位置取得失敗 / Map POI lookup 失敗 / 起動同期失敗 `lastError`）→ `errorToast`
+- 致命（VisitEditor の保存失敗 / 写真保存失敗）→ `.alert` 据え置き
+- アクション可能（CafeSearch の位置情報許可拒否 → 設定アプリ誘導）→ `.alert` 据え置き
+
+**複数エラー源の集約パターン（重要）**:
+- `.errorToast` は `.overlay(alignment: .top)` で表示するため、1 View に 2 つ付けると上部で衝突する。複数エラー源がある画面は `activeToast`（優先順位付き単一値）に集約してから 1 つだけ付ける。優先度は ViewModel 由来（`bridge.error`）を上位、補助エラー（`poiLookupError` / `locationManager.error`）を下位とする。
+- スライス 7-B 当時 `MapTabView` に 2 つの `.alert` を並べていた懸念（「同時発火時の挙動が非決定的」）は、本対応で `activeToast` 集約に統一して解消した。
+- View body レベルで全エラー源を保持できる画面（CafeSearch）は計算プロパティ、クロージャ内でしか bridge を参照できない画面（Map の `mapContent(bridge:)`）は `bridge` 引数を取るメソッドで集約する（非対称はやむを得ない）。
+
+**実装上の要点**:
+- 自動消去は `.task(id: message)` で実装（message 変化時に前タスク自動キャンセル → タイマーリセット）。4 秒後にキャンセルされていなければ `onDismiss()`。
+- VoiceOver は自動消去で読み逃すため `.onChange(of: message)` で `AccessibilityNotification.Announcement` を投稿。`accessibilityReduceMotion` true 時は opacity のみの遷移。
+- `AppState.lastError` は従来セットされるだけで未表示（実質バグ）だったため、`clearLastError()` を追加し `AppRootView` に root レベルの `errorToast` を付与して露出させた。
+- KMP 変更なし。各 Bridge の既存 `error` / `onErrorDismissed()` をそのまま流用。

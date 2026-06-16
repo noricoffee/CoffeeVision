@@ -47,16 +47,21 @@ private struct AppRootView: View {
 
     var appState: AppState
 
+    /// 設定画面で選択されたテーマを永続化するキー。`SettingsView` と同じキーを参照する。
+    @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.system.rawValue
+
     var body: some View {
         if appState.uid != nil,
            appState.visitListBridge != nil,
            appState.mapBridge != nil {
             RootTabView(appState: appState)
+                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
         } else {
             loadingView
                 .task {
                     await appState.bootstrap()
                 }
+                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
         }
     }
 

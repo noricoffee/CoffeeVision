@@ -1219,3 +1219,28 @@ iOS 17+ の `Map(selection:)` + `MapFeature` API で Apple Maps の標準 POI（
 - `shared/feature/map`: 唯一の commonTest 持ち（kotlin.test + coroutines.test）
 
 将来 commonTest を持つ feature が増えるようなら、`kmp.feature` Convention Plugin に `commonTest` 依存も組み込む案を検討する（今は 1 件だけなので手動追加で十分）。
+
+---
+
+### 2026-06-16: 設定画面のスコープ確定（サインアウト見送り）+ マップフィルタのタグ UI 化
+
+- 領域: iOS / Docs
+- 関連: `iosApp/iosApp/Features/Settings/*`, `iosApp/iosApp/Features/Map/MapTabView.swift`, `iosApp/iosApp/iOSApp.swift`
+
+Phase 5 最初のタスク「設定画面」のスコープと設置場所をユーザー確認のうえ確定した。
+
+**サインアウトを今回のスコープから外す判断**:
+- 現状の認証は匿名のみ（`AuthRepositoryIosImpl.observeUserId()` は仕様上サインアウト時の `nil` emit をスコープ外と明記）。匿名アカウントでサインアウトすると、その uid に紐づく Firestore 記録が孤立し実質データ消失する。
+- サインアウトが意味を持つのはアカウントアップグレード（匿名 → メール / SNS）実装後。`requirements.md` 8-2 / `tasks.md` Phase 5 でもアップグレードは別タスク。
+- よって今回は **テーマ切替（8-1）/ バージョン表示・ライセンス表示（8-3）のみ**実装し、サインアウトはアップグレード実装後のフォローアップに回す。`tasks.md` のタスク名も「設定画面（テーマ切り替え / バージョン表示 / ライセンス表示）」に修正済。
+
+**設置場所と画面構成（ユーザー指定）**:
+- 下部 TabBar（マップ / 訪問 / 検索）は現状維持。スライス 6 の TabBar 構成は変えない。
+- マップ画面右上に **歯車 → 設定画面（sheet）**。
+- マップ画面上部に既存フィルタ（訪問済み / 周辺）を **タグ選択 UI** として配置。`MapTabView.filterToolbar` の Menu トグル（`onShowVisitedToggled` / `onShowNearbyToggled`）を撤去し、マップ上部のタグ（チップ）に再配置する。
+- **マップは全画面（`.ignoresSafeArea()`）でステータスバー裏まで表示し、歯車とタグは `ZStack(alignment: .top)` でマップにフローティング重ね**（ナビバーは `.toolbar(.hidden, for: .navigationBar)` で非表示、`NavigationStack` は CafeDetail への push のため維持）。当初 `safeAreaInset` でマップを押し下げる案だったが、ユーザー要望で全画面マップ + オーバーレイに変更。歯車は円形 `.regularMaterial` 背景のフローティングボタン。
+
+**実装上の要点**:
+- KMP 変更なし。フィルタ state（`MapViewModel.UIState.showVisited / showNearby`）と Bridge メソッドは既存をそのまま流用。本タスクは iOS 完結（ios-engineer 単独 dispatch）。
+- テーマは `enum AppAppearance(system/light/dark)` + `@AppStorage("appAppearance")` を `AppRootView`（`iOSApp.swift`）の `.preferredColorScheme` で適用し、TabView・sheet 含むアプリ全体に効かせる。
+- ライセンスは MVP では利用 OSS（Firebase iOS SDK / SQLDelight / Ktor / kotlinx 各種 / SKIE、いずれも Apache-2.0）の静的リスト + ライセンス名表示まで。全文表示は将来タスク。

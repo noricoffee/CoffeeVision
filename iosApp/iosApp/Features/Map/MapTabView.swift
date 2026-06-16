@@ -46,6 +46,9 @@ struct MapTabView: View {
     /// POI ルックアップ結果などのプログラマティック push 用 NavigationPath。
     @State private var navigationPath = NavigationPath()
 
+    /// 設定画面の表示状態。
+    @State private var isPresentingSettings = false
+
     // MARK: - Body
 
     var body: some View {
@@ -53,9 +56,10 @@ struct MapTabView: View {
             Group {
                 if let bridge = appState.mapBridge {
                     mapContent(bridge: bridge)
-                        .navigationTitle(String(localized: "マップ"))
-                        .navigationBarTitleDisplayMode(.inline)
-                        .toolbar { filterToolbar(bridge: bridge) }
+                        .toolbar(.hidden, for: .navigationBar)
+                        .sheet(isPresented: $isPresentingSettings) {
+                            SettingsView()
+                        }
                         .navigationDestination(for: CafeDetailRoute.self) { route in
                             CafeDetailView(
                                 placeId: route.placeId,
@@ -123,60 +127,94 @@ struct MapTabView: View {
 
     @ViewBuilder
     private func mapContent(bridge: MapViewModelBridge) -> some View {
-        Map(position: $cameraPosition, selection: $mapFeatureSelection) {
-            // 訪問済みカフェピン（ブラウン）
-            if bridge.showVisited {
-                ForEach(bridge.visitedCafes, id: \.cafe.placeId) { visitedCafe in
-                    if let lat = visitedCafe.cafe.latitude?.doubleValue,
-                       let lng = visitedCafe.cafe.longitude?.doubleValue {
-                        Annotation(
-                            visitedCafe.cafe.name,
-                            coordinate: CLLocationCoordinate2D(
-                                latitude: lat,
-                                longitude: lng
-                            )
-                        ) {
-                            NavigationLink(
-                                value: CafeDetailRoute(
-                                    placeId: visitedCafe.cafe.placeId,
-                                    initialCafe: visitedCafe.cafe
+        ZStack(alignment: .top) {
+            Map(position: $cameraPosition, selection: $mapFeatureSelection) {
+                // 訪問済みカフェピン（ブラウン）
+                if bridge.showVisited {
+                    ForEach(bridge.visitedCafes, id: \.cafe.placeId) { visitedCafe in
+                        if let lat = visitedCafe.cafe.latitude?.doubleValue,
+                           let lng = visitedCafe.cafe.longitude?.doubleValue {
+                            Annotation(
+                                visitedCafe.cafe.name,
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: lat,
+                                    longitude: lng
                                 )
                             ) {
-                                visitedCafePin(visitedCafe: visitedCafe)
+                                NavigationLink(
+                                    value: CafeDetailRoute(
+                                        placeId: visitedCafe.cafe.placeId,
+                                        initialCafe: visitedCafe.cafe
+                                    )
+                                ) {
+                                    visitedCafePin(visitedCafe: visitedCafe)
+                                }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
                         }
                     }
                 }
+
+                // 周辺カフェピン（グレー）
+                if bridge.showNearby {
+                    ForEach(bridge.nearbyPlaces, id: \.placeId) { cafe in
+                        if let lat = cafe.latitude?.doubleValue,
+                           let lng = cafe.longitude?.doubleValue {
+                            Annotation(
+                                cafe.name,
+                                coordinate: CLLocationCoordinate2D(
+                                    latitude: lat,
+                                    longitude: lng
+                                )
+                            ) {
+                                NavigationLink(
+                                    value: CafeDetailRoute(
+                                        placeId: cafe.placeId,
+                                        initialCafe: cafe
+                                    )
+                                ) {
+                                    nearbyPin
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+            }
+            .mapStyle(.standard)
+            .ignoresSafeArea()
+
+            // フローティングコントロール（セーフエリア内に自然に収まる）
+            HStack(alignment: .center, spacing: 8) {
+                filterChipRow(bridge: bridge)
+                Spacer()
+                settingsFloatingButton
+            }
+            .padding(.horizontal, 16)
+            .padding(.top, 8)
+        }
+    }
+
+    // MARK: - フィルタチップ行
+
+    private func filterChipRow(bridge: MapViewModelBridge) -> some View {
+        HStack(spacing: 8) {
+            FilterChip(
+                label: String(localized: "訪問済み"),
+                systemImage: "cup.and.saucer.fill",
+                isOn: bridge.showVisited
+            ) {
+                bridge.onShowVisitedToggled(!bridge.showVisited)
             }
 
-            // 周辺カフェピン（グレー）
-            if bridge.showNearby {
-                ForEach(bridge.nearbyPlaces, id: \.placeId) { cafe in
-                    if let lat = cafe.latitude?.doubleValue,
-                       let lng = cafe.longitude?.doubleValue {
-                        Annotation(
-                            cafe.name,
-                            coordinate: CLLocationCoordinate2D(
-                                latitude: lat,
-                                longitude: lng
-                            )
-                        ) {
-                            NavigationLink(
-                                value: CafeDetailRoute(
-                                    placeId: cafe.placeId,
-                                    initialCafe: cafe
-                                )
-                            ) {
-                                nearbyPin
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
+            FilterChip(
+                label: String(localized: "周辺"),
+                systemImage: "mappin",
+                isOn: bridge.showNearby
+            ) {
+                bridge.onShowNearbyToggled(!bridge.showNearby)
             }
         }
-        .mapStyle(.standard)
     }
 
     // MARK: - ピン UI
@@ -226,31 +264,19 @@ struct MapTabView: View {
         .accessibilityLabel(String(localized: "周辺を検索中"))
     }
 
-    // MARK: - フィルタツールバー
+    // MARK: - 設定フローティングボタン
 
-    @ToolbarContentBuilder
-    private func filterToolbar(bridge: MapViewModelBridge) -> some ToolbarContent {
-        ToolbarItem(placement: .topBarTrailing) {
-            Menu {
-                Toggle(
-                    String(localized: "訪問済みを表示"),
-                    isOn: Binding(
-                        get: { bridge.showVisited },
-                        set: { bridge.onShowVisitedToggled($0) }
-                    )
-                )
-                Toggle(
-                    String(localized: "周辺を表示"),
-                    isOn: Binding(
-                        get: { bridge.showNearby },
-                        set: { bridge.onShowNearbyToggled($0) }
-                    )
-                )
-            } label: {
-                Image(systemName: "line.3.horizontal.decrease.circle")
-                    .accessibilityLabel(String(localized: "表示フィルタ"))
-            }
+    private var settingsFloatingButton: some View {
+        Button {
+            isPresentingSettings = true
+        } label: {
+            Image(systemName: "gearshape")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(.regularMaterial))
         }
+        .accessibilityLabel(String(localized: "設定"))
     }
 
     // MARK: - POI 選択ハンドラ
@@ -392,4 +418,59 @@ struct MapTabView: View {
             cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
         }
     }
+}
+
+// MARK: - FilterChip
+
+/// マップ上部に表示するフィルタ切替チップ。
+///
+/// 選択時: `Color.accentColor` で塗り潰す。
+/// 非選択時: `.regularMaterial` 背景 + secondary テキスト。
+private struct FilterChip: View {
+
+    let label: String
+    let systemImage: String
+    let isOn: Bool
+    let action: () -> Void
+
+    var body: some View {
+        Button(action: action) {
+            Label(label, systemImage: systemImage)
+                .font(.subheadline.weight(.medium))
+                .foregroundStyle(isOn ? .white : Color.secondary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 8)
+                .frame(minWidth: 44, minHeight: 44)
+                .background(
+                    Capsule()
+                        .fill(isOn ? Color.accentColor : Color.clear)
+                        .background(
+                            Capsule().fill(.regularMaterial)
+                        )
+                )
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
+        .accessibilityAddTraits(isOn ? [.isSelected] : [])
+    }
+}
+
+// MARK: - FilterChip Preview
+
+#Preview("FilterChip") {
+    HStack(spacing: 8) {
+        FilterChip(
+            label: "訪問済み",
+            systemImage: "cup.and.saucer.fill",
+            isOn: true
+        ) {}
+
+        FilterChip(
+            label: "周辺",
+            systemImage: "mappin",
+            isOn: false
+        ) {}
+    }
+    .padding()
+    .background(Color(.systemGroupedBackground))
 }

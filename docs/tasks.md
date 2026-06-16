@@ -262,7 +262,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 設定画面（テーマ切り替え / バージョン表示 / サインアウト） | |
+| [x] | 設定画面（テーマ切り替え / バージョン表示 / ライセンス表示） | 2026-06-16 実装完了 / `iosApp/iosApp/Features/Settings/{AppAppearance,SettingsView,LicensesView}.swift` 新規 + `iOSApp.swift`（`AppRootView` に `@AppStorage("appAppearance")` + `.preferredColorScheme`）+ `MapTabView.swift`（Menu フィルタ撤去 → マップを `.ignoresSafeArea()` で全画面化 + ナビバー非表示、`ZStack(alignment: .top)` で歯車フローティングボタン（→ `.sheet(SettingsView)`）と `FilterChip` 行をマップに重ねる）。テーマ = システム/ライト/ダークの 3 値を `@AppStorage` で永続化しアプリ全体に即時反映。ライセンスは OSS 7 件（Apache-2.0）の静的リスト。**サインアウトは見送り**（匿名のみ→記録孤立リスク、アカウントアップグレード後のフォローアップ）。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。**シミュレータ目視確認はユーザー作業**。事前設計は [`implementation_note.md`](./implementation_note.md) 2026-06-16 エントリ参照 |
 | [ ] | アカウントアップグレード（匿名 → メール / SNS）の UI | |
 | [ ] | アカウント削除フロー | |
 | [ ] | エラーバナー / トースト共通コンポーネント | |
@@ -328,3 +328,18 @@
   - iOS 側の Firebase 初期化は Xcode（SPM / CocoaPods）で別途設定が必要（Phase 2）
   - `androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用するのは Phase 2（`google-services.json` 配置時）に行う
   - ~~SKIE の採用判断は未着手~~ → 2026-06-04 採用済み（0.10.12）
+
+### 2026-06-16 - Phase 5 設定画面 + マップ上部フィルタタグ化
+- 変更点:
+  - `iosApp/iosApp/Features/Settings/AppAppearance.swift`（新規）: `enum AppAppearance(system/light/dark)` + `colorScheme: ColorScheme?` + `displayName`
+  - `iosApp/iosApp/Features/Settings/SettingsView.swift`（新規）: `NavigationStack { Form }`。テーマ `Picker`（`@AppStorage("appAppearance")`）/ バージョン・ビルド `LabeledContent`（`CFBundleShortVersionString` / `CFBundleVersion`）/ ライセンス `NavigationLink` の 3 セクション + 「完了」ボタン
+  - `iosApp/iosApp/Features/Settings/LicensesView.swift`（新規）: 利用 OSS 7 件（Firebase iOS SDK / SQLDelight / Ktor / kotlinx-coroutines・serialization・datetime / SKIE、すべて Apache-2.0）の静的リスト
+  - `iosApp/iosApp/iOSApp.swift`: `AppRootView` に `@AppStorage("appAppearance")` + `.preferredColorScheme(...)` を両分岐に付与（TabView・sheet 含むアプリ全体に即時反映）
+  - `iosApp/iosApp/Features/Map/MapTabView.swift`: `filterToolbar`（Menu）撤去 → 歯車ボタン（`.sheet(SettingsView)`）に置換。`mapContent` に `.safeAreaInset(edge: .top)` で `FilterChip`（訪問済み / 周辺）行を追加。`FilterChip` private サブビュー新設
+- 動作確認:
+  - `xcodebuild -sdk iphonesimulator -scheme iosApp build` → BUILD SUCCEEDED（今回変更分の新規 warning ゼロ）
+  - KMP / gradle 変更なし（`MapViewModel` の既存 `showVisited` / `showNearby` + `onShowVisitedToggled` / `onShowNearbyToggled` を流用）
+  - シミュレータ目視確認はユーザー作業（歯車→設定 sheet / テーマ即時切替 / マップ上部チップでピン表示切替 / 再起動後のテーマ保持 / ライセンス一覧）
+- 残課題 / フォローアップ:
+  - サインアウト（匿名→記録孤立リスクのため見送り）はアカウントアップグレード（次タスク）実装後に設定画面のアカウントセクションへ追加する
+  - ライセンスは名称 + ライセンス名表示まで。全文表示は将来タスク

@@ -21,87 +21,58 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ ネイティブ UI** 構成を
 
 ## モジュール構成
 
-### 現状（Phase 2.5 完了時点）
+### 現状（Phase 5 時点）
 
-2026-06-08 Phase 2.5 完了をもって、旧 `sharedLogic` 一枚モジュールを基盤レイヤーに分割しました。
+旧 `sharedLogic` 一枚モジュールを Phase 2.5（2026-06-08）で基盤レイヤーに分割し、その後 Phase 3 / 3.5 / 4 で `feature/*` と `data-places` を順次切り出した。構成は **基盤層（`core` / `domain` / `data-*`）+ feature 層（1 画面 = 1 モジュール、画面追加ごとに増える）+ `framework`（iOS Umbrella）+ アプリ層** という固定パターン。**モジュールの正確な一覧と件数は `settings.gradle.kts` を真とする**（このツリーは構造を示すための代表例で、feature の網羅列挙はしない）。
 
 ```
 coffeevision/
 ├── build-logic/
 │   └── convention/                       # Convention Plugin（precompiled script plugin）
 │       └── src/main/kotlin/
-│           ├── kmp.library.gradle.kts
-│           ├── kmp.feature.gradle.kts    # Phase 3 の feature 切り出し用、現状未使用
-│           └── android.library.gradle.kts
-│
-├── shared/
-│   ├── core/                             # AppContainer / VisitRepositoryImpl
-│   ├── domain/                           # ドメインモデル + Repository インターフェース
-│   ├── data-local/                       # SQLDelight スキーマ / Mapper / DriverFactory / LocalVisitRepository
-│   ├── data-firebase/                    # Android Firebase 実装（Firestore / Auth）の置き場（PR2 で空殻作成、Android 実装の本格移送は着手時）
-│   └── framework/                        # iOS 向け Umbrella。`SharedLogic.xcframework` を出力
-│
-├── sharedUI/                             # Compose Multiplatform（Android 検証用、未本格化）
-├── iosApp/                               # SwiftUI エントリポイント + Swift Firebase 実装
-└── androidApp/                           # Android エントリポイント（検証ターゲット）
-```
-
-- iOS 向けには `shared/framework` が `shared/{core,domain,data-local,data-firebase}` を `api` + `export(...)` で再公開し、`SharedLogic.framework`（XCFramework 名も `SharedLogic`）として配布
-- 残課題: `shared/data-places`（Phase 4）と `shared/feature/*`（Phase 3 / Phase 3.5）はまだ未着手。`shared/data-firebase` も Android 実装は空殻状態
-
----
-
-### 目標構成（KMP モジュール分割アーキテクチャの実証）
-
-CoffeeVision は **iOS のみリリース** を想定していますが、KMP のモジュール分割アーキテクチャを実証することを設計目的の 1 つに位置づけています。
-Android ターゲットは「リリース対象」ではなく **「共通レイヤーが両プラットフォームで成立することを示す検証ターゲット」** として維持します。
-
-分割の主目的は以下の 3 点です。
-
-1. **`feature` モジュール単位で並行開発・独立テストできる**
-2. **`data` 層の実装差し替えが他レイヤーを壊さない**（特に Firebase の iOS = Swift / Android = Kotlin という非対称性を吸収する）
-3. **アーキテクチャ判断がコードベースの構造そのものから読み取れる**（モジュール境界と責務の対応を明示的にする）
-
-```
-coffeevision/
-├── build-logic/
-│   └── convention/                       # KMP / Android 共通設定の Convention Plugin
-│       └── src/main/kotlin/
 │           ├── kmp.library.gradle.kts    # KMP ライブラリ共通（targets / compilerOptions）
 │           ├── kmp.feature.gradle.kts    # feature 共通（domain + core 自動依存）
 │           └── android.library.gradle.kts
 │
 ├── shared/
-│   ├── framework/                        # 【iOS 向け Umbrella】XCFramework のソース
-│   │                                     # 全 feature / data / domain を export するだけの薄い層
-│   │
-│   ├── core/                             # Result, Logger, Dispatchers, DI 基盤, テストヘルパ
-│   │
-│   ├── domain/                           # Visit / Cafe / 各 enum / *Repository インターフェース / UseCase
-│   │
-│   ├── data-local/                       # SQLDelight スキーマ + DriverFactory (expect/actual)
-│   ├── data-places/                      # Ktor + Google Places API クライアント
-│   ├── data-firebase/                    # Firestore / Auth の Android 実装
-│   │                                     # （iOS 実装は iosApp 側 Swift で書き、domain の I/F に準拠）
-│   │
+│   ├── core/                             # [com.noricoffee.core] AppContainer / VisitRepositoryImpl（local+remote 合成）
+│   ├── domain/                           # [com.noricoffee.domain] ドメインモデル / enum / *Repository I/F / UseCase / VisitedCafe
+│   ├── data-local/                       # [com.noricoffee.dataLocal] SQLDelight スキーマ / Mapper / DriverFactory / LocalVisitRepository
+│   ├── data-places/                      # [com.noricoffee.dataPlaces] Ktor + Google Places API クライアント（PlacesClient / CafeRepositoryImpl）
+│   ├── data-firebase/                    # [com.noricoffee.dataFirebase] Firestore / Auth の Android 実装（iOS 実装は iosApp 側 Swift）
+│   ├── framework/                        # [com.noricoffee.framework] iOS 向け Umbrella。`SharedLogic.xcframework` を出力 + ViewModel ファクトリ
 │   └── feature/
-│       ├── visit-list/                   # VisitListViewModel + UIState
-│       ├── visit-detail/                 # VisitDetailViewModel + UIState
-│       ├── visit-editor/                 # VisitEditorViewModel + UIState
-│       └── cafe-search/                  # CafeSearchViewModel + UIState
+│       └── <feature-name>/               # [com.noricoffee.feature.<name>] 1 画面 = 1 モジュール（<Name>ViewModel + UIState）
+│                                         #   画面追加ごとに増える。正確な一覧は settings.gradle.kts を真とする
+│                                         #   現状: visit-list / visit-detail / visit-editor / cafe-search / map / cafe-detail
 │
+├── sharedUI/                             # Compose Multiplatform（Android 検証用、feature/visit-list を 1 画面表示）
 ├── iosApp/
 │   └── iosApp/
 │       ├── App/                          # @main・AppContainer 構築・Firebase 初期化
 │       ├── Features/                     # SwiftUI View + ViewModelBridge（feature ごと）
 │       ├── FirebaseRepositories/         # domain の Repository インターフェースの iOS 実装（Swift）
-│       └── Bridge/                       # Flow / suspend / sealed のヘルパ
+│       └── Bridge/ ほか                  # Flow / suspend / sealed のヘルパ、Utilities（PhotoFileStore / LocationManager 等）
 │
-└── androidApp/                           # 検証ターゲット（リリース対象外、最小実装で維持）
+└── androidApp/                           # Android エントリポイント（検証ターゲット、リリース対象外、最小実装で維持）
     └── src/main/kotlin/
-        ├── App.kt                        # Application・AppContainer 構築・Firebase 初期化
-        └── ui/                           # Compose Navigation + Visit 一覧 1 画面のみ
+        ├── CoffeeVisionApp.kt            # Application・AppContainer 構築・Firebase 初期化
+        └── ...                           # Compose Navigation + Visit 一覧 1 画面のみ
 ```
+
+- iOS 向けには `shared/framework` が **全 shared モジュール（基盤層 + 全 feature）** を `api` + `export(...)` で再公開し、`SharedLogic.framework`（XCFramework 名も `SharedLogic`）として配布。feature を追加したらこの export にも 1 行追加する
+- `shared/data-firebase` は `androidMain` に Android 実装（`AuthRepositoryAndroidImpl` / `RemoteVisitDataSourceAndroidImpl` / `VisitFirestoreMapper`、2026-06-11 移送済）を持つ。iOS 実装は `iosApp` 側 Swift で `domain` の I/F に準拠
+
+#### この分割の設計目的（KMP モジュール分割アーキテクチャの実証）
+
+CoffeeVision は **iOS のみリリース** を想定しているが、KMP のモジュール分割アーキテクチャを実証することを設計目的の 1 つに位置づけている。
+Android ターゲットは「リリース対象」ではなく **「共通レイヤーが両プラットフォームで成立することを示す検証ターゲット」** として維持する。
+
+分割の主目的は以下の 3 点：
+
+1. **`feature` モジュール単位で並行開発・独立テストできる**
+2. **`data` 層の実装差し替えが他レイヤーを壊さない**（特に Firebase の iOS = Swift / Android = Kotlin という非対称性を吸収する）
+3. **アーキテクチャ判断がコードベースの構造そのものから読み取れる**（モジュール境界と責務の対応を明示的にする）
 
 ---
 
@@ -158,9 +129,11 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 このため `shared/framework` モジュールを **「全 shared モジュールを `api` 依存で再エクスポートするだけ」** の薄い層として用意します。
 
 ```kotlin
-// shared/framework/build.gradle.kts（抜粋・Phase 2.5 時点の実装）
+// shared/framework/build.gradle.kts（抜粋）
 import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
 
+// 全 shared モジュール（基盤層 + 全 feature）を api + export で再公開する。
+// 下記は代表例。feature は画面追加ごとに増えるので、実体は settings.gradle.kts の全モジュールを列挙する。
 kotlin {
     val xcf = XCFramework("SharedLogic")
     listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
@@ -172,6 +145,9 @@ kotlin {
             export(projects.shared.domain)
             export(projects.shared.dataLocal)
             export(projects.shared.dataFirebase)
+            export(projects.shared.dataPlaces)
+            export(projects.shared.feature.visitList)
+            // visitDetail / visitEditor / cafeSearch / map / cafeDetail も同様に export
             xcf.add(this)
         }
     }
@@ -180,6 +156,9 @@ kotlin {
         api(projects.shared.domain)
         api(projects.shared.dataLocal)
         api(projects.shared.dataFirebase)
+        api(projects.shared.dataPlaces)
+        api(projects.shared.feature.visitList)
+        // visitDetail / visitEditor / cafeSearch / map / cafeDetail も同様に api
     }
 }
 ```
@@ -233,11 +212,11 @@ kotlin.sourceSets.commonMain.dependencies {
 | 実施タイミング | 分割内容 | 状態 |
 |--------------|---------|------|
 | **Phase 2 完了直後（Phase 2.5）** | `build-logic/convention/` を整備し、`core` / `domain` / `data-local` / `data-firebase` を分離。`AppContainer` の依存配線を整理。`shared/framework` umbrella を作成し、旧 `sharedLogic` を削除 | **完了（2026-06-08）** |
-| **Phase 3 開始時** | `feature/visit-list` を最初の feature module として切り出し | 未着手 |
-| **Phase 3 進行中** | `feature/visit-detail` / `feature/visit-editor` を順次切り出し | 未着手 |
-| **Phase 3 完了と並行** | `androidApp` で `feature/visit-list` を Compose の 1 画面として表示。Firestore 読み取りまで動くことを確認 | 未着手 |
-| **Phase 4 開始時** | `data-places` を切り出し | 未着手 |
-| **Phase 4 完了直後** | `feature/cafe-search` を切り出し | 未着手 |
+| **Phase 3 開始時** | `feature/visit-list` を最初の feature module として切り出し | 完了（2026-06-09） |
+| **Phase 3 進行中** | `feature/visit-detail` / `feature/visit-editor` を順次切り出し | 完了（2026-06-09） |
+| **Phase 3 完了と並行** | `androidApp` で `feature/visit-list` を Compose の 1 画面として表示。Firestore 読み取りまで動くことを確認 | 完了（2026-06-11） |
+| **Phase 4 開始時** | `data-places` を切り出し | 完了（2026-06-11） |
+| **Phase 4 完了直後** | `feature/cafe-search` / `feature/map` / `feature/cafe-detail` を切り出し | 完了（2026-06-15） |
 | **継続** | CI で iOS / Android 両方のビルドを必須チェックにする | 設定済（Phase 2.5 で `:shared:data-local:testAndroidHostTest` + `:shared:framework:assembleSharedLogicXCFramework` に追随済） |
 
 **注意点:**
@@ -302,11 +281,11 @@ Android ターゲットを **「常にビルドが通り、共通 ViewModel を�
 | レイヤー | 役割 | 配置 |
 |---------|------|------|
 | Presentation | 描画・入力。SwiftUI / Compose | `iosApp/` / `androidApp/` |
-| ViewModel | UI 状態の保持と更新、ユーザーアクションのハンドリング | `shared/feature/*/viewmodel/`（Phase 3 で切り出し予定、現状は `shared/core` に集約） |
+| ViewModel | UI 状態の保持と更新、ユーザーアクションのハンドリング | `shared/feature/*`（visit-list / visit-detail / visit-editor / cafe-search / map / cafe-detail に配置済） |
 | UseCase | 複数 Repository をまたぐ手続き（薄ければ省略可） | `shared/domain/usecase/` |
 | Repository | データソースの集約。UI に対しては単一のインターフェースを提供 | インターフェース: `shared/domain/repository/` / 合成実装: `shared/core/repository/` |
 | Local | SQLDelight。検索・オフライン参照を高速化する用途 | `shared/data-local/` |
-| Remote (Places) | Google Places API クライアント（Ktor） | `shared/data-places/`（Phase 4 で切り出し予定） |
+| Remote (Places) | Google Places API クライアント（Ktor） | `shared/data-places/`（配置済） |
 | Remote (Firebase) | Firestore / Auth は **公式プラットフォーム別 SDK** を使う。Android 実装は `shared/data-firebase/androidMain`、iOS 実装は `iosApp` 側の Swift で書き、Repository インターフェースを `shared/domain` に置いて差し替える。写真本体はクラウドに同期せず端末ローカルのみに保存（Storage 採用見送り） | インターフェース: `shared/domain` / Android 実装: `shared/data-firebase/androidMain` / iOS 実装: `iosApp/FirebaseRepositories/` |
 
 ---
@@ -360,7 +339,7 @@ class VisitListViewModel(
 
 ### iOS（SwiftUI + @Observable）
 
-iOS では `@Observable` の薄い ViewModel ラッパが `shared/feature/*`（Phase 3 切り出し後）の Kotlin ViewModel を内包し、`StateFlow` を Swift の `@Published` 相当の値へブリッジします。
+iOS では `@Observable` の薄い ViewModel ラッパが `shared/feature/*` の Kotlin ViewModel を内包し、`StateFlow` を Swift の `@Published` 相当の値へブリッジします。
 
 ```swift
 import Observation
@@ -463,7 +442,8 @@ class AppContainer(
     // Firebase 実装はプラットフォーム別 SDK を使うため、外部から受け取る
     private val remoteVisitDataSource: RemoteVisitDataSource,
     val authRepository: AuthRepository,
-    val scope: CoroutineScope = MainScope(),
+    val placesApiKey: String,      // Places API キー（Android=BuildConfig / iOS=Info.plist 経由で注入）
+    val scope: CoroutineScope,     // テスト用途。通常は scope なしのセカンダリコンストラクタを使う
 ) {
     private val db = AppDatabase(sqlDriver)
 
@@ -473,12 +453,15 @@ class AppContainer(
     val visitRepository: VisitRepository =
         VisitRepositoryImpl(local = localVisitRepository, remote = remoteVisitDataSource)
 
+    // Places API（カフェ検索）リポジトリ
+    val cafeRepository: CafeRepository = createCafeRepository(placesApiKey)
+
     // 起動時の匿名サインイン → uid 確定 → リモート → ローカル同期購読 を 1 メソッドで起こす
     @Throws(Exception::class)
     suspend fun startInitialSync(): String { /* ... */ }
 
-    // ViewModel ファクトリ（makeVisitListViewModel 等）は Phase 3 で追加
-    // CafeRepository（Places）は Phase 4 で追加
+    // ViewModel ファクトリ（makeVisitListViewModel 等）は shared/framework の拡張関数として配置
+    //（core → feature の循環依存を避けるため。kmp-bridge.md / implementation_note.md 参照）
 }
 ```
 

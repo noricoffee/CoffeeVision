@@ -343,3 +343,15 @@
 - 残課題 / フォローアップ:
   - サインアウト（匿名→記録孤立リスクのため見送り）はアカウントアップグレード（次タスク）実装後に設定画面のアカウントセクションへ追加する
   - ライセンスは名称 + ライセンス名表示まで。全文表示は将来タスク
+
+### 2026-06-16 - docs 精査 & 基盤 doc を Phase 5 実態に同期（最優先パック）
+- 変更点:
+  - docs 全体精査でアンチパターン / 乖離を洗い出し（A-1〜A-7 / B 系 / C 系）。乖離の構造的原因を `docs/tasks/lessons.md` 2026-06-16 エントリに記録
+  - **A-1** `architecture.md`: 「現状（Phase 2.5）」と「目標構成」の二段を **Phase 5 実態の 14 モジュール一段に統合**（namespace 付き）。data-firebase「空殻」修正、段階的移行ステップ表の Phase 3/3.5/4 を完了に、ViewModel / data-places の配置記述・AppContainer スケッチ・framework export 例を実態化
+  - **A-2** `implementation_note.md`「現在生きてる方針サマリ」: include 10→14 件、data-firebase 移送済、AppContainer 引数（placesApiKey 追加）、framework export 11 モジュール、feature 暫定置き場→移送済に更新。**写真パスの矛盾（`visits/{visitId}` → flat `photos/{fileName}`）を解消**（過去エントリ L582-583 / L1053 の食い違いも訂正）
+  - **A-3** `CLAUDE.md`: モジュール表を 14 モジュール（namespace 付き）に、共通言語行 / アーキテクチャ記述 / チェックリストの「Phase 3 以降で追加予定」「現状は core 経由」を実態化
+- 動作確認:
+  - docs のみ（コード / ビルド / CI 変更なし）。grep 検証で `visits/{visitId}` 写真パス残存ゼロ / 現状記述の「予定」語ゼロ / `settings.gradle.kts`（14 include）と doc のモジュール一覧一致を確認
+- 残課題 / フォローアップ:
+  - 🟠整合パック（A-4 kmp-bridge の `SharedFramework` 表記 / A-5 data-model の Repository 例 / A-6 requirements リリース方針 / A-7 GitLive リンク）未着手
+  - 🟠設計判断パック（B-1 マルチデバイス競合解決 / B-2 ViewModel テスト方針 / B-3 API キー難読化→制限ベース / B-4 rating=0 sentinel / B-5 CI 未グリーン）未着手

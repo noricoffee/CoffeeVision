@@ -135,7 +135,7 @@
 - **コンセプト**: 訪れたカフェでのコーヒー・フード体験を記録・振り返るためのモバイルアプリ
 - **プラットフォーム**: iOS（リリース対象）/ Android（KMP 共通レイヤーの検証ターゲット、リリース対象外）
 - **アーキテクチャ**: Kotlin Multiplatform（KMP）+ ネイティブ UI
-- **共通言語**: Kotlin（`shared/*` モジュール群。Phase 2.5 で `core` / `domain` / `data-local` / `data-firebase` / `framework` に分割済、`data-places` / `feature/*` は Phase 3 以降で追加予定）
+- **共通言語**: Kotlin（`shared/*` モジュール群。基盤層 `core` / `domain` / `data-local` / `data-places` / `data-firebase` + `feature/*`（1 画面 = 1 モジュール、増減する）+ iOS 配布用 `framework` に分割済。正確な一覧は `settings.gradle.kts`）
 - **iOS UI**: SwiftUI + MVVM（`@Observable`）
 - **Android UI**: Compose Multiplatform（`feature/visit-list` を 1 画面だけ表示する検証実装）
 - **ローカル DB**: SQLDelight
@@ -146,25 +146,25 @@
 
 ## モジュール構成
 
-### 現状（Phase 2.5 完了時点）
+### 現状（Phase 5 時点）
 
-| モジュール | 役割 |
-|----------|------|
-| `build-logic/convention/` | KMP / Android 共通設定の Convention Plugin |
-| `shared/core/` | `AppContainer` / `VisitRepositoryImpl`（合成実装）/ Dispatcher・Logger ラッパ枠 |
-| `shared/domain/` | ドメインモデル + Repository インターフェース + UseCase |
-| `shared/data-local/` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalVisitRepository` |
-| `shared/data-firebase/` | Android Firebase 実装の置き場（現状は空殻、本格移送は Android Firebase 着手時） |
-| `shared/framework/` | iOS 向け Umbrella（`SharedLogic.xcframework` を出力、SKIE 適用先） |
-| `sharedUI/` | Compose Multiplatform 将来枠（当面未着手） |
-| `iosApp/` | SwiftUI エントリポイント + Swift Firebase 実装 |
-| `androidApp/` | Android エントリポイント（検証ターゲット） |
+Phase 2.5 で基盤レイヤーを分割し、Phase 3 / 3.5 / 4 で `feature/*` と `data-places` を切り出し完了済。**モジュールの正確な一覧は `settings.gradle.kts` を真とする**（feature は画面追加ごとに増えるため、下表では feature を 1 行にまとめる）。
 
-### 目標構成（Phase 3 以降で追加）
+| モジュール | namespace | 役割 |
+|----------|-----------|------|
+| `build-logic/convention/` | - | KMP / Android 共通設定の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`） |
+| `shared/core/` | `com.noricoffee.core` | `AppContainer` / `VisitRepositoryImpl`（local+remote 合成） |
+| `shared/domain/` | `com.noricoffee.domain` | ドメインモデル + enum + Repository インターフェース + UseCase + `VisitedCafe` |
+| `shared/data-local/` | `com.noricoffee.dataLocal` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalVisitRepository` |
+| `shared/data-places/` | `com.noricoffee.dataPlaces` | Ktor + Google Places API クライアント（`PlacesClient` / `CafeRepositoryImpl`） |
+| `shared/data-firebase/` | `com.noricoffee.dataFirebase` | Android Firebase 実装（`AuthRepositoryAndroidImpl` / `RemoteVisitDataSourceAndroidImpl` / `VisitFirestoreMapper`）。iOS 実装は iosApp 側 Swift |
+| `shared/feature/<name>/` | `com.noricoffee.feature.<name>` | **1 画面 = 1 モジュール**（`<Name>ViewModel` + UIState）。画面追加ごとに増える。現状: visit-list / visit-detail / visit-editor / cafe-search / map / cafe-detail |
+| `shared/framework/` | `com.noricoffee.framework` | iOS 向け Umbrella（`SharedLogic.xcframework` を出力、SKIE 適用先）+ `AppContainer` の ViewModel ファクトリ拡張関数 |
+| `sharedUI/` | - | Compose Multiplatform（Android 検証用、`feature/visit-list` を 1 画面表示） |
+| `iosApp/` | - | SwiftUI エントリポイント + Swift Firebase 実装 |
+| `androidApp/` | `com.noricoffee` | Android エントリポイント（検証ターゲット、リリース対象外） |
 
-Phase 3 で `shared/feature/*`（`visit-list` / `visit-detail` / `visit-editor` 等）、Phase 4 で `shared/data-places` を追加予定。
-
-詳細・移行ステップは [`docs/architecture.md`](./docs/architecture.md) を参照してください。
+詳細・依存方向ルール・移行経緯は [`docs/architecture.md`](./docs/architecture.md) を参照してください。
 
 ---
 
@@ -189,7 +189,7 @@ Phase 3 で `shared/feature/*`（`visit-list` / `visit-detail` / `visit-editor` 
 
 ### アーキテクチャ
 
-- ドメインモデル・ユースケース・リポジトリ・ViewModel はすべて KMP 共通層（`shared/domain` + `shared/feature/*`（Phase 3 以降）+ `shared/data-*`）に置く
+- ドメインモデル・ユースケース・リポジトリ・ViewModel はすべて KMP 共通層（`shared/domain` + `shared/feature/*` + `shared/data-*`）に置く
 - `feature` 同士の相互依存は禁止。画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
 - iOS / Android 固有実装が必要なものは `expect`/`actual` で表現する（プラットフォーム API ラッパに限定）
 - ViewModel は `kotlinx.coroutines` の `StateFlow` で UI 状態を公開する
@@ -225,7 +225,7 @@ Phase 3 で `shared/feature/*`（`visit-list` / `visit-detail` / `visit-editor` 
 - [ ] 副作用は `suspend` 関数または `Flow` として定義されているか
 - [ ] `commonMain` で書ける処理を `iosMain` / `androidMain` に漏らしていないか
 - [ ] `when` で全ケースを網羅しているか
-- [ ] 配置先モジュールが正しいか（モデル / UseCase は `domain`、ViewModel は `feature/*`（Phase 3 以降。現状は `core` 経由）、DB は `data-local`、Firestore は `data-firebase`）
+- [ ] 配置先モジュールが正しいか（モデル / UseCase は `domain`、ViewModel は `feature/*`、DB は `data-local`、Places は `data-places`、Firestore は `data-firebase`）
 
 ### Swift（iosApp）
 

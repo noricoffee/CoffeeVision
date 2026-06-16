@@ -1269,3 +1269,16 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - VoiceOver は自動消去で読み逃すため `.onChange(of: message)` で `AccessibilityNotification.Announcement` を投稿。`accessibilityReduceMotion` true 時は opacity のみの遷移。
 - `AppState.lastError` は従来セットされるだけで未表示（実質バグ）だったため、`clearLastError()` を追加し `AppRootView` に root レベルの `errorToast` を付与して露出させた。
 - KMP 変更なし。各 Bridge の既存 `error` / `onErrorDismissed()` をそのまま流用。
+
+### 2026-06-16: App Icon / Launch Screen / 表示名（Phase 5 仕上げ）
+
+- 領域: iOS
+- 関連: `iosApp/scripts/generate_app_icon.swift`（新規）, `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/`, `LaunchBackground.colorset`, `LaunchLogo.imageset`, `iosApp/iosApp/Info.plist`, `iosApp/iosApp.xcodeproj/project.pbxproj`
+
+表示名 = `CoffeeVision`（`CFBundleDisplayName`、bundle ID / `PRODUCT_NAME=coffeevision` は不変）。アイコン・起動画面の画像は **AppKit + SF Symbol をレンダリングする Swift スクリプトで生成**する方針を採用。デザイン変更時は `swift iosApp/scripts/generate_app_icon.swift`（リポジトリルートから実行）で再生成して PNG を上書きコミットする。
+
+**アイコン**: `cup.and.saucer.fill` をコーヒーブラウン縦グラデーション背景の中央に配置。light（ミルクブラウン→エスプレッソ）/ dark（ほぼ黒のダークブラウン）/ tinted（グレースケール地、システムが tint を sourceAtop 合成する前提）の 3 variant を 1024×1024 で出力。`Contents.json` の 3 枠に `filename` で紐付け。マップの訪問済みピン（ブラウン `cup.and.saucer.fill`）とモチーフを揃えた。
+
+**Launch Screen**: storyboard を使わず Info.plist の `UILaunchScreen` 辞書方式（`UIColorName=LaunchBackground` + `UIImageName=LaunchLogo`）を採用。`INFOPLIST_KEY_UILaunchScreen_Generation = YES`（Base.xcconfig 系 2 config）は手動辞書との競合回避のため削除。`UILaunchScreen` 辞書はテキストラベルを置けないため、「CoffeeVision」ワードマークはカップ + 文字を焼き込んだ透過 PNG（`LaunchLogo`）として用意し、ダークモードは `LaunchBackground.colorset`（Any `#5A3A22` / Dark `#1C0F08`）で吸収する。
+
+**残課題**: tinted variant と起動画面の見た目はシミュレータ目視確認がユーザー作業。`LaunchLogo` は現状クリーム 1 枚で `LaunchBackground` のコントラストに依存（dark appearance スロットは未作成、必要ならスクリプトに関数追加で対応可）。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。

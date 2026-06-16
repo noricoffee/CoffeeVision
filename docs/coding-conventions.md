@@ -356,7 +356,7 @@ Button("追加") {
 
 ## 2.4 KMP（shared/* 共通層）の利用
 
-- `iosApp` は `SharedFramework`（`shared/framework` 由来の XCFramework）だけを参照する。個別の shared モジュールを直接参照しない
+- `iosApp` は `SharedLogic`（`shared/framework` 由来の XCFramework。framework 名・import 名ともに `SharedLogic`）だけを参照する。個別の shared モジュールを直接参照しない
 - Kotlin の `suspend` / `Flow` は直接呼ばず、`Bridge/` のヘルパを通す
 - Kotlin で投げる例外は Swift では `NSError` として届く。受け側で型を見て分岐する
 - Firebase Repository の iOS 実装は `FirebaseRepositories/` 配下に置き、`shared/domain` のインターフェースに準拠させる

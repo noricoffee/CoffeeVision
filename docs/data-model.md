@@ -423,72 +423,85 @@ service cloud.firestore {
 
 # 4. Repository 設計
 
-インターフェース定義は `shared/domain/src/commonMain/kotlin/com/noricoffee/repository/`、合成実装（`VisitRepositoryImpl` / `LocalVisitRepository`）は `shared/core/src/commonMain/kotlin/com/noricoffee/repository/` および `shared/data-local/src/commonMain/kotlin/com/noricoffee/repository/` に配置。
+`commonMain` から Firestore SDK は直接呼べない（公式 SDK はプラットフォーム別 = iOS Swift / Android Kotlin）。そこで **2 段構成** にして、合成ロジックを共通層に 1 度だけ書く（詳細は [`kmp-bridge.md`](./kmp-bridge.md) §Repository 合成パターン）。
+
+- `VisitRepository`（interface, `shared/domain`） — UI から見える唯一の API
+- `RemoteVisitDataSource`（interface, `shared/domain`） — Firestore リスナを `Flow` で公開し、`upload(visit)` / `remove(userId, id)` を持つ**薄いアダプタ**。実装はプラットフォーム別（Android = `shared/data-firebase/androidMain`、iOS = `iosApp` 側 Swift）
+- `LocalVisitRepository`（class, `shared/data-local`） — SQLDelight のみの単体実装
+- `VisitRepositoryImpl`（class, `shared/core`） — `LocalVisitRepository` と `RemoteVisitDataSource` を合成し、`VisitRepository` を満たす
+
+各プラットフォームが書くのは `RemoteVisitDataSource` の実装のみ。書き込み順序（ローカル → リモート）や `startSync` はこの合成クラスに集約される。
 
 ## 4.1 インターフェース例
 
 ```kotlin
+// shared/domain — UI から見える API
 interface VisitRepository {
     fun observeAll(userId: String): Flow<List<Visit>>
     fun observeById(id: String): Flow<Visit?>
     fun observeByCafe(userId: String, placeId: String): Flow<List<Visit>>
 
-    suspend fun save(visit: Visit)        // 新規・更新 共通
-    suspend fun delete(id: String)
+    suspend fun save(visit: Visit)             // 新規・更新 共通
+    suspend fun delete(userId: String, id: String)
+}
+
+// shared/domain — プラットフォーム別に実装する薄いリモートアダプタ
+interface RemoteVisitDataSource {
+    fun observeChanges(userId: String): Flow<List<Visit>>
+    suspend fun upload(visit: Visit)
+    suspend fun remove(userId: String, id: String)
 }
 ```
 
 ## 4.2 実装方針
 
 - **読み取り** は **SQLDelight の Flow を Single Source として返す**
-  - Firestore の更新は別途リスナで購読し、SQLDelight に書き戻す
+  - Firestore の更新は `RemoteVisitDataSource.observeChanges` を `startSync` で購読し、SQLDelight に書き戻す
   - UI からは SQLDelight のみを見る（書き戻しが完了次第、Flow が emit する）
-- **書き込み** は **SQLDelight → Firestore の順** で実施
-  - SQLDelight の書き込み完了で即座に UI 更新
-  - Firestore への書き込みは並行で投げ、失敗時は SDK のオフラインキューに任せる
+- **書き込み** は **ローカル（SQLDelight）→ リモート（Firestore）の順** で実施
+  - ローカル書き込み完了で即座に UI 更新
+  - リモート書き込みの失敗扱いは `WritePolicy` で切り替え可能（既定 `PropagateRemoteFailure` = 呼び出し元に伝播 / `IgnoreRemoteFailure` = SDK のオフライン永続化の再送に委ねる）
 - **写真** は端末ローカル（Documents 配下）にのみ保存する。Firestore の `photos` サブコレクションには `fileName` / `width` / `height` / `createdAt` などメタデータのみを書き出し、`remoteUrl` は常に null（Storage 採用見送りのため）
 
 ```kotlin
+// shared/core — local + remote を合成（commonMain。Firestore SDK は呼ばない）
 class VisitRepositoryImpl(
-    private val db: AppDatabase,
-    private val firestore: Firestore,
-    private val scope: CoroutineScope,
+    private val local: LocalVisitRepository,        // SQLDelight（shared/data-local）
+    private val remote: RemoteVisitDataSource,       // プラットフォーム別実装を注入
+    private val writePolicy: WritePolicy = WritePolicy.PropagateRemoteFailure,
 ) : VisitRepository {
 
-    override fun observeAll(userId: String): Flow<List<Visit>> =
-        db.visitQueries.selectAll(userId)
-            .asFlow()
-            .mapToList(Dispatchers.Default)
-            .combineWithChildren(db)   // coffee/food/photo を結合
+    // 読み取りは常にローカル DB の Flow を返す
+    override fun observeAll(userId: String): Flow<List<Visit>> = local.observeAll(userId)
 
     override suspend fun save(visit: Visit) {
-        db.transaction {
-            db.visitQueries.upsert(visit.toRow())
-            db.coffeeItemQueries.deleteByVisit(visit.id)
-            visit.coffees.forEachIndexed { i, c ->
-                db.coffeeItemQueries.upsert(c.toRow(visit.id, sortOrder = i))
-            }
-            // food / photo も同様
-        }
+        local.save(visit)                            // 1) まずローカル（UI 即時更新）
+        runRemote { remote.upload(visit) }           // 2) 並行でリモート（WritePolicy に従う）
+    }
 
+    override suspend fun delete(userId: String, id: String) {
+        local.delete(userId, id)
+        runRemote { remote.remove(userId, id) }
+    }
+
+    // リモート変更を購読してローカル DB に upsert（起動時に AppContainer から呼ぶ）
+    fun startSync(userId: String, scope: CoroutineScope) {
         scope.launch {
-            runCatching {
-                firestore.collection("users").document(visit.userId)
-                    .collection("visits").document(visit.id)
-                    .set(visit.toFirestoreMap())
-                // 子サブコレクションも同様に書く
-            }.onFailure {
-                // SDK の永続化キューが再送するので、UI には出さない
+            remote.observeChanges(userId).collect { visits ->
+                visits.forEach { local.save(it) }
             }
         }
     }
 
-    override suspend fun delete(id: String) { ... }
+    private suspend fun runRemote(block: suspend () -> Unit) =
+        when (writePolicy) {
+            WritePolicy.PropagateRemoteFailure -> block()
+            WritePolicy.IgnoreRemoteFailure -> runCatching { block() }.let { }
+        }
 }
 ```
 
-> Firestore のリッスンと SQLDelight との突き合わせは **後続フェーズ** で実装する。
-> MVP では「同一端末のローカル更新 + バックグラウンド送信」のみで十分動作する。
+> iOS / Android が実装するのは `RemoteVisitDataSource`（Firestore SDK 直叩き）だけ。子サブコレクション（`coffeeItems` / `foodItems` / `photos`）の同期方針（WriteBatch + 差分削除、observe は親リスナ + 子は都度取得）は [`implementation_note.md`](./implementation_note.md) を参照。
 
 ---
 
@@ -521,7 +534,6 @@ class VisitRepositoryImpl(
 ## 参考リンク
 
 - [SQLDelight](https://sqldelight.github.io/sqldelight/)
-- [Firebase Kotlin SDK](https://github.com/GitLiveApp/firebase-kotlin-sdk)
 - [Firestore — データモデル](https://firebase.google.com/docs/firestore/data-model)
 - [Firestore — オフライン永続化](https://firebase.google.com/docs/firestore/manage-data/enable-offline)
 - [Google Places API](https://developers.google.com/maps/documentation/places/web-service)

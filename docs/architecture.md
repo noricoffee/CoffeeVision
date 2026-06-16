@@ -319,18 +319,22 @@ class VisitListViewModel(
     private val _state = MutableStateFlow(UIState())
     val state: StateFlow<UIState> = _state.asStateFlow()
 
-    fun onAppear() {
+    private var currentUserId: String? = null
+
+    fun onAppear(userId: String) {
+        currentUserId = userId
         scope.launch {
             _state.update { it.copy(isLoading = true) }
-            visitRepository.observeAll().collect { visits ->
+            visitRepository.observeAll(userId).collect { visits ->
                 _state.update { it.copy(visits = visits, isLoading = false) }
             }
         }
     }
 
     fun onVisitDeleted(id: String) {
+        val userId = currentUserId ?: return   // onAppear 前の削除は uid 未確定として黙殺
         scope.launch {
-            runCatching { visitRepository.delete(id) }
+            runCatching { visitRepository.delete(userId, id) }
                 .onFailure { e -> _state.update { it.copy(error = e.message) } }
         }
     }
@@ -356,7 +360,7 @@ final class VisitListViewModelBridge {
         // StateFlow の購読は kmp-bridge.md のヘルパで実装する
     }
 
-    func onAppear() { kotlin.onAppear() }
+    func onAppear(userId: String) { kotlin.onAppear(userId: userId) }
     func onVisitDeleted(id: String) { kotlin.onVisitDeleted(id: id) }
 }
 ```

@@ -369,7 +369,7 @@ Phase 2.5 の最終 PR として、`shared/framework` umbrella モジュール�
 
 **採用判断:**
 - 内部 framework `baseName` と XCFramework 名を `SharedLogic` に統一（既存 Swift 7 ファイルの `import SharedLogic` を壊さない原則優先）。結果、umbrella モジュール名は `shared/framework` だが framework 名は `SharedLogic`、Swift 側命名は完全に維持された
-- `architecture.md` の例コードは `baseName = "SharedFramework"` だが、実装上 Swift 互換性を優先して `SharedLogic` を採用（docs と乖離する判断、docs 側の更新が要る）
+- ~~`architecture.md` の例コードは `baseName = "SharedFramework"` だが、実装上 Swift 互換性を優先して `SharedLogic` を採用（docs 側の更新が要る）~~ → 2026-06-16 に `architecture.md` / `kmp-bridge.md` / `coding-conventions.md` の `SharedFramework` 表記を `SharedLogic` に統一済
 
 **残課題:**
 - ~~各モジュールの KDoc コメント中に旧 `sharedLogic/androidMain` 等の経緯記述が残る（計 5 箇所）~~ → 2026-06-08 に整理済（`docs/{architecture,coding-conventions,data-model,kmp-bridge}.md` の sharedLogic 言及と同時に消し込み）

@@ -252,15 +252,15 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 ### 配布形態
 
 - ローカル開発: `./gradlew :shared:framework:embedAndSignAppleFrameworkForXcode` を Xcode の Build Phase に組み込む
-- リリースビルド / CI: `./gradlew :shared:framework:assembleSharedFrameworkXCFramework` で XCFramework を生成
+- リリースビルド / CI: `./gradlew :shared:framework:assembleSharedLogicXCFramework` で XCFramework を生成
 
 ### iosApp からの参照ルール
 
-`iosApp` は **`SharedFramework` という単一の Framework だけを参照** します。
+`iosApp` は **`SharedLogic` という単一の Framework だけを参照** します（モジュール名は `shared/framework` だが、内部 framework 名・XCFramework 名・Swift `import` 名はすべて `SharedLogic`。詳細は `architecture.md` §iOS 配布戦略 / `tasks/lessons.md` の命名統一エントリ参照）。
 個別の shared モジュール（`shared/domain` / `shared/feature/visit-list` 等）を直接参照しないでください — 依存が複雑化し、Kotlin 側の `api` / `implementation` 制御が効かなくなります。
 
 ```swift
-import SharedFramework
+import SharedLogic
 
 let container = AppContainer(...)
 let bridge = VisitListViewModelBridge(kotlin: container.makeVisitListViewModel())

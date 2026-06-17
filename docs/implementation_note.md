@@ -1311,3 +1311,9 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - entitlements: `PBXFileSystemSynchronizedRootGroup` 環境では `iosApp.entitlements` はファイル同期で認識されるが、`CODE_SIGN_ENTITLEMENTS` は pbxproj の各 build configuration（Debug/Release）に明示追記が必要。`SystemCapabilities` セクションは省略可。
 - 親側で `xcodebuild -scheme iosApp -sdk iphonesimulator` を再実行し `** BUILD SUCCEEDED **` を確認（新規 warning ゼロ）。エディタ SourceKit が macOS コンテキストで出す「No such module / unavailable in macOS」診断は偽陽性。
 - **将来課題（コードにコメント済・MVP 対象外）**: `linkWithApple` の `credentialAlreadyInUse` 時のサインインフォールバック、`deleteAuthUser` の `requiresRecentLogin` 時の再認証フロー。
+
+#### 2026-06-17: Firebase OAuth コールバック URL / Apple トークン失効について
+
+- **コールバック URL は不要**: 今回はネイティブ Sign in with Apple フロー（`ASAuthorizationController` でデバイス上完結 → `OAuthProvider.appleCredential(withIDToken:rawNonce:)` で Firebase に渡す）のため Web リダイレクトが発生しない。`https://<project>.firebaseapp.com/__/auth/handler` の Return URL 登録や Services ID / OAuth コードフロー設定、カスタム URL スキーム（reversed client ID）はいずれも不要。これらが要るのは Web / Android の Apple サインイン（ネイティブ Apple SDK がない）の場合のみ。
+- **Firebase Console の Apple プロバイダは有効化済み**（2026-06-17、ユーザー作業完了）。ネイティブ iOS 用途では「有効化」のみで足り、プロバイダ詳細設定（Services ID / 秘密鍵）は未設定。
+- **将来課題: Apple トークン失効（revoke）**: App Store ガイドライン 5.1.1(v) は「Sign in with Apple を使い、かつアカウント削除を提供するアプリは、削除時に Apple トークンの失効も行う」ことを求める。現状の `deleteAuthUser`（`currentUser.delete()`）は Firebase ユーザー + Firestore データは消すが Apple 連携の失効までは行っていない。対応するには ①削除時に Sign in with Apple の authorization code を取得 → `Auth.auth().revokeToken(withAuthorizationCode:)` を呼ぶ、②そのために Firebase Console で Apple プロバイダの OAuth 鍵（Services ID / Team ID / Key ID / 秘密鍵）を登録する、が必要。`tasks.md` バックログ E-1 として管理。

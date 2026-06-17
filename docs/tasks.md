@@ -268,7 +268,7 @@
 | [x] | エラーバナー / トースト共通コンポーネント | 2026-06-16 実装完了 / `iosApp/iosApp/Components/ErrorToast.swift`（新規・`View.errorToast(message:onDismiss:)`、上部スライドイン + 4 秒自動消去 + タップ/上スワイプ手動消去、`AccessibilityNotification.Announcement` で VoiceOver 対応、`accessibilityReduceMotion` 対応）。非致命エラー（VisitList / VisitDetail / Map の error+poiLookupError / CafeSearch の error+位置取得失敗 / 起動同期失敗 `lastError`）をトースト化。複数エラー源は `activeToast` で集約。致命（VisitEditor 保存失敗）とアクション可能（位置情報許可拒否→設定誘導）は `.alert` 据え置き。`AppState.clearLastError()` 追加で未表示だった `lastError` を露出。KMP 変更なし。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。**シミュレータ目視確認はユーザー作業**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-16 errorToast エントリ参照 |
 | [ ] | アクセシビリティ通し検証（VoiceOver / Dynamic Type / Reduce Motion） | |
 | [x] | App Icon / Launch Screen / アプリ表示名の整備 | 2026-06-16 実装完了 / 表示名 = `CoffeeVision`（`Info.plist` の `CFBundleDisplayName`、bundle ID / `PRODUCT_NAME` 不変）。アイコンは `iosApp/scripts/generate_app_icon.swift`（AppKit + SF Symbol `cup.and.saucer.fill`）で light/dark/tinted の 1024×1024 を生成し `AppIcon.appiconset` に紐付け。Launch Screen は `UILaunchScreen` 辞書方式（`LaunchBackground` colorset + `LaunchLogo` imageset のカップ+ワードマーク透過 PNG）、`INFOPLIST_KEY_UILaunchScreen_Generation` は削除。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。**シミュレータ目視確認はユーザー作業**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-16 App Icon エントリ参照 |
-| [ ] | App Store Connect 用メタデータ準備 | |
+| [x] | App Store Connect 用メタデータ準備 | 2026-06-17 / [`app-store-metadata.md`](./app-store-metadata.md) 新規作成。アプリ基本情報 / 説明文 / キーワード / スクショ計画 / プライバシー申告（位置情報・写真・ユーザーコンテンツ・匿名 uid の収集マッピング）/ 年齢制限 / 審査メモ / 提出前チェックリストを整備。**プライバシーポリシー URL・サポート URL の作成、サブタイトル/カテゴリ確定、スクショ撮影、審査連絡先記入はユーザー作業**（チェックリストに明記） |
 
 ---
 

@@ -53,7 +53,8 @@ private struct AppRootView: View {
     var body: some View {
         if appState.uid != nil,
            appState.visitListBridge != nil,
-           appState.mapBridge != nil {
+           appState.mapBridge != nil,
+           appState.accountBridge != nil {
             RootTabView(appState: appState)
                 .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .errorToast(message: appState.lastError) {

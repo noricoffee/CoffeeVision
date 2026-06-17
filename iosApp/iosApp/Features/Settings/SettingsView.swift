@@ -2,10 +2,16 @@ import SwiftUI
 
 /// アプリ設定画面。sheet で表示する。
 ///
+/// - アカウント管理への遷移（`NavigationLink` → `AccountView`）
 /// - 表示テーマ切替（`@AppStorage` 経由でアプリ全体に即時反映）
 /// - バージョン / ビルド番号の表示
 /// - ライセンス一覧への遷移
 struct SettingsView: View {
+
+    /// アカウント画面表示とリブートのために AppState を受け取る。
+    ///
+    /// AppState は `@Observable` のため、`var` で受け取ると変化追跡が有効になる。
+    var appState: AppState
 
     @Environment(\.dismiss) private var dismiss
 
@@ -27,6 +33,7 @@ struct SettingsView: View {
     var body: some View {
         NavigationStack {
             Form {
+                accountSection
                 themeSection
                 appInfoSection
                 licensesSection
@@ -45,6 +52,28 @@ struct SettingsView: View {
     }
 
     // MARK: - セクション
+
+    /// アカウント管理セクション。
+    ///
+    /// `accountBridge` が確定済みのときのみ NavigationLink を表示する。
+    /// bootstrap 完了前はブリッジが nil のため空セクションになる。
+    @ViewBuilder
+    private var accountSection: some View {
+        if let accountBridge = appState.accountBridge {
+            Section(String(localized: "アカウント")) {
+                NavigationLink {
+                    AccountView(viewModel: accountBridge) {
+                        // サインアウト / 削除完了後に AppState をリセットして再起動
+                        appState.resetAndRebootstrap()
+                        dismiss()
+                    }
+                } label: {
+                    Label(String(localized: "アカウント管理"), systemImage: "person.circle")
+                }
+                .accessibilityLabel(String(localized: "アカウント管理画面を開く"))
+            }
+        }
+    }
 
     /// 表示テーマ切替セクション。
     private var themeSection: some View {
@@ -86,5 +115,7 @@ struct SettingsView: View {
 // MARK: - Preview
 
 #Preview {
-    SettingsView()
+    // Preview では AppState が必要だが、bootstrap 前の状態で accountBridge は nil。
+    // アカウントセクションは表示されないが UI 全体のプレビューとして機能する。
+    SettingsView(appState: AppState())
 }

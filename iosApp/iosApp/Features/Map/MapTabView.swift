@@ -58,7 +58,7 @@ struct MapTabView: View {
                     mapContent(bridge: bridge)
                         .toolbar(.hidden, for: .navigationBar)
                         .sheet(isPresented: $isPresentingSettings) {
-                            SettingsView()
+                            SettingsView(appState: appState)
                         }
                         .navigationDestination(for: CafeDetailRoute.self) { route in
                             CafeDetailView(

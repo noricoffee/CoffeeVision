@@ -1301,3 +1301,13 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 **Android 実装**: 検証パリティのため `signOut` / `deleteAuthUser` / `observeAccount` は実装、`linkWithApple` は Apple UI が無いため `UnsupportedOperationException` スタブ（呼び出し元なし）。
 
 **iOS 側残作業（Dispatch B）**: `AuthRepositoryIosImpl` に 4 メソッド追加 / `AppleSignInCoordinator`（nonce+ASAuthorization）/ `AccountView` + `AccountViewModelBridge` / `SettingsView` にアカウント節 / `AppState.resetAndRebootstrap()` + 削除後の `PhotoFileStore` 全消去 / entitlements に Sign in with Apple capability。**Firebase Console での Apple プロバイダ有効化と Apple Developer の App ID 設定はユーザー作業**。
+
+#### 2026-06-17: Dispatch B（iOS 実装）完了時の追補
+
+- `SignInWithAppleButton`（SwiftUI 組み込み）は **rawNonce を外部公開しない**ため、Firebase の nonce 検証付き link/signIn には使えない。`ASAuthorizationController` を `async` ラップした `AppleSignInCoordinator`（CryptoKit で nonce 生成 + SHA256）を自作し、カスタム黒ボタン（`applelogo` SF Symbol、HIG 相当）から呼ぶ方式を採用。→ lessons 追記済。
+- サインアウト時の `nil` アカウント emit のため、`FlowBridge.swift` に `CallbackFlowOptional<T>`（`emitSome` / `emitNone` の 2 クロージャ）を追加。`observeAccount()` の `SkieSwiftOptionalFlow<AuthAccount>` 実装で使用。
+- `resetAndRebootstrap()` は同一 `AppContainer` インスタンスを再利用する（uid は新規匿名になるが container の `scope` は継続）。各 Bridge の cancel/onDisappear は observation task のみキャンセルし、KMP 側 scope には触れない。
+- アクション完了検知（`onDeleteAccountTapped` 後の写真消去 → reset の連携）は `isProcessing` の 0.1s ポーリング（最大 30s タイムアウト）で実装。`@Observable` 変化を Task 内で同期検知する確立した公式 API が iOS 26 時点で無いための妥協。
+- entitlements: `PBXFileSystemSynchronizedRootGroup` 環境では `iosApp.entitlements` はファイル同期で認識されるが、`CODE_SIGN_ENTITLEMENTS` は pbxproj の各 build configuration（Debug/Release）に明示追記が必要。`SystemCapabilities` セクションは省略可。
+- 親側で `xcodebuild -scheme iosApp -sdk iphonesimulator` を再実行し `** BUILD SUCCEEDED **` を確認（新規 warning ゼロ）。エディタ SourceKit が macOS コンテキストで出す「No such module / unavailable in macOS」診断は偽陽性。
+- **将来課題（コードにコメント済・MVP 対象外）**: `linkWithApple` の `credentialAlreadyInUse` 時のサインインフォールバック、`deleteAuthUser` の `requiresRecentLogin` 時の再認証フロー。

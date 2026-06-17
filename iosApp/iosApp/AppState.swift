@@ -7,7 +7,8 @@ import SharedLogic
 /// - 起動時に Swift 側で `AuthRepositoryIosImpl` / `RemoteVisitDataSourceIosImpl` を組み立て、
 ///   Kotlin の `AppContainer` に注入する
 /// - `AppContainer.startInitialSync()` を呼び、得られた uid を保持する
-/// - `visitListBridge` / `mapBridge` を lazy で 1 回だけ生成し、各 View に渡す
+/// - `visitListBridge` / `mapBridge` / `accountBridge` を `Optional` で保持し、
+///   `bootstrap()` 完了後に 1 度だけ生成する
 @MainActor
 @Observable
 final class AppState {
@@ -28,6 +29,12 @@ final class AppState {
     /// マップタブは TabView 常時生存のため `visitListBridge` と同等のライフサイクルで管理する。
     /// `bootstrap()` 完了後（uid 確定後）に 1 度だけ生成する。
     private(set) var mapBridge: MapViewModelBridge?
+
+    /// AccountView 用の ViewModel ブリッジ。
+    ///
+    /// Settings → Account の sheet 遷移で使う。`bootstrap()` 完了後に 1 度だけ生成する。
+    /// サインアウト / 削除後は `resetAndRebootstrap()` で nil に戻す。
+    private(set) var accountBridge: AccountViewModelBridge?
 
     /// Google Places Photo Media API から写真 URL を取得するローダー。
     ///
@@ -68,9 +75,9 @@ final class AppState {
         lastError = nil
     }
 
-    /// 匿名サインイン + 同期購読を起動する。`RootView` の `.task` から呼ぶ。
+    /// 匿名サインイン + 同期購読を起動する。`AppRootView` の `.task` から呼ぶ。
     ///
-    /// 成功時に `visitListBridge` と `mapBridge` を 1 度だけ生成する。
+    /// 成功時に `visitListBridge` / `mapBridge` / `accountBridge` を 1 度だけ生成する。
     /// 既に生成済み（bootstrap 再呼び出し）の場合は再生成しない。
     func bootstrap() async {
         status = .signingIn
@@ -86,6 +93,10 @@ final class AppState {
             if mapBridge == nil {
                 mapBridge = MapViewModelBridge(viewModel: container.makeMapViewModel(userId: uid))
             }
+            // AccountViewModelBridge を 1 度だけ生成する
+            if accountBridge == nil {
+                accountBridge = AccountViewModelBridge(viewModel: container.makeAccountViewModel())
+            }
             print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
         } catch {
             self.lastError = error.localizedDescription
@@ -94,4 +105,25 @@ final class AppState {
         }
     }
 
+    /// サインアウト / アカウント削除後に全ブリッジをリセットして再起動する。
+    ///
+    /// - `visitListBridge` / `mapBridge` / `accountBridge` / `uid` を nil に戻す
+    /// - `status = .idle` にして `AppRootView` をローディング表示に切り替える
+    /// - 再度 `bootstrap()` を呼んで新規匿名 uid を確定する
+    func resetAndRebootstrap() {
+        visitListBridge?.onDisappear()
+        mapBridge?.cancel()
+        accountBridge?.onDisappear()
+
+        visitListBridge = nil
+        mapBridge = nil
+        accountBridge = nil
+        uid = nil
+        status = .idle
+        lastError = nil
+
+        Task { [weak self] in
+            await self?.bootstrap()
+        }
+    }
 }

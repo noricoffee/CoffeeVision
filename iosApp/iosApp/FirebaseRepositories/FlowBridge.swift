@@ -51,3 +51,44 @@ final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
         onCancel()
     }
 }
+
+// MARK: - CallbackFlowOptional
+
+/// Optional 値（`T?` / nil）を emit できる `Flow<T?>` のブリッジ実装。
+///
+/// `CallbackFlow<T>` は `T: AnyObject` の非 Optional 値しか扱えないため、
+/// `Flow<AuthAccount?>` のように nil emit が必要なケース向けに別途用意する。
+///
+/// `emitSome(value)` で非 nil を、`emitNone()` で nil を emit する。
+/// Obj-C ブリッジでは nil を `NSNull` として渡すことで Kotlin 側が null として受け取る。
+final class CallbackFlowOptional<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
+
+    private let onStart: (@escaping (T) -> Void, @escaping () -> Void) -> Void
+    private let onCancel: () -> Void
+
+    init(
+        onStart: @escaping (@escaping (T) -> Void, @escaping () -> Void) -> Void,
+        onCancel: @escaping () -> Void
+    ) {
+        self.onStart = onStart
+        self.onCancel = onCancel
+    }
+
+    func __collect(
+        collector: any Kotlinx_coroutines_coreFlowCollector,
+        completionHandler: @escaping @Sendable ((any Error)?) -> Void
+    ) {
+        let emitSome: (T) -> Void = { value in
+            collector.__emit(value: value) { _ in }
+        }
+        let emitNone: () -> Void = {
+            // nil を Obj-C ブリッジ経由で Kotlin 側の null として渡す
+            collector.__emit(value: nil) { _ in }
+        }
+        onStart(emitSome, emitNone)
+    }
+
+    deinit {
+        onCancel()
+    }
+}

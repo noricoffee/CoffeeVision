@@ -66,4 +66,173 @@ final class AuthRepositoryIosImpl: NSObject, AuthRepository {
             SkieKotlinOptionalFlow(callbackFlow)
         )
     }
+
+    // MARK: - observeAccount
+
+    /// Firebase Auth の state listener を Flow<AuthAccount?> としてブリッジ。
+    ///
+    /// サインイン中は AuthAccount を emit し、サインアウト（nil user）は nil を emit する。
+    /// SKIE 実装側は `SkieSwiftOptionalFlow<AuthAccount>` を返す。
+    func observeAccount() -> SkieSwiftOptionalFlow<AuthAccount> {
+        var handle: AuthStateDidChangeListenerHandle?
+        let callbackFlow = CallbackFlowOptional<AuthAccount>(
+            onStart: { emitSome, emitNone in
+                handle = Auth.auth().addStateDidChangeListener { _, user in
+                    if let user {
+                        let account = AuthRepositoryIosImpl.makeAuthAccount(from: user)
+                        emitSome(account)
+                    } else {
+                        emitNone()
+                    }
+                }
+            },
+            onCancel: {
+                if let handle {
+                    Auth.auth().removeStateDidChangeListener(handle)
+                }
+                handle = nil
+            }
+        )
+        return SkieSwiftOptionalFlow._unconditionallyBridgeFromObjectiveC(
+            SkieKotlinOptionalFlow(callbackFlow)
+        )
+    }
+
+    // MARK: - linkWithApple
+
+    /// 現在の匿名アカウントに Sign in with Apple の資格情報をリンクする（アップグレード）。
+    ///
+    /// uid は変わらない。成功時に更新後の AuthAccount を completion で返す。
+    /// `credentialAlreadyInUse` は分かりやすいエラー文言に変換する。
+    ///
+    /// 将来課題（MVP 対象外）: link 失敗時のサインインフォールバック。
+    /// 現状は link のみ試みてエラーを返す。
+    func __linkWithApple(
+        idToken: String,
+        rawNonce: String,
+        completionHandler: @escaping @Sendable (AuthAccount?, (any Error)?) -> Void
+    ) {
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idToken,
+            rawNonce: rawNonce,
+            fullName: nil
+        )
+        guard let currentUser = Auth.auth().currentUser else {
+            completionHandler(
+                nil,
+                NSError(
+                    domain: "AuthRepositoryIosImpl",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "サインインセッションが見つかりません。アプリを再起動してください。"]
+                )
+            )
+            return
+        }
+        currentUser.link(with: credential) { result, error in
+            if let error {
+                let nsError = error as NSError
+                // credentialAlreadyInUse: この Apple ID はすでに別アカウントで使用中
+                if nsError.code == AuthErrorCode.credentialAlreadyInUse.rawValue {
+                    completionHandler(
+                        nil,
+                        NSError(
+                            domain: nsError.domain,
+                            code: nsError.code,
+                            userInfo: [NSLocalizedDescriptionKey: "この Apple ID はすでに別のアカウントで使用されています。"]
+                        )
+                    )
+                } else {
+                    completionHandler(nil, error)
+                }
+                return
+            }
+            guard let user = result?.user else {
+                completionHandler(
+                    nil,
+                    NSError(
+                        domain: "AuthRepositoryIosImpl",
+                        code: -1,
+                        userInfo: [NSLocalizedDescriptionKey: "アップグレードに失敗しました。"]
+                    )
+                )
+                return
+            }
+            let account = AuthRepositoryIosImpl.makeAuthAccount(from: user)
+            completionHandler(account, nil)
+        }
+    }
+
+    // MARK: - signOut
+
+    /// Firebase Auth からサインアウトする。
+    ///
+    /// 呼び出し元（AccountViewModel 経由で AppState）が
+    /// `resetAndRebootstrap()` を呼んで新規匿名 uid を確定すること。
+    func __signOut(
+        completionHandler: @escaping @Sendable ((any Error)?) -> Void
+    ) {
+        do {
+            try Auth.auth().signOut()
+            completionHandler(nil)
+        } catch {
+            completionHandler(error)
+        }
+    }
+
+    // MARK: - deleteAuthUser
+
+    /// Firebase Auth からユーザー本体を削除する。
+    ///
+    /// 呼び出し元 UseCase（DeleteAccountUseCase）が全 Visit 削除済みであることを前提とする。
+    /// `requiresRecentLogin` が返った場合は再ログインを促すエラー文言を返す。
+    /// 将来課題（MVP 対象外）: 再認証フロー（Apple 資格情報での re-authenticate）。
+    func __deleteAuthUser(
+        completionHandler: @escaping @Sendable ((any Error)?) -> Void
+    ) {
+        guard let currentUser = Auth.auth().currentUser else {
+            completionHandler(
+                NSError(
+                    domain: "AuthRepositoryIosImpl",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "サインインセッションが見つかりません。"]
+                )
+            )
+            return
+        }
+        currentUser.delete { error in
+            if let error {
+                let nsError = error as NSError
+                if nsError.code == AuthErrorCode.requiresRecentLogin.rawValue {
+                    completionHandler(
+                        NSError(
+                            domain: nsError.domain,
+                            code: nsError.code,
+                            userInfo: [
+                                NSLocalizedDescriptionKey:
+                                    "セキュリティのため、再度サインインしてからアカウントを削除してください。"
+                            ]
+                        )
+                    )
+                } else {
+                    completionHandler(error)
+                }
+            } else {
+                completionHandler(nil)
+            }
+        }
+    }
+
+    // MARK: - Private helpers
+
+    /// Firebase `User` を `AuthAccount` ドメインモデルに変換する。
+    private static func makeAuthAccount(from user: User) -> AuthAccount {
+        let providerLabel = user.providerData.first?.providerID
+        let email = user.providerData.first?.email ?? user.email
+        return AuthAccount(
+            uid: user.uid,
+            isAnonymous: user.isAnonymous,
+            providerLabel: providerLabel,
+            email: email
+        )
+    }
 }

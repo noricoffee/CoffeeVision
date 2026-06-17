@@ -14,6 +14,13 @@
 - 「状態更新の連続変化をテストしたい」場合は `backgroundScope` を使った別アプローチが必要
 - 発生源: Phase 5 アカウント機能 KMP 実装（`AccountViewModelTest` / `DeleteAccountUseCaseTest`）
 
+### `SignInWithAppleButton`（SwiftUI 組み込み）は rawNonce を外部公開しない
+
+- Firebase の `OAuthProvider.appleCredential(withIDToken:rawNonce:)` は nonce 検証のため rawNonce が必須だが、SwiftUI 標準の `SignInWithAppleButton` は内部で nonce を扱い外に出さない → link/signIn の nonce 突き合わせができない
+- 対処: `ASAuthorizationController` を `async` ラップしたカスタムコーディネータ（`AppleSignInCoordinator`、CryptoKit で nonce 生成 + SHA256）を自作し、見た目は `applelogo` SF Symbol のカスタム黒ボタン（Apple HIG 相当）で代替する
+- 補足: シミュレータでは `ASAuthorizationController` の Apple ID フローは起動しない（実機必須）。動作確認は実機作業になる
+- 発生源: Phase 5 アカウント機能 iOS 実装（`AppleSignInCoordinator.swift` / `AccountView.swift`）
+
 ---
 
 ## 2026-06-02

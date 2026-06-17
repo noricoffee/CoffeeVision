@@ -57,4 +57,14 @@ enum PhotoFileStore {
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return }
         try FileManager.default.removeItem(at: fileURL)
     }
+
+    /// `photos/` ディレクトリ全体を削除する。
+    ///
+    /// アカウント削除時に端末ローカルの全写真を消去するために使う。
+    /// ディレクトリが存在しない場合は no-op（エラーを throw しない）。
+    static func deleteAllPhotos() throws {
+        let url = photosDirectoryURL
+        guard FileManager.default.fileExists(atPath: url.path) else { return }
+        try FileManager.default.removeItem(at: url)
+    }
 }

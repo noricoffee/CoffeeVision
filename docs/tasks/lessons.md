@@ -5,6 +5,17 @@
 
 ---
 
+## 2026-06-17
+
+### `runTest` で Flow を永続購読する ViewModel をテストするとき `MutableStateFlow` Fake は `UncompletedCoroutinesError` を起こす
+
+- `init` で `repository.observeXxx()` を `scope.launch { collect }` する ViewModel（例: `AccountViewModel` の `observeAccount()`）を `runTest` でテストする際、Fake repo が `MutableStateFlow`（= 完了しない無限 Flow）を返すと、`advanceUntilIdle()` が待機中コルーチンの完了を待ち続けて `UncompletedCoroutinesError` になる
+- 回避: テスト Fake では `flowOf(value)` で **1 値 emit 後に完了する Flow** を返す。`MapViewModel` テストの `FakeVisitRepository.observeAll` が `flowOf(emptyList())` を使っているのと同じ理由
+- 「状態更新の連続変化をテストしたい」場合は `backgroundScope` を使った別アプローチが必要
+- 発生源: Phase 5 アカウント機能 KMP 実装（`AccountViewModelTest` / `DeleteAccountUseCaseTest`）
+
+---
+
 ## 2026-06-02
 
 ### SQLDelight 2.x の命名規則

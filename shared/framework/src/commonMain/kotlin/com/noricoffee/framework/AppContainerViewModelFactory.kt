@@ -2,7 +2,9 @@ package com.noricoffee.framework
 
 import com.noricoffee.AppContainer
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.usecase.DeleteAccountUseCase
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
+import com.noricoffee.feature.account.AccountViewModel
 import com.noricoffee.feature.cafedetail.CafeDetailViewModel
 import com.noricoffee.feature.cafesearch.CafeSearchViewModel
 import com.noricoffee.feature.map.MapViewModel
@@ -116,5 +118,26 @@ fun AppContainer.makeCafeDetailViewModel(
         placeId = placeId,
         initialCafe = initialCafe,
         userId = userId,
+        scope = scope,
+    )
+
+/**
+ * [AccountViewModel] を生成して返す。
+ *
+ * [AppContainer] が保持する [com.noricoffee.repository.AuthRepository] /
+ * [com.noricoffee.repository.VisitRepository] と CoroutineScope（内部の MainScope）を自動配線する。
+ * [DeleteAccountUseCase] はファクトリ内で都度生成する（DI コンテナ化は YAGNI）。
+ *
+ * ## Bridge のライフサイクル
+ * アカウント画面は TabBar / NavigationStack の配置に応じて、iOS 側の `AppState` か
+ * View 内 `@State` で保持すること。生成ポリシーは `ios-engineer` に委ねる。
+ */
+fun AppContainer.makeAccountViewModel(): AccountViewModel =
+    AccountViewModel(
+        authRepository = authRepository,
+        deleteAccountUseCase = DeleteAccountUseCase(
+            visitRepository = visitRepository,
+            authRepository = authRepository,
+        ),
         scope = scope,
     )

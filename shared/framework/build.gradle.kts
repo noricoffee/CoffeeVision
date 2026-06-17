@@ -52,6 +52,7 @@ kotlin {
             export(projects.shared.feature.cafeSearch)
             export(projects.shared.feature.map)
             export(projects.shared.feature.cafeDetail)
+            export(projects.shared.feature.account)
 
             xcf.add(this)
         }
@@ -80,6 +81,7 @@ kotlin {
             api(projects.shared.feature.cafeSearch)
             api(projects.shared.feature.map)
             api(projects.shared.feature.cafeDetail)
+            api(projects.shared.feature.account)
             implementation(libs.kotlinx.coroutines.core)
         }
     }

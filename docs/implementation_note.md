@@ -1282,3 +1282,22 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 **Launch Screen**: storyboard を使わず Info.plist の `UILaunchScreen` 辞書方式（`UIColorName=LaunchBackground` + `UIImageName=LaunchLogo`）を採用。`INFOPLIST_KEY_UILaunchScreen_Generation = YES`（Base.xcconfig 系 2 config）は手動辞書との競合回避のため削除。`UILaunchScreen` 辞書はテキストラベルを置けないため、「CoffeeVision」ワードマークはカップ + 文字を焼き込んだ透過 PNG（`LaunchLogo`）として用意し、ダークモードは `LaunchBackground.colorset`（Any `#5A3A22` / Dark `#1C0F08`）で吸収する。
 
 **残課題**: tinted variant と起動画面の見た目はシミュレータ目視確認がユーザー作業。`LaunchLogo` は現状クリーム 1 枚で `LaunchBackground` のコントラストに依存（dark appearance スロットは未作成、必要ならスクリプトに関数追加で対応可）。`xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。
+
+### 2026-06-17: アカウント機能（アップグレード / サインアウト / 削除）— 設計判断（Phase 5 仕上げ）
+
+- 領域: KMP + iOS（Dispatch A=KMP 完了、Dispatch B=iOS 予定）
+- 関連: `shared/domain/.../model/AuthAccount.kt`, `repository/AuthRepository.kt`, `usecase/DeleteAccountUseCase.kt`, `shared/feature/account/`（新規モジュール）, `shared/framework/.../AppContainerViewModelFactory.kt`, `shared/data-firebase/androidMain/.../AuthRepositoryAndroidImpl.kt`
+
+**プロバイダは Sign in with Apple のみ**（Google は見送り）。`requirements.md` は「メール / SNS（Apple / Google）」と書くが、GoogleSignIn SDK 追加を避け、Apple は審査上必須・追加依存ゼロ（`AuthenticationServices`）のため MVP は Apple 一本。資格情報取得（nonce/SHA256 + `ASAuthorizationController`）と Firebase 操作は iOS Swift（`AuthRepositoryIosImpl`）が担い、KMP は `AuthRepository` interface の抽象操作（`linkWithApple(idToken, rawNonce)` 等）と ViewModel/UseCase のみ持つ。
+
+**アップグレード = link で uid 不変**。`currentUser.link(with:)` は uid を保持するため Firestore / ローカル DB / 写真がそのまま引き継がれ、アプリ全体の uid 再配線が不要。匿名のときだけ提示する。
+
+**サインアウト / 削除 = uid が変わる → 再 bootstrap に収束**。両者とも「Firebase サインアウト/削除 → 新規匿名サインインで `AppState` のブリッジを作り直す」共通経路で扱う（iOS 側 `resetAndRebootstrap()`）。サインアウト後の既存ローカルデータは uid フィルタで自然に隠れるため残置可。削除時のみプライバシー目的で実データ消去。
+
+**削除の責務分担**: `DeleteAccountUseCase`（KMP）= 全 Visit 削除（local+remote、既存 `delete` を `observeAll().first()` スナップショットに対し反復）→ `deleteAuthUser()`。**写真ファイル削除は端末ローカルなので iOS 責務**（KMP から触れない）。順序は「データ → Auth ユーザー」を UseCase が強制。bulk 削除 API 追加は YAGNI で見送り（個別 delete 反復）。
+
+**`observeAccount()` を新設**（既存 `observeUserId` は bootstrap 用に残置）。`AuthAccount(uid, isAnonymous, providerLabel, email)` を流す。iOS の `observeUserId` が持つ「サインアウト時 nil 未 emit」制約は新 `observeAccount` 側で解消する。
+
+**Android 実装**: 検証パリティのため `signOut` / `deleteAuthUser` / `observeAccount` は実装、`linkWithApple` は Apple UI が無いため `UnsupportedOperationException` スタブ（呼び出し元なし）。
+
+**iOS 側残作業（Dispatch B）**: `AuthRepositoryIosImpl` に 4 メソッド追加 / `AppleSignInCoordinator`（nonce+ASAuthorization）/ `AccountView` + `AccountViewModelBridge` / `SettingsView` にアカウント節 / `AppState.resetAndRebootstrap()` + 削除後の `PhotoFileStore` 全消去 / entitlements に Sign in with Apple capability。**Firebase Console での Apple プロバイダ有効化と Apple Developer の App ID 設定はユーザー作業**。

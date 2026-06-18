@@ -1,9 +1,10 @@
 package com.noricoffee.domain.usecase
 
+import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.Cafe
-import com.noricoffee.domain.Visit
+import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.model.VisitedCafe
-import com.noricoffee.repository.VisitRepository
+import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.first
@@ -20,28 +21,32 @@ import kotlin.test.assertTrue
 /**
  * [ObserveVisitedCafesUseCase] の集計ロジックを検証する。
  *
- * `VisitRepository` の実装は [FakeVisitRepository] で差し替え、
+ * [CoffeeRepository] の実装は [FakeCoffeeRepository] で差し替え、
  * 集計・ソート・平均評価の計算ロジックだけを単体でテストする。
+ *
+ * ## cafe=null（セルフ抽出）の扱い
+ * cafe=null のレコードは座標がなくマップに表示できないため、
+ * [ObserveVisitedCafesUseCase] が集計対象から除外する。
  */
 class ObserveVisitedCafesUseCaseTest {
 
     // --- テスト用 Fake ---
 
-    private class FakeVisitRepository(
-        private val visits: List<Visit> = emptyList(),
-    ) : VisitRepository {
+    private class FakeCoffeeRepository(
+        private val records: List<CoffeeRecord> = emptyList(),
+    ) : CoffeeRepository {
 
-        private val flow = MutableStateFlow(visits)
+        private val flow = MutableStateFlow(records)
 
-        override fun observeAll(userId: String): Flow<List<Visit>> = flow
+        override fun observeAll(userId: String): Flow<List<CoffeeRecord>> = flow
 
-        override fun observeById(id: String): Flow<Visit?> =
-            MutableStateFlow(visits.firstOrNull { it.id == id })
+        override fun observeById(id: String): Flow<CoffeeRecord?> =
+            MutableStateFlow(records.firstOrNull { it.id == id })
 
-        override fun observeByCafe(userId: String, placeId: String): Flow<List<Visit>> =
-            MutableStateFlow(visits.filter { it.cafe.placeId == placeId })
+        override fun observeByCafe(userId: String, placeId: String): Flow<List<CoffeeRecord>> =
+            MutableStateFlow(records.filter { it.cafe?.placeId == placeId })
 
-        override suspend fun save(visit: Visit) = Unit
+        override suspend fun save(record: CoffeeRecord) = Unit
 
         override suspend fun delete(userId: String, id: String) = Unit
     }
@@ -59,23 +64,27 @@ class ObserveVisitedCafesUseCaseTest {
         mapsUrl = null,
     )
 
-    private fun visit(
+    private fun record(
         id: String,
-        placeId: String,
+        placeId: String?,
         visitedOn: LocalDate,
         rating: Int = 3,
-        cafeName: String = "カフェ $placeId",
-    ) = Visit(
+        cafeName: String = "カフェ ${placeId ?: "home"}",
+    ) = CoffeeRecord(
         id = id,
         userId = "user-1",
-        cafe = cafe(placeId, cafeName),
+        cafe = placeId?.let { cafe(it, cafeName) },
         visitedOn = visitedOn,
-        ambiance = "",
         rating = rating,
         notes = "",
         photos = emptyList(),
-        coffees = emptyList(),
-        foods = emptyList(),
+        name = "Test Coffee $id",
+        brewMethod = BrewMethod.HandDrip,
+        origin = null,
+        variety = null,
+        processing = null,
+        roastLevel = null,
+        cup = null,
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),
     )
@@ -83,8 +92,8 @@ class ObserveVisitedCafesUseCaseTest {
     // --- テスト ---
 
     @Test
-    fun emptyVisits_returnsEmptyList() = runTest {
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(emptyList()))
+    fun emptyRecords_returnsEmptyList() = runTest {
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(emptyList()))
 
         val result = useCase("user-1").first()
 
@@ -92,9 +101,9 @@ class ObserveVisitedCafesUseCaseTest {
     }
 
     @Test
-    fun singleVisit_returnsSingleVisitedCafe() = runTest {
-        val v = visit("v1", "place-1", LocalDate(2026, 6, 1), rating = 4)
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(listOf(v)))
+    fun singleRecord_returnsSingleVisitedCafe() = runTest {
+        val r = record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4)
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(listOf(r)))
 
         val result = useCase("user-1").first()
 
@@ -106,13 +115,13 @@ class ObserveVisitedCafesUseCaseTest {
     }
 
     @Test
-    fun multipleVisitsSamePlaceId_groupedIntoOneVisitedCafe() = runTest {
-        val visits = listOf(
-            visit("v1", "place-1", LocalDate(2026, 6, 1), rating = 4),
-            visit("v2", "place-1", LocalDate(2026, 6, 10), rating = 2),
-            visit("v3", "place-1", LocalDate(2026, 5, 20), rating = 3),
+    fun multipleRecordsSamePlaceId_groupedIntoOneVisitedCafe() = runTest {
+        val records = listOf(
+            record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4),
+            record("r2", "place-1", LocalDate(2026, 6, 10), rating = 2),
+            record("r3", "place-1", LocalDate(2026, 5, 20), rating = 3),
         )
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(visits))
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
         val result = useCase("user-1").first()
 
@@ -126,12 +135,12 @@ class ObserveVisitedCafesUseCaseTest {
 
     @Test
     fun sortedByLastVisitedAtDescending() = runTest {
-        val visits = listOf(
-            visit("v1", "place-A", LocalDate(2026, 4, 1)),
-            visit("v2", "place-B", LocalDate(2026, 6, 15)),
-            visit("v3", "place-C", LocalDate(2026, 5, 10)),
+        val records = listOf(
+            record("r1", "place-A", LocalDate(2026, 4, 1)),
+            record("r2", "place-B", LocalDate(2026, 6, 15)),
+            record("r3", "place-C", LocalDate(2026, 5, 10)),
         )
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(visits))
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
         val result = useCase("user-1").first()
 
@@ -143,12 +152,12 @@ class ObserveVisitedCafesUseCaseTest {
 
     @Test
     fun lastVisitedAt_isLatestVisitedOnInGroup() = runTest {
-        val visits = listOf(
-            visit("v1", "place-1", LocalDate(2026, 3, 1)),
-            visit("v2", "place-1", LocalDate(2026, 6, 15)),
-            visit("v3", "place-1", LocalDate(2026, 1, 10)),
+        val records = listOf(
+            record("r1", "place-1", LocalDate(2026, 3, 1)),
+            record("r2", "place-1", LocalDate(2026, 6, 15)),
+            record("r3", "place-1", LocalDate(2026, 1, 10)),
         )
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(visits))
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
         val result = useCase("user-1").first()
 
@@ -161,9 +170,9 @@ class ObserveVisitedCafesUseCaseTest {
     @Test
     fun latestCafeSnapshot_usedWhenCafeNameChanged() = runTest {
         // 同じ placeId で店舗名が変わっていた場合、最新訪問の cafe が採用される
-        val oldVisit = visit("v1", "place-1", LocalDate(2026, 1, 1), cafeName = "Old Name")
-        val newVisit = visit("v2", "place-1", LocalDate(2026, 6, 1), cafeName = "New Name")
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(listOf(oldVisit, newVisit)))
+        val oldRecord = record("r1", "place-1", LocalDate(2026, 1, 1), cafeName = "Old Name")
+        val newRecord = record("r2", "place-1", LocalDate(2026, 6, 1), cafeName = "New Name")
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(listOf(oldRecord, newRecord)))
 
         val result = useCase("user-1").first()
 
@@ -173,12 +182,12 @@ class ObserveVisitedCafesUseCaseTest {
     @Test
     fun averageRating_excludesZeroRating() = runTest {
         // rating = 0 は「未評価」として除外する
-        val visits = listOf(
-            visit("v1", "place-1", LocalDate(2026, 1, 1), rating = 0),
-            visit("v2", "place-1", LocalDate(2026, 2, 1), rating = 5),
-            visit("v3", "place-1", LocalDate(2026, 3, 1), rating = 3),
+        val records = listOf(
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0),
+            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 5),
+            record("r3", "place-1", LocalDate(2026, 3, 1), rating = 3),
         )
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(visits))
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
         val result = useCase("user-1").first()
 
@@ -188,11 +197,11 @@ class ObserveVisitedCafesUseCaseTest {
 
     @Test
     fun averageRating_nullWhenAllRatingsAreZero() = runTest {
-        val visits = listOf(
-            visit("v1", "place-1", LocalDate(2026, 1, 1), rating = 0),
-            visit("v2", "place-1", LocalDate(2026, 2, 1), rating = 0),
+        val records = listOf(
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0),
+            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 0),
         )
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(visits))
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
         val result = useCase("user-1").first()
 
@@ -201,12 +210,12 @@ class ObserveVisitedCafesUseCaseTest {
 
     @Test
     fun multiplePlaceIds_eachBecomesOwnVisitedCafe() = runTest {
-        val visits = listOf(
-            visit("v1", "place-A", LocalDate(2026, 6, 1)),
-            visit("v2", "place-A", LocalDate(2026, 6, 5)),
-            visit("v3", "place-B", LocalDate(2026, 6, 10)),
+        val records = listOf(
+            record("r1", "place-A", LocalDate(2026, 6, 1)),
+            record("r2", "place-A", LocalDate(2026, 6, 5)),
+            record("r3", "place-B", LocalDate(2026, 6, 10)),
         )
-        val useCase = ObserveVisitedCafesUseCase(FakeVisitRepository(visits))
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
         val result = useCase("user-1").first()
 
@@ -218,6 +227,37 @@ class ObserveVisitedCafesUseCaseTest {
         // ソート: place-B（6/10）→ place-A（6/5）
         assertEquals("place-B", result[0].cafe.placeId)
         assertEquals("place-A", result[1].cafe.placeId)
+    }
+
+    @Test
+    fun nullCafeRecords_areExcludedFromResult() = runTest {
+        // cafe=null（セルフ抽出）のレコードはマップに表示できないため除外される
+        val records = listOf(
+            record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4),
+            record("r2", null, LocalDate(2026, 6, 5), rating = 5),  // セルフ抽出
+            record("r3", null, LocalDate(2026, 6, 10), rating = 3), // セルフ抽出
+        )
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
+
+        val result = useCase("user-1").first()
+
+        // cafe=null の 2 件は除外され、place-1 のみ
+        assertEquals(1, result.size)
+        assertEquals("place-1", result.first().cafe.placeId)
+    }
+
+    @Test
+    fun onlyNullCafeRecords_returnsEmptyList() = runTest {
+        // 全件が cafe=null（セルフ抽出）の場合は空リストが返る
+        val records = listOf(
+            record("r1", null, LocalDate(2026, 6, 1)),
+            record("r2", null, LocalDate(2026, 6, 5)),
+        )
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
+
+        val result = useCase("user-1").first()
+
+        assertTrue(result.isEmpty())
     }
 
     // --- ヘルパ ---

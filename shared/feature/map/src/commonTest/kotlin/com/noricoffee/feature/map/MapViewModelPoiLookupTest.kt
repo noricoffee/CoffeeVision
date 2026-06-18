@@ -1,13 +1,12 @@
 package com.noricoffee.feature.map
 
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
-import com.noricoffee.domain.Visit
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
-import com.noricoffee.repository.VisitRepository
+import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -32,11 +31,11 @@ class MapViewModelPoiLookupTest {
 
     // --- Fakes ---
 
-    private class FakeVisitRepository : VisitRepository {
-        override fun observeAll(userId: String): Flow<List<Visit>> = flowOf(emptyList())
-        override fun observeById(id: String): Flow<Visit?> = flowOf(null)
-        override fun observeByCafe(userId: String, placeId: String): Flow<List<Visit>> = flowOf(emptyList())
-        override suspend fun save(visit: Visit) = Unit
+    private class FakeCoffeeRepository : CoffeeRepository {
+        override fun observeAll(userId: String): Flow<List<CoffeeRecord>> = flowOf(emptyList())
+        override fun observeById(id: String): Flow<CoffeeRecord?> = flowOf(null)
+        override fun observeByCafe(userId: String, placeId: String): Flow<List<CoffeeRecord>> = flowOf(emptyList())
+        override suspend fun save(record: CoffeeRecord) = Unit
         override suspend fun delete(userId: String, id: String) = Unit
     }
 
@@ -102,8 +101,8 @@ class MapViewModelPoiLookupTest {
     // --- 共通セットアップ ---
 
     private val fakeCafeRepo = FakeCafeRepository()
-    private val fakeVisitRepo = FakeVisitRepository()
-    private val useCase = ObserveVisitedCafesUseCase(fakeVisitRepo)
+    private val fakeCoffeeRepo = FakeCoffeeRepository()
+    private val useCase = ObserveVisitedCafesUseCase(fakeCoffeeRepo)
 
     // --- テスト ---
 
@@ -232,8 +231,6 @@ class MapViewModelPoiLookupTest {
 
     @Test
     fun onPoiTapped_retainsPreviousNearbyPlaces() = runTest {
-        // 周辺検索で結果が入っている状態で POI タップしても nearbyPlaces は壊れないこと
-        val nearbyCafe = makeCafe("nearby-001")
         fakeCafeRepo.searchTextResult = listOf(makeCafe("poi-001"))
 
         val vm = MapViewModel(
@@ -243,8 +240,6 @@ class MapViewModelPoiLookupTest {
             scope = this,
         )
 
-        // 周辺検索 stub を差し替えて別の結果を仕込む（searchNearby は別 fake 実装）
-        // nearbyPlaces の不変性を確認する目的なので空でも十分
         vm.onPoiTapped(name = "Test Cafe", latitude = 35.658, longitude = 139.701)
         testScheduler.advanceUntilIdle()
 

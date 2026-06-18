@@ -8,7 +8,7 @@ import com.google.firebase.firestore.firestoreSettings
 import com.noricoffee.AppContainer
 import com.noricoffee.platform.DatabaseDriverFactory
 import com.noricoffee.repository.AuthRepositoryAndroidImpl
-import com.noricoffee.repository.RemoteVisitDataSourceAndroidImpl
+import com.noricoffee.repository.RemoteCoffeeDataSourceAndroidImpl
 import kotlinx.coroutines.launch
 
 /**
@@ -51,7 +51,7 @@ class CoffeeVisionApp : Application() {
         val sqlDriver = DatabaseDriverFactory(this).create()
         appContainer = AppContainer(
             sqlDriver = sqlDriver,
-            remoteVisitDataSource = RemoteVisitDataSourceAndroidImpl(),
+            remoteCoffeeDataSource = RemoteCoffeeDataSourceAndroidImpl(),
             authRepository = AuthRepositoryAndroidImpl(),
             placesApiKey = BuildConfig.PLACES_API_KEY,
         )

@@ -1,0 +1,52 @@
+CREATE TABLE coffee_record (
+    id TEXT NOT NULL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    -- cafe は任意（全 cafe_* が null = セルフ抽出）
+    cafe_place_id TEXT,
+    cafe_name TEXT,
+    cafe_address TEXT,
+    cafe_latitude REAL,
+    cafe_longitude REAL,
+    cafe_photo_references TEXT,            -- JSON 配列（cafe null のとき null）
+    cafe_website_url TEXT,
+    cafe_maps_url TEXT,
+    -- 記録本体
+    visited_on TEXT NOT NULL,              -- ISO-8601 (YYYY-MM-DD)
+    rating INTEGER NOT NULL,
+    notes TEXT NOT NULL,
+    -- コーヒー属性
+    name TEXT NOT NULL,
+    brew_method TEXT NOT NULL,             -- enum 文字列
+    origin TEXT,
+    variety TEXT,
+    processing TEXT,                       -- enum 文字列
+    roast_level TEXT,                      -- enum 文字列
+    cup TEXT,
+    created_at INTEGER NOT NULL,           -- epoch millis
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX coffee_record_by_user_visited ON coffee_record (user_id, visited_on DESC);
+CREATE INDEX coffee_record_by_cafe ON coffee_record (cafe_place_id);
+
+selectAll:
+SELECT * FROM coffee_record WHERE user_id = ? ORDER BY visited_on DESC, created_at DESC;
+
+selectById:
+SELECT * FROM coffee_record WHERE id = ?;
+
+selectByCafe:
+SELECT * FROM coffee_record WHERE user_id = ? AND cafe_place_id = ? ORDER BY visited_on DESC;
+
+upsert:
+INSERT OR REPLACE INTO coffee_record (
+    id, user_id, cafe_place_id, cafe_name, cafe_address,
+    cafe_latitude, cafe_longitude, cafe_photo_references,
+    cafe_website_url, cafe_maps_url,
+    visited_on, rating, notes,
+    name, brew_method, origin, variety, processing, roast_level, cup,
+    created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM coffee_record WHERE id = ?;

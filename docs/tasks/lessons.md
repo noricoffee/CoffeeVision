@@ -306,3 +306,22 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **「モジュール追加・方針転換時は同 PR で CLAUDE 表・サマリ・architecture 現状図も直す」をチェックリスト化**（キャッシュ無効化を作業動線に組み込む）
 - `settings.gradle.kts` 等の**機械的事実と doc を定期突き合わせる棚卸し**を定例化する。doc 全体精査自体をその定例とみなしてよい
 - 方針転換時は implementation_note の「重要な方針転換は新エントリで旧を参照 / 陳腐化したら削除」ルールを、**昇格先・周辺 doc の旧記述消し込みまで**含めて運用する（決定の単一更新で終わらせない）
+
+---
+
+## 2026-06-19
+
+### Kotlin/Native クロスモジュールの nullable プロパティは smart cast が効かない（commonMain では検出されない）
+
+- `compileKotlinMetadata`（commonMain コンパイル）は通過するのに `compileKotlinIosArm64` / `assembleSharedLogicXCFramework` で `Smart cast to 'T' is impossible, because 'prop' is a public API property declared in different module` が出るケースがある
+- 別モジュールで宣言された `val` プロパティは、`if (x?.prop != null)` の後でも別モジュールコンパイル時に smart cast されない（例: `feature/coffee-editor` から `domain` の `Cafe?` プロパティを参照）
+- **修正パターン**: `val localProp = x?.prop; if (localProp != null) { use(localProp) }` でローカル変数にキャプチャ
+- **検証への含意**: commonMain のコンパイル成功だけで KMP の正しさを判断しない。**`assembleSharedLogicXCFramework`（iOS ターゲット実コンパイル）を検証ステップに必ず含める**。Phase 7 の Visit→CoffeeRecord 再設計で発生
+- 発生源: Phase 7 Phase 1（`CoffeeEditorViewModel` の `initial?.cafe` 参照）
+
+### JdbcSqliteDriver（Android Host Test）は PRAGMA foreign_keys = ON が必要
+
+- `testAndroidHostTest` が使う `JdbcSqliteDriver` は SQLite の Foreign Key サポートがデフォルト OFF。`ON DELETE CASCADE` のテストが通らない
+- `AppDatabase.Schema.create(driver)` の直後に `driver.execute(null, "PRAGMA foreign_keys = ON", 0, null)` を実行する（`createInMemoryTestSqlDriver()` に追加）
+- 実機の `AndroidSqliteDriver` / iOS の `NativeSqliteDriver` とは挙動が異なる。iOS テストで CASCADE を検証する場合も同様の pragma 設定を確認すること
+- 発生源: Phase 7 Phase 1（`coffee_record` ⇄ `photo` の CASCADE 削除テスト）

@@ -32,6 +32,7 @@ struct CafeDetailRoute: Hashable {
 /// - Apple Maps 標準 POI タップ → Places ルックアップ → `CafeDetailView` プログラマティック push
 /// - 自身が `NavigationStack(path: $navigationPath)` を保持するため RootTabView 側の NavigationStack は不要
 /// - 現在地取得は `LocationManager` 経由
+/// - 検索タブ上に「現在地 FAB」を浮かべ、タップで地図中心を現在地・ズーム 1000m にリセットする
 struct MapTabView: View {
 
     var appState: AppState
@@ -48,6 +49,13 @@ struct MapTabView: View {
 
     /// 設定画面の表示状態。
     @State private var isPresentingSettings = false
+
+    /// `TabBarFrameReader` が報告する検索タブの global フレーム。`.zero` は未取得。
+    @State private var tabBarSearchFrame: CGRect = .zero
+
+    /// FAB タップ後、次の location 更新で 1 回だけ recenter する。
+    /// `lastLocation` を nil にしないため、`setupLocation` の周辺カフェ検索に副作用を与えない。
+    @State private var pendingRecenter = false
 
     // MARK: - Body
 
@@ -79,6 +87,20 @@ struct MapTabView: View {
                                     .background(.ultraThinMaterial)
                             }
                         }
+                        // 現在地 FAB: 検索タブボタンの真上に浮かべる
+                        .overlay {
+                            if tabBarSearchFrame != .zero {
+                                GeometryReader { geo in
+                                    currentLocationFAB
+                                        .position(fabPosition(geo: geo))
+                                }
+                            }
+                        }
+                        .background(
+                            TabBarFrameReader { frame in
+                                tabBarSearchFrame = frame
+                            }
+                        )
                         .errorToast(message: activeToast(bridge: bridge)?.message) {
                             activeToast(bridge: bridge)?.dismiss()
                         }
@@ -92,6 +114,24 @@ struct MapTabView: View {
                                 )
                                 bridge.onPoiLookupConsumed()
                                 mapFeatureSelection = nil
+                            }
+                        }
+                        // pendingRecenter フラグを監視し、次の location 更新で 1 回だけ recenter する
+                        .onChange(of: locationManager.lastLocation?.latitude) { _, _ in
+                            if pendingRecenter, let loc = locationManager.lastLocation {
+                                pendingRecenter = false
+                                withAnimation {
+                                    cameraPosition = .region(
+                                        MKCoordinateRegion(
+                                            center: CLLocationCoordinate2D(
+                                                latitude: loc.latitude,
+                                                longitude: loc.longitude
+                                            ),
+                                            latitudinalMeters: 1000,
+                                            longitudinalMeters: 1000
+                                        )
+                                    )
+                                }
                             }
                         }
                         .task {
@@ -274,6 +314,83 @@ struct MapTabView: View {
                 .background(Circle().fill(.regularMaterial))
         }
         .accessibilityLabel(String(localized: "設定"))
+    }
+
+    // MARK: - 現在地 FAB
+
+    /// 検索タブボタン上に浮かべる「現在地に戻る」FAB。
+    ///
+    /// - `.denied` / `.restricted` 時は淡色 + 無効化
+    /// - それ以外は押下で `recenterToCurrentLocation()` を呼ぶ
+    private var currentLocationFAB: some View {
+        let isDenied = locationManager.authorizationStatus == .denied
+            || locationManager.authorizationStatus == .restricted
+        return Button {
+            recenterToCurrentLocation()
+        } label: {
+            Image(systemName: "location.fill")
+                .font(.body.weight(.medium))
+                .foregroundStyle(.primary)
+                .frame(width: 44, height: 44)
+                .background(Circle().fill(.regularMaterial))
+        }
+        .accessibilityLabel(String(localized: "現在地に戻る"))
+        .disabled(isDenied)
+        .opacity(isDenied ? 0.4 : 1.0)
+    }
+
+    /// `tabBarSearchFrame`（global）と `GeometryReader` の global フレームから
+    /// FAB の local position を計算する。
+    private func fabPosition(geo: GeometryProxy) -> CGPoint {
+        let geoFrame = geo.frame(in: .global)
+        let tabFrame = tabBarSearchFrame
+        let size = min(max(tabFrame.height, 44), 64)
+        let x = tabFrame.midX - geoFrame.minX
+        let y = tabFrame.minY - geoFrame.minY - 8 - size / 2
+        return CGPoint(x: x, y: y)
+    }
+
+    // MARK: - 現在地センタリング
+
+    /// FAB タップ時に現在地へセンタリング＋ズームリセットする。
+    ///
+    /// `lastLocation` を nil にしないフラグ方式を採用し、
+    /// `setupLocation` の `bridge.onLocationUpdated`（周辺カフェ検索）への副作用を防ぐ。
+    private func recenterToCurrentLocation() {
+        switch locationManager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            // 既存の lastLocation があればすぐにセンタリング
+            if let loc = locationManager.lastLocation {
+                withAnimation {
+                    cameraPosition = .region(
+                        MKCoordinateRegion(
+                            center: CLLocationCoordinate2D(
+                                latitude: loc.latitude,
+                                longitude: loc.longitude
+                            ),
+                            latitudinalMeters: 1000,
+                            longitudinalMeters: 1000
+                        )
+                    )
+                }
+            }
+            // さらに最新化のため location を要求し、次の更新で再センタリング
+            pendingRecenter = true
+            locationManager.requestLocation()
+
+        case .notDetermined:
+            // 許可ダイアログ → 許可後は locationManagerDidChangeAuthorization で requestLocation が走る。
+            // フラグを立てておき、その location 更新で recenter する。
+            pendingRecenter = true
+            locationManager.requestLocation()
+
+        case .denied, .restricted:
+            // FAB 自体を無効化しているのでここには到達しない想定
+            break
+
+        @unknown default:
+            break
+        }
     }
 
     // MARK: - POI 選択ハンドラ

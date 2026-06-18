@@ -1317,3 +1317,18 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **コールバック URL は不要**: 今回はネイティブ Sign in with Apple フロー（`ASAuthorizationController` でデバイス上完結 → `OAuthProvider.appleCredential(withIDToken:rawNonce:)` で Firebase に渡す）のため Web リダイレクトが発生しない。`https://<project>.firebaseapp.com/__/auth/handler` の Return URL 登録や Services ID / OAuth コードフロー設定、カスタム URL スキーム（reversed client ID）はいずれも不要。これらが要るのは Web / Android の Apple サインイン（ネイティブ Apple SDK がない）の場合のみ。
 - **Firebase Console の Apple プロバイダは有効化済み**（2026-06-17、ユーザー作業完了）。ネイティブ iOS 用途では「有効化」のみで足り、プロバイダ詳細設定（Services ID / 秘密鍵）は未設定。
 - **将来課題: Apple トークン失効（revoke）**: App Store ガイドライン 5.1.1(v) は「Sign in with Apple を使い、かつアカウント削除を提供するアプリは、削除時に Apple トークンの失効も行う」ことを求める。現状の `deleteAuthUser`（`currentUser.delete()`）は Firebase ユーザー + Firestore データは消すが Apple 連携の失効までは行っていない。対応するには ①削除時に Sign in with Apple の authorization code を取得 → `Auth.auth().revokeToken(withAuthorizationCode:)` を呼ぶ、②そのために Firebase Console で Apple プロバイダの OAuth 鍵（Services ID / Team ID / Key ID / 秘密鍵）を登録する、が必要。`tasks.md` バックログ E-1 として管理。
+
+### 2026-06-19: マップタブの現在地 FAB（検索タブ上に配置）
+
+- 領域: iOS のみ（`iosApp/iosApp/Utilities/TabBarFrameReader.swift`〔新規〕, `Features/Map/MapTabView.swift`）。KMP / gradle 変更なし。
+
+**検索タブ（`Tab(role: .search)`）のフレーム取得を private API 名非依存の幾何条件で行う**。iOS 26 の新 TabView では検索ボタンは `_UITabBarAuxiliaryView` 系の private ビューになるが、クラス名へのハードコード依存を避け、`TabBarFrameReader`（`UIViewRepresentable`）が `tabBar.subviews` を「ほぼ正方形（`abs(w-h)<4`）かつ タブバー幅の半分未満」で絞り込み、クラス名に `"Auxiliary"`/`"Search"` を含むものを優先する。`didMoveToWindow` / `layoutSubviews` で再報告し回転追従。UITabBarController は responder chain →（不在なら）windowScene の rootViewController 階層再帰で探索。global frame は `convert(bounds, to: nil)`。
+
+**耐性方針**: 条件が外れて検索タブを特定できない場合は `tabBarSearchFrame == .zero` のままで、FAB を `.overlay` ごと非表示にする（クラッシュせず「FAB が出ないだけ」に縮退）。iOS 26 はベータのため、リリース前に実機で配置を実機確認すること。
+
+**FAB は `MapTabView` 内に閉じる**（スコープ＝マップタブのみ）。`cameraPosition` / `LocationManager` が既に MapTabView 保持のため AppState への状態リフト不要。配置は `GeometryReader` の global フレームで global→local 変換し `.position()`（`x=tabFrame.midX-geo.minX`, `y=tabFrame.minY-geo.minY-8-size/2`, `size=clamp(tabFrame.height,44,64)`）。
+
+**recenter は `lastLocation` 非破壊のフラグ方式**。FAB タップで `pendingRecenter=true` を立て `requestLocation()` を呼び、`.onChange(of: lastLocation?.latitude)` で 1 回だけ 1000m リージョンにセンタリングする。`resetLastLocation()`（nil 化）を使わないことで `setupLocation` の `bridge.onLocationUpdated`（周辺カフェ検索）への副作用をゼロにした。許可済みなら既存 `lastLocation` で即時センタリングも併用。`.denied`/`.restricted` は FAB を `.disabled` + opacity 0.4 で無効化（`recenterToCurrentLocation` の同 case は到達不可前提）。`notDetermined` はタップで許可ダイアログ→許可後の location 更新で自動センタリング。
+
+- 既知の軽微な論点（許容）: タップ後 `requestLocation()` が同一緯度を返すと `onChange` 不発で `pendingRecenter` が残り、次の自然な位置更新で 1 回再センタリングが起きうる。実害なしと判断。
+- 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` → BUILD SUCCEEDED（新規 warning ゼロ）。シミュレータ / 実機の目視確認（配置・センタリング・拒否時無効・回転追従・初回許可フロー）はユーザー作業。

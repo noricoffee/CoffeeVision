@@ -1,5 +1,13 @@
 # CoffeeVision アーキテクチャ
 
+> **2026-06-19 大改訂（コーヒー記録主体へ）**: アプリの集約ルートを「カフェ訪問（`Visit`）」から「**コーヒー記録（`CoffeeRecord`）**」へ再設計した。これに伴い以下を改名:
+> - ドメイン: `Visit`→`CoffeeRecord`（`CoffeeItem` / `FoodItem` は廃止し属性を `CoffeeRecord` に昇格、`cafe` は任意）
+> - リポジトリ: `VisitRepository`→`CoffeeRepository`、`RemoteVisitDataSource`→`RemoteCoffeeDataSource`、`VisitRepositoryImpl`→`CoffeeRepositoryImpl`、`LocalVisitRepository`→`LocalCoffeeRepository`
+> - feature モジュール: `visit-list`→`coffee-list`、`visit-detail`→`coffee-detail`、`visit-editor`→`coffee-editor`
+> - Firestore: `users/{uid}/visits/{id}` + 子サブコレクション → `users/{uid}/coffees/{id}`（photos は埋め込み配列）
+>
+> 本ドキュメント内の **過去の移行ステップ表は履歴としてそのまま残す**。それ以外の例文・コードスニペットに残る `Visit*` 表記は対応する `Coffee*` / `CoffeeRecord` に読み替えること。最新のデータ表現は [`data-model.md`](./data-model.md) を真とする。
+
 ## 概要
 
 CoffeeVision は **Kotlin Multiplatform（KMP）+ ネイティブ UI** 構成を採用しています。
@@ -35,18 +43,18 @@ coffeevision/
 │           └── android.library.gradle.kts
 │
 ├── shared/
-│   ├── core/                             # [com.noricoffee.core] AppContainer / VisitRepositoryImpl（local+remote 合成）
+│   ├── core/                             # [com.noricoffee.core] AppContainer / CoffeeRepositoryImpl（local+remote 合成）
 │   ├── domain/                           # [com.noricoffee.domain] ドメインモデル / enum / *Repository I/F / UseCase / VisitedCafe
-│   ├── data-local/                       # [com.noricoffee.dataLocal] SQLDelight スキーマ / Mapper / DriverFactory / LocalVisitRepository
+│   ├── data-local/                       # [com.noricoffee.dataLocal] SQLDelight スキーマ / Mapper / DriverFactory / LocalCoffeeRepository
 │   ├── data-places/                      # [com.noricoffee.dataPlaces] Ktor + Google Places API クライアント（PlacesClient / CafeRepositoryImpl）
 │   ├── data-firebase/                    # [com.noricoffee.dataFirebase] Firestore / Auth の Android 実装（iOS 実装は iosApp 側 Swift）
 │   ├── framework/                        # [com.noricoffee.framework] iOS 向け Umbrella。`SharedLogic.xcframework` を出力 + ViewModel ファクトリ
 │   └── feature/
 │       └── <feature-name>/               # [com.noricoffee.feature.<name>] 1 画面 = 1 モジュール（<Name>ViewModel + UIState）
 │                                         #   画面追加ごとに増える。正確な一覧は settings.gradle.kts を真とする
-│                                         #   現状: visit-list / visit-detail / visit-editor / cafe-search / map / cafe-detail
+│                                         #   現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail
 │
-├── sharedUI/                             # Compose Multiplatform（Android 検証用、feature/visit-list を 1 画面表示）
+├── sharedUI/                             # Compose Multiplatform（Android 検証用、feature/coffee-list を 1 画面表示）
 ├── iosApp/
 │   └── iosApp/
 │       ├── App/                          # @main・AppContainer 構築・Firebase 初期化
@@ -57,11 +65,11 @@ coffeevision/
 └── androidApp/                           # Android エントリポイント（検証ターゲット、リリース対象外、最小実装で維持）
     └── src/main/kotlin/
         ├── CoffeeVisionApp.kt            # Application・AppContainer 構築・Firebase 初期化
-        └── ...                           # Compose Navigation + Visit 一覧 1 画面のみ
+        └── ...                           # Compose Navigation + コーヒー一覧 1 画面のみ
 ```
 
 - iOS 向けには `shared/framework` が **全 shared モジュール（基盤層 + 全 feature）** を `api` + `export(...)` で再公開し、`SharedLogic.framework`（XCFramework 名も `SharedLogic`）として配布。feature を追加したらこの export にも 1 行追加する
-- `shared/data-firebase` は `androidMain` に Android 実装（`AuthRepositoryAndroidImpl` / `RemoteVisitDataSourceAndroidImpl` / `VisitFirestoreMapper`、2026-06-11 移送済）を持つ。iOS 実装は `iosApp` 側 Swift で `domain` の I/F に準拠
+- `shared/data-firebase` は `androidMain` に Android 実装（`AuthRepositoryAndroidImpl` / `RemoteCoffeeDataSourceAndroidImpl` / `CoffeeFirestoreMapper`）を持つ。iOS 実装は `iosApp` 側 Swift で `domain` の I/F に準拠
 
 #### この分割の設計目的（KMP モジュール分割アーキテクチャの実証）
 
@@ -88,7 +96,7 @@ Android ターゲットは「リリース対象」ではなく **「共通レイ
 | **機能** | `feature/*` | ViewModel + `UIState`（Kotlin）／画面ごとに 1 モジュール | `core`, `domain`（**他 feature 不可**） |
 | **配布** | `framework` | iOS 向け umbrella。全 feature/data/domain を `api` で再 export | 全 shared モジュール |
 | **アプリ** | `iosApp` | SwiftUI View + Bridge + Firebase Swift 実装 + DI 配線 | `framework`（XCFramework）|
-|  | `androidApp` | Compose Navigation + Visit 一覧 1 画面（**検証用最小実装**） | `feature/visit-list`, `data/*`, `domain`, `core` |
+|  | `androidApp` | Compose Navigation + コーヒー一覧 1 画面（**検証用最小実装**） | `feature/coffee-list`, `data/*`, `domain`, `core` |
 
 ---
 
@@ -146,8 +154,8 @@ kotlin {
             export(projects.shared.dataLocal)
             export(projects.shared.dataFirebase)
             export(projects.shared.dataPlaces)
-            export(projects.shared.feature.visitList)
-            // visitDetail / visitEditor / cafeSearch / map / cafeDetail も同様に export
+            export(projects.shared.feature.coffeeList)
+            // coffeeDetail / coffeeEditor / cafeSearch / map / cafeDetail も同様に export
             xcf.add(this)
         }
     }
@@ -157,8 +165,8 @@ kotlin {
         api(projects.shared.dataLocal)
         api(projects.shared.dataFirebase)
         api(projects.shared.dataPlaces)
-        api(projects.shared.feature.visitList)
-        // visitDetail / visitEditor / cafeSearch / map / cafeDetail も同様に api
+        api(projects.shared.feature.coffeeList)
+        // coffeeDetail / coffeeEditor / cafeSearch / map / cafeDetail も同様に api
     }
 }
 ```
@@ -281,7 +289,7 @@ Android ターゲットを **「常にビルドが通り、共通 ViewModel を�
 | レイヤー | 役割 | 配置 |
 |---------|------|------|
 | Presentation | 描画・入力。SwiftUI / Compose | `iosApp/` / `androidApp/` |
-| ViewModel | UI 状態の保持と更新、ユーザーアクションのハンドリング | `shared/feature/*`（visit-list / visit-detail / visit-editor / cafe-search / map / cafe-detail に配置済） |
+| ViewModel | UI 状態の保持と更新、ユーザーアクションのハンドリング | `shared/feature/*`（coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail に配置済） |
 | UseCase | 複数 Repository をまたぐ手続き（薄ければ省略可） | `shared/domain/usecase/` |
 | Repository | データソースの集約。UI に対しては単一のインターフェースを提供 | インターフェース: `shared/domain/repository/` / 合成実装: `shared/core/repository/` |
 | Local | SQLDelight。検索・オフライン参照を高速化する用途 | `shared/data-local/` |

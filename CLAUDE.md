@@ -137,7 +137,7 @@
 - **アーキテクチャ**: Kotlin Multiplatform（KMP）+ ネイティブ UI
 - **共通言語**: Kotlin（`shared/*` モジュール群。基盤層 `core` / `domain` / `data-local` / `data-places` / `data-firebase` + `feature/*`（1 画面 = 1 モジュール、増減する）+ iOS 配布用 `framework` に分割済。正確な一覧は `settings.gradle.kts`）
 - **iOS UI**: SwiftUI + MVVM（`@Observable`）
-- **Android UI**: Compose Multiplatform（`feature/visit-list` を 1 画面だけ表示する検証実装）
+- **Android UI**: Compose Multiplatform（`feature/coffee-list` を 1 画面だけ表示する検証実装）
 - **ローカル DB**: SQLDelight
 - **クラウド同期**: Firebase 公式プラットフォーム別 SDK（オフライン永続化に委譲）
 - **カフェ検索**: Google Places API
@@ -153,14 +153,14 @@ Phase 2.5 で基盤レイヤーを分割し、Phase 3 / 3.5 / 4 で `feature/*` 
 | モジュール | namespace | 役割 |
 |----------|-----------|------|
 | `build-logic/convention/` | - | KMP / Android 共通設定の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`） |
-| `shared/core/` | `com.noricoffee.core` | `AppContainer` / `VisitRepositoryImpl`（local+remote 合成） |
-| `shared/domain/` | `com.noricoffee.domain` | ドメインモデル + enum + Repository インターフェース + UseCase + `VisitedCafe` |
-| `shared/data-local/` | `com.noricoffee.dataLocal` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalVisitRepository` |
+| `shared/core/` | `com.noricoffee.core` | `AppContainer` / `CoffeeRepositoryImpl`（local+remote 合成） |
+| `shared/domain/` | `com.noricoffee.domain` | ドメインモデル（`CoffeeRecord` 主体）+ enum + Repository インターフェース + UseCase + `VisitedCafe` |
+| `shared/data-local/` | `com.noricoffee.dataLocal` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalCoffeeRepository` |
 | `shared/data-places/` | `com.noricoffee.dataPlaces` | Ktor + Google Places API クライアント（`PlacesClient` / `CafeRepositoryImpl`） |
 | `shared/data-firebase/` | `com.noricoffee.dataFirebase` | Android Firebase 実装（`AuthRepositoryAndroidImpl` / `RemoteVisitDataSourceAndroidImpl` / `VisitFirestoreMapper`）。iOS 実装は iosApp 側 Swift |
-| `shared/feature/<name>/` | `com.noricoffee.feature.<name>` | **1 画面 = 1 モジュール**（`<Name>ViewModel` + UIState）。画面追加ごとに増える。現状: visit-list / visit-detail / visit-editor / cafe-search / map / cafe-detail |
+| `shared/feature/<name>/` | `com.noricoffee.feature.<name>` | **1 画面 = 1 モジュール**（`<Name>ViewModel` + UIState）。画面追加ごとに増える。現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail |
 | `shared/framework/` | `com.noricoffee.framework` | iOS 向け Umbrella（`SharedLogic.xcframework` を出力、SKIE 適用先）+ `AppContainer` の ViewModel ファクトリ拡張関数 |
-| `sharedUI/` | - | Compose Multiplatform（Android 検証用、`feature/visit-list` を 1 画面表示） |
+| `sharedUI/` | - | Compose Multiplatform（Android 検証用、`feature/coffee-list` を 1 画面表示） |
 | `iosApp/` | - | SwiftUI エントリポイント + Swift Firebase 実装 |
 | `androidApp/` | `com.noricoffee` | Android エントリポイント（検証ターゲット、リリース対象外） |
 

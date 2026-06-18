@@ -273,6 +273,50 @@
 
 ---
 
+## フェーズ 7: コーヒー記録主体への再設計（Visit → CoffeeRecord）
+
+> 2026-06-19 着手。アプリの集約ルートを「カフェ訪問（`Visit`）」から「**コーヒー記録（`CoffeeRecord`）**」へ転換。カフェは任意（null = セルフ抽出）。`ambiance` / `FoodItem` は廃止（メモに吸収）。**クリーンブレイク**（データ移行なし、テスト端末はアプリ削除→再インストール）。確定仕様は [`data-model.md`](./data-model.md)（2026-06-19 全面改訂版）、経緯は [`implementation_note.md`](./implementation_note.md) 2026-06-19 エントリ。3 ロール体制で Phase 1（KMP commonMain + data-local）→ Phase 2（data-firebase Android）/ Phase 3（iOS）の順に dispatch。
+
+### Phase 0: docs（親）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `data-model.md` を CoffeeRecord 主体に全面改訂（Kotlin / SQLDelight / Firestore の 3 表現） | 2026-06-19 |
+| [x] | `architecture.md` / `CLAUDE.md` のモジュール名・リポジトリ名を更新（改訂バナー追加、履歴表は残置） | 2026-06-19 |
+| [x] | `tasks.md` にフェーズ 7 を追加、`implementation_note.md` に判断記録 | 2026-06-19 |
+
+### Phase 1: KMP commonMain + data-local（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `shared/domain`: `CoffeeRecord` 新設、`Visit` / `CoffeeItem` / `FoodItem` 削除。`cafe: Cafe?`、コーヒー属性昇格 | |
+| [ ] | `shared/domain`: `CoffeeRepository` / `RemoteCoffeeDataSource` 新設（旧 Visit 系を置換）。`ObserveVisitedCafesUseCase`（cafe != null フィルタ）/ `DeleteAccountUseCase` 追随。`VisitedCafe` は名前維持で集計元変更 | |
+| [ ] | `shared/core`: `CoffeeRepositoryImpl` / `AppContainer`（`coffeeRepository`、引数 `remoteCoffeeDataSource`） | |
+| [ ] | `shared/data-local`: `CoffeeRecord.sq` 新設 + `Photo.sq` FK 変更、`Visit/CoffeeItem/FoodItem.sq` 削除、`LocalCoffeeRepository` + `Mapper`。テスト改訂（null cafe 往復ケース追加） | |
+| [ ] | feature リネーム: `coffee-list` / `coffee-detail` / `coffee-editor`（ViewModel + UIState を CoffeeRecord 化）。`cafe-detail` / `map` 追随 | |
+| [ ] | `shared/framework`: export/api を coffee-* に、`AppContainerViewModelFactory` のファクトリ改名・配線。`settings.gradle.kts` のモジュール名更新 | |
+| [ ] | 検証: `:shared:domain:compile*` / `:shared:data-local:allTests` / `:shared:framework:assembleSharedLogicXCFramework` 成功（iOS 着手の前提） | |
+
+### Phase 2: data-firebase（androidMain, kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `CoffeeFirestoreMapper` + `RemoteCoffeeDataSourceAndroidImpl`（`coffees` コレクション + photos 埋め込み、子取得・差分 delete 撤廃） | |
+| [ ] | `androidApp` / `sharedUI` の Visit 参照を追随。検証: `:androidApp:assembleDebug` 成功 | |
+
+### Phase 3: iOS UI（ios-engineer, Phase 1 完了後）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `FirebaseRepositories`: `CoffeeFirestoreMapper.swift` + `RemoteCoffeeDataSourceIosImpl.swift`（coffees + photos 埋め込みで簡素化） | |
+| [ ] | `AppState.swift`: `coffeeListBridge`、`RemoteCoffeeDataSourceIosImpl`、AppContainer init 追随 | |
+| [ ] | `RootTabView`: 「訪問」→「コーヒー」タブ + **FAB でコーヒー記録追加**（TabBarFrameReader パターン流用、競合時は右下標準配置にフォールバック） | |
+| [ ] | `Coffee{List,Detail,Editor}View` + Bridge（VisitEditor は子アイテム編集を本体フォームに統合、cafe 任意化）。`CoffeeItemEditorView` / `FoodItemEditorView` 削除 | |
+| [ ] | `CafeDetailView` / `MapTabView` 追随、`PreviewSamples` を CoffeeRecord 化（cafe あり/null 両方） | |
+| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ手動確認（アプリ削除→再インストール前提） | |
+
+---
+
 ## フェーズ 6（任意 / 後続）
 
 | 状態 | タスク | 備考 |

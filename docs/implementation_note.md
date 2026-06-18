@@ -1332,3 +1332,25 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 
 - 既知の軽微な論点（許容）: タップ後 `requestLocation()` が同一緯度を返すと `onChange` 不発で `pendingRecenter` が残り、次の自然な位置更新で 1 回再センタリングが起きうる。実害なしと判断。
 - 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` → BUILD SUCCEEDED（新規 warning ゼロ）。シミュレータ / 実機の目視確認（配置・センタリング・拒否時無効・回転追従・初回許可フロー）はユーザー作業。
+
+### 2026-06-19: コーヒー記録主体への再設計（Visit → CoffeeRecord、Phase 7）
+
+- 領域: 全レイヤー（domain / core / data-local / data-firebase / feature × 6 / framework / iosApp / settings.gradle）。事前確定仕様は [`data-model.md`](./data-model.md) 2026-06-19 全面改訂版。`tasks.md` フェーズ 7。
+
+**集約ルートを `Visit`（カフェ訪問）から `CoffeeRecord`（コーヒー 1 杯）へ転換する**。ユーザー意図は「カフェ主体ではなくコーヒー主体。カフェまたはセルフ抽出に紐づく」。`CoffeeItem` / `FoodItem` を廃止し、旧 `CoffeeItem` の属性（name / brewMethod / origin / variety / processing / roastLevel / cup）を `CoffeeRecord` に昇格。旧 `Visit` の属性のうち visitedOn / rating / notes / photos を `CoffeeRecord` に移管。
+
+**確定した設計判断（ユーザー承認済み、AskUserQuestion 2026-06-19）**:
+- Visit を廃止し Coffee を独立エンティティ化（中間グルーピングを残さない最もシンプルな形）
+- 旧 Visit 属性はコーヒー単位へ移管、カフェ訪問概念は廃止。`ambiance` と `FoodItem` は構造化フィールドとしては廃止し自由メモ `notes` に吸収（フードを別管理したい要件が再燃したら別途検討）
+- カフェは nullable（`cafe: Cafe?`）。null = セルフ抽出。「ソース種別（自宅/職場等）」フィールドは持たず最小構成（将来の絞り込み要件が出たら追加）
+- クリーンブレイク（データ移行コードを書かない）。未リリースのため実ユーザーデータなし前提。SQLDelight はマイグレーション不要、テスト端末はアプリ削除→再インストール
+
+**トレードオフ / 影響**:
+- **`VisitedCafe` は名前を維持**し集計元だけ `CoffeeRecord`（cafe != null）に変更。`map` / `cafe-detail` の iOS 参照が広く、ドメイン意味変更（「訪問」→「記録のあるカフェ」）のみに留めるため。改名（`RecordedCafe` 等）は将来の任意タスク
+- **Firestore は `coffees` コレクション + photos 埋め込み配列**（旧: `visits` + 子サブコレクション 3 種）。1 杯あたり photos は数枚でメタデータのみのため 1MB 上限に余裕。これにより observe の子 N+1 取得と WriteBatch 差分 delete が不要になり、Android（`RemoteCoffeeDataSourceAndroidImpl`）/ iOS（`RemoteCoffeeDataSourceIosImpl.swift`）が大幅簡素化。将来 1 記録に大量写真を許す要件が出たらサブコレクションに戻す
+- **feature モジュールをリネーム**（`visit-list/detail/editor` → `coffee-*`）。クリーンブレイクで未リリースのため名残を残さない方が保守上良い。中身は全面改訂が必須なのでリネームの追加コストは小（ディレクトリ移動 + settings/framework の文字列置換）。`shared/framework/build.gradle.kts` の `export(...)` と `api(...)` の **両方** を typesafe accessor（`projects.shared.feature.coffeeList` 等）で更新する必要あり（片方だと型が Swift に出ない）
+- **`observeByCafe` / 集計の null cafe 扱い**: `selectByCafe` は SQL 等値マッチで null を自然除外（意図通り＝セルフ抽出はカフェ詳細・マップに出ない）。`ObserveVisitedCafesUseCase` は明示的に `cafe != null` フィルタを入れる（NPE 回避）。`CafeDetailViewModel` は `it.cafe?.placeId == placeId`
+
+**dispatch 順序**: 3 ロール体制。commonMain の公開 API（`CoffeeRecord` / `CoffeeRepository` / ViewModel / ファクトリ名）を Phase 1 で凍結し `:shared:framework:assembleSharedLogicXCFramework` 成功（= SKIE ヘッダ生成）を iOS 着手の前提にする。Phase 2（data-firebase Android）と Phase 3（iOS）は Phase 1 完了後に並行可能。
+
+**SKIE 生成名の注意**: 旧 `Visit` は SQLDelight が同名行型を生成する衝突回避で Swift 側 `Visit_` だった（サマリ参照）。`CoffeeRecord` は SQLDelight 行型名（`Coffee_record` 等）と異なるため `_` は付かない見込みだが、Phase 1 後に生成ヘッダで実際の Swift 型名を確認してから iOS 実装を書く。

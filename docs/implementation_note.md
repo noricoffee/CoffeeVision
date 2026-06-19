@@ -1403,3 +1403,15 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **`AppContainer` のコンストラクタが 3 系統**: プライマリ（6 引数 = テスト用 scope 注入）/ セカンダリ A（5 引数 = iOS で `CoffeeInsightProvider` 注入、MainScope 内部生成）/ セカンダリ B（4 引数 = Android 互換、`coffeeInsightProvider` null 固定、MainScope 内部生成）。SKIE がデフォルト引数を Swift に出さない制約への対処（既存の scope 隠蔽パターンの踏襲）。**Android の `CoffeeVisionApp.kt` と現状の iOS `AppState.swift` は 4 引数のままで無変更**。iOS は A-4 で `CoffeeInsightProvider` 実装を注入する際に 5 引数へ切り替える。
 - **`AnalysisViewModel.onAppear()` は引数なし**（`userId` はコンストラクタ確定）。`makeAnalysisViewModel(userId)` で生成し、TabBar 常時生存パターン（`mapBridge` と同じく `AppState` 1 つ保持）を想定。
 - **要約再生成トリガ**: 現状「統計更新のたびに再生成」。リアルタイム同期で連続 emit する場合は LLM 呼び出しコストが上がるため、A-4 でデバウンス / 手動トリガ化を検討する余地あり（要 follow-up）。
+
+### 2026-06-19: Phase A-3 — 分析タブ iOS UI（Swift Charts）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Analysis/{AnalysisView,AnalysisViewModelBridge}.swift`, `RootTabView.swift`, `AppState.swift`, `PreviewSupport/PreviewSamples.swift`
+
+- **タブ順**: マップ / コーヒー / **分析** / 検索。`Tab(role: .search)` の右端固定を維持し、分析はコーヒーの次。SF Symbol `chart.bar.xaxis`。
+- **グラフ種別**: 縦棒（評価ヒストグラム / 焙煎度 / 抽出方法）/ 横棒（産地 = 日本語名が長く横軸向き）/ 折れ線（月次推移）/ カスタムリスト（よく行く店 = ランキング形式）。レイアウトは `ScrollView` + `LazyVStack` のカード方式（グラフが多く Form より適）。
+- **空状態**: `stats == nil`（ロード前）OR `totalCount == 0`（記録ゼロ）を空状態、`isLoading` は `ProgressView` で分離。`ContentUnavailableView` でコーヒータブ誘導。
+- **Bridge**: `insightStatus` を `any AnalysisViewModelInsightStatus`（existential）で保持。A-3 では常に `Unsupported`（provider 未注入）で UI 非描画だが、A-4 の `is` チェック分岐に備えて型を維持。`AppContainer` は **4 引数のまま無変更**（A-4 で 5 引数化）。`analysisBridge` は `AppState` 1 つ保持（`mapBridge` と同パターン）。
+- **enum 日本語化**: `RoastLevel` / `BrewMethod` の `enum.name`（英語）→ 日本語変換ヘルパを `AnalysisView` に内包。既存の他画面（CoffeeDetail 等）の enum 表示は英語のままで、日本語化は元々別タスク扱い。**分析タブが先行して独自ヘルパを持つ形になったため、将来 enum 表示の日本語化を全画面で行う際に共通化する候補**（follow-up）。
+- **SKIE 型の注意**: `CoffeeStats` を `Identifiable` 適合させる際 `id: Int32 { totalCount }`（KMP の `Int` は Swift で `Int32`）。

@@ -351,10 +351,10 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `RootTabView` に「分析」タブ追加（SF Symbols `chart.bar` 等）。`AnalysisView` + `AnalysisViewModelBridge` 新設 | iOS 26 TabView 新 API。タブ位置は親と調整 |
-| [ ] | 階層1 の可視化（Swift Charts で産地分布 / 焙煎度 / 月次推移 / 評価ヒストグラム、よく行く店リスト、サマリ数値） | システムカラー / Dynamic Type / アクセシビリティラベル |
-| [ ] | 空状態（記録 0 件）の `ContentUnavailableView` | |
-| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | |
+| [x] | `RootTabView` に「分析」タブ追加（SF Symbols `chart.bar` 等）。`AnalysisView` + `AnalysisViewModelBridge` 新設 | 2026-06-19 / `chart.bar.xaxis`、タブ順=マップ/コーヒー/分析/検索（search 右端固定）。Bridge は insight 系も読むが描画は stats のみ |
+| [x] | 階層1 の可視化（Swift Charts で産地分布 / 焙煎度 / 月次推移 / 評価ヒストグラム、よく行く店リスト、サマリ数値） | 2026-06-19 / 棒（ヒストグラム/カテゴリ）/ 横棒（産地）/ 折れ線（月次）/ リスト（店）。`ScrollView`+`LazyVStack`、enum 日本語化ヘルパ内包、accessibilityLabel 付与 |
+| [x] | 空状態（記録 0 件）の `ContentUnavailableView` | 2026-06-19 / `stats==nil` または `totalCount==0`、isLoading は ProgressView で分離 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | 2026-06-19 / BUILD SUCCEEDED・新規 warning ゼロ。**シミュレータ目視（タブ表示/各グラフ/空状態/VoiceOver 数値読み上げ）はユーザー作業** |
 
 ### Phase A-4: Foundation Models 要約（親が契約確定 → ios-engineer）
 

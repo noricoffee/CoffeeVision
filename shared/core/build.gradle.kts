@@ -18,6 +18,8 @@ kotlin {
             // AppContainer が PlacesClient / CafeRepository を内部で組み立てるため
             api(projects.shared.dataPlaces)
             implementation(libs.kotlinx.coroutines.core)
+            // DummyCoffeeData で LocalDate / Instant / Clock を使う
+            implementation(libs.kotlinx.datetime)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

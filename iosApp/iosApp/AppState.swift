@@ -103,6 +103,12 @@ final class AppState {
             let uid = try await container.startInitialSync()
             self.uid = uid
             self.status = .ready
+            // [DEBUG] ダミーデータの seed / clear（bridge 生成前に実行し、最初の Flow emit からダミーが反映されるようにする）
+            // 専用 Scheme「iosApp (Dummy Data)」で起動したときだけ seed、それ以外は clear する。
+            // seed / clear は開発用途のため失敗しても致命扱いにせずログのみ出す。
+            #if DEBUG
+            await seedOrClearDummyData(userId: uid)
+            #endif
             // CoffeeListViewModelBridge を 1 度だけ生成する
             if coffeeListBridge == nil {
                 coffeeListBridge = CoffeeListViewModelBridge(kotlin: container.makeCoffeeListViewModel())
@@ -124,6 +130,34 @@ final class AppState {
             self.lastError = error.localizedDescription
             self.status = .failed
             print("[CoffeeVision] startInitialSync failed: \(error)")
+        }
+    }
+
+    // MARK: - Private helpers
+
+    /// ダミーデータを seed または clear する（DEBUG ビルド専用）。
+    ///
+    /// - 環境変数 `SEED_DUMMY_DATA == "1"` のとき seed（冪等 upsert）
+    /// - それ以外のとき clear（固定 ID `dummy-0001`..`dummy-0030` をローカル削除）
+    ///
+    /// ローカル DB のみ操作し Firestore には流れない。
+    /// 失敗しても致命扱いにせずログのみ出す（開発支援用途のため）。
+    @MainActor
+    private func seedOrClearDummyData(userId: String) async {
+        if ProcessInfo.processInfo.environment["SEED_DUMMY_DATA"] == "1" {
+            do {
+                try await container.seedDummyData(userId: userId)
+                print("[CoffeeVision] seedDummyData succeeded uid=\(userId)")
+            } catch {
+                print("[CoffeeVision] seedDummyData failed (ignored): \(error)")
+            }
+        } else {
+            do {
+                try await container.clearDummyData(userId: userId)
+                print("[CoffeeVision] clearDummyData succeeded uid=\(userId)")
+            } catch {
+                print("[CoffeeVision] clearDummyData failed (ignored): \(error)")
+            }
         }
     }
 

@@ -3,6 +3,7 @@ package com.noricoffee
 import app.cash.sqldelight.db.SqlDriver
 import com.noricoffee.data.places.createCafeRepository
 import com.noricoffee.db.AppDatabase
+import com.noricoffee.dev.DummyCoffeeData
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.CafeRepository
@@ -133,5 +134,35 @@ class AppContainer(
         val uid = authRepository.signInAnonymouslyIfNeeded()
         (coffeeRepository as CoffeeRepositoryImpl).startSync(uid, scope)
         return uid
+    }
+
+    /**
+     * 開発用: [DummyCoffeeData] のレコード 30 件をローカル DB のみに upsert する。
+     *
+     * - **ローカル DB 限定**（Firestore には流さない。dev データで本番を汚染しない）
+     * - **冪等**（固定 ID で何度呼んでも 30 件）
+     * - iOS 側から呼ぶ場合は `#if DEBUG` かつ `SEED_DUMMY_DATA == "1"` の環境変数ガード下に限定すること
+     *
+     * Swift から呼ぶシグネチャ（SKIE）:
+     * `seedDummyData(userId: String) async throws`
+     */
+    @Throws(Exception::class)
+    suspend fun seedDummyData(userId: String) {
+        DummyCoffeeData.records(userId).forEach { localCoffeeRepository.save(it) }
+    }
+
+    /**
+     * 開発用: ローカル DB から [DummyCoffeeData] の固定 ID を持つレコードを全件削除する。
+     *
+     * - **ローカル DB 限定**（Firestore 側には何もしない）
+     * - 通常 Scheme での起動時（`SEED_DUMMY_DATA` 未設定）に呼ぶことで、
+     *   ダミー Scheme で seed したデータを綺麗に消せる
+     *
+     * Swift から呼ぶシグネチャ（SKIE）:
+     * `clearDummyData(userId: String) async throws`
+     */
+    @Throws(Exception::class)
+    suspend fun clearDummyData(userId: String) {
+        DummyCoffeeData.ids.forEach { localCoffeeRepository.delete(userId, it) }
     }
 }

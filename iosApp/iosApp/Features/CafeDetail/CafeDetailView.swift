@@ -177,12 +177,12 @@ private struct CoffeeSummaryRow: View {
             Text(formattedDate)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            StarRatingView(rating: Int(coffee.rating), size: .caption)
+            StarRatingView(rating: coffee.rating, size: .caption)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            String(localized: "\(coffee.name), \(formattedDate), \(Int(coffee.rating))星")
+            String(localized: "\(coffee.name), \(formattedDate), \(coffee.rating.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(coffee.rating))" : "\(coffee.rating)")星")
         )
     }
 

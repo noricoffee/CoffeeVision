@@ -127,7 +127,7 @@ enum PreviewSamples {
             mapsUrl: "https://maps.google.com/?cid=sample"
         ),
         visitedOn: localDate(year: 2026, month: 6, day: 2),
-        rating: 4,
+        rating: 4.5,
         notes: "ベリー系の華やかな酸味。落ち着いた木質の内装。店員さんが品種を丁寧に教えてくれた",
         photos: samplePhotos,
         name: "本日のコーヒー（ケニア カグモイニ）",
@@ -156,7 +156,7 @@ enum PreviewSamples {
             mapsUrl: nil
         ),
         visitedOn: localDate(year: 2026, month: 5, day: 28),
-        rating: 3,
+        rating: 3.0,
         notes: "",
         photos: [],
         name: "エスプレッソ",
@@ -176,7 +176,7 @@ enum PreviewSamples {
         userId: "preview-user",
         cafe: nil,
         visitedOn: localDate(year: 2026, month: 6, day: 19),
-        rating: 5,
+        rating: 5.0,
         notes: "豆の挽き方を変えたら格段に旨くなった",
         photos: [],
         name: "エチオピア イルガチェフェ",

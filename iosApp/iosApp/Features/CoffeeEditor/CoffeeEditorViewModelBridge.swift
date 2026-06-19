@@ -74,8 +74,8 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onVisitedOnChanged(date: date)
     }
 
-    func onRatingChanged(rating: Int) {
-        kotlin.onRatingChanged(rating: Int32(rating))
+    func onRatingChanged(rating: Double) {
+        kotlin.onRatingChanged(rating: rating)
     }
 
     func onNotesChanged(_ text: String) {

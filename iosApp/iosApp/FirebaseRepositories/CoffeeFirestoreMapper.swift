@@ -53,7 +53,7 @@ enum CoffeeFirestoreMapper {
             "id": record.id,
             "userId": record.userId,
             "visitedOn": record.visitedOn.description(),
-            "rating": Int(record.rating),
+            "rating": record.rating,
             "notes": record.notes,
             "name": record.name,
             "brewMethod": record.brewMethod.name,
@@ -85,7 +85,6 @@ enum CoffeeFirestoreMapper {
             let userId = data["userId"] as? String,
             let visitedOnStr = data["visitedOn"] as? String,
             let visitedOn = parseIsoLocalDate(visitedOnStr),
-            let rating = (data["rating"] as? NSNumber)?.int32Value,
             let notes = data["notes"] as? String,
             let name = data["name"] as? String,
             let brewMethodName = data["brewMethod"] as? String,
@@ -95,6 +94,11 @@ enum CoffeeFirestoreMapper {
         else {
             return nil
         }
+
+        // rating: Double として読む。旧形式（Int）との互換のため NSNumber 経由でも解釈する
+        let rating: Double = (data["rating"] as? Double)
+            ?? (data["rating"] as? NSNumber)?.doubleValue
+            ?? 0.0
 
         // cafe は null 時 nil（セルフ抽出）
         let cafe: Cafe?

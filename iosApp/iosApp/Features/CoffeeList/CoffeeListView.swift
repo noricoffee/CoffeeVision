@@ -180,12 +180,15 @@ struct CoffeeRow: View {
     }
 
     private var starRating: some View {
-        StarRatingView(rating: Int(coffee.rating), size: .caption2)
+        StarRatingView(rating: coffee.rating, size: .caption2)
     }
 
     private var accessibilityDescription: String {
         let cafeName = coffee.cafe?.name ?? String(localized: "セルフ抽出")
-        return "\(cafeName), \(coffee.name), \(formattedDate), \(Int(coffee.rating))星"
+        let ratingStr = coffee.rating.truncatingRemainder(dividingBy: 1) == 0
+            ? "\(Int(coffee.rating))星"
+            : "\(coffee.rating)星"
+        return "\(cafeName), \(coffee.name), \(formattedDate), \(ratingStr)"
     }
 }
 

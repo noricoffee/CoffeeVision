@@ -105,7 +105,7 @@ struct CoffeeDetailView: View {
                 }
 
                 LabeledContent(String(localized: "評価")) {
-                    StarRatingView(rating: Int(coffee.rating))
+                    StarRatingView(rating: coffee.rating)
                 }
             }
 
@@ -264,7 +264,7 @@ private struct PhotoDetailCell: View {
                     Text("2026/06/02")
                 }
                 LabeledContent(String(localized: "評価")) {
-                    StarRatingView(rating: 4)
+                    StarRatingView(rating: 4.0)
                 }
             }
 
@@ -310,7 +310,7 @@ private struct PhotoDetailCell: View {
                     Text("2026/06/19")
                 }
                 LabeledContent(String(localized: "評価")) {
-                    StarRatingView(rating: 3)
+                    StarRatingView(rating: 3.0)
                 }
             }
 

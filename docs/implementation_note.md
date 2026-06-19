@@ -1392,3 +1392,14 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - v2（Phase B-3）で tool calling（Swift のツールが KMP のクエリ API を呼ぶ）に拡張。初手で KMP 側にクエリ境界を新設するのは過剰。
 
 **フェーズ分割**: A-1 集計（domain + UseCase + test）→ A-2 `feature/analysis` + ViewModel → A-3 分析タブ UI（Swift Charts）→ A-4 Foundation Models 要約。階層2（`favoriteSignals`）と Q&A は Phase B。A-4 は Foundation Models の round-trip を小さな PoC で確認してから本実装に組み込む（KMP / 新規 API ブリッジの鉄則）。「好みのカフェをマップで探す」は要件外（将来）。
+
+### 2026-06-19: Phase A-2 — AnalysisViewModel の insightStatus 設計と AppContainer コンストラクタ拡張
+
+- 領域: KMP / Shared / iOS Bridge
+- 関連: `shared/feature/analysis/.../AnalysisViewModel.kt`, `shared/core/.../AppContainer.kt`, `shared/framework/.../AppContainerViewModelFactory.kt`
+
+- **統計と要約を独立ロード状態に**: `AnalysisUiState(stats, isLoading, insight, insightStatus, error)`。統計（階層1）は `ObserveCoffeeStatsUseCase` の Flow で即時反映、要約（階層3）は後追いで `insightProvider?.summarize(stats)` を呼んで埋める。要約が失敗・非対応でも統計画面は完全機能する。
+- **`InsightStatus` は `sealed interface` + `data object`**（`Unsupported` / `Idle` / `Loading` / `Loaded` / `Failed`）。SKIE SealedInterop で Swift には `AnalysisViewModelInsightStatus` protocol + 5 実装として届き、`is` チェックで分岐。将来 `Failed(message)` 等の関連値を付ける拡張に強い。`insightProvider == null`（Android / Apple Intelligence 非対応）は初期値 `Unsupported`。
+- **`AppContainer` のコンストラクタが 3 系統**: プライマリ（6 引数 = テスト用 scope 注入）/ セカンダリ A（5 引数 = iOS で `CoffeeInsightProvider` 注入、MainScope 内部生成）/ セカンダリ B（4 引数 = Android 互換、`coffeeInsightProvider` null 固定、MainScope 内部生成）。SKIE がデフォルト引数を Swift に出さない制約への対処（既存の scope 隠蔽パターンの踏襲）。**Android の `CoffeeVisionApp.kt` と現状の iOS `AppState.swift` は 4 引数のままで無変更**。iOS は A-4 で `CoffeeInsightProvider` 実装を注入する際に 5 引数へ切り替える。
+- **`AnalysisViewModel.onAppear()` は引数なし**（`userId` はコンストラクタ確定）。`makeAnalysisViewModel(userId)` で生成し、TabBar 常時生存パターン（`mapBridge` と同じく `AppState` 1 つ保持）を想定。
+- **要約再生成トリガ**: 現状「統計更新のたびに再生成」。リアルタイム同期で連続 emit する場合は LLM 呼び出しコストが上がるため、A-4 でデバウンス / 手動トリガ化を検討する余地あり（要 follow-up）。

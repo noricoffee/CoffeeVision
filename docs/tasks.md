@@ -342,10 +342,10 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | **モジュール分割**: `shared/feature/analysis` モジュール作成（`kmp.feature` 適用、namespace `com.noricoffee.feature.analysis`） | `settings.gradle.kts` に include 追加 |
-| [ ] | `AnalysisViewModel(observeCoffeeStatsUseCase, insightProvider: CoffeeInsightProvider?, userId, scope)` + `AnalysisUiState(stats, isLoading, insight, insightStatus, error)` | stats と insight は別ロード状態（統計は即時描画、要約は後追い）。insightProvider == null なら insight 関連は非対応状態 |
-| [ ] | `shared/framework`: `api` / `export` + `AppContainer.makeAnalysisViewModel()` 拡張関数追加。`AppContainer` に `coffeeInsightProvider: CoffeeInsightProvider?` 注入経路を追加（既定 null、iOS が実装を注入） | feature 追加の定石（implementation_note サマリ） |
-| [ ] | 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 成功 | |
+| [x] | **モジュール分割**: `shared/feature/analysis` モジュール作成（`kmp.feature` 適用、namespace `com.noricoffee.feature.analysis`） | 2026-06-19 / `settings.gradle.kts` include 追加 |
+| [x] | `AnalysisViewModel(observeCoffeeStatsUseCase, insightProvider: CoffeeInsightProvider?, userId, scope)` + `AnalysisUiState(stats, isLoading, insight, insightStatus, error)` | 2026-06-19 / `InsightStatus` = sealed interface（Unsupported/Idle/Loading/Loaded/Failed）。`insightProvider==null` は Unsupported。`onAppear()` 引数なし |
+| [x] | `shared/framework`: `api` / `export` + `AppContainer.makeAnalysisViewModel()` 拡張関数追加。`AppContainer` に `coffeeInsightProvider: CoffeeInsightProvider?` 注入経路を追加（既定 null、iOS が実装を注入） | 2026-06-19 / `AppContainer` コンストラクタ 3 系統（6/5/4 引数）。Android・現状 iOS は 4 引数で無変更、iOS は A-4 で 5 引数化 |
+| [x] | 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 成功 | 2026-06-19 / 両成功。XCFramework ヘッダに `AnalysisViewModel` / `makeAnalysisViewModel` / `InsightStatus` 出力確認。domain/data-local テスト計 62 件リグレッションなし |
 
 ### Phase A-3: 分析タブ UI（ios-engineer）
 

@@ -36,6 +36,12 @@ final class AppState {
     /// サインアウト / 削除後は `resetAndRebootstrap()` で nil に戻す。
     private(set) var accountBridge: AccountViewModelBridge?
 
+    /// AnalysisView 用の ViewModel ブリッジ。
+    ///
+    /// 分析タブは TabBar 常時生存のため `mapBridge` と同等のライフサイクルで管理する。
+    /// `bootstrap()` 完了後（uid 確定後）に 1 度だけ生成する。
+    private(set) var analysisBridge: AnalysisViewModelBridge?
+
     /// Google Places Photo Media API から写真 URL を取得するローダー。
     ///
     /// uid 不要なので `init` で即座に生成する（`bootstrap()` 前から利用可能）。
@@ -97,6 +103,10 @@ final class AppState {
             if accountBridge == nil {
                 accountBridge = AccountViewModelBridge(viewModel: container.makeAccountViewModel())
             }
+            // AnalysisViewModelBridge を 1 度だけ生成する（uid が必要）
+            if analysisBridge == nil {
+                analysisBridge = AnalysisViewModelBridge(viewModel: container.makeAnalysisViewModel(userId: uid))
+            }
             print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
         } catch {
             self.lastError = error.localizedDescription
@@ -114,10 +124,12 @@ final class AppState {
         coffeeListBridge?.onDisappear()
         mapBridge?.cancel()
         accountBridge?.onDisappear()
+        analysisBridge?.cancel()
 
         coffeeListBridge = nil
         mapBridge = nil
         accountBridge = nil
+        analysisBridge = nil
         uid = nil
         status = .idle
         lastError = nil

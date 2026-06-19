@@ -1354,3 +1354,14 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 **dispatch 順序**: 3 ロール体制。commonMain の公開 API（`CoffeeRecord` / `CoffeeRepository` / ViewModel / ファクトリ名）を Phase 1 で凍結し `:shared:framework:assembleSharedLogicXCFramework` 成功（= SKIE ヘッダ生成）を iOS 着手の前提にする。Phase 2（data-firebase Android）と Phase 3（iOS）は Phase 1 完了後に並行可能。
 
 **SKIE 生成名の注意**: 旧 `Visit` は SQLDelight が同名行型を生成する衝突回避で Swift 側 `Visit_` だった（サマリ参照）。`CoffeeRecord` は SQLDelight 行型名（`Coffee_record` 等）と異なるため `_` は付かない見込みだが、Phase 1 後に生成ヘッダで実際の Swift 型名を確認してから iOS 実装を書く。
+
+### 2026-06-19: コーヒー評価を 0.5 刻み Double に（ハーフスター）
+
+- 領域: 全レイヤー（domain / data-local / data-firebase / feature / iosApp）。`docs/data-model.md` の rating 記述を更新済み。
+
+`CoffeeRecord.rating` を `Int`(1..5) → **`Double`(0.5..5.0、0.0=未評価)** に変更し、星入力を 0.5 刻みにした。
+
+- **表現**: 0.5 の倍数は IEEE 754 double で厳密表現できるため、DB(REAL)/Firestore(number) 往復・等値判定とも安全。`VisitedCafe.averageRating` は元から Double で不変
+- **バリデーション**（`CoffeeEditorViewModel`）: `rating < 0.5 || rating > 5.0 || (rating * 2) % 1.0 != 0.0` で 0.5 刻みを強制（`*2` してから整数判定）
+- **Firestore 後方互換**: rating を Double で書くが、旧 Int 保存ドキュメントは SDK から Long/NSNumber で届くため、Android は `(Number).toDouble()`、iOS は `(Double) ?? (NSNumber).doubleValue ?? 0.0` で受ける。マイグレーション不要
+- **iOS ハーフスター入力**: `StarRatingView` を Double 化。表示は `star.fill` / `star.leadinghalf.filled` / `star` を rating 比較で出し分け。入力は星を左右 2 分割した透明タップ領域（`StarTapCell`、`GeometryReader` + `Color.clear.onTapGesture`）で左=‐0.5/右=フルを判定。`accessibilityAdjustableAction` は 0.5 刻み、値は「3.5星」表記。`SpatialTapGesture`(iOS17+)/`DragGesture` は連続入力や最小バージョンの懸念で不採用

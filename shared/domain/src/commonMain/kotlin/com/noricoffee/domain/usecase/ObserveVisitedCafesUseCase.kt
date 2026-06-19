@@ -23,7 +23,7 @@ import kotlinx.datetime.atStartOfDayIn
  * 3. 各グループから最新 [CoffeeRecord] の `cafe` スナップショットを採用（最新値勝ち）
  * 4. `lastVisitedAt` = グループ内最新 [CoffeeRecord.visitedOn] の UTC 開始 Instant
  * 5. `visitCount` = グループ内 CoffeeRecord 件数
- * 6. `averageRating` = [CoffeeRecord.rating] が 1 以上のものを平均（全件 0 なら null を返す）
+ * 6. `averageRating` = [CoffeeRecord.rating] が 0.0 より大きいものを平均（全件 0.0 なら null を返す）
  * 7. `lastVisitedAt` 降順でソート
  *
  * @param coffeeRepository [CoffeeRecord] の観測に使うリポジトリ
@@ -52,11 +52,11 @@ class ObserveVisitedCafesUseCase(
         val latest = maxBy { it.visitedOn }
         val lastVisitedAt = latest.visitedOn.toInstant()
 
-        val validRatings = map { it.rating }.filter { it > 0 }
+        val validRatings = map { it.rating }.filter { it > 0.0 }
         val averageRating = if (validRatings.isEmpty()) {
             null
         } else {
-            validRatings.sum().toDouble() / validRatings.size
+            validRatings.sum() / validRatings.size
         }
 
         return VisitedCafe(

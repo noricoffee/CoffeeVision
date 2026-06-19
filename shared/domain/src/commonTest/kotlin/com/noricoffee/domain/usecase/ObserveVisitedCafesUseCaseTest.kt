@@ -68,7 +68,7 @@ class ObserveVisitedCafesUseCaseTest {
         id: String,
         placeId: String?,
         visitedOn: LocalDate,
-        rating: Int = 3,
+        rating: Double = 3.0,
         cafeName: String = "カフェ ${placeId ?: "home"}",
     ) = CoffeeRecord(
         id = id,
@@ -102,7 +102,7 @@ class ObserveVisitedCafesUseCaseTest {
 
     @Test
     fun singleRecord_returnsSingleVisitedCafe() = runTest {
-        val r = record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4)
+        val r = record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4.0)
         val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(listOf(r)))
 
         val result = useCase("user-1").first()
@@ -117,9 +117,9 @@ class ObserveVisitedCafesUseCaseTest {
     @Test
     fun multipleRecordsSamePlaceId_groupedIntoOneVisitedCafe() = runTest {
         val records = listOf(
-            record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4),
-            record("r2", "place-1", LocalDate(2026, 6, 10), rating = 2),
-            record("r3", "place-1", LocalDate(2026, 5, 20), rating = 3),
+            record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4.0),
+            record("r2", "place-1", LocalDate(2026, 6, 10), rating = 2.0),
+            record("r3", "place-1", LocalDate(2026, 5, 20), rating = 3.0),
         )
         val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
@@ -181,11 +181,11 @@ class ObserveVisitedCafesUseCaseTest {
 
     @Test
     fun averageRating_excludesZeroRating() = runTest {
-        // rating = 0 は「未評価」として除外する
+        // rating = 0.0 は「未評価」として除外する
         val records = listOf(
-            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0),
-            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 5),
-            record("r3", "place-1", LocalDate(2026, 3, 1), rating = 3),
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0.0),
+            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 5.0),
+            record("r3", "place-1", LocalDate(2026, 3, 1), rating = 3.0),
         )
         val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
@@ -196,10 +196,25 @@ class ObserveVisitedCafesUseCaseTest {
     }
 
     @Test
+    fun averageRating_halfStepRatingsAreAveragedCorrectly() = runTest {
+        // 0.5 刻みの rating が正しく平均されることを確認する
+        val records = listOf(
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 4.5),
+            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 3.5),
+        )
+        val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
+
+        val result = useCase("user-1").first()
+
+        // (4.5 + 3.5) / 2 = 4.0
+        assertEquals(4.0, result.first().averageRating)
+    }
+
+    @Test
     fun averageRating_nullWhenAllRatingsAreZero() = runTest {
         val records = listOf(
-            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0),
-            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 0),
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0.0),
+            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 0.0),
         )
         val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 
@@ -233,9 +248,9 @@ class ObserveVisitedCafesUseCaseTest {
     fun nullCafeRecords_areExcludedFromResult() = runTest {
         // cafe=null（セルフ抽出）のレコードはマップに表示できないため除外される
         val records = listOf(
-            record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4),
-            record("r2", null, LocalDate(2026, 6, 5), rating = 5),  // セルフ抽出
-            record("r3", null, LocalDate(2026, 6, 10), rating = 3), // セルフ抽出
+            record("r1", "place-1", LocalDate(2026, 6, 1), rating = 4.0),
+            record("r2", null, LocalDate(2026, 6, 5), rating = 5.0),  // セルフ抽出
+            record("r3", null, LocalDate(2026, 6, 10), rating = 3.0), // セルフ抽出
         )
         val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 

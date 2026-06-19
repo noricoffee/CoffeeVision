@@ -232,7 +232,7 @@ class CoffeeRepositoryImplTest {
             userId = USER_ID,
             cafe = cafe,
             visitedOn = visitedOn,
-            rating = 4,
+            rating = 4.0,
             notes = "",
             photos = listOf(
                 Photo(

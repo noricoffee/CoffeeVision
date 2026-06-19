@@ -12,7 +12,7 @@ CREATE TABLE coffee_record (
     cafe_maps_url TEXT,
     -- 記録本体
     visited_on TEXT NOT NULL,              -- ISO-8601 (YYYY-MM-DD)
-    rating INTEGER NOT NULL,
+    rating REAL NOT NULL,                  -- 0.5..5.0（0.5 刻み）。0.0 = 未評価
     notes TEXT NOT NULL,
     -- コーヒー属性
     name TEXT NOT NULL,

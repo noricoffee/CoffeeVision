@@ -41,7 +41,7 @@ data class CoffeeRecord(
     val userId: String,                   // Firebase Auth uid
     val cafe: Cafe?,                      // Places 由来のスナップショット。null = セルフ抽出（自宅等）
     val visitedOn: LocalDate,             // 飲んだ日
-    val rating: Int,                      // 1..5（このコーヒーの評価）
+    val rating: Double,                   // 0.5..5.0（0.5 刻み）。0.0 = 未評価（sentinel）
     val notes: String,                    // 自由メモ（旧 ambiance / フード等もここに吸収）
     val photos: List<Photo>,
     // --- コーヒー属性（旧 CoffeeItem から昇格）---
@@ -139,7 +139,7 @@ data class VisitedCafe(
     val cafe: Cafe,                       // 最新記録時のカフェスナップショット
     val lastVisitedAt: Instant,           // そのカフェで最後にコーヒーを記録した日
     val visitCount: Int,                  // そのカフェでのコーヒー記録件数
-    val averageRating: Double?,           // 記録の平均評価（rating=0 は除外、全 0 なら null）
+    val averageRating: Double?,           // 記録の平均評価（rating=0.0 の未評価は除外、全て未評価なら null）
 )
 ```
 
@@ -171,7 +171,7 @@ CREATE TABLE coffee_record (
     cafe_maps_url TEXT,
     -- 記録本体
     visited_on TEXT NOT NULL,              -- ISO-8601 (YYYY-MM-DD)
-    rating INTEGER NOT NULL,
+    rating REAL NOT NULL,                  -- 0.5..5.0（0.5 刻み）。0.0 = 未評価
     notes TEXT NOT NULL,
     -- コーヒー属性
     name TEXT NOT NULL,
@@ -295,7 +295,7 @@ users/{uid}
     "mapsUrl": "https://maps.google.com/?cid=..."
   },
   "visitedOn": "2026-06-02",
-  "rating": 5,
+  "rating": 4.5,
   "notes": "ベリー系の華やかな酸味。落ち着いた木質の内装",
   "name": "本日のコーヒー（ケニア カグモイニ）",
   "brewMethod": "HandDrip",
@@ -444,7 +444,7 @@ class CoffeeRepositoryImpl(
 
 # 7. バリデーション
 
-- `rating` は 1..5 の範囲
+- `rating` は 0.5..5.0 の範囲（0.5 刻み）。0.0 は未評価扱い（保存時はバリデーションで 0.5 以上を要求）
 - `name`（コーヒー名）は必須・最大 200 文字（SQLite の現実的な上限）
 - `notes` は最大 2000 文字
 - `cafe` は任意（未選択でもセルフ抽出として保存可能）

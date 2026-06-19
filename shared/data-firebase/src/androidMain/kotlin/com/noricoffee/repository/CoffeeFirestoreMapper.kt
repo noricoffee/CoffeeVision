@@ -124,7 +124,7 @@ object CoffeeFirestoreMapper {
         val userId = data["userId"] as? String ?: return null
         val visitedOnStr = data["visitedOn"] as? String ?: return null
         val visitedOn = parseLocalDate(visitedOnStr) ?: return null
-        val rating = (data["rating"] as? Number)?.toInt() ?: return null
+        val rating = (data["rating"] as? Number)?.toDouble() ?: return null
         val notes = data["notes"] as? String ?: return null
         val name = data["name"] as? String ?: return null
         val brewMethodName = data["brewMethod"] as? String ?: return null

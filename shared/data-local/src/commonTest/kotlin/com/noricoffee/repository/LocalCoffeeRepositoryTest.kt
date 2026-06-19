@@ -109,7 +109,7 @@ class LocalCoffeeRepositoryTest {
         repository.save(original)
 
         val updated = original.copy(
-            rating = 5,
+            rating = 5.0,
             notes = "updated notes",
             name = "Updated Coffee",
         )
@@ -146,6 +146,18 @@ class LocalCoffeeRepositoryTest {
         assertEquals(record.name, loaded?.name)
         assertEquals(record.brewMethod, loaded?.brewMethod)
         assertEquals(record.origin, loaded?.origin)
+    }
+
+    @Test
+    fun half_step_rating_round_trips_correctly() = runTest {
+        // 0.5 刻みの rating が SQLDelight REAL カラムで正確に往復することを確認する
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord().copy(rating = 4.5)
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertEquals(4.5, loaded?.rating)
     }
 
     @Test
@@ -199,7 +211,7 @@ class LocalCoffeeRepositoryTest {
             userId = USER_ID,
             cafe = cafe,
             visitedOn = visitedOn,
-            rating = 4,
+            rating = 4.0,
             notes = "ベリー系の華やかな酸味",
             photos = listOf(
                 Photo(

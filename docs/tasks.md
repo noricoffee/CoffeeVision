@@ -317,6 +317,64 @@
 
 ---
 
+## フェーズ 8: 分析タブ（コーヒー傾向分析）
+
+> 2026-06-19 着手。これまでの `CoffeeRecord` 群を分析する「分析」タブを追加する。3 階層構成（階層1 記述統計 / 階層2 傾向抽出 = KMP 共通、階層3 自然言語解釈 = iOS Foundation Models）。確定仕様は [`requirements.md`](./requirements.md) §9、集計モデルは [`data-model.md`](./data-model.md) §1.6、設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-19 分析機能エントリ。**設計原則: 集計は KMP で決定論的に正確に、その集約済みサマリ（`CoffeeStats`）だけを Foundation Models に渡す**。Foundation Models は iOS 専用のため Android は分析タブ非表示。
+
+### Phase 0: docs（親）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `requirements.md` §9 + 画面一覧に分析タブを追加 | 2026-06-19 |
+| [x] | `data-model.md` §1.6 `CoffeeStats` 集計モデル + `CoffeeInsightProvider` インターフェースを定義 | 2026-06-19 |
+| [x] | `tasks.md` フェーズ 8 追加 + `implementation_note.md` に設計判断を記録 | 2026-06-19 |
+
+### Phase A-1: 階層1 集計（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared/domain`: `CoffeeStats` / `RatingBucket` / `CategoryStat` / `MonthlyStat` / `CafeStat` / `RecordDigest` / `FavoriteSignals` / `CoffeeInsight` / `CoffeeInsightProvider` を追加 | 2026-06-19 / `model/CoffeeStats.kt`。`favoriteSignals` は空（`minSampleSize=3`）|
+| [x] | `shared/domain`: `BuildCoffeeStatsUseCase`（`List<CoffeeRecord>` → `CoffeeStats`）+ `ObserveCoffeeStatsUseCase`（`CoffeeRepository.observeAll(userId).map { ... }`） | 2026-06-19 / `usecase/`。定数 `ORIGIN_RANKING_LIMIT=10` / `TOP_CAFES_LIMIT=10` / `RECENT_HIGHLIGHTS_LIMIT=5` / `HIGHLIGHTS_MIN_RATING=4.0` を companion 公開 |
+| [x] | `commonTest`: 集計ロジックのユニットテスト（空 / 単一 / 未評価除外 / カテゴリ集計 / 月次 / topCafes が cafe==null 除外 / 平均の null 条件） | 2026-06-19 / `BuildCoffeeStatsUseCaseTest` 31 件 |
+| [x] | 検証: `:shared:domain:test`（または `:shared:data-local:testAndroidHostTest`）成功 | 2026-06-19 / `:shared:domain:testAndroidHostTest` 43 件 pass（新規31+既存12）、`compileKotlinIosSimulatorArm64` / `assembleSharedLogicXCFramework` 成功 |
+
+### Phase A-2: AnalysisViewModel（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | **モジュール分割**: `shared/feature/analysis` モジュール作成（`kmp.feature` 適用、namespace `com.noricoffee.feature.analysis`） | `settings.gradle.kts` に include 追加 |
+| [ ] | `AnalysisViewModel(observeCoffeeStatsUseCase, insightProvider: CoffeeInsightProvider?, userId, scope)` + `AnalysisUiState(stats, isLoading, insight, insightStatus, error)` | stats と insight は別ロード状態（統計は即時描画、要約は後追い）。insightProvider == null なら insight 関連は非対応状態 |
+| [ ] | `shared/framework`: `api` / `export` + `AppContainer.makeAnalysisViewModel()` 拡張関数追加。`AppContainer` に `coffeeInsightProvider: CoffeeInsightProvider?` 注入経路を追加（既定 null、iOS が実装を注入） | feature 追加の定石（implementation_note サマリ） |
+| [ ] | 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 成功 | |
+
+### Phase A-3: 分析タブ UI（ios-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `RootTabView` に「分析」タブ追加（SF Symbols `chart.bar` 等）。`AnalysisView` + `AnalysisViewModelBridge` 新設 | iOS 26 TabView 新 API。タブ位置は親と調整 |
+| [ ] | 階層1 の可視化（Swift Charts で産地分布 / 焙煎度 / 月次推移 / 評価ヒストグラム、よく行く店リスト、サマリ数値） | システムカラー / Dynamic Type / アクセシビリティラベル |
+| [ ] | 空状態（記録 0 件）の `ContentUnavailableView` | |
+| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | |
+
+### Phase A-4: Foundation Models 要約（親が契約確定 → ios-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | iOS `CoffeeInsightProvider` 実装（`shared/domain` インターフェース準拠の Swift クラス）。`CoffeeStats` をコンパクトなテキストに整形 → `LanguageModelSession` で 2–3 文要約（`@Generable` で headline/body 構造化） | `SystemLanguageModel.availability` で可否判定、不可なら非対応を返す |
+| [ ] | `AppState` / `AppContainer` 構築で `CoffeeInsightProvider` を注入。`AnalysisView` に要約カード + ローディング / 非対応フォールバック表示 | Apple Intelligence 無効・非対応端末は統計のみ |
+| [ ] | 小さな PoC で Foundation Models 呼び出しの round-trip を先に確認してから本実装に組み込む | KMP ブリッジ部分の鉄則（CLAUDE.md 検証ルール） |
+| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。実機 / Apple Intelligence 有効端末での要約確認はユーザー作業 | |
+
+### Phase B（後続）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | B-1: `FavoriteSignals`（階層2）を `BuildCoffeeStatsUseCase` に実装 + テスト（kmp-engineer） | minSampleSize 閾値ガード |
+| [ ] | B-2: 対話 Q&A v1（ツール無し・`CoffeeStats` 文脈注入）（ios-engineer） | `CoffeeInsightProvider` に Q&A API 追加を親が確定してから |
+| [ ] | B-3: 対話 Q&A v2（tool calling）/ 好みのカフェをマップ連携 | 将来 |
+
+---
+
 ## フェーズ 6（任意 / 後続）
 
 | 状態 | タスク | 備考 |

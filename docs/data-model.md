@@ -145,6 +145,93 @@ data class VisitedCafe(
 
 > マップ表示・カフェ集計用。`ObserveVisitedCafesUseCase` が `CoffeeRecord` のうち **`cafe != null` のものだけ** を `cafe.placeId` でグループ化して生成する。セルフ抽出（cafe == null）は集計対象外（座標が無くマップに出せないため）。名前は互換性のため `VisitedCafe` を維持するが、意味は「コーヒー記録のあるカフェ」。
 
+## 1.6 CoffeeStats（分析用 集計モデル）
+
+`shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/CoffeeStats.kt`
+
+分析タブ（[`requirements.md`](./requirements.md) §9）の **階層1（記述統計）+ 階層2（傾向抽出）** の結果。`CoffeeRecord` 群から `BuildCoffeeStatsUseCase` が決定論的に生成する。**永続化しない派生モデル**（DB / Firestore 表現は持たない）。この `CoffeeStats` が ① 統計 UI の入力であり、② 階層3（Foundation Models）に渡す**唯一の入力**でもある（生レコードは LLM に渡さない）。
+
+```kotlin
+data class CoffeeStats(
+    val totalCount: Int,                       // 全記録件数
+    val ratedCount: Int,                       // rating >= 0.5 の件数
+    val averageRating: Double?,                // 未評価(0.0)除外の平均。全未評価なら null
+    val ratingHistogram: List<RatingBucket>,   // 0.5 刻みの度数（存在する刻みのみ、昇順）
+    val byBrewMethod: List<CategoryStat>,      // 抽出方法別（label = enum.name）
+    val byRoastLevel: List<CategoryStat>,      // 焙煎度別
+    val byProcessing: List<CategoryStat>,      // 精製方法別
+    val originRanking: List<CategoryStat>,     // 産地別（自由文字列を軽く正規化、件数降順 上位N）
+    val monthlyTrend: List<MonthlyStat>,       // visitedOn の年月別（昇順）
+    val topCafes: List<CafeStat>,              // cafe != null をグループ化（件数降順 上位N）
+    val recentHighlights: List<RecordDigest>,  // Q&A 文脈用の代表レコード（高評価・直近）
+    val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
+)
+
+data class RatingBucket(val rating: Double, val count: Int)
+
+data class CategoryStat(
+    val label: String,                         // enum.name / 正規化済み産地など
+    val count: Int,
+    val averageRating: Double?,                // その群の平均（未評価除外、全未評価なら null）
+)
+
+data class MonthlyStat(
+    val yearMonth: String,                     // "YYYY-MM"
+    val count: Int,
+    val averageRating: Double?,
+)
+
+data class CafeStat(
+    val placeId: String,
+    val name: String,
+    val count: Int,
+    val averageRating: Double?,
+)
+
+data class RecordDigest(
+    val name: String,
+    val rating: Double,
+    val cafeName: String?,                     // セルフ抽出は null
+    val visitedOn: LocalDate,
+)
+
+data class FavoriteSignals(
+    val bestBrewMethod: CategoryStat?,         // 平均評価が突出する抽出方法（閾値未満なら null）
+    val bestOrigin: CategoryStat?,
+    val bestRoastLevel: CategoryStat?,
+    val minSampleSize: Int,                    // この件数未満の群は信号にしない（既定 3）
+)
+```
+
+### 集計ルール（決定論）
+
+- **平均評価**: `rating == 0.0`（未評価 sentinel）は常に母数から除外。対象が 0 件なら `null`。
+- **`favoriteSignals`（階層2）**: 各カテゴリ軸で「件数 `>= minSampleSize` かつ平均評価が全体平均を最も上回る label」を 1 つ選ぶ。閾値を満たす群が無ければ `null`。サンプル不足の過大解釈を避けるためのガード。
+- **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
+- **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
+- **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
+
+> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は Phase B-1 で実体化する（それまでは全フィールド null の空 `FavoriteSignals` を返す）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。
+
+### 階層3（自然言語解釈）のインターフェース
+
+iOS の Foundation Models 実装を `shared/domain` のインターフェースで抽象化し、プラットフォーム非対称を吸収する（Firebase の `RemoteCoffeeDataSource` と同じパターン）。
+
+```kotlin
+// shared/domain — 階層3。iOS = Foundation Models 実装、Android = 注入しない（分析タブ非表示）
+interface CoffeeInsightProvider {
+    suspend fun summarize(stats: CoffeeStats): CoffeeInsight
+    // 対話 Q&A（Phase B-2）の API はインターフェース確定時に追加
+}
+
+data class CoffeeInsight(
+    val headline: String,
+    val body: String,
+)
+```
+
+> `AnalysisViewModel` には `CoffeeInsightProvider?` を注入する（null = 階層3 非対応 = Android / Apple Intelligence 無効時）。iOS 実装は `LanguageModelSession` を用い、`SystemLanguageModel.availability` で利用可否を判定して不可なら統計のみ表示にフォールバックする。
+
 ---
 
 # 2. SQLDelight スキーマ

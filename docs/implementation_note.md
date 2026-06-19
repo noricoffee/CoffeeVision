@@ -1365,3 +1365,30 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **バリデーション**（`CoffeeEditorViewModel`）: `rating < 0.5 || rating > 5.0 || (rating * 2) % 1.0 != 0.0` で 0.5 刻みを強制（`*2` してから整数判定）
 - **Firestore 後方互換**: rating を Double で書くが、旧 Int 保存ドキュメントは SDK から Long/NSNumber で届くため、Android は `(Number).toDouble()`、iOS は `(Double) ?? (NSNumber).doubleValue ?? 0.0` で受ける。マイグレーション不要
 - **iOS ハーフスター入力**: `StarRatingView` を Double 化。表示は `star.fill` / `star.leadinghalf.filled` / `star` を rating 比較で出し分け。入力は星を左右 2 分割した透明タップ領域（`StarTapCell`、`GeometryReader` + `Color.clear.onTapGesture`）で左=‐0.5/右=フルを判定。`accessibilityAdjustableAction` は 0.5 刻み、値は「3.5星」表記。`SpatialTapGesture`(iOS17+)/`DragGesture` は連続入力や最小バージョンの懸念で不採用
+
+### 2026-06-19: 分析機能の 3 階層分離と Foundation Models の使いどころ
+
+- 領域: Shared / KMP / iOS / Docs
+- 関連: `docs/requirements.md` §9, `docs/data-model.md` §1.6, `docs/tasks.md` フェーズ 8
+
+「これまで登録したコーヒー情報を分析する分析タブを追加。分析には iOS の Foundation Models を使う」という要望を、**3 階層に分離**して設計した。
+
+**確定した設計判断（ユーザー承認済み、AskUserQuestion 2026-06-19）**:
+- 主目的 = **統計（階層1）＋ AI 要約（階層3）の両方**
+- Foundation Models の役割 = **傾向の要約サマリ** ＋ **対話 Q&A**
+- Android（KMP 検証ターゲット）= **分析タブ非表示**（Foundation Models が iOS 専用のため）
+
+**核となる設計原則 — 集計は KMP、解釈は LLM**:
+- 階層1（記述統計）/ 階層2（傾向抽出 = 高評価群の共通属性）は **KMP 共通層で決定論的に算出**（`CoffeeStats` / `BuildCoffeeStatsUseCase`）。テスト可能で正確。
+- 階層3（自然言語の要約・Q&A）だけ iOS の Foundation Models。**入力は集約済み `CoffeeStats` のみ**で、生レコードは LLM に渡さない。
+- 理由: ①正確性（「平均 4.2」を LLM に計算させない）②オンデバイス LLM（約 3B）のコンテキスト窓が狭く全レコードは入らないが集約サマリなら収まる ③再現性・ユニットテスト容易性 ④3 ロール体制に綺麗に割れる（集計 = kmp-engineer、Foundation Models ブリッジ = ios-engineer）。
+
+**プラットフォーム非対称の吸収**:
+- `shared/domain` に `CoffeeInsightProvider` インターフェース（`summarize(stats): CoffeeInsight`）を置き、iOS = `LanguageModelSession` 実装、Android = 注入しない（null）。Firebase の `RemoteCoffeeDataSource` と同じ「インターフェースは domain、実装はプラットフォーム別、AppContainer 注入」パターン。
+- `AnalysisViewModel` は `CoffeeInsightProvider?` を受け、null なら階層3 を非対応状態にする。Apple Intelligence 無効 / 非対応端末も `SystemLanguageModel.availability` 判定で同じフォールバック（統計のみ表示）。
+
+**対話 Q&A の段階化**:
+- v1（Phase B-2）は **ツール無し**で実装する。`CoffeeStats` に `recentHighlights` / `topCafes` を含めて十分リッチにすれば「一番高評価だった店は？」程度はセッションへの文脈注入だけで答えられる。
+- v2（Phase B-3）で tool calling（Swift のツールが KMP のクエリ API を呼ぶ）に拡張。初手で KMP 側にクエリ境界を新設するのは過剰。
+
+**フェーズ分割**: A-1 集計（domain + UseCase + test）→ A-2 `feature/analysis` + ViewModel → A-3 分析タブ UI（Swift Charts）→ A-4 Foundation Models 要約。階層2（`favoriteSignals`）と Q&A は Phase B。A-4 は Foundation Models の round-trip を小さな PoC で確認してから本実装に組み込む（KMP / 新規 API ブリッジの鉄則）。「好みのカフェをマップで探す」は要件外（将来）。

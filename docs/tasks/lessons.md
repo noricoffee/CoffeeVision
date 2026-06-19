@@ -325,3 +325,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - `AppDatabase.Schema.create(driver)` の直後に `driver.execute(null, "PRAGMA foreign_keys = ON", 0, null)` を実行する（`createInMemoryTestSqlDriver()` に追加）
 - 実機の `AndroidSqliteDriver` / iOS の `NativeSqliteDriver` とは挙動が異なる。iOS テストで CASCADE を検証する場合も同様の pragma 設定を確認すること
 - 発生源: Phase 7 Phase 1（`coffee_record` ⇄ `photo` の CASCADE 削除テスト）
+
+### iOS ビルド検証で `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` を付けると SharedLogic の Gradle ビルドがスキップされ「偽の成功」になる
+
+- `xcodebuild ... OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES build` は「Compile Kotlin Framework」run script phase の **Gradle 起動をスキップ**する（ログに `Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to "YES"`）
+- DerivedData に前回ビルドの `SharedLogic.framework` が温存されていると、KMP 公開 API を変えた直後でも **古いフレームワークに対して Swift がコンパイルされ BUILD SUCCEEDED になる**。クリーンな DerivedData では `error: Unable to find module dependency: 'SharedLogic'` で落ちる
+- **KMP の公開 API を変更した後の iOS 検証は、必ず override フラグ無し**（`xcodebuild -project iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator -configuration Debug build`）で行い、ログに `> Task :shared:framework:...` と `BUILD SUCCESSFUL`（Gradle）が出ることを確認する
+- サブエージェントが override フラグ付きで「BUILD SUCCEEDED」と報告したら、親は **フラグ無しで再検証**してから完了扱いにする
+- IDE（SourceKit）の `No such module 'SharedLogic'` 診断は、フレームワーク未ビルドのインデックス環境では出る**偽陽性**のことが多い。`xcodebuild` の実ビルド結果を真とする
+- 発生源: Phase 7 Phase 3（ios-engineer が override フラグ付きで成功報告 → 親のフラグ無し再検証で原因切り分け）

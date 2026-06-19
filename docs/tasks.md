@@ -289,31 +289,31 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `shared/domain`: `CoffeeRecord` 新設、`Visit` / `CoffeeItem` / `FoodItem` 削除。`cafe: Cafe?`、コーヒー属性昇格 | |
-| [ ] | `shared/domain`: `CoffeeRepository` / `RemoteCoffeeDataSource` 新設（旧 Visit 系を置換）。`ObserveVisitedCafesUseCase`（cafe != null フィルタ）/ `DeleteAccountUseCase` 追随。`VisitedCafe` は名前維持で集計元変更 | |
-| [ ] | `shared/core`: `CoffeeRepositoryImpl` / `AppContainer`（`coffeeRepository`、引数 `remoteCoffeeDataSource`） | |
-| [ ] | `shared/data-local`: `CoffeeRecord.sq` 新設 + `Photo.sq` FK 変更、`Visit/CoffeeItem/FoodItem.sq` 削除、`LocalCoffeeRepository` + `Mapper`。テスト改訂（null cafe 往復ケース追加） | |
-| [ ] | feature リネーム: `coffee-list` / `coffee-detail` / `coffee-editor`（ViewModel + UIState を CoffeeRecord 化）。`cafe-detail` / `map` 追随 | |
-| [ ] | `shared/framework`: export/api を coffee-* に、`AppContainerViewModelFactory` のファクトリ改名・配線。`settings.gradle.kts` のモジュール名更新 | |
-| [ ] | 検証: `:shared:domain:compile*` / `:shared:data-local:allTests` / `:shared:framework:assembleSharedLogicXCFramework` 成功（iOS 着手の前提） | |
+| [x] | `shared/domain`: `CoffeeRecord` 新設、`Visit` / `CoffeeItem` / `FoodItem` 削除。`cafe: Cafe?`、コーヒー属性昇格 | 2026-06-19 |
+| [x] | `shared/domain`: `CoffeeRepository` / `RemoteCoffeeDataSource` 新設（旧 Visit 系を置換）。`ObserveVisitedCafesUseCase`（cafe != null フィルタ）/ `DeleteAccountUseCase` 追随。`VisitedCafe` は名前維持で集計元変更 | 2026-06-19 |
+| [x] | `shared/core`: `CoffeeRepositoryImpl` / `AppContainer`（`coffeeRepository`、引数 `remoteCoffeeDataSource`） | 2026-06-19 |
+| [x] | `shared/data-local`: `CoffeeRecord.sq` 新設 + `Photo.sq` FK 変更、`Visit/CoffeeItem/FoodItem.sq` 削除、`LocalCoffeeRepository` + `Mapper`。テスト改訂（null cafe 往復ケース追加） | 2026-06-19 / testAndroidHostTest 18 件緑。JdbcSqliteDriver は PRAGMA foreign_keys=ON 必要（lessons.md） |
+| [x] | feature リネーム: `coffee-list` / `coffee-detail` / `coffee-editor`（ViewModel + UIState を CoffeeRecord 化）。`cafe-detail` / `map` 追随 | 2026-06-19 / 旧 visit-* ディレクトリ git rm 済 |
+| [x] | `shared/framework`: export/api を coffee-* に、`AppContainerViewModelFactory` のファクトリ改名・配線。`settings.gradle.kts` のモジュール名更新 | 2026-06-19 / makeCoffee*ViewModel |
+| [x] | 検証: `:shared:domain:compile*` / `:shared:data-local:allTests` / `:shared:framework:assembleSharedLogicXCFramework` 成功（iOS 着手の前提） | 2026-06-19 / 全成功 |
 
 ### Phase 2: data-firebase（androidMain, kmp-engineer）
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `CoffeeFirestoreMapper` + `RemoteCoffeeDataSourceAndroidImpl`（`coffees` コレクション + photos 埋め込み、子取得・差分 delete 撤廃） | |
-| [ ] | `androidApp` / `sharedUI` の Visit 参照を追随。検証: `:androidApp:assembleDebug` 成功 | |
+| [x] | `CoffeeFirestoreMapper` + `RemoteCoffeeDataSourceAndroidImpl`（`coffees` コレクション + photos 埋め込み、子取得・差分 delete 撤廃） | 2026-06-19 / observe リスナ1本・set/delete 各1回に簡素化 |
+| [x] | `androidApp` / `sharedUI` の Visit 参照を追随。検証: `:androidApp:assembleDebug` 成功 | 2026-06-19 / VisitListScreen→CoffeeListScreen。Firestore 実機往復確認はユーザー作業 |
 
 ### Phase 3: iOS UI（ios-engineer, Phase 1 完了後）
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `FirebaseRepositories`: `CoffeeFirestoreMapper.swift` + `RemoteCoffeeDataSourceIosImpl.swift`（coffees + photos 埋め込みで簡素化） | |
-| [ ] | `AppState.swift`: `coffeeListBridge`、`RemoteCoffeeDataSourceIosImpl`、AppContainer init 追随 | |
-| [ ] | `RootTabView`: 「訪問」→「コーヒー」タブ + **FAB でコーヒー記録追加**（TabBarFrameReader パターン流用、競合時は右下標準配置にフォールバック） | |
-| [ ] | `Coffee{List,Detail,Editor}View` + Bridge（VisitEditor は子アイテム編集を本体フォームに統合、cafe 任意化）。`CoffeeItemEditorView` / `FoodItemEditorView` 削除 | |
-| [ ] | `CafeDetailView` / `MapTabView` 追随、`PreviewSamples` を CoffeeRecord 化（cafe あり/null 両方） | |
-| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ手動確認（アプリ削除→再インストール前提） | |
+| [x] | `FirebaseRepositories`: `CoffeeFirestoreMapper.swift` + `RemoteCoffeeDataSourceIosImpl.swift`（coffees + photos 埋め込みで簡素化） | 2026-06-19 / SKIE 実装側は `__upload`/`__remove` + `SkieSwiftFlow<[CoffeeRecord]>`（lessons.md） |
+| [x] | `AppState.swift`: `coffeeListBridge`、`RemoteCoffeeDataSourceIosImpl`、AppContainer init 追随 | 2026-06-19 |
+| [x] | `RootTabView`: 「訪問」→「コーヒー」タブ + **FAB でコーヒー記録追加**（TabBarFrameReader パターン流用、競合時は右下標準配置にフォールバック） | 2026-06-19 / TabBarFrameReader 採用（MapTabView 現在地 FAB と同パターン、検索タブ上に配置）。toolbar + は撤去 |
+| [x] | `Coffee{List,Detail,Editor}View` + Bridge（VisitEditor は子アイテム編集を本体フォームに統合、cafe 任意化）。`CoffeeItemEditorView` / `FoodItemEditorView` 削除 | 2026-06-19 |
+| [x] | `CafeDetailView` / `MapTabView` 追随、`PreviewSamples` を CoffeeRecord 化（cafe あり/null 両方） | 2026-06-19 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ手動確認（アプリ削除→再インストール前提） | 2026-06-19 / 親が override フラグ無しで BUILD SUCCEEDED 再確認済。**シミュレータ目視確認はユーザー作業**（FAB→セルフ抽出保存→一覧 / カフェ詳細→記録 / マップピン / 詳細編集削除 / Firestore coffees。DB 作り直しのためアプリ削除→再インストール必須） |
 
 ---
 

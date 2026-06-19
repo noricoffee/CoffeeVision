@@ -375,6 +375,20 @@
 
 ---
 
+## 開発支援: ダミーデータ Scheme
+
+> 2026-06-19。分析タブ等の確認用に、専用 Xcode Scheme で起動したときだけ約 30 件のダミー `CoffeeRecord` が入るようにする。**ローカル DB のみ**（Firestore 非汚染）/ 固定 ID で冪等 / DEBUG 限定。設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-19 ダミーデータ Scheme エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | KMP: `shared/core` に `DummyCoffeeData`（固定 ID `dummy-0001`..`dummy-0030`、産地/焙煎度/抽出方法/評価/日付/カフェ有無を分散した約 30 件を生成） | 2026-06-19 / `com.noricoffee.dev.DummyCoffeeData`。`visitedOn` は `Clock.System.todayIn` から逆算（常に直近12ヶ月）。cafe 有り20件（5カフェ使い回し）/ null 10件、rating=0.0 を 2 件 |
+| [x] | KMP: `AppContainer` に local-only の `seedDummyData(userId)` / `clearDummyData(userId)`（`localCoffeeRepository` 経由、Firestore に流さない） | 2026-06-19 / `@Throws suspend`。SKIE → Swift `try await ...(userId:)` |
+| [x] | iOS: 共有 Scheme「iosApp (Dummy Data)」を作成（環境変数 `SEED_DUMMY_DATA=1`） | 2026-06-19 / `xcshareddata/xcschemes/` に `iosApp.xcscheme`（通常）+ `iosApp (Dummy Data).xcscheme` を明示作成・コミット。Build Config = Debug |
+| [x] | iOS: `AppState.bootstrap` で `#if DEBUG` かつ uid 確定後、`SEED_DUMMY_DATA==1` なら seed / それ以外は clear | 2026-06-19 / `seedOrClearDummyData(userId:)` ヘルパ、bridge 生成前。失敗は `print` のみ（通常起動の clear で赤バナーを出さない） |
+| [~] | 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` / `xcodebuild` 成功。ダミー Scheme で 30 件・通常 Scheme で 0 件はユーザー目視 | 2026-06-19 / KMP 全ビルド + 両 Scheme `xcodebuild` BUILD SUCCEEDED、`-list` で両 Scheme 認識。**シミュレータ目視（ダミー30件 / 通常0件）はユーザー作業** |
+
+---
+
 ## フェーズ 6（任意 / 後続）
 
 | 状態 | タスク | 備考 |

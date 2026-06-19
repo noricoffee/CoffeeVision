@@ -1427,3 +1427,18 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **可否判定（契約 = 注入時）**: `CoffeeInsightProviderIosImpl.makeIfAvailable()` が `SystemLanguageModel.default.availability == .available` のときだけ実装を返し、不可なら nil。`AppState` で 5 引数 `AppContainer` コンストラクタの `coffeeInsightProvider:` に渡す。nil → `AnalysisViewModel` が `InsightStatus.Unsupported` → 要約カード非表示（統計のみ）。KMP 変更ゼロで graceful degradation。
 - **要約カード UI**: `insightCardSection` が `insightStatus` を `is` 分岐。`Unsupported`=`EmptyView()`（タブ高を変えない）/ `Loading` / `Loaded`（headline+body）/ `Failed`（`onRetryInsight()` でリトライ）。
 - **follow-up（未対応・実害小）**: ① availability 判定は `AppState.init()` の起動時 1 回のみ。起動後に Apple Intelligence を有効化しても次回起動まで反映されない（動的再チェックは `scenePhase` active で再評価する案、現フェーズ不要）。② 要約再生成が「統計更新のたび」のため、リアルタイム同期の連続 emit で LLM 呼び出しが増える懸念（デバウンス / 手動トリガ化は実機計測後に判断）。③ `unavailable(reason)` の理由別ユーザー案内 UI は未実装（仕様未定）。
+
+### 2026-06-19: ダミーデータ Scheme（開発支援）
+
+- 領域: KMP / iOS / Build
+- 関連: `shared/core/.../dev/DummyCoffeeData.kt`, `shared/core/.../AppContainer.kt`, `iosApp/iosApp.xcodeproj/xcshareddata/xcschemes/iosApp (Dummy Data).xcscheme`, `iosApp/iosApp/AppState.swift`
+
+分析タブ等の確認用に、専用 Xcode Scheme で起動したときだけ約 30 件のダミー `CoffeeRecord` が入る仕組み。
+
+- **投入先はローカル DB のみ**: `AppContainer.seedDummyData(userId)` / `clearDummyData(userId)` は private `localCoffeeRepository` 経由で `save` / `delete`。合成 `coffeeRepository`（Firestore 込み）は使わず、**dev データを Firestore に流さない**。`startSync` は remote→local の upsert のみで local を消さないため、ローカルのダミーは sync で消えない。
+- **固定 ID で冪等**: `DummyCoffeeData`（`com.noricoffee.dev`）が `dummy-0001`..`dummy-0030` を生成。再 seed は upsert で常に 30 件（増えない）。`clear` は同 ID をローカル削除（実データ = UUID には触れない）。
+- **`visitedOn` は動的算出**: `Clock.System.todayIn(...)` から逆算（`object` で呼び出しのたびに今日基準）。固定日付より「常に直近 12 ヶ月」が保証され、月次推移グラフが映える。cafe 有り 20 件（5 カフェ使い回し → `topCafes` に偏り）/ null 10 件、rating=0.0 を 2 件（未評価除外パス確認）。
+- **DEBUG 限定 + 環境変数で分離**: Kotlin に DEBUG フラグはないため `DummyCoffeeData` / メソッドは常にコンパイルされるが、呼び出しは iOS の `AppState.bootstrap()` 内 `#if DEBUG` ガード + `ProcessInfo...environment["SEED_DUMMY_DATA"]` 判定に閉じる。**ダミー Scheme（env=1）→ seed / 通常 Scheme（env なし）→ clear**。Release ビルドは seed/clear とも無効。これで「ダミー Scheme でだけ 30 件、通常 Scheme は綺麗」を実現。
+- **共有 Scheme をリポジトリ管理化**: `xcshareddata/xcschemes/` が無かったため新規作成し、`iosApp.xcscheme`（通常）+ `iosApp (Dummy Data).xcscheme`（env `SEED_DUMMY_DATA=1` / Build Config Debug）を**明示ファイルとしてコミット**。pbxproj のターゲット UUID `A5D55589987A954070545386` / product `coffeevision.app` を参照。
+- **seed/clear の失敗は `print` のみ**（`lastError` に乗せない）。`clear` は通常起動毎に走るため、ユーザー可視エラーにすると通常起動で赤バナーが出かねないため。
+- **注意**: `resetAndRebootstrap()`（サインアウト/削除後）も `bootstrap()` 経由で同ブロックを通る。ダミー Scheme でサインアウトすると新 uid に再 seed される（dev 用途として許容）。

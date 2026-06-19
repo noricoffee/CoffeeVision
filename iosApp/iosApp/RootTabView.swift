@@ -8,7 +8,7 @@ import SwiftUI
 /// - 検索タブ: カフェ検索（CafeSearchView / `Tab(role: .search)`）
 ///
 /// 新規 CoffeeRecord 作成の導線:
-/// - コーヒータブの + ボタン（ toolbar）: セルフ抽出または後からカフェ選択
+/// - コーヒータブの FAB（検索タブ上に浮かぶ +）: セルフ抽出または後からカフェ選択
 /// - マップ / 検索 → カフェ詳細 → 「コーヒーを記録」ボタン → CoffeeEditorView（カフェ pre-fill）
 @MainActor
 struct RootTabView: View {

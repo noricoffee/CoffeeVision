@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  *
  * ## AppContainer の取得方法
  * `CoffeeVisionApp.appContainer` を Singleton として提供する。
- * `MainActivity` および `VisitListScreen` から参照する。
+ * `MainActivity` および `CoffeeListScreen` から参照する。
  *
  * ## トレードオフ
  * `companion object` で Singleton 化するためテストしやすさを犠牲にしているが、

@@ -24,7 +24,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.framework.makeCoffeeListViewModel
 
 /**
- * Android 検証用のコーヒー記録一覧画面（旧 VisitListScreen）。
+ * Android 検証用のコーヒー記録一覧画面。
  *
  * ## 目的
  * `CoffeeListViewModel` が Android でも動くこと + Firestore observe が Android-Android で
@@ -37,7 +37,7 @@ import com.noricoffee.framework.makeCoffeeListViewModel
  * `startSync()` は新しい同期 Job を起動するだけなので二重呼び出しで実害はない。
  */
 @Composable
-fun VisitListScreen(appContainer: AppContainer) {
+fun CoffeeListScreen(appContainer: AppContainer) {
     val viewModel = remember { appContainer.makeCoffeeListViewModel() }
     val state by viewModel.state.collectAsState()
 

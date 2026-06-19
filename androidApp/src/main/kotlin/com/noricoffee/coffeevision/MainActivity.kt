@@ -7,7 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.tooling.preview.Preview
-import com.noricoffee.VisitListScreen
+import com.noricoffee.CoffeeListScreen
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -16,7 +16,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             MaterialTheme {
-                VisitListScreen(CoffeeVisionApp.appContainer)
+                CoffeeListScreen(CoffeeVisionApp.appContainer)
             }
         }
     }

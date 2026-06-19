@@ -79,6 +79,7 @@ struct AnalysisView: View {
     private func statisticsScrollView(stats: CoffeeStats) -> some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: 24) {
+                insightCardSection
                 summarySection(stats: stats)
                 ratingHistogramSection(stats: stats)
                 originRankingSection(stats: stats)
@@ -89,6 +90,34 @@ struct AnalysisView: View {
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
+        }
+    }
+
+    // MARK: - 傾向要約カード（階層3）
+
+    /// Foundation Models によるコーヒー傾向要約カード。
+    ///
+    /// `insightStatus` に応じて表示を切り替える:
+    /// - `Unsupported`: カード自体を非表示（Apple Intelligence 非対応 / 無効端末）
+    /// - `Idle` / `Loading`: ローディング表示（生成中）
+    /// - `Loaded`: `insight.headline` + `insight.body` を表示
+    /// - `Failed`: 控えめなエラー表示 + リトライボタン
+    @ViewBuilder
+    private var insightCardSection: some View {
+        let status = viewModel.insightStatus
+        if status is AnalysisViewModelInsightStatusUnsupported {
+            // 非対応端末 / Apple Intelligence 無効: カードを出さない
+            EmptyView()
+        } else if status is AnalysisViewModelInsightStatusLoading
+                    || status is AnalysisViewModelInsightStatusIdle {
+            InsightLoadingCard()
+        } else if status is AnalysisViewModelInsightStatusLoaded,
+                  let insight = viewModel.insight {
+            InsightLoadedCard(headline: insight.headline, insightBody: insight.body)
+        } else if status is AnalysisViewModelInsightStatusFailed {
+            InsightFailedCard {
+                viewModel.onRetryInsight()
+            }
         }
     }
 
@@ -389,6 +418,108 @@ struct AnalysisView: View {
     }
 }
 
+// MARK: - InsightLoadingCard
+
+/// 要約生成中（`Idle` / `Loading` 状態）に表示するカード。
+private struct InsightLoadingCard: View {
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(String(localized: "あなたの傾向"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+            HStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text(String(localized: "傾向を分析中…"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityLabel(String(localized: "傾向を分析中"))
+    }
+}
+
+// MARK: - InsightLoadedCard
+
+/// 要約生成完了（`Loaded` 状態）に表示するカード。
+private struct InsightLoadedCard: View {
+    let headline: String
+    let insightBody: String
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(String(localized: "あなたの傾向"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+            Text(headline)
+                .font(.headline)
+                .foregroundStyle(.primary)
+            Text(insightBody)
+                .font(.body)
+                .foregroundStyle(.secondary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(localized: "あなたの傾向: \(headline)。\(insightBody)"))
+    }
+}
+
+// MARK: - InsightFailedCard
+
+/// 要約生成失敗（`Failed` 状態）に表示するカード。
+private struct InsightFailedCard: View {
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkles")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .accessibilityHidden(true)
+                Text(String(localized: "あなたの傾向"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+            HStack {
+                Text(String(localized: "傾向の分析に失敗しました"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+                Spacer()
+                Button(String(localized: "再試行"), action: onRetry)
+                    .font(.footnote)
+                    .buttonStyle(.borderless)
+                    .accessibilityLabel(String(localized: "傾向の分析を再試行"))
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .combine)
+    }
+}
+
 // MARK: - CafeStatRow
 
 /// よく行くカフェの 1 行表示コンポーネント。
@@ -588,6 +719,25 @@ private struct AnalysisViewPreviewContent: View {
         stats: nil,
         isLoading: true
     )
+}
+
+// MARK: - 要約カード単体プレビュー
+
+#Preview("要約カード - Loaded") {
+    VStack(spacing: 16) {
+        InsightLoadedCard(
+            headline: "深煎り好きのカフェ探求者",
+            insightBody: "シティロースト以上を好み、全国各地のスペシャルティカフェを積極的に訪れています。ハンドドリップへの深い愛情が記録から伝わります。"
+        )
+        InsightLoadingCard()
+        InsightFailedCard { }
+    }
+    .padding(16)
+}
+
+#Preview("要約カード - Loading") {
+    InsightLoadingCard()
+        .padding(16)
 }
 
 #endif

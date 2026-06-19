@@ -74,6 +74,13 @@ final class AnalysisViewModelBridge {
         kotlin.onErrorDismissed()
     }
 
+    /// Foundation Models の要約生成に失敗したときにリトライを要求する。
+    ///
+    /// `InsightStatus.Unsupported`（provider が null）の場合は VM 側で何もしない。
+    func onRetryInsight() {
+        kotlin.onRetryInsight()
+    }
+
     // MARK: - Private
 
     private func apply(_ state: AnalysisViewModel.UIState) {

@@ -62,11 +62,23 @@ final class AppState {
         // Secrets.xcconfig が存在しない場合（CI 環境等）は空文字フォールバック。
         // 空文字の場合もアプリは起動するが Places API 呼び出しは 401 を返す。
         let placesApiKey = (Bundle.main.object(forInfoDictionaryKey: "PLACES_API_KEY") as? String) ?? ""
+
+        // Foundation Models の可否を判定し、利用可能なときだけ Provider を注入する。
+        // iOS 26 未満 / Apple Intelligence 無効 / 非対応端末では nil を渡す。
+        // AnalysisViewModel は provider == nil のとき InsightStatus.Unsupported を返す。
+        let insightProvider: (any CoffeeInsightProvider)? = {
+            if #available(iOS 26.0, *) {
+                return CoffeeInsightProviderIosImpl.makeIfAvailable()
+            }
+            return nil
+        }()
+
         let container = AppContainer(
             sqlDriver: sqlDriver,
             remoteCoffeeDataSource: remoteDataSource,
             authRepository: authRepo,
-            placesApiKey: placesApiKey
+            placesApiKey: placesApiKey,
+            coffeeInsightProvider: insightProvider
         )
         self.container = container
         // uid 不要なので bootstrap() 前から利用可能

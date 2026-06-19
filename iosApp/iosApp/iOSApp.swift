@@ -38,9 +38,9 @@ struct iOSApp: App {
 /// uid の確定状況に応じてローディング表示と RootTabView を切り替えるルートビュー。
 ///
 /// - uid == nil（サインイン中 / 失敗）: ProgressView + 状態テキスト
-/// - uid != nil かつ visitListBridge / mapBridge が準備完了: RootTabView を表示
+/// - uid != nil かつ coffeeListBridge / mapBridge が準備完了: RootTabView を表示
 ///
-/// `visitListBridge` と `mapBridge` は AppState 内で lazy に 1 度だけ生成されるため、
+/// `coffeeListBridge` と `mapBridge` は AppState 内で lazy に 1 度だけ生成されるため、
 /// AppRootView の再描画で ViewModel が作り直されることはない。
 @MainActor
 private struct AppRootView: View {
@@ -52,7 +52,7 @@ private struct AppRootView: View {
 
     var body: some View {
         if appState.uid != nil,
-           appState.visitListBridge != nil,
+           appState.coffeeListBridge != nil,
            appState.mapBridge != nil,
            appState.accountBridge != nil {
             RootTabView(appState: appState)

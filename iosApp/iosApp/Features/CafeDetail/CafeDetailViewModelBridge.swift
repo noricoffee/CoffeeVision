@@ -6,6 +6,7 @@ import SharedLogic
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
 /// - `VisitDetailViewModelBridge` と同じパターンで、push ごとに新規インスタンスを生成する
 /// - `CafeDetailView` 内の `@State` で保持する（AppState にホルダを持たせない）
+/// - Phase 7 以降: UIState.coffees は `[CoffeeRecord]`（旧 `[Visit_]` から変更）
 @MainActor
 @Observable
 final class CafeDetailViewModelBridge {
@@ -16,8 +17,8 @@ final class CafeDetailViewModelBridge {
     // MARK: - SwiftUI が観測するプロパティ
 
     private(set) var cafe: Cafe?
-    /// Kotlin の `List<Visit>` は SKIE 経由で Swift では `[Visit_]` 型
-    private(set) var pastVisits: [Visit_] = []
+    /// Kotlin の `List<CoffeeRecord>` は SKIE 経由で Swift では `[CoffeeRecord]` 型
+    private(set) var coffees: [CoffeeRecord] = []
     private(set) var isLoading: Bool = true
 
     // MARK: - Init
@@ -50,7 +51,7 @@ final class CafeDetailViewModelBridge {
 
     private func apply(_ state: CafeDetailViewModel.UIState) {
         self.cafe = state.cafe
-        self.pastVisits = state.pastVisits
+        self.coffees = state.coffees
         self.isLoading = state.isLoading
     }
 }

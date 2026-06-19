@@ -7,8 +7,8 @@ import SharedLogic
 ///
 /// - すべてのメンバは `static let` で定義し、Preview の外から呼び出しを禁止しない
 ///   （`#if DEBUG` で囲むと Preview Canvas では見えるが Xcode ビルドで dead-code strip される）
-/// - `Visit_` / `Photo_` / `CoffeeItem` / `FoodItem` は KMP 側の Kotlin ドメインモデルから
-///   Swift に橋渡しされた型。コンストラクタシグネチャは `VisitFirestoreMapper.swift` と同じパターン
+/// - `CoffeeRecord` / `Photo_` は KMP 側の Kotlin ドメインモデルから
+///   Swift に橋渡しされた型。コンストラクタシグネチャは `CoffeeFirestoreMapper.swift` と同じパターン
 /// - Kotlin の `Kotlinx_datetimeInstant` は `Kotlinx_datetimeInstant.Companion.shared
 ///   .fromEpochMilliseconds(epochMilliseconds:)` で生成する
 /// - Kotlin の `Kotlinx_datetimeLocalDate` は `Kotlinx_datetimeLocalDate(year:monthNumber:dayOfMonth:)` で生成する
@@ -110,75 +110,11 @@ enum PreviewSamples {
         ),
     ]
 
-    // MARK: - CoffeeItem
+    // MARK: - CoffeeRecord（カフェあり）
 
-    static let sampleCoffeeItems: [CoffeeItem] = [
-        CoffeeItem(
-            id: "coffee-001",
-            name: "本日のコーヒー（ケニア カグモイニ）",
-            brewMethod: .handDrip,
-            origin: "ケニア",
-            variety: "SL28",
-            processing: .washed,
-            roastLevel: .medium,
-            cup: "ノリタケ",
-            rating: 5,
-            notes: "ベリー系の華やかな酸味"
-        ),
-        CoffeeItem(
-            id: "coffee-002",
-            name: "エスプレッソ",
-            brewMethod: .espresso,
-            origin: "エチオピア",
-            variety: nil,
-            processing: .natural,
-            roastLevel: .fullCity,
-            cup: nil,
-            rating: 4,
-            notes: "チョコレートのような余韻"
-        ),
-        CoffeeItem(
-            id: "coffee-003",
-            name: "アイスコーヒー",
-            brewMethod: .coldBrew,
-            origin: nil,
-            variety: nil,
-            processing: nil,
-            roastLevel: .city,
-            cup: nil,
-            rating: 3,
-            notes: nil
-        ),
-    ]
-
-    // MARK: - FoodItem
-
-    static let sampleFoodItems: [FoodItem] = [
-        FoodItem(
-            id: "food-001",
-            name: "バナナブレッド",
-            rating: 4,
-            notes: nil
-        ),
-        FoodItem(
-            id: "food-002",
-            name: "スコーン",
-            rating: 5,
-            notes: "クロテッドクリームとの相性が抜群"
-        ),
-        FoodItem(
-            id: "food-003",
-            name: "チョコレートクッキー",
-            rating: 3,
-            notes: nil
-        ),
-    ]
-
-    // MARK: - Visit（フル）
-
-    /// コーヒー・フード・写真をすべて持つサンプル訪問記録。
-    static let sampleVisit: Visit_ = Visit_(
-        id: "visit-001",
+    /// カフェあり・写真ありのサンプルコーヒー記録。
+    static let sampleCoffeeRecord: CoffeeRecord = CoffeeRecord(
+        id: "coffee-001",
         userId: "preview-user",
         cafe: Cafe(
             placeId: "ChIJsampleBluBottle",
@@ -191,19 +127,23 @@ enum PreviewSamples {
             mapsUrl: "https://maps.google.com/?cid=sample"
         ),
         visitedOn: localDate(year: 2026, month: 6, day: 2),
-        ambiance: "落ち着いた木質の内装、奥に大きな焙煎機",
         rating: 4,
-        notes: "店員さんが品種を丁寧に教えてくれた",
+        notes: "ベリー系の華やかな酸味。落ち着いた木質の内装。店員さんが品種を丁寧に教えてくれた",
         photos: samplePhotos,
-        coffees: sampleCoffeeItems,
-        foods: sampleFoodItems,
+        name: "本日のコーヒー（ケニア カグモイニ）",
+        brewMethod: .handDrip,
+        origin: "ケニア",
+        variety: "SL28",
+        processing: .washed,
+        roastLevel: .medium,
+        cup: "ノリタケ",
         createdAt: instant(year: 2026, month: 6, day: 2),
         updatedAt: instant(year: 2026, month: 6, day: 2)
     )
 
-    /// 写真なし・コーヒーのみのサンプル訪問記録。
-    static let sampleVisitWithoutPhotos: Visit_ = Visit_(
-        id: "visit-002",
+    /// カフェあり・写真なしのサンプルコーヒー記録。
+    static let sampleCoffeeRecordWithoutPhotos: CoffeeRecord = CoffeeRecord(
+        id: "coffee-002",
         userId: "preview-user",
         cafe: Cafe(
             placeId: "ChIJsampleSteamers",
@@ -216,45 +156,44 @@ enum PreviewSamples {
             mapsUrl: nil
         ),
         visitedOn: localDate(year: 2026, month: 5, day: 28),
-        ambiance: "カウンターがメインの開放的な空間",
         rating: 3,
         notes: "",
         photos: [],
-        coffees: [sampleCoffeeItems[1]],
-        foods: [],
+        name: "エスプレッソ",
+        brewMethod: .espresso,
+        origin: "エチオピア",
+        variety: nil,
+        processing: .natural,
+        roastLevel: .fullCity,
+        cup: nil,
         createdAt: instant(year: 2026, month: 5, day: 28),
         updatedAt: instant(year: 2026, month: 5, day: 28)
     )
 
-    /// 最小構成（サブアイテムゼロ）のサンプル訪問記録。
-    static let sampleVisitMinimal: Visit_ = Visit_(
-        id: "visit-003",
+    /// セルフ抽出（cafe = null）のサンプルコーヒー記録。
+    static let sampleCoffeeRecordSelfBrew: CoffeeRecord = CoffeeRecord(
+        id: "coffee-003",
         userId: "preview-user",
-        cafe: Cafe(
-            placeId: "ChIJsampleFuglen",
-            name: "Fuglen Tokyo",
-            address: "東京都渋谷区富ヶ谷1-16-11",
-            latitude: nil,
-            longitude: nil,
-            photoReferences: [],
-            websiteUrl: nil,
-            mapsUrl: nil
-        ),
-        visitedOn: localDate(year: 2026, month: 5, day: 15),
-        ambiance: "",
+        cafe: nil,
+        visitedOn: localDate(year: 2026, month: 6, day: 19),
         rating: 5,
-        notes: "",
+        notes: "豆の挽き方を変えたら格段に旨くなった",
         photos: [],
-        coffees: [],
-        foods: [],
-        createdAt: instant(year: 2026, month: 5, day: 15),
-        updatedAt: instant(year: 2026, month: 5, day: 15)
+        name: "エチオピア イルガチェフェ",
+        brewMethod: .handDrip,
+        origin: "エチオピア",
+        variety: "ゲイシャ",
+        processing: .washed,
+        roastLevel: .light,
+        cup: nil,
+        createdAt: instant(year: 2026, month: 6, day: 19),
+        updatedAt: instant(year: 2026, month: 6, day: 19)
     )
 
-    /// 複数 Visit の配列（一覧 Preview 用）。
-    static let sampleVisits: [Visit_] = [
-        sampleVisit,
-        sampleVisitWithoutPhotos,
-        sampleVisitMinimal,
+    /// 複数 CoffeeRecord の配列（一覧 Preview 用）。
+    static let sampleCoffeeRecords: [CoffeeRecord] = [
+        sampleCoffeeRecord,
+        sampleCoffeeRecordWithoutPhotos,
+        sampleCoffeeRecordSelfBrew,
     ]
 }

@@ -1,40 +1,42 @@
 import Observation
 import SharedLogic
 
-/// `VisitDetailViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
+// MARK: - Identifiable 拡張
+
+extension CoffeeRecord: @retroactive Identifiable {}
+
+/// `CoffeeListViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `onAppear(visitId:)` / `onDisappear()` でライフサイクルを管理し、観測タスクのリーク防止する
+/// - `onAppear` / `onDisappear` でライフサイクルを管理し、観測タスクのリーク防止する
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - VisitList と異なり、Detail は画面遷移ごとに新規インスタンスを生成するため
-///   `VisitDetailView` 内の `@State` で保持する（AppState にはホルダプロパティを持たせない）
 @MainActor
 @Observable
-final class VisitDetailViewModelBridge {
+final class CoffeeListViewModelBridge {
 
-    private let kotlin: VisitDetailViewModel
+    private let kotlin: CoffeeListViewModel
     private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
-    private(set) var visit: Visit_?
+    private(set) var coffees: [CoffeeRecord] = []
     private(set) var isLoading: Bool = false
     private(set) var error: String?
 
     // MARK: - Init
 
-    init(kotlin: VisitDetailViewModel) {
+    init(kotlin: CoffeeListViewModel) {
         self.kotlin = kotlin
     }
 
     // MARK: - ライフサイクル
 
-    /// 画面表示時に呼ぶ。`visitId` に対応する訪問記録の購読を開始する。
+    /// 画面表示時に呼ぶ。userId でコーヒー記録の購読を開始する。
     ///
     /// 前回の観測タスクをキャンセルしてから再スタートするため、
-    /// 複数回呼ばれても二重購読しない。
-    func onAppear(visitId: String) {
-        kotlin.onAppear(visitId: visitId)
+    /// タブ切り替えなどで複数回呼ばれても二重購読しない。
+    func onAppear(userId: String) {
+        kotlin.onAppear(userId: userId)
         observationTask?.cancel()
         let flow = kotlin.state
         observationTask = Task { [weak self] in
@@ -54,14 +56,19 @@ final class VisitDetailViewModelBridge {
 
     // MARK: - ユーザーアクション
 
+    func onCoffeeDeleted(id: String) {
+        kotlin.onCoffeeDeleted(id: id)
+    }
+
     func onErrorDismissed() {
         kotlin.onErrorDismissed()
     }
 
     // MARK: - Private
 
-    private func apply(_ state: VisitDetailViewModel.UIState) {
-        self.visit = state.visit
+    private func apply(_ state: CoffeeListViewModel.UIState) {
+        // SKIE 環境では state.coffees は既に [CoffeeRecord] として型付けされている
+        self.coffees = state.coffees
         self.isLoading = state.isLoading
         self.error = state.error
     }

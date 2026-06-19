@@ -1,46 +1,41 @@
 import Observation
 import SharedLogic
 
-/// `VisitEditorViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
+/// `CoffeeEditorViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
 /// - `onAppear(mode:userId:)` / `onDisappear()` でライフサイクルを管理し、観測タスクのリーク防止する
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - VisitDetail と同様に、画面遷移ごとに新規インスタンスを生成するため
-///   `VisitEditorView` 内の `@State` で保持する（AppState にはホルダプロパティを持たせない）
+/// - 画面遷移ごとに新規インスタンスを生成するため `CoffeeEditorView` 内の `@State` で保持する
 @MainActor
 @Observable
-final class VisitEditorViewModelBridge {
+final class CoffeeEditorViewModelBridge {
 
-    private let kotlin: VisitEditorViewModel
+    private let kotlin: CoffeeEditorViewModel
     private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
-    private(set) var draft: VisitEditorViewModel.VisitDraft = VisitEditorViewModel.companion.defaultDraft()
+    private(set) var draft: CoffeeEditorViewModel.CoffeeDraft = CoffeeEditorViewModel.companion.defaultDraft()
     private(set) var isLoading: Bool = false
     private(set) var isSaving: Bool = false
     private(set) var error: String?
-    private(set) var savedVisitId: String?
+    private(set) var savedCoffeeId: String?
 
     // MARK: - Init
 
-    init(kotlin: VisitEditorViewModel) {
+    init(kotlin: CoffeeEditorViewModel) {
         self.kotlin = kotlin
     }
 
     // MARK: - ライフサイクル
 
     /// 画面表示時に呼ぶ。`mode` と `userId` を受け取り初期 draft を設定する。
-    ///
-    /// 前回の観測タスクをキャンセルしてから再スタートするため、
-    /// 複数回呼ばれても二重購読しない。
-    func onAppear(mode: any VisitEditorViewModelMode, userId: String) {
+    func onAppear(mode: any CoffeeEditorViewModelMode, userId: String) {
         kotlin.onAppear(mode: mode, userId: userId)
         observationTask?.cancel()
         let flow = kotlin.state
         observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
             for await state in flow {
                 guard let self else { break }
                 self.apply(state)
@@ -55,7 +50,7 @@ final class VisitEditorViewModelBridge {
         kotlin.onDisappear()
     }
 
-    // MARK: - フィールド更新転送
+    // MARK: - フィールド更新転送（cafe 関連）
 
     func onCafeNameChanged(_ name: String) {
         kotlin.onCafeNameChanged(name: name)
@@ -73,12 +68,10 @@ final class VisitEditorViewModelBridge {
         kotlin.onCafeMapsUrlChanged(url: url)
     }
 
+    // MARK: - フィールド更新転送（記録本体）
+
     func onVisitedOnChanged(_ date: Kotlinx_datetimeLocalDate) {
         kotlin.onVisitedOnChanged(date: date)
-    }
-
-    func onAmbianceChanged(_ text: String) {
-        kotlin.onAmbianceChanged(text: text)
     }
 
     func onRatingChanged(rating: Int) {
@@ -89,23 +82,37 @@ final class VisitEditorViewModelBridge {
         kotlin.onNotesChanged(text: text)
     }
 
-    // MARK: - 子要素操作転送
+    // MARK: - フィールド更新転送（コーヒー属性）
 
-    func onCoffeeUpserted(item: CoffeeItem) {
-        kotlin.onCoffeeUpserted(item: item)
+    func onNameChanged(_ name: String) {
+        kotlin.onNameChanged(name: name)
     }
 
-    func onCoffeeRemoved(id: String) {
-        kotlin.onCoffeeRemoved(id: id)
+    func onBrewMethodChanged(_ brewMethod: BrewMethod) {
+        kotlin.onBrewMethodChanged(brewMethod: brewMethod)
     }
 
-    func onFoodUpserted(item: FoodItem) {
-        kotlin.onFoodUpserted(item: item)
+    func onOriginChanged(_ origin: String) {
+        kotlin.onOriginChanged(origin: origin)
     }
 
-    func onFoodRemoved(id: String) {
-        kotlin.onFoodRemoved(id: id)
+    func onVarietyChanged(_ variety: String) {
+        kotlin.onVarietyChanged(variety: variety)
     }
+
+    func onProcessingChanged(_ processing: ProcessingMethod?) {
+        kotlin.onProcessingChanged(processing: processing)
+    }
+
+    func onRoastLevelChanged(_ roastLevel: RoastLevel?) {
+        kotlin.onRoastLevelChanged(roastLevel: roastLevel)
+    }
+
+    func onCupChanged(_ cup: String) {
+        kotlin.onCupChanged(cup: cup)
+    }
+
+    // MARK: - 写真操作転送
 
     func onPhotoUpserted(item: Photo_) {
         kotlin.onPhotoUpserted(item: item)
@@ -118,10 +125,6 @@ final class VisitEditorViewModelBridge {
     // MARK: - Places API 統合
 
     /// Places API 検索でカフェを選択した際に呼ぶ。
-    ///
-    /// Kotlin の `onPlacesCafeSelected(cafe:)` に転送し、
-    /// draft の cafeName / cafeAddress / cafeWebsiteUrl / cafeMapsUrl を上書きする。
-    /// Create モードでは UIState.selectedPlaceId も更新され、保存時に Google placeId が使われる。
     func onPlacesCafeSelected(cafe: Cafe) {
         kotlin.onPlacesCafeSelected(cafe: cafe)
     }
@@ -138,11 +141,11 @@ final class VisitEditorViewModelBridge {
 
     // MARK: - Private
 
-    private func apply(_ state: VisitEditorViewModel.UIState) {
+    private func apply(_ state: CoffeeEditorViewModel.UIState) {
         self.draft = state.draft
         self.isLoading = state.isLoading
         self.isSaving = state.isSaving
         self.error = state.error
-        self.savedVisitId = state.savedVisitId
+        self.savedCoffeeId = state.savedCoffeeId
     }
 }

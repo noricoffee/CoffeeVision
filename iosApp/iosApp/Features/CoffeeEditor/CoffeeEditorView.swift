@@ -2,74 +2,26 @@ import SwiftUI
 import SharedLogic
 import PhotosUI
 
-// MARK: - シート用 Identifiable ラッパ
+// MARK: - CoffeeEditorView
 
-/// コーヒーアイテム編集シートのターゲット。
+/// コーヒー記録作成 / 編集画面。
 ///
-/// `.sheet(item:)` と `Identifiable` の組み合わせで、
-/// nil = 非表示 / 非 nil = 表示（新規 or 既存）を切り替える。
-private enum CoffeeEditingTarget: Identifiable {
-    case new
-    case existing(CoffeeItem)
-
-    var id: String {
-        switch self {
-        case .new: return "new"
-        case .existing(let item): return item.id
-        }
-    }
-
-    /// シート初期値。新規は nil、編集は既存 CoffeeItem。
-    var initial: CoffeeItem? {
-        switch self {
-        case .new: return nil
-        case .existing(let item): return item
-        }
-    }
-}
-
-/// フードアイテム編集シートのターゲット。
-private enum FoodEditingTarget: Identifiable {
-    case new
-    case existing(FoodItem)
-
-    var id: String {
-        switch self {
-        case .new: return "new"
-        case .existing(let item): return item.id
-        }
-    }
-
-    var initial: FoodItem? {
-        switch self {
-        case .new: return nil
-        case .existing(let item): return item
-        }
-    }
-}
-
-// MARK: - VisitEditorView
-
-/// 訪問記録作成 / 編集画面。
-///
-/// - `VisitListView` / `VisitDetailView` の `.sheet` で開かれる前提のため、自身を `NavigationStack` でラップする
+/// - `CoffeeListView` / `CoffeeDetailView` の `.sheet` で開かれる前提のため、自身を `NavigationStack` でラップする
 /// - Bridge は遷移ごとに新規生成するため、View 内 `@State` で保持する（AppState にホルダを持たせない）
-struct VisitEditorView: View {
+/// - cafe は任意（セルフ抽出も可）。カフェ未選択の場合は「セルフ抽出」として保存
+struct CoffeeEditorView: View {
 
     // MARK: - Properties
 
-    let mode: any VisitEditorViewModelMode
+    let mode: any CoffeeEditorViewModelMode
     let appState: AppState
 
     /// カフェ詳細画面から起動した場合に pre-fill するカフェ。
-    /// 非 nil のとき `.task` 内で `viewModel.onPlacesCafeSelected(cafe:)` を呼ぶ。
     let initialCafe: Cafe?
 
-    @State private var viewModel: VisitEditorViewModelBridge
+    @State private var viewModel: CoffeeEditorViewModelBridge
     @Environment(\.dismiss) private var dismiss
 
-    @State private var coffeeBeingEdited: CoffeeEditingTarget?
-    @State private var foodBeingEdited: FoodEditingTarget?
     @State private var isCafeSearchPresented: Bool = false
 
     /// 新規追加分の写真データ（photoId → JPEG Data）。保存ボタン押下時に Documents に書き出す。
@@ -83,26 +35,14 @@ struct VisitEditorView: View {
 
     // MARK: - Init
 
-    /// 通常の VisitEditor 起動（カフェ pre-fill なし）。
-    init(mode: any VisitEditorViewModelMode, appState: AppState) {
-        self.mode = mode
-        self.appState = appState
-        self.initialCafe = nil
-        _viewModel = State(
-            initialValue: VisitEditorViewModelBridge(
-                kotlin: appState.container.makeVisitEditorViewModel()
-            )
-        )
-    }
-
-    /// CafeDetailView から起動するときに使うイニシャライザ。カフェを pre-fill する。
-    init(mode: any VisitEditorViewModelMode, appState: AppState, initialCafe: Cafe?) {
+    /// 通常の CoffeeEditor 起動（カフェ pre-fill なし）。
+    init(mode: any CoffeeEditorViewModelMode, appState: AppState, initialCafe: Cafe? = nil) {
         self.mode = mode
         self.appState = appState
         self.initialCafe = initialCafe
         _viewModel = State(
-            initialValue: VisitEditorViewModelBridge(
-                kotlin: appState.container.makeVisitEditorViewModel()
+            initialValue: CoffeeEditorViewModelBridge(
+                kotlin: appState.container.makeCoffeeEditorViewModel()
             )
         )
     }
@@ -113,10 +53,9 @@ struct VisitEditorView: View {
         NavigationStack {
             Form {
                 cafeSection
+                coffeeSection
                 visitSection
                 photosSection
-                coffeeSection
-                foodSection
             }
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
@@ -144,7 +83,7 @@ struct VisitEditorView: View {
             } message: {
                 Text(viewModel.error ?? "")
             }
-            .onChange(of: viewModel.savedVisitId) { _, newValue in
+            .onChange(of: viewModel.savedCoffeeId) { _, newValue in
                 if newValue != nil {
                     // 保存成功後に Editor 内で削除した既存写真ファイルを物理削除する
                     for fileName in removedFileNames {
@@ -170,18 +109,6 @@ struct VisitEditorView: View {
             } message: {
                 Text(photoSaveError ?? "")
             }
-            .sheet(item: $coffeeBeingEdited) { target in
-                CoffeeItemEditorView(
-                    initial: target.initial,
-                    onSave: { viewModel.onCoffeeUpserted(item: $0) }
-                )
-            }
-            .sheet(item: $foodBeingEdited) { target in
-                FoodItemEditorView(
-                    initial: target.initial,
-                    onSave: { viewModel.onFoodUpserted(item: $0) }
-                )
-            }
             .sheet(isPresented: $isCafeSearchPresented) {
                 NavigationStack {
                     CafeSearchView(appState: appState) { cafe in
@@ -200,74 +127,138 @@ struct VisitEditorView: View {
         }
     }
 
-    // MARK: - カフェ Section
+    // MARK: - カフェ Section（任意）
 
     private var cafeSection: some View {
-        Section(String(localized: "カフェ")) {
+        Section {
+            // カフェ選択ボタン
             Button {
                 isCafeSearchPresented = true
             } label: {
-                Label(String(localized: "カフェを検索"), systemImage: "magnifyingglass")
+                Label(
+                    viewModel.draft.cafeName.isEmpty
+                        ? String(localized: "カフェを選択（任意）")
+                        : String(localized: "カフェを変更"),
+                    systemImage: "magnifyingglass"
+                )
             }
             .accessibilityLabel(String(localized: "カフェを検索"))
 
-            TextField(
-                String(localized: "カフェ名（必須）"),
-                text: Binding(
-                    get: { viewModel.draft.cafeName },
-                    set: { viewModel.onCafeNameChanged($0) }
+            // カフェ選択済みの場合は名前・住所を表示
+            if !viewModel.draft.cafeName.isEmpty {
+                TextField(
+                    String(localized: "カフェ名"),
+                    text: Binding(
+                        get: { viewModel.draft.cafeName },
+                        set: { viewModel.onCafeNameChanged($0) }
+                    )
                 )
-            )
-            .accessibilityLabel(String(localized: "カフェ名"))
+                .accessibilityLabel(String(localized: "カフェ名"))
 
-            TextField(
-                String(localized: "住所（任意）"),
-                text: Binding(
-                    get: { viewModel.draft.cafeAddress },
-                    set: { viewModel.onCafeAddressChanged($0) }
-                )
-            )
-            .accessibilityLabel(String(localized: "住所"))
-
-            TextField(
-                String(localized: "Web サイト URL（任意）"),
-                text: Binding(
-                    get: { viewModel.draft.cafeWebsiteUrl },
-                    set: { viewModel.onCafeWebsiteUrlChanged($0) }
-                )
-            )
-            .keyboardType(.URL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .accessibilityLabel(String(localized: "Web サイト URL"))
-
-            TextField(
-                String(localized: "Google Maps URL（任意）"),
-                text: Binding(
-                    get: { viewModel.draft.cafeMapsUrl },
-                    set: { viewModel.onCafeMapsUrlChanged($0) }
-                )
-            )
-            .keyboardType(.URL)
-            .textInputAutocapitalization(.never)
-            .autocorrectionDisabled()
-            .accessibilityLabel(String(localized: "Google Maps URL"))
+                if !viewModel.draft.cafeAddress.isEmpty {
+                    Text(viewModel.draft.cafeAddress)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } else {
+                // 未選択時はセルフ抽出として保存される旨を表示
+                Label(String(localized: "未選択の場合はセルフ抽出として保存されます"), systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        } header: {
+            Text(String(localized: "カフェ（任意）"))
         }
     }
 
-    // MARK: - 訪問 Section
+    // MARK: - コーヒー Section
+
+    private var coffeeSection: some View {
+        Section(String(localized: "コーヒー")) {
+            TextField(
+                String(localized: "コーヒー名（必須）"),
+                text: Binding(
+                    get: { viewModel.draft.name },
+                    set: { viewModel.onNameChanged($0) }
+                )
+            )
+            .accessibilityLabel(String(localized: "コーヒー名"))
+
+            Picker(String(localized: "抽出方法"), selection: Binding(
+                get: { viewModel.draft.brewMethod },
+                set: { viewModel.onBrewMethodChanged($0) }
+            )) {
+                ForEach(BrewMethod.allCases, id: \.name) { method in
+                    Text(localizedBrewMethod(method))
+                        .tag(method)
+                }
+            }
+            .accessibilityLabel(String(localized: "抽出方法"))
+
+            TextField(
+                String(localized: "産地（任意）"),
+                text: Binding(
+                    get: { viewModel.draft.origin },
+                    set: { viewModel.onOriginChanged($0) }
+                )
+            )
+            .accessibilityLabel(String(localized: "産地"))
+
+            TextField(
+                String(localized: "品種（任意）"),
+                text: Binding(
+                    get: { viewModel.draft.variety },
+                    set: { viewModel.onVarietyChanged($0) }
+                )
+            )
+            .accessibilityLabel(String(localized: "品種"))
+
+            Picker(String(localized: "精製方法"), selection: Binding(
+                get: { viewModel.draft.processing },
+                set: { viewModel.onProcessingChanged($0) }
+            )) {
+                Text(String(localized: "未設定")).tag(nil as ProcessingMethod?)
+                ForEach(ProcessingMethod.allCases, id: \.name) { method in
+                    Text(method.name).tag(method as ProcessingMethod?)
+                }
+            }
+            .accessibilityLabel(String(localized: "精製方法"))
+
+            Picker(String(localized: "焙煎度"), selection: Binding(
+                get: { viewModel.draft.roastLevel },
+                set: { viewModel.onRoastLevelChanged($0) }
+            )) {
+                Text(String(localized: "未設定")).tag(nil as RoastLevel?)
+                ForEach(RoastLevel.allCases, id: \.name) { level in
+                    Text(level.name).tag(level as RoastLevel?)
+                }
+            }
+            .accessibilityLabel(String(localized: "焙煎度"))
+
+            TextField(
+                String(localized: "カップ（任意）"),
+                text: Binding(
+                    get: { viewModel.draft.cup },
+                    set: { viewModel.onCupChanged($0) }
+                )
+            )
+            .accessibilityLabel(String(localized: "カップ"))
+        }
+    }
+
+    // MARK: - 記録 Section
 
     private var visitSection: some View {
-        Section(String(localized: "訪問")) {
+        Section(String(localized: "記録")) {
             DatePicker(
-                String(localized: "訪問日"),
+                String(localized: "記録日"),
                 selection: Binding(
                     get: { localDateToDate(viewModel.draft.visitedOn) },
                     set: { viewModel.onVisitedOnChanged(dateToLocalDate($0)) }
                 ),
                 displayedComponents: .date
             )
-            .accessibilityLabel(String(localized: "訪問日"))
+            .accessibilityLabel(String(localized: "記録日"))
 
             LabeledContent(String(localized: "評価")) {
                 StarRatingView(
@@ -276,17 +267,6 @@ struct VisitEditorView: View {
                 )
             }
             .accessibilityLabel(String(localized: "評価"))
-
-            TextField(
-                String(localized: "雰囲気（任意）"),
-                text: Binding(
-                    get: { viewModel.draft.ambiance },
-                    set: { viewModel.onAmbianceChanged($0) }
-                ),
-                axis: .vertical
-            )
-            .lineLimit(3...6)
-            .accessibilityLabel(String(localized: "雰囲気"))
 
             TextField(
                 String(localized: "メモ（任意）"),
@@ -301,76 +281,15 @@ struct VisitEditorView: View {
         }
     }
 
-    // MARK: - コーヒー Section
-
-    private var coffeeSection: some View {
-        Section(String(localized: "コーヒー")) {
-            ForEach(viewModel.draft.coffees) { coffee in
-                Button {
-                    coffeeBeingEdited = .existing(coffee)
-                } label: {
-                    CoffeeItemSummaryRow(coffee: coffee)
-                }
-                .foregroundStyle(.primary)
-                .accessibilityLabel(coffee.name)
-            }
-            .onDelete { indexSet in
-                indexSet.forEach { index in
-                    let coffees = viewModel.draft.coffees
-                    if index < coffees.count {
-                        viewModel.onCoffeeRemoved(id: coffees[index].id)
-                    }
-                }
-            }
-
-            Button {
-                coffeeBeingEdited = .new
-            } label: {
-                Label(String(localized: "コーヒーを追加"), systemImage: "plus")
-            }
-            .accessibilityLabel(String(localized: "コーヒーを追加"))
-        }
-    }
-
-    // MARK: - フード Section
-
-    private var foodSection: some View {
-        Section(String(localized: "フード")) {
-            ForEach(viewModel.draft.foods) { food in
-                Button {
-                    foodBeingEdited = .existing(food)
-                } label: {
-                    FoodItemSummaryRow(food: food)
-                }
-                .foregroundStyle(.primary)
-                .accessibilityLabel(food.name)
-            }
-            .onDelete { indexSet in
-                indexSet.forEach { index in
-                    let foods = viewModel.draft.foods
-                    if index < foods.count {
-                        viewModel.onFoodRemoved(id: foods[index].id)
-                    }
-                }
-            }
-
-            Button {
-                foodBeingEdited = .new
-            } label: {
-                Label(String(localized: "フードを追加"), systemImage: "plus")
-            }
-            .accessibilityLabel(String(localized: "フードを追加"))
-        }
-    }
-
     // MARK: - 写真 Section
 
     private var photosSection: some View {
         Section(String(localized: "写真")) {
-            if !viewModel.draft.photos.isEmpty {
+            let photos = viewModel.draft.photos
+            if !photos.isEmpty {
                 ScrollView(.horizontal, showsIndicators: false) {
                     LazyHStack(spacing: 8) {
-                        ForEach(viewModel.draft.photos) { photo in
+                        ForEach(photos) { photo in
                             PhotoThumbnailCell(
                                 photo: photo,
                                 pendingData: pendingImageData[photo.id],
@@ -451,10 +370,10 @@ struct VisitEditorView: View {
     /// 保存ボタン押下時の処理。
     /// pendingImageData を Documents に書き出してから VM の onSaveTapped を呼ぶ。
     private func saveWithPhotoFlush() async {
-        // pendingImageData を Documents に書き出す
+        let currentPhotos = viewModel.draft.photos
         var flushedFileNames: [String] = []
         do {
-            for photo in viewModel.draft.photos {
+            for photo in currentPhotos {
                 guard let data = pendingImageData[photo.id],
                       let fileName = photo.fileName else { continue }
                 try PhotoFileStore.save(data: data, fileName: fileName)
@@ -495,16 +414,15 @@ struct VisitEditorView: View {
     // MARK: - ナビゲーションタイトル
 
     private var navigationTitle: String {
-        if mode is VisitEditorViewModelModeCreate {
-            return String(localized: "新規訪問")
+        if mode is CoffeeEditorViewModelModeCreate {
+            return String(localized: "コーヒーを記録")
         } else {
-            return String(localized: "訪問の編集")
+            return String(localized: "記録を編集")
         }
     }
 
     // MARK: - LocalDate ↔ Date 変換
 
-    /// `Kotlinx_datetimeLocalDate` を Foundation の `Date` に変換する。
     private func localDateToDate(_ localDate: Kotlinx_datetimeLocalDate) -> Date {
         var components = DateComponents()
         components.year = Int(localDate.year)
@@ -513,7 +431,6 @@ struct VisitEditorView: View {
         return Calendar.current.date(from: components) ?? Date()
     }
 
-    /// Foundation の `Date` を `Kotlinx_datetimeLocalDate` に変換する。
     private func dateToLocalDate(_ date: Date) -> Kotlinx_datetimeLocalDate {
         let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
         return Kotlinx_datetimeLocalDate(
@@ -522,40 +439,21 @@ struct VisitEditorView: View {
             dayOfMonth: Int32(components.day ?? 1)
         )
     }
-}
 
-// MARK: - CoffeeItemSummaryRow
+    // MARK: - BrewMethod ローカライズ
 
-/// コーヒーアイテムの一覧行コンポーネント（Editor 内リスト用）。
-private struct CoffeeItemSummaryRow: View {
-    let coffee: CoffeeItem
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(coffee.name)
-                .font(.body)
-            Text(coffee.brewMethod.name)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+    private func localizedBrewMethod(_ method: BrewMethod) -> String {
+        switch method {
+        case .handDrip: return String(localized: "ハンドドリップ")
+        case .espresso: return String(localized: "エスプレッソ")
+        case .nelDrip: return String(localized: "ネルドリップ")
+        case .frenchPress: return String(localized: "フレンチプレス")
+        case .aeroPress: return String(localized: "エアロプレス")
+        case .syphon: return String(localized: "サイフォン")
+        case .coldBrew: return String(localized: "コールドブリュー")
+        case .other: return String(localized: "その他")
+        @unknown default: return method.name
         }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
-    }
-}
-
-// MARK: - FoodItemSummaryRow
-
-/// フードアイテムの一覧行コンポーネント（Editor 内リスト用）。
-private struct FoodItemSummaryRow: View {
-    let food: FoodItem
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(food.name)
-                .font(.body)
-        }
-        .padding(.vertical, 4)
-        .accessibilityElement(children: .combine)
     }
 }
 
@@ -565,7 +463,6 @@ private struct FoodItemSummaryRow: View {
 private struct PhotoThumbnailCell: View {
 
     let photo: Photo_
-    /// 新規追加分の未保存 JPEG データ（既存写真では nil）。
     let pendingData: Data?
     let onDelete: () -> Void
 
@@ -611,75 +508,41 @@ private struct PhotoThumbnailCell: View {
     }
 }
 
-// MARK: - Preview (CoffeeItemSummaryRow 単体)
-
-#Preview("CoffeeItemSummaryRow") {
-    List {
-        CoffeeItemSummaryRow(coffee: PreviewSamples.sampleCoffeeItems[0])
-        CoffeeItemSummaryRow(coffee: PreviewSamples.sampleCoffeeItems[1])
-        CoffeeItemSummaryRow(coffee: PreviewSamples.sampleCoffeeItems[2])
-    }
-}
-
-// MARK: - Preview (FoodItemSummaryRow 単体)
-
-#Preview("FoodItemSummaryRow") {
-    List {
-        FoodItemSummaryRow(food: PreviewSamples.sampleFoodItems[0])
-        FoodItemSummaryRow(food: PreviewSamples.sampleFoodItems[1])
-    }
-}
-
-// MARK: - Preview (PhotoThumbnailCell 単体)
-
-#Preview("PhotoThumbnailCell") {
-    ScrollView(.horizontal) {
-        LazyHStack(spacing: 8) {
-            // pendingData が nil かつ fileName あり → placeholder 表示（Preview では実ファイル無し）
-            PhotoThumbnailCell(
-                photo: PreviewSamples.samplePhotos[0],
-                pendingData: nil,
-                onDelete: {}
-            )
-            // fileName nil → placeholder 表示
-            PhotoThumbnailCell(
-                photo: PreviewSamples.samplePhotos[2],
-                pendingData: nil,
-                onDelete: {}
-            )
-        }
-        .padding()
-    }
-    .frame(height: 140)
-}
-
-// MARK: - Preview (新規作成 Form Demo)
+// MARK: - Preview (新規作成 Demo)
 
 #Preview("新規作成 Demo") {
     NavigationStack {
         Form {
-            Section(String(localized: "カフェ")) {
-                Text("Blue Bottle 三軒茶屋").foregroundStyle(.secondary)
-                Text("東京都世田谷区太子堂4-1-22").foregroundStyle(.secondary)
+            Section {
+                Button {} label: {
+                    Label(String(localized: "カフェを選択（任意）"), systemImage: "magnifyingglass")
+                }
+                Label(String(localized: "未選択の場合はセルフ抽出として保存されます"), systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            } header: {
+                Text(String(localized: "カフェ（任意）"))
             }
-            Section(String(localized: "訪問")) {
-                LabeledContent(String(localized: "訪問日")) {
-                    Text("2026/06/02")
+
+            Section(String(localized: "コーヒー")) {
+                TextField(String(localized: "コーヒー名（必須）"), text: .constant(""))
+                Text("ハンドドリップ").foregroundStyle(.secondary)
+            }
+
+            Section(String(localized: "記録")) {
+                LabeledContent(String(localized: "記録日")) {
+                    Text("2026/06/19")
                 }
                 LabeledContent(String(localized: "評価")) {
                     StarRatingView(rating: 0)
                 }
             }
-            Section(String(localized: "コーヒー")) {
-                Label(String(localized: "コーヒーを追加"), systemImage: "plus")
-                    .accessibilityLabel(String(localized: "コーヒーを追加"))
-            }
-            Section(String(localized: "フード")) {
-                Label(String(localized: "フードを追加"), systemImage: "plus")
-                    .accessibilityLabel(String(localized: "フードを追加"))
+
+            Section(String(localized: "写真")) {
+                Label(String(localized: "写真を追加"), systemImage: "plus")
             }
         }
-        .navigationTitle(String(localized: "新規訪問"))
+        .navigationTitle(String(localized: "コーヒーを記録"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .navigationBarLeading) {
@@ -688,56 +551,6 @@ private struct PhotoThumbnailCell: View {
             ToolbarItem(placement: .navigationBarTrailing) {
                 Button(String(localized: "保存")) {}
                     .disabled(true)
-            }
-        }
-    }
-}
-
-// MARK: - Preview (編集 Form Demo)
-
-#Preview("訪問の編集 Demo") {
-    let visit = PreviewSamples.sampleVisit
-    NavigationStack {
-        Form {
-            Section(String(localized: "カフェ")) {
-                Text(visit.cafe.name)
-                if let address = visit.cafe.address {
-                    Text(address).foregroundStyle(.secondary)
-                }
-            }
-            Section(String(localized: "訪問")) {
-                let d = visit.visitedOn
-                LabeledContent(String(localized: "訪問日")) {
-                    Text(String(format: "%04d/%02d/%02d",
-                                Int(d.year), Int(d.monthNumber), Int(d.dayOfMonth)))
-                }
-                LabeledContent(String(localized: "評価")) {
-                    StarRatingView(rating: Int(visit.rating))
-                }
-            }
-            Section(String(localized: "コーヒー")) {
-                ForEach(visit.coffees) { coffee in
-                    CoffeeItemSummaryRow(coffee: coffee)
-                }
-                Label(String(localized: "コーヒーを追加"), systemImage: "plus")
-                    .accessibilityLabel(String(localized: "コーヒーを追加"))
-            }
-            Section(String(localized: "フード")) {
-                ForEach(visit.foods) { food in
-                    FoodItemSummaryRow(food: food)
-                }
-                Label(String(localized: "フードを追加"), systemImage: "plus")
-                    .accessibilityLabel(String(localized: "フードを追加"))
-            }
-        }
-        .navigationTitle(String(localized: "訪問の編集"))
-        .navigationBarTitleDisplayMode(.inline)
-        .toolbar {
-            ToolbarItem(placement: .navigationBarLeading) {
-                Button(String(localized: "キャンセル")) {}
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                Button(String(localized: "保存")) {}
             }
         }
     }

@@ -3,8 +3,8 @@ import SharedLogic
 
 /// カフェ詳細画面。
 ///
-/// - カフェ情報（名前 / 住所 / 訪問回数）+ 過去 Visit 一覧を表示する
-/// - ツールバーの `+` ボタンで `VisitEditorView` を sheet で起動（cafe pre-filled）
+/// - カフェ情報（名前 / 住所）+ 過去コーヒー記録一覧を表示する
+/// - ツールバーの `+` ボタンで `CoffeeEditorView` を sheet で起動（cafe pre-filled）
 /// - NavigationStack push ごとに新規 Bridge を生成するため、`@State` で保持する
 /// - マップの Annotation タップ / 検索結果タップの両方から push される
 struct CafeDetailView: View {
@@ -52,8 +52,8 @@ struct CafeDetailView: View {
             bridge?.cancel()
         }
         .sheet(isPresented: $isPresentingEditor) {
-            VisitEditorView(
-                mode: VisitEditorViewModelModeCreate.shared,
+            CoffeeEditorView(
+                mode: CoffeeEditorViewModelModeCreate.shared,
                 appState: appState,
                 initialCafe: bridge?.cafe ?? initialCafe
             )
@@ -65,7 +65,7 @@ struct CafeDetailView: View {
     private func cafeDetailList(bridge: CafeDetailViewModelBridge) -> some View {
         List {
             cafeInfoSection(bridge: bridge)
-            pastVisitsSection(bridge: bridge)
+            coffeesSection(bridge: bridge)
         }
         .listStyle(.insetGrouped)
     }
@@ -90,11 +90,10 @@ struct CafeDetailView: View {
                     .accessibilityLabel(String(localized: "住所 \(address)"))
                 }
 
-                LabeledContent(String(localized: "訪問回数")) {
-                    Text(String(localized: "\(bridge.pastVisits.count) 回"))
-                        .foregroundStyle(bridge.pastVisits.isEmpty ? .secondary : .primary)
+                LabeledContent(String(localized: "記録 \(bridge.coffees.count) 杯")) {
+                    EmptyView()
                 }
-                .accessibilityLabel(String(localized: "訪問回数 \(bridge.pastVisits.count) 回"))
+                .accessibilityLabel(String(localized: "記録 \(bridge.coffees.count) 杯"))
             } else {
                 Text(String(localized: "カフェ情報を読み込み中..."))
                     .foregroundStyle(.secondary)
@@ -102,43 +101,43 @@ struct CafeDetailView: View {
         }
     }
 
-    // MARK: - 過去 Visit セクション
+    // MARK: - コーヒー記録セクション
 
-    private func pastVisitsSection(bridge: CafeDetailViewModelBridge) -> some View {
-        Section(String(localized: "訪問記録")) {
-            if bridge.pastVisits.isEmpty {
-                emptyVisitsView
+    private func coffeesSection(bridge: CafeDetailViewModelBridge) -> some View {
+        Section(String(localized: "コーヒー記録")) {
+            if bridge.coffees.isEmpty {
+                emptyRecordsView
             } else {
-                ForEach(bridge.pastVisits) { visit in
+                ForEach(bridge.coffees) { coffee in
                     NavigationLink {
-                        VisitDetailView(visitId: visit.id, appState: appState)
+                        CoffeeDetailView(coffeeId: coffee.id, appState: appState)
                     } label: {
-                        VisitSummaryRow(visit: visit)
+                        CoffeeSummaryRow(coffee: coffee)
                     }
                 }
             }
         }
     }
 
-    /// 過去 Visit がない場合の空表示 + Visit 追加誘導。
-    private var emptyVisitsView: some View {
+    /// コーヒー記録がない場合の空表示 + 記録追加誘導。
+    private var emptyRecordsView: some View {
         VStack(spacing: 16) {
             Image(systemName: "cup.and.saucer")
                 .font(.largeTitle)
                 .foregroundStyle(.tertiary)
-            Text(String(localized: "まだ訪問記録がありません"))
+            Text(String(localized: "まだコーヒー記録がありません"))
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
             Button {
                 isPresentingEditor = true
             } label: {
                 Label(
-                    String(localized: "Visit を追加"),
+                    String(localized: "コーヒーを記録"),
                     systemImage: "plus.circle.fill"
                 )
                 .font(.body.bold())
             }
-            .accessibilityLabel(String(localized: "Visit を追加"))
+            .accessibilityLabel(String(localized: "コーヒーを記録"))
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 24)
@@ -153,39 +152,42 @@ struct CafeDetailView: View {
                 isPresentingEditor = true
             } label: {
                 Label(
-                    String(localized: "Visit を追加"),
+                    String(localized: "コーヒーを記録"),
                     systemImage: "plus"
                 )
             }
-            .accessibilityLabel(String(localized: "Visit を追加"))
+            .accessibilityLabel(String(localized: "コーヒーを記録"))
             .disabled(appState.uid == nil)
         }
     }
 }
 
-// MARK: - VisitSummaryRow
+// MARK: - CoffeeSummaryRow
 
-/// カフェ詳細画面内の過去 Visit 行コンポーネント。
-private struct VisitSummaryRow: View {
+/// カフェ詳細画面内の過去コーヒー記録行コンポーネント。
+private struct CoffeeSummaryRow: View {
 
-    let visit: Visit_
+    let coffee: CoffeeRecord
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(formattedDate)
+            Text(coffee.name)
                 .font(.subheadline)
                 .foregroundStyle(.primary)
-            StarRatingView(rating: Int(visit.rating), size: .caption)
+            Text(formattedDate)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            StarRatingView(rating: Int(coffee.rating), size: .caption)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            String(localized: "\(formattedDate), \(Int(visit.rating))星")
+            String(localized: "\(coffee.name), \(formattedDate), \(Int(coffee.rating))星")
         )
     }
 
     private var formattedDate: String {
-        let d = visit.visitedOn
+        let d = coffee.visitedOn
         return String(
             format: "%04d/%02d/%02d",
             Int(d.year),

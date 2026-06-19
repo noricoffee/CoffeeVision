@@ -4,10 +4,10 @@ import SharedLogic
 
 /// アプリ全体の状態ホルダ。
 ///
-/// - 起動時に Swift 側で `AuthRepositoryIosImpl` / `RemoteVisitDataSourceIosImpl` を組み立て、
+/// - 起動時に Swift 側で `AuthRepositoryIosImpl` / `RemoteCoffeeDataSourceIosImpl` を組み立て、
 ///   Kotlin の `AppContainer` に注入する
 /// - `AppContainer.startInitialSync()` を呼び、得られた uid を保持する
-/// - `visitListBridge` / `mapBridge` / `accountBridge` を `Optional` で保持し、
+/// - `coffeeListBridge` / `mapBridge` / `accountBridge` を `Optional` で保持し、
 ///   `bootstrap()` 完了後に 1 度だけ生成する
 @MainActor
 @Observable
@@ -18,15 +18,15 @@ final class AppState {
     private(set) var status: Status = .idle
     private(set) var lastError: String?
 
-    /// VisitListView 用の ViewModel ブリッジ。
+    /// CoffeeListView 用の ViewModel ブリッジ。
     ///
     /// `@Observable` マクロは `lazy var` をサポートしないため `Optional` で初期化し、
     /// `bootstrap()` 完了後に 1 度だけ生成する。
-    private(set) var visitListBridge: VisitListViewModelBridge?
+    private(set) var coffeeListBridge: CoffeeListViewModelBridge?
 
     /// MapTabView 用の ViewModel ブリッジ。
     ///
-    /// マップタブは TabView 常時生存のため `visitListBridge` と同等のライフサイクルで管理する。
+    /// マップタブは TabView 常時生存のため `coffeeListBridge` と同等のライフサイクルで管理する。
     /// `bootstrap()` 完了後（uid 確定後）に 1 度だけ生成する。
     private(set) var mapBridge: MapViewModelBridge?
 
@@ -51,14 +51,14 @@ final class AppState {
     init() {
         let sqlDriver = DatabaseDriverFactory().create()
         let authRepo = AuthRepositoryIosImpl()
-        let remoteDataSource = RemoteVisitDataSourceIosImpl()
+        let remoteDataSource = RemoteCoffeeDataSourceIosImpl()
         // Configuration/Base.xcconfig → Info.plist の $(PLACES_API_KEY) 経由で取得する。
         // Secrets.xcconfig が存在しない場合（CI 環境等）は空文字フォールバック。
         // 空文字の場合もアプリは起動するが Places API 呼び出しは 401 を返す。
         let placesApiKey = (Bundle.main.object(forInfoDictionaryKey: "PLACES_API_KEY") as? String) ?? ""
         let container = AppContainer(
             sqlDriver: sqlDriver,
-            remoteVisitDataSource: remoteDataSource,
+            remoteCoffeeDataSource: remoteDataSource,
             authRepository: authRepo,
             placesApiKey: placesApiKey
         )
@@ -77,7 +77,7 @@ final class AppState {
 
     /// 匿名サインイン + 同期購読を起動する。`AppRootView` の `.task` から呼ぶ。
     ///
-    /// 成功時に `visitListBridge` / `mapBridge` / `accountBridge` を 1 度だけ生成する。
+    /// 成功時に `coffeeListBridge` / `mapBridge` / `accountBridge` を 1 度だけ生成する。
     /// 既に生成済み（bootstrap 再呼び出し）の場合は再生成しない。
     func bootstrap() async {
         status = .signingIn
@@ -85,9 +85,9 @@ final class AppState {
             let uid = try await container.startInitialSync()
             self.uid = uid
             self.status = .ready
-            // VisitListViewModelBridge を 1 度だけ生成する
-            if visitListBridge == nil {
-                visitListBridge = VisitListViewModelBridge(kotlin: container.makeVisitListViewModel())
+            // CoffeeListViewModelBridge を 1 度だけ生成する
+            if coffeeListBridge == nil {
+                coffeeListBridge = CoffeeListViewModelBridge(kotlin: container.makeCoffeeListViewModel())
             }
             // MapViewModelBridge を 1 度だけ生成する（uid が必要）
             if mapBridge == nil {
@@ -107,15 +107,15 @@ final class AppState {
 
     /// サインアウト / アカウント削除後に全ブリッジをリセットして再起動する。
     ///
-    /// - `visitListBridge` / `mapBridge` / `accountBridge` / `uid` を nil に戻す
+    /// - `coffeeListBridge` / `mapBridge` / `accountBridge` / `uid` を nil に戻す
     /// - `status = .idle` にして `AppRootView` をローディング表示に切り替える
     /// - 再度 `bootstrap()` を呼んで新規匿名 uid を確定する
     func resetAndRebootstrap() {
-        visitListBridge?.onDisappear()
+        coffeeListBridge?.onDisappear()
         mapBridge?.cancel()
         accountBridge?.onDisappear()
 
-        visitListBridge = nil
+        coffeeListBridge = nil
         mapBridge = nil
         accountBridge = nil
         uid = nil

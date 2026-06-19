@@ -3,6 +3,7 @@ package com.noricoffee
 import app.cash.sqldelight.db.SqlDriver
 import com.noricoffee.data.places.createCafeRepository
 import com.noricoffee.db.AppDatabase
+import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
@@ -29,8 +30,10 @@ import kotlinx.coroutines.MainScope
  *
  * 通常用途（iOS / Android のアプリ起動時）では **scope 引数なし** のセカンダリコンストラクタを
  * 使い、内部で [MainScope]（`SupervisorJob() + Dispatchers.Main`）を生成させること。
- * Swift から見える初期化シグネチャは
+ * Android の Swift 側から見える初期化シグネチャは
  * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:)` になる。
+ * iOS で Foundation Models を注入する場合は
+ * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:coffeeInsightProvider:)` を使う。
  *
  * scope を引数で受け取るプライマリコンストラクタは **テスト用途専用**（TestDispatcher の差し替え等）。
  */
@@ -39,6 +42,7 @@ class AppContainer(
     private val remoteCoffeeDataSource: RemoteCoffeeDataSource,
     val authRepository: AuthRepository,
     val placesApiKey: String,
+    val coffeeInsightProvider: CoffeeInsightProvider?,
     val scope: CoroutineScope,
 ) {
 
@@ -49,7 +53,47 @@ class AppContainer(
      * コンストラクタに委譲する。Swift からはこのシグネチャを使うこと。
      *
      * Swift 側の呼び出しシグネチャ:
+     * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:coffeeInsightProvider:)`
+     *
+     * ## iOS での使い方
+     * - Phase A-4 まで: `coffeeInsightProvider: nil` を渡す（分析タブは統計のみ表示）
+     * - Phase A-4 以降: iOS が Foundation Models 実装（`CoffeeInsightProviderIosImpl` 等）を渡す
+     *
+     * ## Android での使い方
+     * Foundation Models は iOS 専用のため、Android では `coffeeInsightProvider` を渡さない
+     * （nil 既定のオーバーロードを使う）。
+     *
+     * ## SKIE / デフォルト引数の注意
+     * SKIE は Kotlin のデフォルト引数を Swift に出さない（[implementation_note.md] 参照）。
+     * そのため `coffeeInsightProvider: null` のデフォルト値付きセカンダリコンストラクタ（Android 用）を
+     * 別途定義し、Android の既存呼び出し箇所がコンパイルを通せるようにする。
+     */
+    constructor(
+        sqlDriver: SqlDriver,
+        remoteCoffeeDataSource: RemoteCoffeeDataSource,
+        authRepository: AuthRepository,
+        placesApiKey: String,
+        coffeeInsightProvider: CoffeeInsightProvider?,
+    ) : this(
+        sqlDriver = sqlDriver,
+        remoteCoffeeDataSource = remoteCoffeeDataSource,
+        authRepository = authRepository,
+        placesApiKey = placesApiKey,
+        coffeeInsightProvider = coffeeInsightProvider,
+        scope = MainScope(),
+    )
+
+    /**
+     * Android / テスト用のセカンダリコンストラクタ（[coffeeInsightProvider] = null 固定）。
+     *
+     * Android では Foundation Models を使わないため、既存の Android 呼び出し箇所が
+     * 引数変更なしでコンパイルを通せるよう `coffeeInsightProvider` を省略可能にしている。
+     *
+     * Swift 側の呼び出しシグネチャ:
      * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:)`
+     *
+     * iOS では Phase A-4 以降に `CoffeeInsightProvider` 実装を注入するため、
+     * iOS の `AppState.swift` では上の 5 引数セカンダリコンストラクタを使うこと。
      */
     constructor(
         sqlDriver: SqlDriver,
@@ -61,6 +105,7 @@ class AppContainer(
         remoteCoffeeDataSource = remoteCoffeeDataSource,
         authRepository = authRepository,
         placesApiKey = placesApiKey,
+        coffeeInsightProvider = null,
         scope = MainScope(),
     )
 

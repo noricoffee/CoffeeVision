@@ -3,8 +3,10 @@ package com.noricoffee.framework
 import com.noricoffee.AppContainer
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.usecase.DeleteAccountUseCase
+import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.feature.account.AccountViewModel
+import com.noricoffee.feature.analysis.AnalysisViewModel
 import com.noricoffee.feature.cafedetail.CafeDetailViewModel
 import com.noricoffee.feature.cafesearch.CafeSearchViewModel
 import com.noricoffee.feature.coffeedetail.CoffeeDetailViewModel
@@ -116,6 +118,33 @@ fun AppContainer.makeCafeDetailViewModel(
         coffeeRepository = coffeeRepository,
         placeId = placeId,
         initialCafe = initialCafe,
+        userId = userId,
+        scope = scope,
+    )
+
+/**
+ * [AnalysisViewModel] を生成して返す。
+ *
+ * [AppContainer] が保持する [com.noricoffee.repository.CoffeeRepository] と
+ * [com.noricoffee.domain.model.CoffeeInsightProvider]（nullable）を自動配線する。
+ * [ObserveCoffeeStatsUseCase] はファクトリ内で都度生成する（DI コンテナ化は YAGNI）。
+ *
+ * ## insightProvider の挙動
+ * - `appContainer.coffeeInsightProvider` が null（Android / Phase A-4 以前）の場合:
+ *   [AnalysisViewModel.UIState.insightStatus] は [AnalysisViewModel.InsightStatus.Unsupported] になり、
+ *   要約生成は一切行わない（統計のみ表示）
+ * - Phase A-4 以降、iOS 側が `AppContainer` に `CoffeeInsightProvider` 実装を注入した場合:
+ *   統計確定後に自動で要約生成を開始する
+ *
+ * ## Bridge のライフサイクル
+ * 分析タブは TabBar 常時生存のため、`AppState` で 1 つだけ生成・保持すること。
+ *
+ * @param userId 現在サインイン中のユーザー ID（`AppState.uid` を渡す）
+ */
+fun AppContainer.makeAnalysisViewModel(userId: String): AnalysisViewModel =
+    AnalysisViewModel(
+        observeCoffeeStatsUseCase = ObserveCoffeeStatsUseCase(coffeeRepository),
+        insightProvider = coffeeInsightProvider,
         userId = userId,
         scope = scope,
     )

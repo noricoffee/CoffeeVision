@@ -1415,3 +1415,15 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **Bridge**: `insightStatus` を `any AnalysisViewModelInsightStatus`（existential）で保持。A-3 では常に `Unsupported`（provider 未注入）で UI 非描画だが、A-4 の `is` チェック分岐に備えて型を維持。`AppContainer` は **4 引数のまま無変更**（A-4 で 5 引数化）。`analysisBridge` は `AppState` 1 つ保持（`mapBridge` と同パターン）。
 - **enum 日本語化**: `RoastLevel` / `BrewMethod` の `enum.name`（英語）→ 日本語変換ヘルパを `AnalysisView` に内包。既存の他画面（CoffeeDetail 等）の enum 表示は英語のままで、日本語化は元々別タスク扱い。**分析タブが先行して独自ヘルパを持つ形になったため、将来 enum 表示の日本語化を全画面で行う際に共通化する候補**（follow-up）。
 - **SKIE 型の注意**: `CoffeeStats` を `Identifiable` 適合させる際 `id: Int32 { totalCount }`（KMP の `Int` は Swift で `Int32`）。
+
+### 2026-06-19: Phase A-4 — Foundation Models による傾向要約（階層3）
+
+- 領域: iOS / KMP Bridge
+- 関連: `iosApp/iosApp/Features/Analysis/CoffeeInsightProviderIosImpl.swift`, `AnalysisView.swift`, `AppState.swift`
+
+- **`CoffeeInsightProviderIosImpl`**: Kotlin `CoffeeInsightProvider`（凍結 IF）の SKIE protocol witness 実装。`__summarize(stats:completionHandler:)` の completion handler 形式（`RemoteCoffeeDataSourceIosImpl.__upload`/`.__remove` と同パターン）。内部で `Task { LanguageModelSession.respond(to:generating:) }` → completion 変換。
+- **`@Generable` 構造化出力**: `CoffeeInsightOutput(headline, body)` を `@Guide` で長さ・用途制約付き宣言。**SwiftUI `View.body` との名前競合を避けるため private struct に閉じる**（外部公開が要るならフィールド名を `insightBody` 等にリネーム）。
+- **prompt 整形**: `buildPrompt(from: CoffeeStats)` で KMP が**集計済みの事実**（総杯数・平均評価・産地トップ・焙煎度/抽出方法・よく行く店・recentHighlights）を日本語テキスト化して渡す。**数値計算は LLM にさせない**（階層分離の原則）。`LanguageModelSession` はリクエストごとに生成（ステートレス。会話 follow-up は Q&A の Phase B-2 で扱う）。
+- **可否判定（契約 = 注入時）**: `CoffeeInsightProviderIosImpl.makeIfAvailable()` が `SystemLanguageModel.default.availability == .available` のときだけ実装を返し、不可なら nil。`AppState` で 5 引数 `AppContainer` コンストラクタの `coffeeInsightProvider:` に渡す。nil → `AnalysisViewModel` が `InsightStatus.Unsupported` → 要約カード非表示（統計のみ）。KMP 変更ゼロで graceful degradation。
+- **要約カード UI**: `insightCardSection` が `insightStatus` を `is` 分岐。`Unsupported`=`EmptyView()`（タブ高を変えない）/ `Loading` / `Loaded`（headline+body）/ `Failed`（`onRetryInsight()` でリトライ）。
+- **follow-up（未対応・実害小）**: ① availability 判定は `AppState.init()` の起動時 1 回のみ。起動後に Apple Intelligence を有効化しても次回起動まで反映されない（動的再チェックは `scenePhase` active で再評価する案、現フェーズ不要）。② 要約再生成が「統計更新のたび」のため、リアルタイム同期の連続 emit で LLM 呼び出しが増える懸念（デバウンス / 手動トリガ化は実機計測後に判断）。③ `unavailable(reason)` の理由別ユーザー案内 UI は未実装（仕様未定）。

@@ -360,10 +360,10 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | iOS `CoffeeInsightProvider` 実装（`shared/domain` インターフェース準拠の Swift クラス）。`CoffeeStats` をコンパクトなテキストに整形 → `LanguageModelSession` で 2–3 文要約（`@Generable` で headline/body 構造化） | `SystemLanguageModel.availability` で可否判定、不可なら非対応を返す |
-| [ ] | `AppState` / `AppContainer` 構築で `CoffeeInsightProvider` を注入。`AnalysisView` に要約カード + ローディング / 非対応フォールバック表示 | Apple Intelligence 無効・非対応端末は統計のみ |
-| [ ] | 小さな PoC で Foundation Models 呼び出しの round-trip を先に確認してから本実装に組み込む | KMP ブリッジ部分の鉄則（CLAUDE.md 検証ルール） |
-| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。実機 / Apple Intelligence 有効端末での要約確認はユーザー作業 | |
+| [x] | iOS `CoffeeInsightProvider` 実装（`shared/domain` インターフェース準拠の Swift クラス）。`CoffeeStats` をコンパクトなテキストに整形 → `LanguageModelSession` で 2–3 文要約（`@Generable` で headline/body 構造化） | 2026-06-19 / `CoffeeInsightProviderIosImpl`。SKIE protocol witness `__summarize(stats:completionHandler:)`。`buildPrompt` は KMP 集計済み事実を文章化（LLM に計算させない）。`@Generable` は private struct（SwiftUI `body` 競合回避） |
+| [x] | `AppState` / `AppContainer` 構築で `CoffeeInsightProvider` を注入。`AnalysisView` に要約カード + ローディング / 非対応フォールバック表示 | 2026-06-19 / `makeIfAvailable()`（`SystemLanguageModel.availability` で不可なら nil）→ 5 引数コンストラクタへ。`insightCardSection` は `Unsupported`=非表示 / `Loading` / `Loaded` / `Failed`（retry）を `is` 分岐 |
+| [x] | 小さな PoC で Foundation Models 呼び出しの round-trip を先に確認してから本実装に組み込む | 2026-06-19 / PoC でビルド通過確認後に本実装 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。実機 / Apple Intelligence 有効端末での要約確認はユーザー作業 | 2026-06-19 / BUILD SUCCEEDED・新規 warning ゼロ。**Apple Intelligence 有効な実機での要約生成確認はユーザー作業** |
 
 ### Phase B（後続）
 

@@ -54,6 +54,7 @@ struct CoffeeEditorView: View {
             Form {
                 cafeSection
                 coffeeSection
+                tastingSection
                 visitSection
                 photosSection
             }
@@ -244,6 +245,126 @@ struct CoffeeEditorView: View {
             )
             .accessibilityLabel(String(localized: "カップ"))
         }
+    }
+
+    // MARK: - テイスティング Section
+
+    /// テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）の入力セクション。
+    ///
+    /// 各要素は任意入力（1〜10 のスライダー）。
+    /// トグルで ON/OFF を切り替えられる。OFF 時は nil（未設定）として VM に渡す。
+    private var tastingSection: some View {
+        Section {
+            tastingRow(
+                label: String(localized: "甘味"),
+                value: viewModel.draft.tasting.sweetness?.intValue,
+                onChanged: { viewModel.onSweetnessChanged($0.map { KotlinInt(value: Int32($0)) }) }
+            )
+            tastingRow(
+                label: String(localized: "ボディ"),
+                value: viewModel.draft.tasting.body?.intValue,
+                onChanged: { viewModel.onBodyChanged($0.map { KotlinInt(value: Int32($0)) }) }
+            )
+            tastingRow(
+                label: String(localized: "酸味"),
+                value: viewModel.draft.tasting.acidity?.intValue,
+                onChanged: { viewModel.onAcidityChanged($0.map { KotlinInt(value: Int32($0)) }) }
+            )
+            tastingRow(
+                label: String(localized: "風味"),
+                value: viewModel.draft.tasting.flavor?.intValue,
+                onChanged: { viewModel.onFlavorChanged($0.map { KotlinInt(value: Int32($0)) }) }
+            )
+            tastingRow(
+                label: String(localized: "後味"),
+                value: viewModel.draft.tasting.aftertaste?.intValue,
+                onChanged: { viewModel.onAftertasteChanged($0.map { KotlinInt(value: Int32($0)) }) }
+            )
+        } header: {
+            Text(String(localized: "テイスティング（任意）"))
+        } footer: {
+            Text(String(localized: "1（弱）〜 10（強）の強度スケール。未設定はスキップできます。"))
+                .font(.caption)
+        }
+    }
+
+    /// テイスティング 1 要素の入力行（トグル + スライダー）。
+    ///
+    /// - ON: スライダーで 1..10 を選択、値を VM に渡す
+    /// - OFF: 未設定（nil）として VM に渡す
+    @ViewBuilder
+    private func tastingRow(
+        label: String,
+        value: Int?,
+        onChanged: @escaping (Int?) -> Void
+    ) -> some View {
+        let isOn = value != nil
+        let displayValue = value ?? 5  // 初期スライダー位置は中央
+
+        VStack(spacing: 4) {
+            HStack {
+                Text(label)
+                    .frame(minWidth: 44, alignment: .leading)
+                Spacer()
+                if isOn {
+                    Text("\(displayValue)/10")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .monospacedDigit()
+                        .frame(minWidth: 44, alignment: .trailing)
+                }
+                // 未設定 ↔ 設定 切り替えボタン
+                Button {
+                    if isOn {
+                        onChanged(nil)
+                    } else {
+                        onChanged(displayValue)
+                    }
+                } label: {
+                    Image(systemName: isOn ? "xmark.circle.fill" : "plus.circle")
+                        .foregroundStyle(isOn ? .secondary : Color.accentColor)
+                        .font(.title3)
+                }
+                .buttonStyle(.plain)
+                .frame(minWidth: 44, minHeight: 44)
+                .accessibilityLabel(
+                    isOn
+                        ? String(localized: "\(label)の入力をクリア")
+                        : String(localized: "\(label)を入力")
+                )
+            }
+
+            if isOn {
+                Slider(
+                    value: Binding(
+                        get: { Double(displayValue) },
+                        set: { onChanged(Int($0.rounded())) }
+                    ),
+                    in: 1...10,
+                    step: 1
+                )
+                .accessibilityLabel(label)
+                .accessibilityValue(String(localized: "\(displayValue)/10"))
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment:
+                        let next = min(displayValue + 1, 10)
+                        onChanged(next)
+                    case .decrement:
+                        let prev = max(displayValue - 1, 1)
+                        onChanged(prev)
+                    @unknown default:
+                        break
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(
+            isOn
+                ? String(localized: "\(label) \(displayValue)/10")
+                : String(localized: "\(label) 未設定")
+        )
     }
 
     // MARK: - 記録 Section
@@ -527,6 +648,26 @@ private struct PhotoThumbnailCell: View {
             Section(String(localized: "コーヒー")) {
                 TextField(String(localized: "コーヒー名（必須）"), text: .constant(""))
                 Text("ハンドドリップ").foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack {
+                    Text(String(localized: "甘味"))
+                    Spacer()
+                    Text("7/10").font(.subheadline).foregroundStyle(.secondary)
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                Slider(value: .constant(7), in: 1...10, step: 1)
+                HStack {
+                    Text(String(localized: "酸味"))
+                    Spacer()
+                    Image(systemName: "plus.circle").foregroundStyle(Color.accentColor)
+                }
+            } header: {
+                Text(String(localized: "テイスティング（任意）"))
+            } footer: {
+                Text(String(localized: "1（弱）〜 10（強）の強度スケール。未設定はスキップできます。"))
+                    .font(.caption)
             }
 
             Section(String(localized: "記録")) {

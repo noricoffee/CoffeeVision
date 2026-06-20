@@ -152,6 +152,30 @@ struct CoffeeDetailView: View {
                 }
             }
 
+            // テイスティング（設定済み要素のみ表示）
+            let tasting = coffee.tasting
+            let tastingItems: [(label: String, value: KotlinInt?)] = [
+                (String(localized: "甘味"), tasting.sweetness),
+                (String(localized: "ボディ"), tasting.body),
+                (String(localized: "酸味"), tasting.acidity),
+                (String(localized: "風味"), tasting.flavor),
+                (String(localized: "後味"), tasting.aftertaste),
+            ]
+            let hasAnyTasting = tastingItems.contains { $0.value != nil }
+            if hasAnyTasting {
+                Section(String(localized: "テイスティング")) {
+                    ForEach(tastingItems.filter { $0.value != nil }, id: \.label) { item in
+                        LabeledContent(item.label) {
+                            TastingScoreBar(value: item.value!.intValue)
+                        }
+                        .accessibilityElement(children: .combine)
+                        .accessibilityLabel(
+                            String(localized: "\(item.label) \(item.value!.intValue)/10")
+                        )
+                    }
+                }
+            }
+
             // メモ
             if !coffee.notes.isEmpty {
                 Section(String(localized: "メモ")) {
@@ -242,6 +266,37 @@ private struct PhotoDetailCell: View {
         .accessibilityLabel(
             String(format: String(localized: "写真 %d/%d 枚目"), index, total)
         )
+    }
+}
+
+// MARK: - TastingScoreBar
+
+/// テイスティング要素のスコア（1〜10）をバーと数値で表示するコンポーネント。
+private struct TastingScoreBar: View {
+
+    let value: Int  // 1..10
+
+    var body: some View {
+        HStack(spacing: 8) {
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color(.tertiarySystemFill))
+                        .frame(height: 8)
+                    RoundedRectangle(cornerRadius: 4)
+                        .fill(Color.accentColor)
+                        .frame(width: geo.size.width * CGFloat(value) / 10.0, height: 8)
+                }
+                .frame(maxHeight: .infinity, alignment: .center)
+            }
+            .frame(height: 20)
+
+            Text("\(value)")
+                .font(.subheadline.monospacedDigit())
+                .foregroundStyle(.secondary)
+                .frame(minWidth: 20, alignment: .trailing)
+        }
+        .frame(maxWidth: 160)
     }
 }
 

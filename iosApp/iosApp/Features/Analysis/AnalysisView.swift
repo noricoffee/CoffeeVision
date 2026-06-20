@@ -82,6 +82,7 @@ struct AnalysisView: View {
                 insightCardSection
                 summarySection(stats: stats)
                 ratingHistogramSection(stats: stats)
+                tastingAveragesSection(stats: stats)
                 originRankingSection(stats: stats)
                 roastLevelSection(stats: stats)
                 brewMethodSection(stats: stats)
@@ -211,6 +212,76 @@ struct AnalysisView: View {
                 .accessibilityLabel(String(localized: "評価の分布グラフ"))
             }
         )
+    }
+
+    // MARK: - テイスティング平均
+
+    /// テイスティング 5 要素の平均を棒グラフで表示するセクション。
+    ///
+    /// 1 件も設定のない要素（nil）はグラフに含めない。
+    /// 全要素 nil なら（記録なし）セクション自体を非表示にする。
+    private func tastingAveragesSection(stats: CoffeeStats) -> some View {
+        let avgs = stats.tastingAverages
+        let counts = avgs.ratedCount
+
+        // 設定済み要素だけ表示する（母数 0 = nil の要素は除外）
+        struct TastingItem: Identifiable {
+            let id: String  // label
+            let label: String
+            let avg: Double
+            let count: Int32
+        }
+
+        var items: [TastingItem] = []
+        if counts.sweetness > 0 {
+            items.append(TastingItem(id: "甘味", label: String(localized: "甘味"), avg: avgs.sweetness?.doubleValue ?? 0, count: counts.sweetness))
+        }
+        if counts.body > 0 {
+            items.append(TastingItem(id: "ボディ", label: String(localized: "ボディ"), avg: avgs.body?.doubleValue ?? 0, count: counts.body))
+        }
+        if counts.acidity > 0 {
+            items.append(TastingItem(id: "酸味", label: String(localized: "酸味"), avg: avgs.acidity?.doubleValue ?? 0, count: counts.acidity))
+        }
+        if counts.flavor > 0 {
+            items.append(TastingItem(id: "風味", label: String(localized: "風味"), avg: avgs.flavor?.doubleValue ?? 0, count: counts.flavor))
+        }
+        if counts.aftertaste > 0 {
+            items.append(TastingItem(id: "後味", label: String(localized: "後味"), avg: avgs.aftertaste?.doubleValue ?? 0, count: counts.aftertaste))
+        }
+
+        guard !items.isEmpty else { return AnyView(EmptyView()) }
+
+        return AnyView(
+            VStack(alignment: .leading, spacing: 8) {
+                sectionHeader(String(localized: "テイスティング平均（強度 1〜10）"))
+                Chart(items) { item in
+                    BarMark(
+                        x: .value("強度", item.avg),
+                        y: .value("要素", item.label)
+                    )
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityLabel(tastingAccessibilityLabel(item.label, avg: item.avg, count: item.count))
+                }
+                .chartXScale(domain: 0...10)
+                .chartXAxis {
+                    AxisMarks(values: [0, 2, 4, 6, 8, 10]) { _ in
+                        AxisGridLine()
+                        AxisValueLabel()
+                    }
+                }
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisValueLabel()
+                    }
+                }
+                .frame(height: 200)
+                .accessibilityLabel(String(localized: "テイスティング 5 要素の平均強度グラフ"))
+            }
+        )
+    }
+
+    private func tastingAccessibilityLabel(_ label: String, avg: Double, count: Int32) -> String {
+        String(format: "%@ 平均 %.1f（%d 件）", label, avg, count)
     }
 
     // MARK: - 産地ランキング
@@ -650,6 +721,9 @@ private struct AnalysisViewPreviewContent: View {
                     }
                 }
 
+                // テイスティング平均
+                previewTastingSection(stats: stats)
+
                 // 月次推移
                 if !stats.monthlyTrend.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
@@ -689,6 +763,43 @@ private struct AnalysisViewPreviewContent: View {
 
     private func ratingLabel(_ rating: Double) -> String {
         rating == Double(Int(rating)) ? String(format: "%.0f", rating) : String(format: "%.1f", rating)
+    }
+
+    @ViewBuilder
+    private func previewTastingSection(stats: CoffeeStats) -> some View {
+        let avgs = stats.tastingAverages
+        let counts = avgs.ratedCount
+        if counts.sweetness > 0 || counts.body > 0 || counts.acidity > 0
+            || counts.flavor > 0 || counts.aftertaste > 0 {
+            VStack(alignment: .leading, spacing: 8) {
+                Text("テイスティング平均（強度 1〜10）").font(.headline)
+                previewTastingChart(avgs: avgs, counts: counts)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func previewTastingChart(avgs: TastingAverages, counts: TastingRatedCount) -> some View {
+        let data: [(String, Double)] = buildPreviewTastingData(avgs: avgs, counts: counts)
+        Chart(data, id: \.0) { item in
+            BarMark(
+                x: .value("強度", item.1),
+                y: .value("要素", item.0)
+            )
+            .foregroundStyle(Color.accentColor)
+        }
+        .chartXScale(domain: 0...10)
+        .frame(height: 200)
+    }
+
+    private func buildPreviewTastingData(avgs: TastingAverages, counts: TastingRatedCount) -> [(String, Double)] {
+        var result: [(String, Double)] = []
+        if counts.sweetness > 0 { result.append(("甘味", avgs.sweetness?.doubleValue ?? 0)) }
+        if counts.body > 0 { result.append(("ボディ", avgs.body?.doubleValue ?? 0)) }
+        if counts.acidity > 0 { result.append(("酸味", avgs.acidity?.doubleValue ?? 0)) }
+        if counts.flavor > 0 { result.append(("風味", avgs.flavor?.doubleValue ?? 0)) }
+        if counts.aftertaste > 0 { result.append(("後味", avgs.aftertaste?.doubleValue ?? 0)) }
+        return result
     }
 
     private var emptyState: some View {

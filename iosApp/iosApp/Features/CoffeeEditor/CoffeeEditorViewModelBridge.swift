@@ -112,6 +112,28 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onCupChanged(cup: cup)
     }
 
+    // MARK: - テイスティング転送
+
+    func onSweetnessChanged(_ value: KotlinInt?) {
+        kotlin.onSweetnessChanged(value: value)
+    }
+
+    func onBodyChanged(_ value: KotlinInt?) {
+        kotlin.onBodyChanged(value: value)
+    }
+
+    func onAcidityChanged(_ value: KotlinInt?) {
+        kotlin.onAcidityChanged(value: value)
+    }
+
+    func onFlavorChanged(_ value: KotlinInt?) {
+        kotlin.onFlavorChanged(value: value)
+    }
+
+    func onAftertasteChanged(_ value: KotlinInt?) {
+        kotlin.onAftertasteChanged(value: value)
+    }
+
     // MARK: - 写真操作転送
 
     func onPhotoUpserted(item: Photo_) {

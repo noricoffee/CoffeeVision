@@ -137,6 +137,13 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .medium,
         cup: "ノリタケ",
+        tasting: TastingScores(
+            sweetness: KotlinInt(value: 7),
+            body: KotlinInt(value: 5),
+            acidity: KotlinInt(value: 9),
+            flavor: KotlinInt(value: 7),
+            aftertaste: KotlinInt(value: 6)
+        ),
         createdAt: instant(year: 2026, month: 6, day: 2),
         updatedAt: instant(year: 2026, month: 6, day: 2)
     )
@@ -166,6 +173,7 @@ enum PreviewSamples {
         processing: .natural,
         roastLevel: .fullCity,
         cup: nil,
+        tasting: TastingScores(sweetness: nil, body: nil, acidity: nil, flavor: nil, aftertaste: nil),
         createdAt: instant(year: 2026, month: 5, day: 28),
         updatedAt: instant(year: 2026, month: 5, day: 28)
     )
@@ -186,6 +194,13 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .light,
         cup: nil,
+        tasting: TastingScores(
+            sweetness: KotlinInt(value: 8),
+            body: KotlinInt(value: 4),
+            acidity: nil,
+            flavor: KotlinInt(value: 9),
+            aftertaste: nil
+        ),
         createdAt: instant(year: 2026, month: 6, day: 19),
         updatedAt: instant(year: 2026, month: 6, day: 19)
     )
@@ -258,6 +273,20 @@ enum PreviewSamples {
             bestOrigin: nil,
             bestRoastLevel: nil,
             minSampleSize: 3
+        ),
+        tastingAverages: TastingAverages(
+            sweetness: KotlinDouble(value: 7.2),
+            body: KotlinDouble(value: 5.1),
+            acidity: KotlinDouble(value: 8.0),
+            flavor: KotlinDouble(value: 7.5),
+            aftertaste: KotlinDouble(value: 6.3),
+            ratedCount: TastingRatedCount(
+                sweetness: 10,
+                body: 10,
+                acidity: 8,
+                flavor: 10,
+                aftertaste: 7
+            )
         )
     )
 }

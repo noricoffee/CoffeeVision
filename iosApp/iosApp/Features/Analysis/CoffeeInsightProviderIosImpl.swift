@@ -153,6 +153,21 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             lines.append("・最近の高評価コーヒー: \(highlightTexts)")
         }
 
+        // テイスティング平均（設定された要素のみ追記）
+        let avgs = stats.tastingAverages
+        let counts = avgs.ratedCount
+        let tastingParts: [String] = [
+            avgs.sweetness.map { String(format: "甘味 %.1f", $0.doubleValue) },
+            avgs.body.map { String(format: "ボディ %.1f", $0.doubleValue) },
+            avgs.acidity.map { String(format: "酸味 %.1f", $0.doubleValue) },
+            avgs.flavor.map { String(format: "風味 %.1f", $0.doubleValue) },
+            avgs.aftertaste.map { String(format: "後味 %.1f", $0.doubleValue) },
+        ].compactMap { $0 }
+        let minCount = min(counts.sweetness, counts.body, counts.acidity, counts.flavor, counts.aftertaste)
+        if !tastingParts.isEmpty {
+            lines.append("・テイスティング平均（1〜10、\(minCount)件以上）: \(tastingParts.joined(separator: "、"))")
+        }
+
         lines.append("")
         lines.append("上記の記録を踏まえ、このコーヒー愛好家の傾向を要約してください。")
 

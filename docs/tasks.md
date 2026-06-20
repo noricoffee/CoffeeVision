@@ -434,13 +434,13 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `shared/domain`: `TastingScores` の 5 フィールドを `Int?` → `Int`（非 null）、`CoffeeRecord.tasting` を `TastingScores?` に | |
-| [ ] | `shared/data-local`: `Mapper` を「5 列全セット→`TastingScores` / それ以外→null」に。`upsert` は `tasting?.x` を渡す。テスト（あり/なし往復） | 5 列は nullable のまま |
-| [ ] | `shared/core`: `BuildCoffeeStatsUseCase` を `tasting != null` の記録のみ集計に。`TastingAverages.ratedCount` を単一 `Int` 化、`TastingRatedCount` 削除。テスト追随 | |
-| [ ] | `shared/core`: `DummyCoffeeData` を「tasting あり（5要素）/ null」の二択に（部分入力を排除） | |
-| [ ] | `shared/feature/coffee-editor`: セッターを非 null Int 化 + `onTastingAdded()`（デフォルト 5 で生成）/ `onTastingCleared()`（null）追加。draft 初期化追随 | |
-| [ ] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` を「tasting!=null で 5 要素マップ / null 省略」に | |
-| [ ] | 検証: domain/data-local/core テスト + XCFramework + androidApp assembleDebug 全成功 | iOS 着手の前提 |
+| [x] | `shared/domain`: `TastingScores` の 5 フィールドを `Int?` → `Int`（非 null）、`CoffeeRecord.tasting` を `TastingScores?` に | 2026-06-20 |
+| [x] | `shared/data-local`: `Mapper` を「5 列全セット→`TastingScores` / それ以外→null」に。`upsert` は `tasting?.x` を渡す。テスト（あり/なし往復） | 2026-06-20 / 5 列は nullable のまま。LocalCoffeeRepositoryTest 13 件 |
+| [x] | `shared/core`: `BuildCoffeeStatsUseCase` を `tasting != null` の記録のみ集計に。`TastingAverages.ratedCount` を単一 `Int` 化、`TastingRatedCount` 削除。テスト追随 | 2026-06-20 |
+| [x] | `shared/core`: `DummyCoffeeData` を「tasting あり（5要素）/ null」の二択に（部分入力を排除） | 2026-06-20 / 部分入力を 5 要素補完 or null 化 |
+| [x] | `shared/feature/coffee-editor`: セッターを非 null Int 化 + `onTastingAdded()`（デフォルト 5 で生成）/ `onTastingCleared()`（null）追加。draft 初期化追随 | 2026-06-20 / `onTastingChanged(TastingScores)` は削除。個別セッターは tasting==null で no-op |
+| [x] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` を「tasting!=null で 5 要素マップ / null 省略」に | 2026-06-20 |
+| [x] | 検証: domain/data-local/core テスト + XCFramework + androidApp assembleDebug 全成功 | 2026-06-20 / 全 green、ヘッダで非null/optional/ratedCount:Int/TastingRatedCount削除を確認 |
 
 ### Phase 2: iOS（ios-engineer, Phase 1 完了後）
 

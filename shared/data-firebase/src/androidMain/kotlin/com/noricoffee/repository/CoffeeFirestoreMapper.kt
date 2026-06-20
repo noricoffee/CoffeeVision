@@ -7,6 +7,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 
@@ -68,7 +69,31 @@ object CoffeeFirestoreMapper {
         record.roastLevel?.let { doc["roastLevel"] = it.name }
         record.cup?.let { doc["cup"] = it }
 
+        // tasting: 非 null の要素だけ書き出す。全 null なら tasting ごと省略
+        val tastingMap = tastingToMap(record.tasting)
+        if (tastingMap.isNotEmpty()) {
+            doc["tasting"] = tastingMap
+        }
+
         return doc
+    }
+
+    /**
+     * [TastingScores] を Firestore の `tasting` マップに変換する。
+     *
+     * - 非 null の要素だけキーを含む。null 要素はキーごと省略
+     * - 全要素 null の場合は空 Map を返す（呼び出し側が `tasting` キーを省略する）
+     *
+     * @see [data-model.md] §3.2
+     */
+    private fun tastingToMap(tasting: TastingScores): Map<String, Any> {
+        val map = mutableMapOf<String, Any>()
+        tasting.sweetness?.let { map["sweetness"] = it }
+        tasting.body?.let { map["body"] = it }
+        tasting.acidity?.let { map["acidity"] = it }
+        tasting.flavor?.let { map["flavor"] = it }
+        tasting.aftertaste?.let { map["aftertaste"] = it }
+        return map
     }
 
     private fun cafeToMap(cafe: Cafe): Map<String, Any?> {
@@ -153,6 +178,10 @@ object CoffeeFirestoreMapper {
             .sortedBy { it.second }
             .map { it.first }
 
+        // tasting: マップ欠如 → TastingScores()、キー欠如 → null
+        val tasting = (data["tasting"] as? Map<String, Any>)?.let { tastingFromMap(it) }
+            ?: TastingScores()
+
         return CoffeeRecord(
             id = id,
             userId = userId,
@@ -168,6 +197,7 @@ object CoffeeFirestoreMapper {
             processing = processing,
             roastLevel = roastLevel,
             cup = cup,
+            tasting = tasting,
             createdAt = Instant.fromEpochSeconds(
                 epochSeconds = createdAtTs.seconds,
                 nanosecondAdjustment = createdAtTs.nanoseconds.toLong(),
@@ -219,6 +249,20 @@ object CoffeeFirestoreMapper {
         )
         return photo to sortOrder
     }
+
+    /**
+     * Firestore `tasting` マップを [TastingScores] に変換する。
+     *
+     * キーが欠如していた場合は該当要素を null として扱う。
+     * 呼び出し側でマップ欠如（`tasting` キー自体がない）は空 [TastingScores] を返す。
+     */
+    private fun tastingFromMap(map: Map<String, Any>): TastingScores = TastingScores(
+        sweetness = (map["sweetness"] as? Number)?.toInt(),
+        body = (map["body"] as? Number)?.toInt(),
+        acidity = (map["acidity"] as? Number)?.toInt(),
+        flavor = (map["flavor"] as? Number)?.toInt(),
+        aftertaste = (map["aftertaste"] as? Number)?.toInt(),
+    )
 
     // ─────────────────────────────────────────────────
     // ヘルパ

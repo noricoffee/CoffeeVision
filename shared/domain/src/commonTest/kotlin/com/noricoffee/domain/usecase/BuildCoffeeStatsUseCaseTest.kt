@@ -5,6 +5,7 @@ import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
@@ -47,6 +48,7 @@ class BuildCoffeeStatsUseCaseTest {
         roastLevel: RoastLevel? = null,
         cafe: Cafe? = null,
         name: String = "Test Coffee $id",
+        tasting: TastingScores = TastingScores(),
     ) = CoffeeRecord(
         id = id,
         userId = "user-1",
@@ -62,6 +64,7 @@ class BuildCoffeeStatsUseCaseTest {
         processing = processing,
         roastLevel = roastLevel,
         cup = null,
+        tasting = tasting,
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),
     )
@@ -88,6 +91,17 @@ class BuildCoffeeStatsUseCaseTest {
         assertNull(stats.favoriteSignals.bestOrigin)
         assertNull(stats.favoriteSignals.bestRoastLevel)
         assertEquals(3, stats.favoriteSignals.minSampleSize)
+        // tastingAverages は全 null・ratedCount は全ゼロ
+        assertNull(stats.tastingAverages.sweetness)
+        assertNull(stats.tastingAverages.body)
+        assertNull(stats.tastingAverages.acidity)
+        assertNull(stats.tastingAverages.flavor)
+        assertNull(stats.tastingAverages.aftertaste)
+        assertEquals(0, stats.tastingAverages.ratedCount.sweetness)
+        assertEquals(0, stats.tastingAverages.ratedCount.body)
+        assertEquals(0, stats.tastingAverages.ratedCount.acidity)
+        assertEquals(0, stats.tastingAverages.ratedCount.flavor)
+        assertEquals(0, stats.tastingAverages.ratedCount.aftertaste)
     }
 
     @Test
@@ -562,5 +576,78 @@ class BuildCoffeeStatsUseCaseTest {
         assertEquals(3, stats.totalCount)
         // ratedCount は評価済みのみ
         assertEquals(1, stats.ratedCount)
+    }
+
+    // --- tastingAverages ---
+
+    @Test
+    fun tastingAverages_allNull_returnsNullAveragesAndZeroCount() {
+        // 全要素 null（未入力）のレコードのみ
+        val records = listOf(
+            record("r1", tasting = TastingScores()),
+            record("r2", tasting = TastingScores()),
+        )
+
+        val stats = useCase(records)
+
+        assertNull(stats.tastingAverages.sweetness, "設定なし → null")
+        assertNull(stats.tastingAverages.body)
+        assertNull(stats.tastingAverages.acidity)
+        assertNull(stats.tastingAverages.flavor)
+        assertNull(stats.tastingAverages.aftertaste)
+        assertEquals(0, stats.tastingAverages.ratedCount.sweetness)
+        assertEquals(0, stats.tastingAverages.ratedCount.body)
+        assertEquals(0, stats.tastingAverages.ratedCount.acidity)
+        assertEquals(0, stats.tastingAverages.ratedCount.flavor)
+        assertEquals(0, stats.tastingAverages.ratedCount.aftertaste)
+    }
+
+    @Test
+    fun tastingAverages_partialInput_averagesExcludeNullElements() {
+        // sweetness / acidity のみ設定（body / flavor / aftertaste は null）
+        val records = listOf(
+            record("r1", tasting = TastingScores(sweetness = 6, acidity = 8)),
+            record("r2", tasting = TastingScores(sweetness = 4, acidity = 6)),
+            record("r3", tasting = TastingScores()),  // 全 null
+        )
+
+        val stats = useCase(records)
+
+        // sweetness: (6+4)/2 = 5.0、設定済み 2 件
+        assertEquals(5.0, stats.tastingAverages.sweetness)
+        assertEquals(2, stats.tastingAverages.ratedCount.sweetness)
+        // body: 設定なし → null、ratedCount=0
+        assertNull(stats.tastingAverages.body)
+        assertEquals(0, stats.tastingAverages.ratedCount.body)
+        // acidity: (8+6)/2 = 7.0、設定済み 2 件
+        assertEquals(7.0, stats.tastingAverages.acidity)
+        assertEquals(2, stats.tastingAverages.ratedCount.acidity)
+        // flavor / aftertaste: null
+        assertNull(stats.tastingAverages.flavor)
+        assertNull(stats.tastingAverages.aftertaste)
+        assertEquals(0, stats.tastingAverages.ratedCount.flavor)
+        assertEquals(0, stats.tastingAverages.ratedCount.aftertaste)
+    }
+
+    @Test
+    fun tastingAverages_allElementsSet_returnsCorrectAveragesAndCounts() {
+        // 全要素設定済み
+        val records = listOf(
+            record("r1", tasting = TastingScores(sweetness = 8, body = 6, acidity = 7, flavor = 9, aftertaste = 5)),
+            record("r2", tasting = TastingScores(sweetness = 4, body = 8, acidity = 5, flavor = 7, aftertaste = 9)),
+        )
+
+        val stats = useCase(records)
+
+        assertEquals(6.0, stats.tastingAverages.sweetness)   // (8+4)/2
+        assertEquals(7.0, stats.tastingAverages.body)         // (6+8)/2
+        assertEquals(6.0, stats.tastingAverages.acidity)      // (7+5)/2
+        assertEquals(8.0, stats.tastingAverages.flavor)       // (9+7)/2
+        assertEquals(7.0, stats.tastingAverages.aftertaste)   // (5+9)/2
+        assertEquals(2, stats.tastingAverages.ratedCount.sweetness)
+        assertEquals(2, stats.tastingAverages.ratedCount.body)
+        assertEquals(2, stats.tastingAverages.ratedCount.acidity)
+        assertEquals(2, stats.tastingAverages.ratedCount.flavor)
+        assertEquals(2, stats.tastingAverages.ratedCount.aftertaste)
     }
 }

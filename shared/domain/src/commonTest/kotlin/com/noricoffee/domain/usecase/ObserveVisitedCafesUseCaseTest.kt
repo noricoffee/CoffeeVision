@@ -3,6 +3,7 @@ package com.noricoffee.domain.usecase
 import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.VisitedCafe
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
@@ -85,6 +86,7 @@ class ObserveVisitedCafesUseCaseTest {
         processing = null,
         roastLevel = null,
         cup = null,
+        tasting = TastingScores(),
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),
     )

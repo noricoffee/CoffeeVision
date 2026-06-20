@@ -8,6 +8,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
@@ -252,6 +253,7 @@ class CoffeeRepositoryImplTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
+            tasting = TastingScores(),
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
         )

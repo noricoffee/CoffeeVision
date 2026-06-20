@@ -8,6 +8,8 @@ import com.noricoffee.domain.model.FavoriteSignals
 import com.noricoffee.domain.model.MonthlyStat
 import com.noricoffee.domain.model.RatingBucket
 import com.noricoffee.domain.model.RecordDigest
+import com.noricoffee.domain.model.TastingAverages
+import com.noricoffee.domain.model.TastingRatedCount
 
 /**
  * `List<CoffeeRecord>` から [CoffeeStats] を決定論的に算出する UseCase。
@@ -66,6 +68,7 @@ class BuildCoffeeStatsUseCase {
             topCafes = buildTopCafes(records),
             recentHighlights = buildRecentHighlights(records),
             favoriteSignals = FavoriteSignals(), // Phase B-1 まで空
+            tastingAverages = buildTastingAverages(records),
         )
     }
 
@@ -234,5 +237,44 @@ class BuildCoffeeStatsUseCase {
                     visitedOn = record.visitedOn,
                 )
             }
+    }
+
+    /**
+     * テイスティング 5 要素それぞれの平均を構築する。
+     *
+     * 各要素は `null`（未設定）の記録を母数から除外した平均を算出する。
+     * 1 件も設定が無い要素は `null`。[TastingRatedCount] に各要素の設定済み件数を入れる。
+     *
+     * @see [data-model.md] §1.6 集計ルール（tastingAverages）
+     */
+    private fun buildTastingAverages(records: List<CoffeeRecord>): TastingAverages {
+        val sweetnessList = records.mapNotNull { it.tasting.sweetness }
+        val bodyList = records.mapNotNull { it.tasting.body }
+        val acidityList = records.mapNotNull { it.tasting.acidity }
+        val flavorList = records.mapNotNull { it.tasting.flavor }
+        val aftertasteList = records.mapNotNull { it.tasting.aftertaste }
+
+        return TastingAverages(
+            sweetness = computeIntAverage(sweetnessList),
+            body = computeIntAverage(bodyList),
+            acidity = computeIntAverage(acidityList),
+            flavor = computeIntAverage(flavorList),
+            aftertaste = computeIntAverage(aftertasteList),
+            ratedCount = TastingRatedCount(
+                sweetness = sweetnessList.size,
+                body = bodyList.size,
+                acidity = acidityList.size,
+                flavor = flavorList.size,
+                aftertaste = aftertasteList.size,
+            ),
+        )
+    }
+
+    /**
+     * Int リストの平均を Double? で返す。空リストなら null。
+     */
+    private fun computeIntAverage(values: List<Int>): Double? {
+        if (values.isEmpty()) return null
+        return values.sum().toDouble() / values.size
     }
 }

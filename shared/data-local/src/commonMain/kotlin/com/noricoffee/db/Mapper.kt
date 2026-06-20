@@ -6,6 +6,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo as DomainPhoto
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.builtins.ListSerializer
@@ -46,6 +47,12 @@ internal fun CoffeeRecord.toRow(): Coffee_record = Coffee_record(
     processing = processing?.name,
     roast_level = roastLevel?.name,
     cup = cup,
+    // SQLDelight は INTEGER を Long? として生成するため toLong() で変換
+    sweetness = tasting.sweetness?.toLong(),
+    body = tasting.body?.toLong(),
+    acidity = tasting.acidity?.toLong(),
+    flavor = tasting.flavor?.toLong(),
+    aftertaste = tasting.aftertaste?.toLong(),
     created_at = createdAt.toEpochMilliseconds(),
     updated_at = updatedAt.toEpochMilliseconds(),
 )
@@ -72,6 +79,15 @@ internal fun Coffee_record.toDomain(photos: List<DomainPhoto>): CoffeeRecord {
         null
     }
 
+    // SQLDelight は INTEGER を Long? で生成するため toInt() で Int? に戻す
+    val tastingScores = TastingScores(
+        sweetness = sweetness?.toInt(),
+        body = body?.toInt(),
+        acidity = acidity?.toInt(),
+        flavor = flavor?.toInt(),
+        aftertaste = aftertaste?.toInt(),
+    )
+
     return CoffeeRecord(
         id = id,
         userId = user_id,
@@ -87,6 +103,7 @@ internal fun Coffee_record.toDomain(photos: List<DomainPhoto>): CoffeeRecord {
         processing = processing?.let { ProcessingMethod.valueOf(it) },
         roastLevel = roast_level?.let { RoastLevel.valueOf(it) },
         cup = cup,
+        tasting = tastingScores,
         createdAt = Instant.fromEpochMilliseconds(created_at),
         updatedAt = Instant.fromEpochMilliseconds(updated_at),
     )

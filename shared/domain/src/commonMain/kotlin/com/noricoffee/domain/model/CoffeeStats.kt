@@ -27,6 +27,7 @@ data class CoffeeStats(
     val topCafes: List<CafeStat>,              // cafe != null をグループ化（件数降順 上位N）
     val recentHighlights: List<RecordDigest>,  // Q&A 文脈用の代表レコード（高評価・直近）
     val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
+    val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
 )
 
 /**
@@ -147,4 +148,35 @@ interface CoffeeInsightProvider {
 data class CoffeeInsight(
     val headline: String,
     val body: String,
+)
+
+/**
+ * テイスティング 5 要素それぞれの平均値。
+ *
+ * 各要素は `null`（未設定）の記録を母数から除外した平均。
+ * 1 件も設定が無い要素は `null`。
+ * [ratedCount] に各要素の設定済み件数を入れる（UI が「n 件の平均」を出せる）。
+ *
+ * @see [data-model.md] §1.6 集計ルール
+ */
+data class TastingAverages(
+    val sweetness: Double?,                    // 甘味の平均（設定済み記録のみ、無ければ null）
+    val body: Double?,
+    val acidity: Double?,
+    val flavor: Double?,
+    val aftertaste: Double?,
+    val ratedCount: TastingRatedCount,         // 各要素の母数（設定済み件数）
+)
+
+/**
+ * テイスティング 5 要素それぞれの設定済みレコード件数。
+ *
+ * [TastingAverages.ratedCount] として格納され、UI が「n 件の平均」を表示できる。
+ */
+data class TastingRatedCount(
+    val sweetness: Int,
+    val body: Int,
+    val acidity: Int,
+    val flavor: Int,
+    val aftertaste: Int,
 )

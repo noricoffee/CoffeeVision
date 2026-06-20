@@ -8,6 +8,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -189,6 +190,42 @@ class LocalCoffeeRepositoryTest {
         assertTrue(ids.contains("self"))
     }
 
+    // --- tasting 往復テスト ---
+
+    @Test
+    fun tasting_with_partial_values_round_trips_correctly() = runTest {
+        // sweetness / acidity のみ設定（body / flavor / aftertaste は null）
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord().copy(
+            tasting = TastingScores(sweetness = 6, acidity = 8),
+        )
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertEquals(6, loaded?.tasting?.sweetness)
+        assertNull(loaded?.tasting?.body)
+        assertEquals(8, loaded?.tasting?.acidity)
+        assertNull(loaded?.tasting?.flavor)
+        assertNull(loaded?.tasting?.aftertaste)
+    }
+
+    @Test
+    fun tasting_all_null_round_trips_correctly() = runTest {
+        // 全 null（未入力）
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord().copy(tasting = TastingScores())
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertNull(loaded?.tasting?.sweetness)
+        assertNull(loaded?.tasting?.body)
+        assertNull(loaded?.tasting?.acidity)
+        assertNull(loaded?.tasting?.flavor)
+        assertNull(loaded?.tasting?.aftertaste)
+    }
+
     private companion object {
         const val USER_ID = "test-user"
 
@@ -231,6 +268,7 @@ class LocalCoffeeRepositoryTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = "ノリタケ",
+            tasting = TastingScores(sweetness = 7, body = 5, acidity = 9, flavor = 7, aftertaste = 6),
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
         )

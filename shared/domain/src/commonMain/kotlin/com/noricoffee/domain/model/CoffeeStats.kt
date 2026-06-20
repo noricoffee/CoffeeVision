@@ -137,6 +137,24 @@ interface CoffeeInsightProvider {
      */
     @Throws(Exception::class)
     suspend fun summarize(stats: CoffeeStats): CoffeeInsight
+
+    /**
+     * ユーザーの質問に [CoffeeStats] digest のみを文脈として 1 問 1 答で回答する（Phase B-2）。
+     *
+     * - **単発・ステートレス**: 会話履歴を持たない。[LanguageModelSession] は呼び出しごとに新規生成
+     * - **接地制約**: [stats] の範囲でのみ回答し、digest に無い情報は「記録からは分かりません」と返す
+     * - **逐次表示なし**: suspend 一発で最終回答 [String] を返す（streaming は Phase 2 以降）
+     *
+     * iOS 実装は `__answer(question:stats:completionHandler:)` の protocol witness 形式。
+     * Android は [com.noricoffee.AppContainer] に null が注入されるため、実装は不要。
+     *
+     * @param question ユーザーが入力した質問テキスト（trim 済みであることを想定）
+     * @param stats 集計済みの統計情報。LLM に渡す唯一の文脈（生レコードは渡さない）
+     * @return 日本語プレーンテキストの回答（整形済み）
+     * @throws Exception Foundation Models の呼び出しに失敗した場合
+     */
+    @Throws(Exception::class)
+    suspend fun answer(question: String, stats: CoffeeStats): String
 }
 
 /**

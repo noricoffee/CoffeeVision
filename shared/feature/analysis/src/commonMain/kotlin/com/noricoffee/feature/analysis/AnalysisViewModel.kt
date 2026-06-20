@@ -55,6 +55,9 @@ class AnalysisViewModel(
      * @property isLoading 統計の初回ロード中かどうか
      * @property insight Foundation Models が生成した要約。非対応 / 未生成 / 失敗時は null
      * @property insightStatus 要約のロード状態。[InsightStatus] を参照
+     * @property qaStatus 対話 Q&A の状態。[QaStatus] を参照
+     * @property qaQuestion 直近の質問テキスト。[onQaCleared] で null に戻る
+     * @property qaAnswer 直近の回答テキスト。[onQaCleared] で null に戻る
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      */
     data class UIState(
@@ -62,6 +65,9 @@ class AnalysisViewModel(
         val isLoading: Boolean = true,
         val insight: CoffeeInsight? = null,
         val insightStatus: InsightStatus = InsightStatus.Idle,
+        val qaStatus: QaStatus = QaStatus.Idle,
+        val qaQuestion: String? = null,
+        val qaAnswer: String? = null,
         val error: String? = null,
     )
 
@@ -84,12 +90,48 @@ class AnalysisViewModel(
         data object Failed : InsightStatus
     }
 
+    /**
+     * 対話 Q&A（階層3 / Phase B-2）のロード状態。
+     *
+     * [insightProvider] が null の端末は Q&A も利用不可のため初期値が [Unsupported] になる
+     * （可否判定は [InsightStatus] と共有。`provider != null` なら Q&A も使える）。
+     *
+     * - [Unsupported]: [insightProvider] が null。UI は Q&A セクションを表示しない
+     * - [Idle]: 入力欄を表示。まだ質問を送っていない状態
+     * - [Asking]: 回答を生成中。[UIState.qaQuestion] に質問が入っている
+     * - [Answered]: 回答が届いた。[UIState.qaQuestion] と [UIState.qaAnswer] に内容が入っている
+     * - [Failed]: 回答生成に失敗。[UIState.error] にメッセージが入る。
+     *   [AnalysisViewModel.onQaCleared] で [Idle] に戻り、再度質問できる
+     */
+    sealed interface QaStatus {
+        data object Unsupported : QaStatus
+        data object Idle : QaStatus
+        data object Asking : QaStatus
+        data object Answered : QaStatus
+        data object Failed : QaStatus
+    }
+
+    /** 候補質問チップ用の提案リスト（UI でショートカットとして提示する）。 */
+    companion object {
+        val SUGGESTED_QUESTIONS: List<String> = listOf(
+            "好きな産地は？",
+            "苦手な傾向は？",
+            "一番高評価だったコーヒーは？",
+            "よく行くカフェは？",
+        )
+    }
+
     private val _state = MutableStateFlow(
         UIState(
             insightStatus = if (insightProvider == null) {
                 InsightStatus.Unsupported
             } else {
                 InsightStatus.Idle
+            },
+            qaStatus = if (insightProvider == null) {
+                QaStatus.Unsupported
+            } else {
+                QaStatus.Idle
             },
         )
     )
@@ -101,7 +143,10 @@ class AnalysisViewModel(
     // 要約生成 Job。統計が更新されるたびにキャンセルして再起動する（連打耐性 / 重複起動防止）。
     private var insightJob: Job? = null
 
-    // 直近の統計値。onRetryInsight で再利用する。
+    // Q&A 回答生成 Job。質問が送られるたびにキャンセルして再起動する（連打耐性 / 重複起動防止）。
+    private var qaJob: Job? = null
+
+    // 直近の統計値。onRetryInsight / onQuestionAsked で再利用する。
     private var latestStats: CoffeeStats? = null
 
     /**
@@ -133,6 +178,73 @@ class AnalysisViewModel(
     fun onRetryInsight() {
         val stats = latestStats ?: return
         launchInsightGeneration(stats)
+    }
+
+    /**
+     * ユーザーが質問を送信したときに呼ぶ（Phase B-2 対話 Q&A）。
+     *
+     * 以下のいずれかを満たす場合は no-op（ガード）:
+     * - [question] の trim が空文字
+     * - [insightProvider] が null（[QaStatus.Unsupported]）
+     * - [latestStats] が null（統計がまだ確定していない）
+     *
+     * 既に回答生成中の [qaJob] をキャンセルして新しい Job を起動する（連打耐性）。
+     * エラーメッセージは [UIState.error]（[InsightStatus] と共有フィールド）に書く。
+     *
+     * @param question ユーザーが入力した質問テキスト（trim は本メソッド内で行う）
+     */
+    fun onQuestionAsked(question: String) {
+        val trimmed = question.trim()
+        if (trimmed.isEmpty()) return
+        val provider = insightProvider ?: return
+        val stats = latestStats ?: return
+
+        qaJob?.cancel()
+        qaJob = scope.launch {
+            _state.update {
+                it.copy(
+                    qaQuestion = trimmed,
+                    qaStatus = QaStatus.Asking,
+                    error = null as String?,
+                )
+            }
+            runCatching { provider.answer(trimmed, stats) }
+                .onSuccess { answer ->
+                    _state.update {
+                        it.copy(
+                            qaAnswer = answer,
+                            qaStatus = QaStatus.Answered,
+                        )
+                    }
+                }
+                .onFailure { e ->
+                    _state.update {
+                        it.copy(
+                            qaStatus = QaStatus.Failed,
+                            error = e.message ?: "回答の生成に失敗しました",
+                        )
+                    }
+                }
+        }
+    }
+
+    /**
+     * Q&A の状態をリセットして [QaStatus.Idle] に戻す。
+     *
+     * 入力欄をクリアしたいときや次の質問に備えて呼ぶ。
+     * [QaStatus.Unsupported] のときは何もしない。
+     *
+     * [UIState.qaQuestion] / [UIState.qaAnswer] を null に、[UIState.qaStatus] を [QaStatus.Idle] にする。
+     */
+    fun onQaCleared() {
+        if (_state.value.qaStatus is QaStatus.Unsupported) return
+        _state.update {
+            it.copy(
+                qaQuestion = null as String?,
+                qaAnswer = null as String?,
+                qaStatus = QaStatus.Idle,
+            )
+        }
     }
 
     /**

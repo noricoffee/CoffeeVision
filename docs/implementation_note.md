@@ -1442,3 +1442,24 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **共有 Scheme をリポジトリ管理化**: `xcshareddata/xcschemes/` が無かったため新規作成し、`iosApp.xcscheme`（通常）+ `iosApp (Dummy Data).xcscheme`（env `SEED_DUMMY_DATA=1` / Build Config Debug）を**明示ファイルとしてコミット**。pbxproj のターゲット UUID `A5D55589987A954070545386` / product `coffeevision.app` を参照。
 - **seed/clear の失敗は `print` のみ**（`lastError` に乗せない）。`clear` は通常起動毎に走るため、ユーザー可視エラーにすると通常起動で赤バナーが出かねないため。
 - **注意**: `resetAndRebootstrap()`（サインアウト/削除後）も `bootstrap()` 経由で同ブロックを通る。ダミー Scheme でサインアウトすると新 uid に再 seed される（dev 用途として許容）。
+
+### 2026-06-20: テイスティング 5 要素（Elements of Coffee Tasting）
+
+- 領域: 全レイヤー（domain / data-local / data-firebase / feature / core / iosApp）+ Docs
+- 関連: `docs/data-model.md` §1.1a / §1.6, `docs/requirements.md` §3 / §9
+
+Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸味 / 風味 / 後味** を `CoffeeRecord.tasting: TastingScores` として追加。
+
+**確定した設計判断（ユーザー承認済み、AskUserQuestion 2026-06-20）**:
+- **スケール = 1〜10 の強度**（カッピング寄り。UI はスライダー）。総合評価 `rating`（0.5 刻みハーフスター）とは**別軸**。「良し悪し」ではなく強度（酸味 10 = 酸が強い）。
+- **任意入力**: 各要素 `Int?`、未入力 = `null`。`tasting` フィールド自体は非 null（全要素 null の `TastingScores()` が「未入力」）。rating の `0.0` sentinel 方式ではなく **nullable Int** を採用（新規フィールドは null の方が明快、星 UI も流用しないため）。
+- **分析タブに即反映**: `CoffeeStats.tastingAverages`（各要素 null 除外平均 + `ratedCount`）を追加。AnalysisView に平均の可視化、`CoffeeInsightProviderIosImpl` の prompt にも平均を含める。
+
+**表現**:
+- ドメイン: `TastingScores`（5 × `Int?`）を `CoffeeRecord` に埋め込み（nested value object。5 要素が 1 つの概念のため flat 展開より凝集度を優先）。
+- SQLDelight: `coffee_record` に 5 列（`sweetness`/`body`/`acidity`/`flavor`/`aftertaste` INTEGER nullable）。Mapper で `TastingScores` に組み立て。
+- Firestore: nested map `tasting`。**非 null の要素だけ書き出し / 全 null は `tasting` ごと省略**（nullable コーヒー属性と同じ「キー省略」流儀）。decode で欠如キーは null、空マップ/欠如は `TastingScores()`。
+
+**クリーンブレイク**: 未リリースのため DB 列追加にマイグレーションを書かない（テスト端末はアプリ削除→再インストール）。Firestore は旧ドキュメントに `tasting` が無くても decode が `TastingScores()` で吸収するため後方互換あり。
+
+**dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。

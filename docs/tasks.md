@@ -389,6 +389,43 @@
 
 ---
 
+## フェーズ 9: テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）
+
+> 2026-06-20 着手。Blue Bottle「Elements of Coffee Tasting」由来の 5 要素を `CoffeeRecord.tasting: TastingScores` として追加。各要素 **1〜10 の強度（任意・未入力=null）**。総合評価 `rating`（0.5 刻み）とは別軸。分析タブに各要素の平均も反映。確定仕様は [`data-model.md`](./data-model.md) §1.1a / §1.6、設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-20 エントリ。**クリーンブレイク**（DB 列追加、マイグレーション無し。テスト端末はアプリ削除→再インストール）。
+
+### Phase 0: docs（親）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `data-model.md`: `TastingScores`（§1.1a）+ `CoffeeRecord.tasting` + SQLDelight 5 列 + Firestore `tasting` マップ + `CoffeeStats.tastingAverages`（§1.6） | 2026-06-20 |
+| [x] | `requirements.md` §3 / §9 にテイスティング要素を追加、変更履歴 | 2026-06-20 |
+| [x] | `tasks.md` フェーズ 9 追加 + `implementation_note.md` 設計判断 | 2026-06-20 |
+
+### Phase 1: KMP（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `shared/domain`: `TastingScores`（5 要素 `Int?`）+ `CoffeeRecord.tasting: TastingScores` | 非 null フィールド、空オブジェクト=未入力 |
+| [ ] | `shared/data-local`: `CoffeeRecord.sq` に 5 列（INTEGER nullable）+ `upsert` 更新、`Mapper` 往復、テスト（部分入力・全 null の往復ケース） | クリーンブレイク（マイグレーション無し） |
+| [ ] | `shared/core`: `BuildCoffeeStatsUseCase` に `tastingAverages`（各要素 null 除外平均 + ratedCount）+ テスト。`CoffeeStats` に `TastingAverages` / `TastingRatedCount` | §1.6 集計ルール |
+| [ ] | `shared/core`: `DummyCoffeeData` の 30 件に tasting を分散付与（一部要素 null も混ぜる） | 分析の平均グラフ確認用 |
+| [ ] | `shared/feature/coffee-editor`: `CoffeeEditorViewModel` の draft に tasting + 各要素セッター + バリデーション（設定値は 1..10） | iOS スライダーから呼ぶ API |
+| [ ] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` に `tasting` マップ（非 null のみ書き出し / 全 null は省略 / decode 補完） | |
+| [ ] | 検証: `:shared:domain:test` / `:shared:data-local:testAndroidHostTest` / `:shared:core:test` / `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 全成功 | iOS 着手の前提（公開 API 凍結） |
+
+### Phase 2: iOS（ios-engineer, Phase 1 完了後）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `CoffeeEditorView`: テイスティング 5 要素のスライダー入力 UI（1..10、未設定トグル/クリア可）+ Bridge 追随 | 任意入力。未設定は null |
+| [ ] | `CoffeeDetailView`: 5 要素の表示（設定済みのみ or 未設定明示） | |
+| [ ] | `FirebaseRepositories/CoffeeFirestoreMapper.swift`: `tasting` マップの read/write 追随 | Android と対称 |
+| [ ] | `AnalysisView`: テイスティング 5 要素の平均を可視化（棒 or レーダー風）+ `CoffeeInsightProviderIosImpl` の prompt に平均を追加 | `tastingAverages` 利用 |
+| [ ] | `PreviewSamples` / 各 `#Preview` に tasting を追随 | |
+| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | |
+
+---
+
 ## フェーズ 6（任意 / 後続）
 
 | 状態 | タスク | 備考 |

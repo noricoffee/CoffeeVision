@@ -1460,6 +1460,8 @@ Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸�
 - SQLDelight: `coffee_record` に 5 列（`sweetness`/`body`/`acidity`/`flavor`/`aftertaste` INTEGER nullable）。Mapper で `TastingScores` に組み立て。
 - Firestore: nested map `tasting`。**非 null の要素だけ書き出し / 全 null は `tasting` ごと省略**（nullable コーヒー属性と同じ「キー省略」流儀）。decode で欠如キーは null、空マップ/欠如は `TastingScores()`。
 
-**クリーンブレイク**: 未リリースのため DB 列追加にマイグレーションを書かない（テスト端末はアプリ削除→再インストール）。Firestore は旧ドキュメントに `tasting` が無くても decode が `TastingScores()` で吸収するため後方互換あり。
+**クリーンブレイク**: 未リリースのため DB 列追加にマイグレーションを書かない（テスト端末はアプリ削除→再インストール）。Firestore は旧ドキュメントに `tasting` が無くても decode が `TastingScores()` で吸収するため後方互換あり。**TestFlight 配布が始まったら SQLDelight マイグレーションが必須**になる（既存ローカル DB にスキーマ不一致でクラッシュするため）。これは tasting 追加に限らず以降の DB 列変更すべてに効く転換点（要 follow-up）。
+
+**スケール型 `Int?`（`Double?` 不採用）**: `rating` は 0.5 刻みで `Double` 化した経緯があるが、テイスティングは整数 1..10 スライダー前提のため中間値の必要がなく `Int?`。バリデーションは `coerceIn(1,10)` クランプ（エラー返却なし）。`CoffeeEditorViewModel` は個別セッター 5 本 + バルク `onTastingChanged(TastingScores)` の両方を公開（iOS の実装自由度のため）。
 
 **dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。

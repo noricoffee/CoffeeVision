@@ -405,13 +405,13 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `shared/domain`: `TastingScores`（5 要素 `Int?`）+ `CoffeeRecord.tasting: TastingScores` | 非 null フィールド、空オブジェクト=未入力 |
-| [ ] | `shared/data-local`: `CoffeeRecord.sq` に 5 列（INTEGER nullable）+ `upsert` 更新、`Mapper` 往復、テスト（部分入力・全 null の往復ケース） | クリーンブレイク（マイグレーション無し） |
-| [ ] | `shared/core`: `BuildCoffeeStatsUseCase` に `tastingAverages`（各要素 null 除外平均 + ratedCount）+ テスト。`CoffeeStats` に `TastingAverages` / `TastingRatedCount` | §1.6 集計ルール |
-| [ ] | `shared/core`: `DummyCoffeeData` の 30 件に tasting を分散付与（一部要素 null も混ぜる） | 分析の平均グラフ確認用 |
-| [ ] | `shared/feature/coffee-editor`: `CoffeeEditorViewModel` の draft に tasting + 各要素セッター + バリデーション（設定値は 1..10） | iOS スライダーから呼ぶ API |
-| [ ] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` に `tasting` マップ（非 null のみ書き出し / 全 null は省略 / decode 補完） | |
-| [ ] | 検証: `:shared:domain:test` / `:shared:data-local:testAndroidHostTest` / `:shared:core:test` / `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 全成功 | iOS 着手の前提（公開 API 凍結） |
+| [x] | `shared/domain`: `TastingScores`（5 要素 `Int?`）+ `CoffeeRecord.tasting: TastingScores` | 2026-06-20 / `TastingScores.kt` + `CoffeeRecord` 引数追加 |
+| [x] | `shared/data-local`: `CoffeeRecord.sq` に 5 列（INTEGER nullable）+ `upsert` 更新、`Mapper` 往復、テスト（部分入力・全 null の往復ケース） | 2026-06-20 / SQLDelight は INTEGER→`Long?` 生成のため Mapper で `toInt`/`toLong` 変換。往復テスト 2 件追加 |
+| [x] | `shared/core`: `BuildCoffeeStatsUseCase` に `tastingAverages`（各要素 null 除外平均 + ratedCount）+ テスト。`CoffeeStats` に `TastingAverages` / `TastingRatedCount` | 2026-06-20 / 新規 3 テスト |
+| [x] | `shared/core`: `DummyCoffeeData` の 30 件に tasting を分散付与（一部要素 null も混ぜる） | 2026-06-20 / 約 22 件に設定（部分入力含む） |
+| [x] | `shared/feature/coffee-editor`: `CoffeeEditorViewModel` の draft に tasting + 各要素セッター + バリデーション（設定値は 1..10） | 2026-06-20 / 個別 5 本（`onSweetnessChanged(Int?)` 等）+ バルク `onTastingChanged(TastingScores)`。範囲外は `coerceIn(1,10)` クランプ |
+| [x] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` に `tasting` マップ（非 null のみ書き出し / 全 null は省略 / decode 補完） | 2026-06-20 / `tastingToMap`/`tastingFromMap` |
+| [x] | 検証: `:shared:domain:test` / `:shared:data-local:testAndroidHostTest` / `:shared:core:test` / `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 全成功 | 2026-06-20 / domain 34 / data-local 21 / account 12 green、XCFramework + androidApp 成功。ヘッダに `TastingScores`/`tastingAverages`/セッター確認 |
 
 ### Phase 2: iOS（ios-engineer, Phase 1 完了後）
 

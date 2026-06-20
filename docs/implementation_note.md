@@ -1482,3 +1482,34 @@ Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸�
 **経緯**: 前エントリの独立 nullable は「書きたい要素だけ」を想定したが、テイスティングは 5 軸セットで初めて意味を成す（プロファイルとして比較・平均する）ため、all-or-nothing が要件・分析の両面で正しい。dev データのみ（クリーンブレイク）なので即作り直し。
 
 **dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。
+
+### 2026-06-21: 対話 Q&A v1（単発・digest 文脈注入）の設計確定
+
+- 領域: Shared（contract）→ KMP → iOS
+- 関連: `docs/data-model.md` §1.6 / `shared/domain` `CoffeeInsightProvider` / `shared/feature/analysis` `AnalysisViewModel`
+
+分析タブに自然言語 Q&A（「好きな産地は？」等）を追加する。Phase A-4 の傾向要約（`CoffeeInsightProvider.summarize`）の仕組みをそのまま拡張する形に決定。
+
+**インターフェース**: `CoffeeInsightProvider` に `@Throws suspend fun answer(question: String, stats: CoffeeStats): String` を 1 本追加するだけ。`summarize` と同列。iOS は `__answer(question:stats:completionHandler:)` の protocol witness で実装、Android は注入しない（分析タブ非表示）。可否ゲートは要約と共有（`provider != null` なら Q&A も可）。
+
+**v1 のスコープ（あえて削ったもの）**:
+- **単発・ステートレス**: 1 問 1 答。`LanguageModelSession` は質問ごとに新規生成、会話履歴を持たない。UI も入力欄 + 直近回答カード 1 枚のみ。チャットスレッド型は不採用（履歴状態 + session ライフサイクル管理が重い）。
+- **digest のみ接地**: 生レコード・tool 無し。要約と同じく `CoffeeStats` が唯一の入力（計算は KMP 済み、LLM は解釈と整形のみ）。
+- **逐次表示なし**: `streamResponse` → `Flow<String>` 化は「Swift 側で Flow を作る」ハードパス（`kmp-bridge.md`）になるため v1 では採らず suspend 一発で最終 `String` を返す。回答待ちは ProgressView。
+
+**ハルシネーション対策**: instructions で「与えられた統計の範囲でのみ答える / digest に無い情報は『記録からは分かりません』/ 再計算しない / 日本語で簡潔に」と縛る。
+
+**AnalysisViewModel の Q&A 状態**: `QaStatus` sealed（Unsupported/Idle/Asking/Answered/Failed）+ `qaQuestion`/`qaAnswer`、`onQuestionAsked(question)` / `onQaCleared()`、候補質問 `SUGGESTED_QUESTIONS`。`insight` と同じ Job 再起動・null=Unsupported パターンに揃える。空質問・`stats==null`・`provider==null` はガードして no-op。`error` は既存フィールドを共用。
+
+**経緯**: ユーザーは UI=単発Q&A型 / データ接地=tool で生レコード参照も、を選択。ただし tool→KMP 照会の bridge（Swift Tool.call から KMP suspend を await）は新規で要 PoC のため、リスク分割して v1（B-2）= digest 接地のみ、tool calling = B-3（9-4b）に分離した。
+
+### 2026-06-21: Phase B-2 対話 Q&A v1 iOS 実装（digest 文脈注入）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Analysis/`（`CoffeeInsightProviderIosImpl.swift` / `AnalysisViewModelBridge.swift` / `AnalysisView.swift`）
+
+`__answer(question:stats:completionHandler:)` は `__summarize` と同じ protocol witness パターン。`generateAnswer` で `buildPrompt(from:)`（要約と共用の digest 整形）を流用して digest を提示し、末尾に質問を付ける。`LanguageModelSession` はリクエストごとに新規生成（ステートレス）。回答はプレーンテキスト（`session.respond(to:).content`、`@Generable` 不使用）。instructions にグラウンディング 5 か条（統計範囲のみ / 不明は「記録からは分かりません」/ 再計算しない / 日本語 2〜4 文 / 推測しない）。
+
+- `suggestedQuestions` は `Array(AnalysisViewModel.companion.SUGGESTED_QUESTIONS)` で取得（`as? [String]` は "always succeeds" warning が出るため `Array()` を使う）。
+- UI は `QaSectionContainer` 内で `qaStatus` の `is` 分岐（`insightCardSection` と同じパターン）。`Unsupported` は `EmptyView()`、`Asking` は ProgressView（逐次表示なし）、`Answered` は質問+回答+クリア、`Failed` は同じ質問で再送。入力欄は `Answered` でも表示し、新規送信で前カードを上書き。
+- `error` は insight 系と共用のため、Q&A 失敗と要約再生成失敗が同時発火するとメッセージが上書きされうる（実運用上は稀、`qaStatus`/`insightStatus` でどちらか判別可。許容）。

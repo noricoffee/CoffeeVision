@@ -251,8 +251,14 @@ iOS の Foundation Models 実装を `shared/domain` のインターフェース�
 ```kotlin
 // shared/domain — 階層3。iOS = Foundation Models 実装、Android = 注入しない（分析タブ非表示）
 interface CoffeeInsightProvider {
+    // 階層3 要約（Phase A-4 実装済）。CoffeeStats を入力に headline/body を構造化生成する。
+    @Throws(Exception::class)
     suspend fun summarize(stats: CoffeeStats): CoffeeInsight
-    // 対話 Q&A（Phase B-2）の API はインターフェース確定時に追加
+
+    // 対話 Q&A v1（Phase B-2）: 単発・ステートレス。digest（CoffeeStats）のみを文脈に質問へ回答する。
+    // 戻り値は整形済みの日本語プレーンテキスト（@Generable 不使用）。tool / 会話履歴は持たない。
+    @Throws(Exception::class)
+    suspend fun answer(question: String, stats: CoffeeStats): String
 }
 
 data class CoffeeInsight(
@@ -261,7 +267,17 @@ data class CoffeeInsight(
 )
 ```
 
-> `AnalysisViewModel` には `CoffeeInsightProvider?` を注入する（null = 階層3 非対応 = Android / Apple Intelligence 無効時）。**可否判定は iOS の注入時に行う**: `SystemLanguageModel` が `.available` のときだけ `CoffeeInsightProvider` の実装を注入し、不可なら null を渡す。`AnalysisViewModel` は `provider == null → InsightStatus.Unsupported` を既に実装済みのため、KMP 側を変更せず graceful degradation が成立する（インターフェースは凍結のまま）。iOS 実装は `summarize` 内で `LanguageModelSession` を用い、`@Generable` で `headline` / `body` を構造化生成する。`summarize` 自体の失敗（生成エラー等）は `Failed` 扱い。
+> `AnalysisViewModel` には `CoffeeInsightProvider?` を注入する（null = 階層3 非対応 = Android / Apple Intelligence 無効時）。**可否判定は iOS の注入時に行う**: `SystemLanguageModel` が `.available` のときだけ `CoffeeInsightProvider` の実装を注入し、不可なら null を渡す。`AnalysisViewModel` は `provider == null → InsightStatus.Unsupported` を既に実装済みのため、KMP 側を変更せず graceful degradation が成立する。iOS 実装は `summarize` 内で `LanguageModelSession` を用い、`@Generable` で `headline` / `body` を構造化生成する。`summarize` 自体の失敗（生成エラー等）は `Failed` 扱い。
+
+#### 対話 Q&A v1（Phase B-2）の設計
+
+`answer(question, stats)` は要約と同じく **`CoffeeStats` digest だけを唯一の入力**とする（生レコード・tool 無し / 計算は KMP 済み、LLM は解釈と整形のみ）。設計上の決め事:
+
+- **単発・ステートレス**: 1 問 1 答。会話履歴・`LanguageModelSession` は質問ごとに新規生成し再利用しない。UI も「質問入力欄 + 直近の回答カード 1 枚」のみ保持する。
+- **グラウンディング制約**: instructions で「与えられた統計の範囲でのみ答える / digest に無い情報は『記録からは分かりません』と返す / 数値の再計算はしない / 日本語で簡潔に」と縛り、ハルシネーションを防ぐ。
+- **ストリーミングなし**: 逐次表示（`streamResponse` → `Flow`）は「Swift 側で Flow を作る」ハードパスになるため v1 では採用せず、suspend 一発で最終回答 `String` を返す。逐次表示は Phase 2 で別途検討。
+- **可否判定は要約と共有**: 新たなゲートは設けない。`CoffeeInsightProvider != null`（= `summarize` が使える端末）なら Q&A も使える。`null` の端末は Q&A UI 自体を出さない。
+- **tool calling（生レコード参照）は Phase 2（9-4b）**: digest で答えられない粒度の質問は将来 Foundation Models の `Tool` で KMP 照会を呼ぶ。v1 のインターフェースは tool を持ち込まない。
 
 ---
 

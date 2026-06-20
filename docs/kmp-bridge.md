@@ -68,9 +68,12 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 |----------------------|------------------------------|
 | `suspend fun signInAnonymouslyIfNeeded(): String` | `func signInAnonymouslyIfNeeded(completionHandler: @escaping (String?, Error?) -> Void)` |
 | `suspend fun upload(visit: Visit)` | `func upload(visit: Visit, completionHandler: @escaping (Error?) -> Void)` |
+| `suspend fun answer(question: String, stats: CoffeeStats): String` | `func answer(question:stats:completionHandler:)`（実装側は `__answer(...)`、completion は `(String?, Error?)`） |
 | `fun observeUserId(): Flow<String?>` | `func observeUserId() -> any Kotlinx_coroutines_coreFlow`（Kotlin Flow を返す。Swift の `AsyncStream` を直接返せない） |
 
 呼び出し側（ViewModel ブリッジ等）の Swift コードは `async throws` / `for await` をそのまま使えますが、`FirebaseRepositories/` 配下のプラットフォーム実装クラスは上記の生シグネチャを実装します。
+
+> **Foundation Models の Q&A（`CoffeeInsightProvider.answer`、Phase B-2）** は `summarize` と同じ protocol witness パターン（実装側 `__answer(question:stats:completionHandler:)`）で iOS が実装する。**逐次表示（`streamResponse` → `Flow`）は採用しない**: Kotlin interface が `Flow<String>` を返す形にすると「Swift 側で Flow を作る」上記ハードパス（`MutableStateFlow` を Swift から構築して流し込む）が必要になり v1 には過剰。`answer` は suspend 一発で最終回答 `String` を返し、UI は回答到着まで ProgressView を出す。逐次表示が要れば Phase 2 で `MutableStateFlow` ブリッジ方式を検討する。
 
 #### Swift から `Flow` を「作って」返す方法
 

@@ -446,9 +446,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `CoffeeEditorView`: 個別 +/× を廃止し、`tasting==nil` 時は「+ テイスティングを追加」1 ボタン → 押下で 5 スライダー一括表示。削除ボタンで nil | Bridge を `onTastingAdded`/`onTastingCleared` + 非 null セッターに追随 |
-| [ ] | `CoffeeDetailView` / `AnalysisView` / `CoffeeFirestoreMapper.swift` / `PreviewSamples` を新 API（`tasting: TastingScores?` / 非 null フィールド / `ratedCount: Int`）に追随 | |
-| [ ] | 検証: `xcodebuild` 成功。シミュレータ目視はユーザー作業 | |
+| [x] | `CoffeeEditorView`: 個別 +/× を廃止し、`tasting==nil` 時は「+ テイスティングを追加」1 ボタン → 押下で 5 スライダー一括表示。削除ボタンで nil | 2026-06-20 / Bridge を `onTastingAdded`/`onTastingCleared` + 非 null `Int32` セッターに追随。`accessibilityAdjustableAction` 維持 |
+| [x] | `CoffeeDetailView` / `AnalysisView` / `CoffeeFirestoreMapper.swift` / `PreviewSamples` を新 API（`tasting: TastingScores?` / 非 null フィールド / `ratedCount: Int`）に追随 | 2026-06-20 / Detail は `if let tasting` で 5 要素表示。Mapper は tasting!=nil で 5 要素マップ / read は 5 要素揃えば `TastingScores` 否なら nil |
+| [x] | 検証: `xcodebuild` 成功。シミュレータ目視はユーザー作業 | 2026-06-20 / 親が BUILD SUCCEEDED 確認（新規 warning ゼロ）。**シミュレータ目視（+で5スライダー一括/削除/詳細/分析/round-trip）はユーザー作業。DB は再インストール必須** |
 
 ---
 

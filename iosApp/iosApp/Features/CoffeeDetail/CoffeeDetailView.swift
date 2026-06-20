@@ -152,25 +152,23 @@ struct CoffeeDetailView: View {
                 }
             }
 
-            // テイスティング（設定済み要素のみ表示）
-            let tasting = coffee.tasting
-            let tastingItems: [(label: String, value: KotlinInt?)] = [
-                (String(localized: "甘味"), tasting.sweetness),
-                (String(localized: "ボディ"), tasting.body),
-                (String(localized: "酸味"), tasting.acidity),
-                (String(localized: "風味"), tasting.flavor),
-                (String(localized: "後味"), tasting.aftertaste),
-            ]
-            let hasAnyTasting = tastingItems.contains { $0.value != nil }
-            if hasAnyTasting {
+            // テイスティング（all-or-nothing: tasting != nil なら 5 要素すべて表示）
+            if let tasting = coffee.tasting {
+                let tastingItems: [(label: String, value: Int)] = [
+                    (String(localized: "甘味"),  Int(tasting.sweetness)),
+                    (String(localized: "ボディ"), Int(tasting.body)),
+                    (String(localized: "酸味"),  Int(tasting.acidity)),
+                    (String(localized: "風味"),  Int(tasting.flavor)),
+                    (String(localized: "後味"),  Int(tasting.aftertaste)),
+                ]
                 Section(String(localized: "テイスティング")) {
-                    ForEach(tastingItems.filter { $0.value != nil }, id: \.label) { item in
+                    ForEach(tastingItems, id: \.label) { item in
                         LabeledContent(item.label) {
-                            TastingScoreBar(value: item.value!.intValue)
+                            TastingScoreBar(value: item.value)
                         }
                         .accessibilityElement(children: .combine)
                         .accessibilityLabel(
-                            String(localized: "\(item.label) \(item.value!.intValue)/10")
+                            String(localized: "\(item.label) \(item.value)/10")
                         )
                     }
                 }

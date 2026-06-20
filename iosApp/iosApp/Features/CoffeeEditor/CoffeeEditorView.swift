@@ -251,120 +251,109 @@ struct CoffeeEditorView: View {
 
     /// テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）の入力セクション。
     ///
-    /// 各要素は任意入力（1〜10 のスライダー）。
-    /// トグルで ON/OFF を切り替えられる。OFF 時は nil（未設定）として VM に渡す。
+    /// all-or-nothing: `+` ボタン 1 つで 5 スライダーを一括表示（初期値 5）。
+    /// 削除ボタンで nil に戻す（＋ボタン表示に戻る）。
     private var tastingSection: some View {
-        Section {
-            tastingRow(
-                label: String(localized: "甘味"),
-                value: viewModel.draft.tasting.sweetness?.intValue,
-                onChanged: { viewModel.onSweetnessChanged($0.map { KotlinInt(value: Int32($0)) }) }
-            )
-            tastingRow(
-                label: String(localized: "ボディ"),
-                value: viewModel.draft.tasting.body?.intValue,
-                onChanged: { viewModel.onBodyChanged($0.map { KotlinInt(value: Int32($0)) }) }
-            )
-            tastingRow(
-                label: String(localized: "酸味"),
-                value: viewModel.draft.tasting.acidity?.intValue,
-                onChanged: { viewModel.onAcidityChanged($0.map { KotlinInt(value: Int32($0)) }) }
-            )
-            tastingRow(
-                label: String(localized: "風味"),
-                value: viewModel.draft.tasting.flavor?.intValue,
-                onChanged: { viewModel.onFlavorChanged($0.map { KotlinInt(value: Int32($0)) }) }
-            )
-            tastingRow(
-                label: String(localized: "後味"),
-                value: viewModel.draft.tasting.aftertaste?.intValue,
-                onChanged: { viewModel.onAftertasteChanged($0.map { KotlinInt(value: Int32($0)) }) }
-            )
+        let tasting = viewModel.draft.tasting
+
+        return Section {
+            if let tasting = tasting {
+                // テイスティングあり: 5 スライダーを表示
+                tastingSliderRow(
+                    label: String(localized: "甘味"),
+                    value: Int(tasting.sweetness),
+                    onChanged: { viewModel.onSweetnessChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "ボディ"),
+                    value: Int(tasting.body),
+                    onChanged: { viewModel.onBodyChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "酸味"),
+                    value: Int(tasting.acidity),
+                    onChanged: { viewModel.onAcidityChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "風味"),
+                    value: Int(tasting.flavor),
+                    onChanged: { viewModel.onFlavorChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "後味"),
+                    value: Int(tasting.aftertaste),
+                    onChanged: { viewModel.onAftertasteChanged(Int32($0)) }
+                )
+                // 削除ボタン
+                Button(role: .destructive) {
+                    viewModel.onTastingCleared()
+                } label: {
+                    Label(String(localized: "テイスティングを削除"), systemImage: "trash")
+                }
+                .accessibilityLabel(String(localized: "テイスティングを削除"))
+            } else {
+                // テイスティングなし: 追加ボタンのみ
+                Button {
+                    viewModel.onTastingAdded()
+                } label: {
+                    Label(String(localized: "テイスティングを追加"), systemImage: "plus.circle")
+                }
+                .accessibilityLabel(String(localized: "テイスティングを追加（5 要素一括）"))
+            }
         } header: {
             Text(String(localized: "テイスティング（任意）"))
         } footer: {
-            Text(String(localized: "1（弱）〜 10（強）の強度スケール。未設定はスキップできます。"))
-                .font(.caption)
+            if tasting != nil {
+                Text(String(localized: "1（弱）〜 10（強）の強度スケール"))
+                    .font(.caption)
+            }
         }
     }
 
-    /// テイスティング 1 要素の入力行（トグル + スライダー）。
+    /// テイスティング 1 要素のスライダー行。
     ///
-    /// - ON: スライダーで 1..10 を選択、値を VM に渡す
-    /// - OFF: 未設定（nil）として VM に渡す
+    /// - `value`: 1..10 の整数値
+    /// - `onChanged`: 値変更時のコールバック（Int を渡す）
     @ViewBuilder
-    private func tastingRow(
+    private func tastingSliderRow(
         label: String,
-        value: Int?,
-        onChanged: @escaping (Int?) -> Void
+        value: Int,
+        onChanged: @escaping (Int) -> Void
     ) -> some View {
-        let isOn = value != nil
-        let displayValue = value ?? 5  // 初期スライダー位置は中央
-
         VStack(spacing: 4) {
             HStack {
                 Text(label)
                     .frame(minWidth: 44, alignment: .leading)
                 Spacer()
-                if isOn {
-                    Text("\(displayValue)/10")
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-                        .monospacedDigit()
-                        .frame(minWidth: 44, alignment: .trailing)
-                }
-                // 未設定 ↔ 設定 切り替えボタン
-                Button {
-                    if isOn {
-                        onChanged(nil)
-                    } else {
-                        onChanged(displayValue)
-                    }
-                } label: {
-                    Image(systemName: isOn ? "xmark.circle.fill" : "plus.circle")
-                        .foregroundStyle(isOn ? .secondary : Color.accentColor)
-                        .font(.title3)
-                }
-                .buttonStyle(.plain)
-                .frame(minWidth: 44, minHeight: 44)
-                .accessibilityLabel(
-                    isOn
-                        ? String(localized: "\(label)の入力をクリア")
-                        : String(localized: "\(label)を入力")
-                )
+                Text("\(value)/10")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(minWidth: 44, alignment: .trailing)
             }
-
-            if isOn {
-                Slider(
-                    value: Binding(
-                        get: { Double(displayValue) },
-                        set: { onChanged(Int($0.rounded())) }
-                    ),
-                    in: 1...10,
-                    step: 1
-                )
-                .accessibilityLabel(label)
-                .accessibilityValue(String(localized: "\(displayValue)/10"))
-                .accessibilityAdjustableAction { direction in
-                    switch direction {
-                    case .increment:
-                        let next = min(displayValue + 1, 10)
-                        onChanged(next)
-                    case .decrement:
-                        let prev = max(displayValue - 1, 1)
-                        onChanged(prev)
-                    @unknown default:
-                        break
-                    }
+            Slider(
+                value: Binding(
+                    get: { Double(value) },
+                    set: { onChanged(Int($0.rounded())) }
+                ),
+                in: 1...10,
+                step: 1
+            )
+            .accessibilityLabel(label)
+            .accessibilityValue(String(localized: "\(label) \(value)/10"))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    onChanged(min(value + 1, 10))
+                case .decrement:
+                    onChanged(max(value - 1, 1))
+                @unknown default:
+                    break
                 }
             }
         }
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(
-            isOn
-                ? String(localized: "\(label) \(displayValue)/10")
-                : String(localized: "\(label) 未設定")
-        )
+        .accessibilityLabel(String(localized: "\(label) \(value)/10"))
     }
 
     // MARK: - 記録 Section

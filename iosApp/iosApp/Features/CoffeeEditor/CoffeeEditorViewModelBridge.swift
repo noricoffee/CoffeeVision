@@ -112,25 +112,40 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onCupChanged(cup: cup)
     }
 
-    // MARK: - テイスティング転送
+    // MARK: - テイスティング転送（all-or-nothing）
 
-    func onSweetnessChanged(_ value: KotlinInt?) {
+    /// テイスティングを追加する。KMP 側でデフォルト値 TastingScores(5,5,5,5,5) が生成される。
+    func onTastingAdded() {
+        kotlin.onTastingAdded()
+    }
+
+    /// テイスティングを削除する（draft.tasting を nil に戻す）。
+    func onTastingCleared() {
+        kotlin.onTastingCleared()
+    }
+
+    /// 甘味を変更する。draft.tasting が nil の場合は no-op。
+    func onSweetnessChanged(_ value: Int32) {
         kotlin.onSweetnessChanged(value: value)
     }
 
-    func onBodyChanged(_ value: KotlinInt?) {
+    /// ボディを変更する。draft.tasting が nil の場合は no-op。
+    func onBodyChanged(_ value: Int32) {
         kotlin.onBodyChanged(value: value)
     }
 
-    func onAcidityChanged(_ value: KotlinInt?) {
+    /// 酸味を変更する。draft.tasting が nil の場合は no-op。
+    func onAcidityChanged(_ value: Int32) {
         kotlin.onAcidityChanged(value: value)
     }
 
-    func onFlavorChanged(_ value: KotlinInt?) {
+    /// 風味を変更する。draft.tasting が nil の場合は no-op。
+    func onFlavorChanged(_ value: Int32) {
         kotlin.onFlavorChanged(value: value)
     }
 
-    func onAftertasteChanged(_ value: KotlinInt?) {
+    /// 後味を変更する。draft.tasting が nil の場合は no-op。
+    func onAftertasteChanged(_ value: Int32) {
         kotlin.onAftertasteChanged(value: value)
     }
 

@@ -74,9 +74,10 @@ enum CoffeeFirestoreMapper {
         if let roastLevel = record.roastLevel { doc["roastLevel"] = roastLevel.name }
         if let cup = record.cup { doc["cup"] = cup }
 
-        // tasting: 非 null 要素のみマップに書く。全要素 null なら tasting キーを省略
-        let tastingMap = tastingToMap(record.tasting)
-        if !tastingMap.isEmpty { doc["tasting"] = tastingMap }
+        // tasting: nil なら tasting キーを省略。非 nil なら 5 要素すべてのマップを書き出す
+        if let tasting = record.tasting {
+            doc["tasting"] = tastingToMap(tasting)
+        }
 
         return doc
     }
@@ -138,12 +139,12 @@ enum CoffeeFirestoreMapper {
             epochMilliseconds: Int64(updatedAtTs.dateValue().timeIntervalSince1970 * 1000)
         )
 
-        // tasting: マップが欠如していれば全 null の TastingScores()
-        let tasting: TastingScores
+        // tasting: マップが存在し 5 要素揃っていれば TastingScores。欠如 or 不完全なら nil（防御的）
+        let tasting: TastingScores?
         if let tastingDict = data["tasting"] as? [String: Any] {
             tasting = tastingFromMap(tastingDict)
         } else {
-            tasting = TastingScores(sweetness: nil, body: nil, acidity: nil, flavor: nil, aftertaste: nil)
+            tasting = nil
         }
 
         return CoffeeRecord(
@@ -260,35 +261,42 @@ enum CoffeeFirestoreMapper {
 
     // MARK: - Tasting Map
 
-    /// `TastingScores` を Firestore マップに変換する。
+    /// `TastingScores`（all-or-nothing、5 要素すべて非 null）を Firestore マップに変換する。
     ///
-    /// 非 null の要素だけマップに書き出す。全要素 null なら空辞書を返す（呼び出し元でキー省略）。
+    /// 5 要素すべてを書き出す。呼び出し元は `tasting != nil` のときだけ呼ぶこと。
     private static func tastingToMap(_ tasting: TastingScores) -> [String: Any] {
-        var dict: [String: Any] = [:]
-        if let sweetness = tasting.sweetness { dict["sweetness"] = sweetness.intValue }
-        if let body = tasting.body { dict["body"] = body.intValue }
-        if let acidity = tasting.acidity { dict["acidity"] = acidity.intValue }
-        if let flavor = tasting.flavor { dict["flavor"] = flavor.intValue }
-        if let aftertaste = tasting.aftertaste { dict["aftertaste"] = aftertaste.intValue }
-        return dict
+        return [
+            "sweetness": Int(tasting.sweetness),
+            "body": Int(tasting.body),
+            "acidity": Int(tasting.acidity),
+            "flavor": Int(tasting.flavor),
+            "aftertaste": Int(tasting.aftertaste),
+        ]
     }
 
-    /// Firestore の `tasting` マップを `TastingScores` に変換する。
+    /// Firestore の `tasting` マップを `TastingScores?` に変換する。
     ///
-    /// 各要素は Firestore から `Int` / `NSNumber` で届く。欠如キーは nil。
-    private static func tastingFromMap(_ dict: [String: Any]) -> TastingScores {
-        func parseInt(_ key: String) -> KotlinInt? {
-            if let n = dict[key] as? NSNumber {
-                return KotlinInt(value: n.int32Value)
-            }
+    /// 5 要素すべて揃っていれば `TastingScores`、いずれかが欠如していれば `nil`（防御的）。
+    private static func tastingFromMap(_ dict: [String: Any]) -> TastingScores? {
+        func parseInt(_ key: String) -> Int32? {
+            guard let n = dict[key] as? NSNumber else { return nil }
+            return n.int32Value
+        }
+        guard
+            let sweetness = parseInt("sweetness"),
+            let body = parseInt("body"),
+            let acidity = parseInt("acidity"),
+            let flavor = parseInt("flavor"),
+            let aftertaste = parseInt("aftertaste")
+        else {
             return nil
         }
         return TastingScores(
-            sweetness: parseInt("sweetness"),
-            body: parseInt("body"),
-            acidity: parseInt("acidity"),
-            flavor: parseInt("flavor"),
-            aftertaste: parseInt("aftertaste")
+            sweetness: sweetness,
+            body: body,
+            acidity: acidity,
+            flavor: flavor,
+            aftertaste: aftertaste
         )
     }
 

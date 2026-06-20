@@ -153,19 +153,20 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             lines.append("・最近の高評価コーヒー: \(highlightTexts)")
         }
 
-        // テイスティング平均（設定された要素のみ追記）
+        // テイスティング平均（all-or-nothing なので ratedCount > 0 なら 5 要素すべて揃っている）
         let avgs = stats.tastingAverages
-        let counts = avgs.ratedCount
-        let tastingParts: [String] = [
-            avgs.sweetness.map { String(format: "甘味 %.1f", $0.doubleValue) },
-            avgs.body.map { String(format: "ボディ %.1f", $0.doubleValue) },
-            avgs.acidity.map { String(format: "酸味 %.1f", $0.doubleValue) },
-            avgs.flavor.map { String(format: "風味 %.1f", $0.doubleValue) },
-            avgs.aftertaste.map { String(format: "後味 %.1f", $0.doubleValue) },
-        ].compactMap { $0 }
-        let minCount = min(counts.sweetness, counts.body, counts.acidity, counts.flavor, counts.aftertaste)
-        if !tastingParts.isEmpty {
-            lines.append("・テイスティング平均（1〜10、\(minCount)件以上）: \(tastingParts.joined(separator: "、"))")
+        let ratedCount = avgs.ratedCount
+        if ratedCount > 0 {
+            let tastingParts: [String] = [
+                avgs.sweetness.map { String(format: "甘味 %.1f", $0.doubleValue) },
+                avgs.body.map { String(format: "ボディ %.1f", $0.doubleValue) },
+                avgs.acidity.map { String(format: "酸味 %.1f", $0.doubleValue) },
+                avgs.flavor.map { String(format: "風味 %.1f", $0.doubleValue) },
+                avgs.aftertaste.map { String(format: "後味 %.1f", $0.doubleValue) },
+            ].compactMap { $0 }
+            if !tastingParts.isEmpty {
+                lines.append("・テイスティング平均（1〜10、\(ratedCount)件）: \(tastingParts.joined(separator: "、"))")
+            }
         }
 
         lines.append("")

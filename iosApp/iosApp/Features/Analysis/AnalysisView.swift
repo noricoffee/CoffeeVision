@@ -222,34 +222,30 @@ struct AnalysisView: View {
     /// 全要素 nil なら（記録なし）セクション自体を非表示にする。
     private func tastingAveragesSection(stats: CoffeeStats) -> some View {
         let avgs = stats.tastingAverages
-        let counts = avgs.ratedCount
+        let ratedCount = avgs.ratedCount
 
-        // 設定済み要素だけ表示する（母数 0 = nil の要素は除外）
+        // all-or-nothing のため 5 要素は同一件数。件数 0 ならセクション非表示
+        guard ratedCount > 0,
+              let sweetness = avgs.sweetness?.doubleValue,
+              let body = avgs.body?.doubleValue,
+              let acidity = avgs.acidity?.doubleValue,
+              let flavor = avgs.flavor?.doubleValue,
+              let aftertaste = avgs.aftertaste?.doubleValue
+        else { return AnyView(EmptyView()) }
+
         struct TastingItem: Identifiable {
             let id: String  // label
             let label: String
             let avg: Double
-            let count: Int32
         }
 
-        var items: [TastingItem] = []
-        if counts.sweetness > 0 {
-            items.append(TastingItem(id: "甘味", label: String(localized: "甘味"), avg: avgs.sweetness?.doubleValue ?? 0, count: counts.sweetness))
-        }
-        if counts.body > 0 {
-            items.append(TastingItem(id: "ボディ", label: String(localized: "ボディ"), avg: avgs.body?.doubleValue ?? 0, count: counts.body))
-        }
-        if counts.acidity > 0 {
-            items.append(TastingItem(id: "酸味", label: String(localized: "酸味"), avg: avgs.acidity?.doubleValue ?? 0, count: counts.acidity))
-        }
-        if counts.flavor > 0 {
-            items.append(TastingItem(id: "風味", label: String(localized: "風味"), avg: avgs.flavor?.doubleValue ?? 0, count: counts.flavor))
-        }
-        if counts.aftertaste > 0 {
-            items.append(TastingItem(id: "後味", label: String(localized: "後味"), avg: avgs.aftertaste?.doubleValue ?? 0, count: counts.aftertaste))
-        }
-
-        guard !items.isEmpty else { return AnyView(EmptyView()) }
+        let items: [TastingItem] = [
+            TastingItem(id: "甘味",   label: String(localized: "甘味"),  avg: sweetness),
+            TastingItem(id: "ボディ", label: String(localized: "ボディ"), avg: body),
+            TastingItem(id: "酸味",   label: String(localized: "酸味"),  avg: acidity),
+            TastingItem(id: "風味",   label: String(localized: "風味"),  avg: flavor),
+            TastingItem(id: "後味",   label: String(localized: "後味"),  avg: aftertaste),
+        ]
 
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
@@ -260,7 +256,7 @@ struct AnalysisView: View {
                         y: .value("要素", item.label)
                     )
                     .foregroundStyle(Color.accentColor)
-                    .accessibilityLabel(tastingAccessibilityLabel(item.label, avg: item.avg, count: item.count))
+                    .accessibilityLabel(tastingAccessibilityLabel(item.label, avg: item.avg, count: ratedCount))
                 }
                 .chartXScale(domain: 0...10)
                 .chartXAxis {
@@ -768,19 +764,27 @@ private struct AnalysisViewPreviewContent: View {
     @ViewBuilder
     private func previewTastingSection(stats: CoffeeStats) -> some View {
         let avgs = stats.tastingAverages
-        let counts = avgs.ratedCount
-        if counts.sweetness > 0 || counts.body > 0 || counts.acidity > 0
-            || counts.flavor > 0 || counts.aftertaste > 0 {
+        if avgs.ratedCount > 0,
+           let sweetness = avgs.sweetness?.doubleValue,
+           let body = avgs.body?.doubleValue,
+           let acidity = avgs.acidity?.doubleValue,
+           let flavor = avgs.flavor?.doubleValue,
+           let aftertaste = avgs.aftertaste?.doubleValue {
             VStack(alignment: .leading, spacing: 8) {
                 Text("テイスティング平均（強度 1〜10）").font(.headline)
-                previewTastingChart(avgs: avgs, counts: counts)
+                previewTastingChart(data: [
+                    ("甘味", sweetness),
+                    ("ボディ", body),
+                    ("酸味", acidity),
+                    ("風味", flavor),
+                    ("後味", aftertaste),
+                ])
             }
         }
     }
 
     @ViewBuilder
-    private func previewTastingChart(avgs: TastingAverages, counts: TastingRatedCount) -> some View {
-        let data: [(String, Double)] = buildPreviewTastingData(avgs: avgs, counts: counts)
+    private func previewTastingChart(data: [(String, Double)]) -> some View {
         Chart(data, id: \.0) { item in
             BarMark(
                 x: .value("強度", item.1),
@@ -790,16 +794,6 @@ private struct AnalysisViewPreviewContent: View {
         }
         .chartXScale(domain: 0...10)
         .frame(height: 200)
-    }
-
-    private func buildPreviewTastingData(avgs: TastingAverages, counts: TastingRatedCount) -> [(String, Double)] {
-        var result: [(String, Double)] = []
-        if counts.sweetness > 0 { result.append(("甘味", avgs.sweetness?.doubleValue ?? 0)) }
-        if counts.body > 0 { result.append(("ボディ", avgs.body?.doubleValue ?? 0)) }
-        if counts.acidity > 0 { result.append(("酸味", avgs.acidity?.doubleValue ?? 0)) }
-        if counts.flavor > 0 { result.append(("風味", avgs.flavor?.doubleValue ?? 0)) }
-        if counts.aftertaste > 0 { result.append(("後味", avgs.aftertaste?.doubleValue ?? 0)) }
-        return result
     }
 
     private var emptyState: some View {

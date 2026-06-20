@@ -417,12 +417,12 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `CoffeeEditorView`: テイスティング 5 要素のスライダー入力 UI（1..10、未設定トグル/クリア可）+ Bridge 追随 | 任意入力。未設定は null |
-| [ ] | `CoffeeDetailView`: 5 要素の表示（設定済みのみ or 未設定明示） | |
-| [ ] | `FirebaseRepositories/CoffeeFirestoreMapper.swift`: `tasting` マップの read/write 追随 | Android と対称 |
-| [ ] | `AnalysisView`: テイスティング 5 要素の平均を可視化（棒 or レーダー風）+ `CoffeeInsightProviderIosImpl` の prompt に平均を追加 | `tastingAverages` 利用 |
-| [ ] | `PreviewSamples` / 各 `#Preview` に tasting を追随 | |
-| [ ] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | |
+| [x] | `CoffeeEditorView`: テイスティング 5 要素のスライダー入力 UI（1..10、未設定トグル/クリア可）+ Bridge 追随 | 2026-06-20 / `+`/`×` ボタンで未設定↔設定、ON 時のみスライダー（初期値 5）。`accessibilityAdjustableAction` 対応。Form 順=カフェ→コーヒー→テイスティング→記録→写真 |
+| [x] | `CoffeeDetailView`: 5 要素の表示（設定済みのみ or 未設定明示） | 2026-06-20 / `TastingScoreBar`（バー+数値）、設定済みのみ表示。全未設定はセクション非表示 |
+| [x] | `FirebaseRepositories/CoffeeFirestoreMapper.swift`: `tasting` マップの read/write 追随 | 2026-06-20 / `tastingToMap`/`tastingFromMap`、Android と対称（非null のみ/全null省略/欠如補完） |
+| [x] | `AnalysisView`: テイスティング 5 要素の平均を可視化（棒 or レーダー風）+ `CoffeeInsightProviderIosImpl` の prompt に平均を追加 | 2026-06-20 / 横棒グラフ（母数>0 のみ、`chartXScale 0...10`）。prompt に平均 1 行追記 |
+| [x] | `PreviewSamples` / 各 `#Preview` に tasting を追随 | 2026-06-20 / `CoffeeRecord` 3 件 + `CoffeeStats` 追随 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | 2026-06-20 / BUILD SUCCEEDED・新規 warning ゼロ。**シミュレータ目視（入力/未設定切替/詳細/分析グラフ/round-trip/VoiceOver）はユーザー作業。DB 列追加のためアプリ削除→再インストール必須** |
 
 ---
 

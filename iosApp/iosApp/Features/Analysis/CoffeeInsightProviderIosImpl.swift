@@ -68,7 +68,65 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         }
     }
 
+    /// ユーザーの質問に対して Foundation Models で回答を生成して completion に返す（Phase B-2）。
+    ///
+    /// `summarize` と同じ `__` プレフィックス付き protocol witness パターン。
+    /// `LanguageModelSession` はリクエストごとに新規生成（ステートレス / 会話履歴なし）。
+    /// 回答はプレーンテキスト（`@Generable` 不使用）で日本語 2〜4 文程度を返す。
+    ///
+    /// - Parameter question: ユーザーが入力した質問テキスト
+    /// - Parameter stats: 集計済みの `CoffeeStats`。digest として LLM に渡す唯一の入力
+    /// - Parameter completionHandler: 成功時 `(answer, nil)`、失敗時 `(nil, error)`
+    func __answer(
+        question: String,
+        stats: CoffeeStats,
+        completionHandler: @escaping @Sendable (String?, (any Error)?) -> Void
+    ) {
+        Task {
+            do {
+                let answer = try await self.generateAnswer(question: question, stats: stats)
+                completionHandler(answer, nil)
+            } catch {
+                print("[CoffeeVision] Foundation Models Q&A failed: \(error)")
+                completionHandler(nil, error)
+            }
+        }
+    }
+
     // MARK: - Private: LLM 生成ロジック
+
+    /// `CoffeeStats` を基に Foundation Models で回答を生成する（Q&A v1）。
+    ///
+    /// - digest（`CoffeeStats`）のみを文脈注入。生レコード・tool 不使用
+    /// - `LanguageModelSession` はリクエストごとに生成（ステートレス）
+    /// - グラウンディング制約を instructions に明示してハルシネーション抑制
+    /// - 回答はプレーンテキスト（`@Generable` 不使用）
+    private func generateAnswer(question: String, stats: CoffeeStats) async throws -> String {
+        let digest = buildPrompt(from: stats)
+
+        let session = LanguageModelSession(
+            instructions: """
+            あなたはコーヒー記録アプリのアシスタントです。
+            ユーザーからコーヒー記録の統計データ（digest）が提供されます。
+            以下のルールを厳守して質問に回答してください:
+            1. 与えられた統計データの範囲内でのみ回答する
+            2. digest に記載のない情報を求められた場合は「記録からは分かりません」と正直に返す
+            3. 数値の再計算や推測は行わない（提示された数値をそのまま引用する）
+            4. 日本語で 2〜4 文程度、簡潔かつ丁寧に答える
+            5. 統計データに基づく事実のみを述べ、根拠のない推測や意見を加えない
+            """
+        )
+
+        let prompt = """
+        \(digest)
+
+        【質問】
+        \(question)
+        """
+
+        let response = try await session.respond(to: prompt)
+        return response.content
+    }
 
     /// `CoffeeStats` を基に Foundation Models で要約を生成する。
     ///

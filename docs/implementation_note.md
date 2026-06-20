@@ -1464,4 +1464,21 @@ Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸�
 
 **スケール型 `Int?`（`Double?` 不採用）**: `rating` は 0.5 刻みで `Double` 化した経緯があるが、テイスティングは整数 1..10 スライダー前提のため中間値の必要がなく `Int?`。バリデーションは `coerceIn(1,10)` クランプ（エラー返却なし）。`CoffeeEditorViewModel` は個別セッター 5 本 + バルク `onTastingChanged(TastingScores)` の両方を公開（iOS の実装自由度のため）。
 
+### 2026-06-20: テイスティングを all-or-nothing 化（5 要素必須）
+
+- 領域: 全レイヤー + Docs
+- 関連: `docs/data-model.md` §1.1a / §1.1 / §1.6
+
+[2026-06-20: テイスティング 5 要素] の **各要素独立 nullable** 方式を、**all-or-nothing（テイスティングを付けるなら 5 要素必須）** に変更。ユーザー要望「テイスティングが存在する場合は 5 項目全て必須、`+` ボタンで各種スライダーが一度に表示」。
+
+**型でモデル化（partial を表現不可能に）**:
+- `TastingScores` の 5 フィールドを `Int?` → **`Int`（非 null）** に変更。`CoffeeRecord.tasting` を `TastingScores` → **`TastingScores?`（nullable）** に変更。「null = 未記入 / 非 null = 5 要素全部ある」を型が保証。バリデーションのエラー経路が不要になる（部分状態を作れない）。
+- SQLDelight の 5 列は nullable のまま（all-null = なし / all-set = あり）。Mapper は **5 列全セットなら `TastingScores`、それ以外 `null`**。
+- Firestore は `tasting != null` のとき 5 要素のマップ、null なら省略。decode はキー欠如を防御的に `null` 扱い。
+- `CoffeeStats.TastingAverages.ratedCount` を `TastingRatedCount`（要素別）→ **単一 `Int`** に簡素化（all-or-nothing で 5 要素の母数が必ず一致するため）。`TastingRatedCount` 型は削除。
+
+**UX**: `tasting == null` のとき「`+` テイスティングを追加」ボタンのみ。押下で `TastingScores(5,5,5,5,5)`（デフォルト 5）を生成して 5 スライダーを一度に表示。削除ボタンで `null` に戻す。**個別セッターは非 null Int**（`tasting == null` の間は no-op）、追加/削除用に `onTastingAdded()` / `onTastingCleared()` 相当を用意。
+
+**経緯**: 前エントリの独立 nullable は「書きたい要素だけ」を想定したが、テイスティングは 5 軸セットで初めて意味を成す（プロファイルとして比較・平均する）ため、all-or-nothing が要件・分析の両面で正しい。dev データのみ（クリーンブレイク）なので即作り直し。
+
 **dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。

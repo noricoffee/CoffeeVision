@@ -426,6 +426,32 @@
 
 ---
 
+## フェーズ 9.1: テイスティングを all-or-nothing 化（5 要素必須）
+
+> 2026-06-20。フェーズ 9 の「各要素独立 nullable」を「テイスティングを付けるなら 5 要素必須」に変更。型で partial を表現不可能にする（`TastingScores` の 5 フィールドを非 null、`CoffeeRecord.tasting` を nullable）。UX は `+` で 5 スライダー一括表示・削除で null。確定仕様は [`data-model.md`](./data-model.md) §1.1a、判断は [`implementation_note.md`](./implementation_note.md) 2026-06-20 all-or-nothing エントリ。**クリーンブレイク**（再インストール）。
+
+### Phase 1: KMP（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `shared/domain`: `TastingScores` の 5 フィールドを `Int?` → `Int`（非 null）、`CoffeeRecord.tasting` を `TastingScores?` に | |
+| [ ] | `shared/data-local`: `Mapper` を「5 列全セット→`TastingScores` / それ以外→null」に。`upsert` は `tasting?.x` を渡す。テスト（あり/なし往復） | 5 列は nullable のまま |
+| [ ] | `shared/core`: `BuildCoffeeStatsUseCase` を `tasting != null` の記録のみ集計に。`TastingAverages.ratedCount` を単一 `Int` 化、`TastingRatedCount` 削除。テスト追随 | |
+| [ ] | `shared/core`: `DummyCoffeeData` を「tasting あり（5要素）/ null」の二択に（部分入力を排除） | |
+| [ ] | `shared/feature/coffee-editor`: セッターを非 null Int 化 + `onTastingAdded()`（デフォルト 5 で生成）/ `onTastingCleared()`（null）追加。draft 初期化追随 | |
+| [ ] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` を「tasting!=null で 5 要素マップ / null 省略」に | |
+| [ ] | 検証: domain/data-local/core テスト + XCFramework + androidApp assembleDebug 全成功 | iOS 着手の前提 |
+
+### Phase 2: iOS（ios-engineer, Phase 1 完了後）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `CoffeeEditorView`: 個別 +/× を廃止し、`tasting==nil` 時は「+ テイスティングを追加」1 ボタン → 押下で 5 スライダー一括表示。削除ボタンで nil | Bridge を `onTastingAdded`/`onTastingCleared` + 非 null セッターに追随 |
+| [ ] | `CoffeeDetailView` / `AnalysisView` / `CoffeeFirestoreMapper.swift` / `PreviewSamples` を新 API（`tasting: TastingScores?` / 非 null フィールド / `ratedCount: Int`）に追随 | |
+| [ ] | 検証: `xcodebuild` 成功。シミュレータ目視はユーザー作業 | |
+
+---
+
 ## フェーズ 6（任意 / 後続）
 
 | 状態 | タスク | 備考 |

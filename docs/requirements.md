@@ -85,7 +85,7 @@ Visit に紐づく 1 杯のコーヒー記録。
 | 焙煎度 | `enum RoastLevel?` | ◎ | ライト / シナモン / ミディアム / ハイ / シティ / フルシティ / フレンチ / イタリアン |
 | カップ | `String?`（使用されたカップの種類 / ブランド等のメモ） | ○ | |
 | 評価 | `Int`（1..5） | ◎ | |
-| 甘味 / ボディ / 酸味 / 風味 / 後味 | `Int?`（各 1..10、未入力可） | ○ | Blue Bottle「Elements of Coffee Tasting」由来のテイスティング 5 要素。強度スケール（UI はスライダー）。`TastingScores` として保持。詳細は [`data-model.md`](./data-model.md) §1.1a |
+| 甘味 / ボディ / 酸味 / 風味 / 後味 | `TastingScores?`（各 1..10） | ○ | Blue Bottle「Elements of Coffee Tasting」由来のテイスティング 5 要素。強度スケール（UI はスライダー）。**テイスティングは任意だが、付ける場合は 5 要素すべて必須**（all-or-nothing）。`+` で 5 スライダーを一括表示。詳細は [`data-model.md`](./data-model.md) §1.1a |
 | メモ | `String?` | ○ | 風味・所感の自由記述 |
 
 **機能**

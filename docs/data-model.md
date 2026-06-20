@@ -52,14 +52,14 @@ data class CoffeeRecord(
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
-    val tasting: TastingScores,           // テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）。各要素は任意
+    val tasting: TastingScores?,          // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須
     // --- メタ ---
     val createdAt: Instant,
     val updatedAt: Instant,
 )
 ```
 
-> **`tasting` の統合**: Blue Bottle「Elements of Coffee Tasting」に基づくテイスティング 5 要素（甘味 / ボディ / 酸味 / 風味 / 後味）を `TastingScores`（§1.1a）として持つ。各要素は **1〜10 の強度**、未入力は `null`（未設定）。`tasting` フィールド自体は常に非 null（全要素 null の空オブジェクトが「未入力」を表す）。総合評価 `rating`（0.5 刻みハーフスター）とは別軸の **強度スケール**であることに注意。
+> **`tasting` の統合**: Blue Bottle「Elements of Coffee Tasting」に基づくテイスティング 5 要素（甘味 / ボディ / 酸味 / 風味 / 後味）を `TastingScores`（§1.1a）として持つ。各要素は **1〜10 の強度**。**テイスティングは任意だが、付ける場合は 5 要素すべて必須**（all-or-nothing）。「付けない」は `tasting = null`。総合評価 `rating`（0.5 刻みハーフスター）とは別軸の **強度スケール**であることに注意。
 
 > **rating / notes の統合**: 旧モデルでは Visit と CoffeeItem の双方に rating / notes があったが、コーヒー主体では 1 杯につき 1 本に統一する。旧 `ambiance`（カフェの雰囲気）と `FoodItem`（フード）は構造化フィールドとして廃止し、必要なら自由メモ `notes` に書く方針。
 
@@ -67,17 +67,18 @@ data class CoffeeRecord(
 
 ```kotlin
 data class TastingScores(
-    val sweetness: Int? = null,           // 甘味     1..10、null = 未設定
-    val body: Int? = null,                // ボディ（コク）
-    val acidity: Int? = null,             // 酸味
-    val flavor: Int? = null,              // 風味
-    val aftertaste: Int? = null,          // 後味
+    val sweetness: Int,                    // 甘味     1..10
+    val body: Int,                         // ボディ（コク）
+    val acidity: Int,                      // 酸味
+    val flavor: Int,                       // 風味
+    val aftertaste: Int,                   // 後味
 )
 ```
 
-- 各要素は **1〜10 の整数**（強度スケール。UI はスライダー）。未入力は `null`（未設定）。各要素は独立に任意入力できる。
+- 各要素は **1〜10 の整数**（強度スケール。UI はスライダー）。
+- **5 要素は不可分（all-or-nothing）**: テイスティングを付ける場合は 5 要素すべて必須。「付けない」は `CoffeeRecord.tasting = null`（§1.1）で表す。**部分入力は型として表現不可能**（各フィールドが非 null）。
 - 「良し悪し」ではなく**強度**を表す軸（酸味 10 = 酸が強い、であって優劣ではない）。総合評価 `rating` とは意味が異なる。
-- バリデーションは ViewModel 層: 入力された要素は `1..10` の範囲を強制（未入力は `null` のまま）。
+- バリデーション: 各値は `1..10`。UI は `+` でデフォルト値（5）の `TastingScores` を生成して 5 スライダーを一度に出し、削除で `null` に戻すため、部分状態は発生しない。
 
 ## 1.2 Cafe
 
@@ -188,16 +189,12 @@ data class CoffeeStats(
 )
 
 data class TastingAverages(
-    val sweetness: Double?,                    // 甘味の平均（設定済み記録のみ、無ければ null）
+    val sweetness: Double?,                    // 甘味の平均（tasting ありの記録のみ、無ければ null）
     val body: Double?,
     val acidity: Double?,
     val flavor: Double?,
     val aftertaste: Double?,
-    val ratedCount: TastingRatedCount,         // 各要素の母数（設定済み件数）
-)
-
-data class TastingRatedCount(
-    val sweetness: Int, val body: Int, val acidity: Int, val flavor: Int, val aftertaste: Int,
+    val ratedCount: Int,                       // tasting を持つ記録の件数（all-or-nothing なので 5 要素共通）
 )
 
 data class RatingBucket(val rating: Double, val count: Int)
@@ -242,7 +239,7 @@ data class FavoriteSignals(
 - **`favoriteSignals`（階層2）**: 各カテゴリ軸で「件数 `>= minSampleSize` かつ平均評価が全体平均を最も上回る label」を 1 つ選ぶ。閾値を満たす群が無ければ `null`。サンプル不足の過大解釈を避けるためのガード。
 - **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
-- **`tastingAverages`**: 5 要素それぞれ、`null`（未設定）の記録を母数から除外した平均。1 件も設定が無い要素は `null`。`ratedCount` に各要素の設定済み件数を入れる（UI が「n 件の平均」を出せる）。
+- **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
 
 > Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は Phase B-1 で実体化する（それまでは全フィールド null の空 `FavoriteSignals` を返す）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。
@@ -302,7 +299,7 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
-    -- テイスティング 5 要素（各 1..10、null = 未設定）
+    -- テイスティング 5 要素（各 1..10）。5 列は all-or-nothing（全列 NULL = tasting なし / 全列セット = tasting あり）
     sweetness INTEGER,
     body INTEGER,
     acidity INTEGER,
@@ -456,7 +453,7 @@ users/{uid}
 
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
 - **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup）: null の場合はキーごと省略
-- **tasting**: `tasting` マップに **非 null の要素だけ**書き出す（null の要素はキーごと省略）。全要素 null（未入力）なら `tasting` マップごと省略。decode 時にキー / マップが欠如していたら該当要素を `null` で組み立て、空なら `TastingScores()`（全 null）
+- **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **photos**: 埋め込み配列。`localPath` は端末固有値のため Firestore には書かない。`remoteUrl` も書かない（Storage 採用見送り）。`sortOrder` は配列 index を upload 時に採番、decode 時はソート用途で破棄
 - `visitedOn` は `"YYYY-MM-DD"` 文字列、`createdAt` / `updatedAt` は Firestore `Timestamp`
 

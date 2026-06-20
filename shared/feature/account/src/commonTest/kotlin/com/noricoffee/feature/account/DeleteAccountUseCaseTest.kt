@@ -2,7 +2,6 @@ package com.noricoffee.feature.account
 
 import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.CoffeeRecord
-import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.AuthAccount
 import com.noricoffee.domain.usecase.DeleteAccountUseCase
 import com.noricoffee.repository.AuthRepository
@@ -82,7 +81,7 @@ class DeleteAccountUseCaseTest {
         processing = null,
         roastLevel = null,
         cup = null,
-        tasting = TastingScores(),
+        tasting = null,
         createdAt = Instant.fromEpochSeconds(0),
         updatedAt = Instant.fromEpochSeconds(0),
     )

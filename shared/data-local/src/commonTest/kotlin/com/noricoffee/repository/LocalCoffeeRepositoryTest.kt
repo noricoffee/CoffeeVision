@@ -193,37 +193,33 @@ class LocalCoffeeRepositoryTest {
     // --- tasting 往復テスト ---
 
     @Test
-    fun tasting_with_partial_values_round_trips_correctly() = runTest {
-        // sweetness / acidity のみ設定（body / flavor / aftertaste は null）
+    fun tasting_with_all_five_values_round_trips_correctly() = runTest {
+        // 5 要素すべて設定（all-or-nothing: TastingScores は 5 要素非 null のみ）
         repository = LocalCoffeeRepository(db, coroutineContext)
 
-        val record = sampleRecord().copy(
-            tasting = TastingScores(sweetness = 6, acidity = 8),
-        )
+        val scores = TastingScores(sweetness = 6, body = 7, acidity = 8, flavor = 5, aftertaste = 9)
+        val record = sampleRecord().copy(tasting = scores)
         repository.save(record)
 
         val loaded = repository.observeById(record.id).first()
+        assertEquals(scores, loaded?.tasting)
         assertEquals(6, loaded?.tasting?.sweetness)
-        assertNull(loaded?.tasting?.body)
+        assertEquals(7, loaded?.tasting?.body)
         assertEquals(8, loaded?.tasting?.acidity)
-        assertNull(loaded?.tasting?.flavor)
-        assertNull(loaded?.tasting?.aftertaste)
+        assertEquals(5, loaded?.tasting?.flavor)
+        assertEquals(9, loaded?.tasting?.aftertaste)
     }
 
     @Test
-    fun tasting_all_null_round_trips_correctly() = runTest {
-        // 全 null（未入力）
+    fun tasting_null_round_trips_correctly() = runTest {
+        // tasting = null（未入力）
         repository = LocalCoffeeRepository(db, coroutineContext)
 
-        val record = sampleRecord().copy(tasting = TastingScores())
+        val record = sampleRecord().copy(tasting = null)
         repository.save(record)
 
         val loaded = repository.observeById(record.id).first()
-        assertNull(loaded?.tasting?.sweetness)
-        assertNull(loaded?.tasting?.body)
-        assertNull(loaded?.tasting?.acidity)
-        assertNull(loaded?.tasting?.flavor)
-        assertNull(loaded?.tasting?.aftertaste)
+        assertNull(loaded?.tasting, "tasting = null のレコードは null として往復するべき")
     }
 
     private companion object {
@@ -268,7 +264,7 @@ class LocalCoffeeRepositoryTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = "ノリタケ",
-            tasting = TastingScores(sweetness = 7, body = 5, acidity = 9, flavor = 7, aftertaste = 6),
+            tasting = TastingScores(sweetness = 7, body = 5, acidity = 9, flavor = 7, aftertaste = 6), // all-or-nothing: 5 要素すべてセット
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
         )

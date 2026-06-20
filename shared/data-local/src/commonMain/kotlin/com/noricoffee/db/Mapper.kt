@@ -47,12 +47,12 @@ internal fun CoffeeRecord.toRow(): Coffee_record = Coffee_record(
     processing = processing?.name,
     roast_level = roastLevel?.name,
     cup = cup,
-    // SQLDelight は INTEGER を Long? として生成するため toLong() で変換
-    sweetness = tasting.sweetness?.toLong(),
-    body = tasting.body?.toLong(),
-    acidity = tasting.acidity?.toLong(),
-    flavor = tasting.flavor?.toLong(),
-    aftertaste = tasting.aftertaste?.toLong(),
+    // all-or-nothing: tasting が null なら全列 null、非 null なら全列セット（Long として保存）
+    sweetness = tasting?.sweetness?.toLong(),
+    body = tasting?.body?.toLong(),
+    acidity = tasting?.acidity?.toLong(),
+    flavor = tasting?.flavor?.toLong(),
+    aftertaste = tasting?.aftertaste?.toLong(),
     created_at = createdAt.toEpochMilliseconds(),
     updated_at = updatedAt.toEpochMilliseconds(),
 )
@@ -79,14 +79,20 @@ internal fun Coffee_record.toDomain(photos: List<DomainPhoto>): CoffeeRecord {
         null
     }
 
-    // SQLDelight は INTEGER を Long? で生成するため toInt() で Int? に戻す
-    val tastingScores = TastingScores(
-        sweetness = sweetness?.toInt(),
-        body = body?.toInt(),
-        acidity = acidity?.toInt(),
-        flavor = flavor?.toInt(),
-        aftertaste = aftertaste?.toInt(),
-    )
+    // all-or-nothing: 5 列すべてが非 null のときのみ TastingScores を構築、それ以外は null
+    val tastingScores: TastingScores? = if (
+        sweetness != null && body != null && acidity != null && flavor != null && aftertaste != null
+    ) {
+        TastingScores(
+            sweetness = sweetness.toInt(),
+            body = body.toInt(),
+            acidity = acidity.toInt(),
+            flavor = flavor.toInt(),
+            aftertaste = aftertaste.toInt(),
+        )
+    } else {
+        null
+    }
 
     return CoffeeRecord(
         id = id,

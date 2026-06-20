@@ -153,30 +153,23 @@ data class CoffeeInsight(
 /**
  * テイスティング 5 要素それぞれの平均値。
  *
- * 各要素は `null`（未設定）の記録を母数から除外した平均。
- * 1 件も設定が無い要素は `null`。
- * [ratedCount] に各要素の設定済み件数を入れる（UI が「n 件の平均」を出せる）。
+ * all-or-nothing 方式のため、5 要素の母数は常に同一（`ratedCount` を共通の単一 Int で持つ）。
+ * tasting を持つ記録が 1 件も無い場合は各要素 null、ratedCount = 0。
+ *
+ * @property sweetness 甘味の平均（tasting あり記録のみ。無ければ null）
+ * @property body ボディの平均
+ * @property acidity 酸味の平均
+ * @property flavor 風味の平均
+ * @property aftertaste 後味の平均
+ * @property ratedCount tasting を持つ記録の件数（all-or-nothing なので 5 要素で共通）
  *
  * @see [data-model.md] §1.6 集計ルール
  */
 data class TastingAverages(
-    val sweetness: Double?,                    // 甘味の平均（設定済み記録のみ、無ければ null）
+    val sweetness: Double?,                    // 甘味の平均（tasting ありの記録のみ、無ければ null）
     val body: Double?,
     val acidity: Double?,
     val flavor: Double?,
     val aftertaste: Double?,
-    val ratedCount: TastingRatedCount,         // 各要素の母数（設定済み件数）
-)
-
-/**
- * テイスティング 5 要素それぞれの設定済みレコード件数。
- *
- * [TastingAverages.ratedCount] として格納され、UI が「n 件の平均」を表示できる。
- */
-data class TastingRatedCount(
-    val sweetness: Int,
-    val body: Int,
-    val acidity: Int,
-    val flavor: Int,
-    val aftertaste: Int,
+    val ratedCount: Int,                       // tasting を持つ記録の件数（all-or-nothing なので 5 要素共通）
 )

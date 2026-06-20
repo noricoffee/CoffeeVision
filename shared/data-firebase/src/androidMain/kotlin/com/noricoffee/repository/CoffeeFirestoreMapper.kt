@@ -69,11 +69,8 @@ object CoffeeFirestoreMapper {
         record.roastLevel?.let { doc["roastLevel"] = it.name }
         record.cup?.let { doc["cup"] = it }
 
-        // tasting: 非 null の要素だけ書き出す。全 null なら tasting ごと省略
-        val tastingMap = tastingToMap(record.tasting)
-        if (tastingMap.isNotEmpty()) {
-            doc["tasting"] = tastingMap
-        }
+        // tasting: all-or-nothing。非 null のとき 5 要素すべてを書き出す。null なら tasting ごと省略
+        record.tasting?.let { doc["tasting"] = tastingToMap(it) }
 
         return doc
     }
@@ -81,20 +78,18 @@ object CoffeeFirestoreMapper {
     /**
      * [TastingScores] を Firestore の `tasting` マップに変換する。
      *
-     * - 非 null の要素だけキーを含む。null 要素はキーごと省略
-     * - 全要素 null の場合は空 Map を返す（呼び出し側が `tasting` キーを省略する）
+     * all-or-nothing: 5 要素すべてをキーに含む（各フィールドは非 null）。
+     * 呼び出し側は `tasting != null` のときのみこのメソッドを呼ぶ。
      *
      * @see [data-model.md] §3.2
      */
-    private fun tastingToMap(tasting: TastingScores): Map<String, Any> {
-        val map = mutableMapOf<String, Any>()
-        tasting.sweetness?.let { map["sweetness"] = it }
-        tasting.body?.let { map["body"] = it }
-        tasting.acidity?.let { map["acidity"] = it }
-        tasting.flavor?.let { map["flavor"] = it }
-        tasting.aftertaste?.let { map["aftertaste"] = it }
-        return map
-    }
+    private fun tastingToMap(tasting: TastingScores): Map<String, Any> = mapOf(
+        "sweetness" to tasting.sweetness,
+        "body" to tasting.body,
+        "acidity" to tasting.acidity,
+        "flavor" to tasting.flavor,
+        "aftertaste" to tasting.aftertaste,
+    )
 
     private fun cafeToMap(cafe: Cafe): Map<String, Any?> {
         val map = mutableMapOf<String, Any?>(
@@ -178,9 +173,8 @@ object CoffeeFirestoreMapper {
             .sortedBy { it.second }
             .map { it.first }
 
-        // tasting: マップ欠如 → TastingScores()、キー欠如 → null
+        // tasting: all-or-nothing。マップがあり 5 要素揃えば TastingScores、欠如（またはいずれかキー不足）なら null
         val tasting = (data["tasting"] as? Map<String, Any>)?.let { tastingFromMap(it) }
-            ?: TastingScores()
 
         return CoffeeRecord(
             id = id,
@@ -253,16 +247,23 @@ object CoffeeFirestoreMapper {
     /**
      * Firestore `tasting` マップを [TastingScores] に変換する。
      *
-     * キーが欠如していた場合は該当要素を null として扱う。
-     * 呼び出し側でマップ欠如（`tasting` キー自体がない）は空 [TastingScores] を返す。
+     * all-or-nothing: 5 要素すべてが揃っている場合のみ [TastingScores] を返す。
+     * いずれかのキーが欠如または型不一致の場合は null を返す（防御的処理）。
      */
-    private fun tastingFromMap(map: Map<String, Any>): TastingScores = TastingScores(
-        sweetness = (map["sweetness"] as? Number)?.toInt(),
-        body = (map["body"] as? Number)?.toInt(),
-        acidity = (map["acidity"] as? Number)?.toInt(),
-        flavor = (map["flavor"] as? Number)?.toInt(),
-        aftertaste = (map["aftertaste"] as? Number)?.toInt(),
-    )
+    private fun tastingFromMap(map: Map<String, Any>): TastingScores? {
+        val sweetness = (map["sweetness"] as? Number)?.toInt() ?: return null
+        val body = (map["body"] as? Number)?.toInt() ?: return null
+        val acidity = (map["acidity"] as? Number)?.toInt() ?: return null
+        val flavor = (map["flavor"] as? Number)?.toInt() ?: return null
+        val aftertaste = (map["aftertaste"] as? Number)?.toInt() ?: return null
+        return TastingScores(
+            sweetness = sweetness,
+            body = body,
+            acidity = acidity,
+            flavor = flavor,
+            aftertaste = aftertaste,
+        )
+    }
 
     // ─────────────────────────────────────────────────
     // ヘルパ

@@ -132,7 +132,7 @@ object DummyCoffeeData {
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,
         val cup: String?,
-        val tasting: TastingScores = TastingScores(),
+        val tasting: TastingScores? = null,  // all-or-nothing: 5 要素セット or null
     )
 
     private val rawData: List<RawData> = listOf(
@@ -164,7 +164,7 @@ object DummyCoffeeData {
             cup = null,
             tasting = TastingScores(sweetness = 5, body = 7, acidity = 8, flavor = 7, aftertaste = 6),
         ),
-        // 003: Colombia / HandDrip / City / null(セルフ抽出) — sweetness/body のみ
+        // 003: Colombia / HandDrip / City / null(セルフ抽出) — tasting あり（5 要素）
         RawData(
             name = "コロンビア ウイラ ウォッシュド",
             cafe = null,
@@ -176,7 +176,7 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.City,
             cup = null,
-            tasting = TastingScores(sweetness = 7, body = 8),
+            tasting = TastingScores(sweetness = 7, body = 8, acidity = 4, flavor = 6, aftertaste = 5),
         ),
         // 004: Guatemala / FrenchPress / FullCity / cafe3 — 全要素設定
         RawData(
@@ -219,7 +219,7 @@ object DummyCoffeeData {
             cup = null,
             tasting = TastingScores(sweetness = 9, body = 5, acidity = 7, flavor = 10, aftertaste = 9),
         ),
-        // 007: Costa Rica / NelDrip / Light / cafe5 — acidity/flavor/aftertaste のみ
+        // 007: Costa Rica / NelDrip / Light / cafe5 — tasting あり（5 要素）
         RawData(
             name = "コスタリカ タラス ホワイトハニー",
             cafe = cafe5,
@@ -231,7 +231,7 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Honey,
             roastLevel = RoastLevel.Light,
             cup = null,
-            tasting = TastingScores(acidity = 5, flavor = 8, aftertaste = 7),
+            tasting = TastingScores(sweetness = 7, body = 5, acidity = 5, flavor = 8, aftertaste = 7),
         ),
         // 008: Panama / HandDrip / Light / null(セルフ抽出) — 全要素設定（高評価）
         RawData(
@@ -274,7 +274,7 @@ object DummyCoffeeData {
             cup = null,
             tasting = TastingScores(sweetness = 8, body = 6, acidity = 5, flavor = 7, aftertaste = 6),
         ),
-        // 011: Honduras / HandDrip / City / cafe4 — sweetness/body/flavor のみ
+        // 011: Honduras / HandDrip / City / cafe4 — tasting null
         RawData(
             name = "ホンジュラス サンタバルバラ SHG",
             cafe = cafe4,
@@ -286,7 +286,6 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.City,
             cup = null,
-            tasting = TastingScores(sweetness = 6, body = 7, flavor = 6),
         ),
         // 012: Kenya / HandDrip / Light / cafe5 — 全要素設定
         RawData(
@@ -356,7 +355,7 @@ object DummyCoffeeData {
             cup = "有田焼",
             tasting = TastingScores(sweetness = 7, body = 8, acidity = 4, flavor = 7, aftertaste = 6),
         ),
-        // 017: Costa Rica / FrenchPress / Italian / cafe1 — body/acidity のみ
+        // 017: Costa Rica / FrenchPress / Italian / cafe1 — tasting あり（5 要素）
         RawData(
             name = "コスタリカ ブルマス デル スルコ",
             cafe = cafe1,
@@ -368,7 +367,7 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Italian,
             cup = null,
-            tasting = TastingScores(body = 9, acidity = 3),
+            tasting = TastingScores(sweetness = 4, body = 9, acidity = 3, flavor = 5, aftertaste = 4),
         ),
         // 018: Rwanda / HandDrip / null(roast) / null(cafe=セルフ) — tasting 未設定（全 null）
         RawData(
@@ -397,7 +396,7 @@ object DummyCoffeeData {
             cup = null,
             tasting = TastingScores(sweetness = 7, body = 7, acidity = 5, flavor = 8, aftertaste = 9),
         ),
-        // 020: Kenya / ColdBrew / Medium / null(cafe=セルフ) — flavor/aftertaste のみ
+        // 020: Kenya / ColdBrew / Medium / null(cafe=セルフ) — tasting null
         RawData(
             name = "ケニア ルイル11 コールドブリュー",
             cafe = null,
@@ -409,7 +408,6 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
-            tasting = TastingScores(flavor = 7, aftertaste = 6),
         ),
         // 021: Panama / Syphon / Light / cafe5 — 全要素設定（最高評価）
         RawData(
@@ -479,7 +477,7 @@ object DummyCoffeeData {
             cup = null,
             tasting = TastingScores(sweetness = 8, body = 7, acidity = 4, flavor = 7, aftertaste = 6),
         ),
-        // 026: Brazil / HandDrip / null(roast) / cafe1 — sweetness のみ
+        // 026: Brazil / HandDrip / null(roast) / cafe1 — tasting あり（5 要素）
         RawData(
             name = "ブラジル イパネマ ディアモンド",
             cafe = cafe1,
@@ -491,7 +489,7 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Natural,
             roastLevel = null,
             cup = null,
-            tasting = TastingScores(sweetness = 6),
+            tasting = TastingScores(sweetness = 6, body = 7, acidity = 3, flavor = 6, aftertaste = 5),
         ),
         // 027: Indonesia / HandDrip / Italian / null(cafe=セルフ) — tasting 未設定（全 null）
         RawData(

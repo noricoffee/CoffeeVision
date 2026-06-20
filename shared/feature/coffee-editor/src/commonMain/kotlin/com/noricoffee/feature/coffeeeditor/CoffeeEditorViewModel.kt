@@ -91,7 +91,7 @@ class CoffeeEditorViewModel(
      * @property processing 精製方法（任意）
      * @property roastLevel 焙煎度（任意）
      * @property cup カップ（任意）
-     * @property tasting テイスティング 5 要素（各要素 1..10 または null = 未設定）
+     * @property tasting テイスティング 5 要素（null = 未記入。非 null = 5 要素すべてセット済み）
      */
     data class CoffeeDraft(
         val cafeName: String,
@@ -109,7 +109,7 @@ class CoffeeEditorViewModel(
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,
         val cup: String,
-        val tasting: TastingScores = TastingScores(),
+        val tasting: TastingScores? = null,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット
     )
 
     /**
@@ -275,43 +275,95 @@ class CoffeeEditorViewModel(
         _state.update { it.copy(draft = it.draft.copy(cup = cup)) }
     }
 
-    // --- テイスティング要素更新 ---
+    // --- テイスティング要素更新（all-or-nothing）---
 
     /**
-     * テイスティング 5 要素を一括更新する。
+     * テイスティングを追加する（`+` ボタン相当）。
      *
-     * iOS スライダー側が要素ごとに組み立てた [TastingScores] をそのまま渡す用途。
-     * 各要素のバリデーション（1..10 クランプ / null 維持）は本メソッド内で適用する。
-     *
-     * @param scores 更新後のテイスティングスコア。null 要素は「未設定」として扱う
+     * `draft.tasting == null` のとき `TastingScores(5,5,5,5,5)` をデフォルト値として生成し、
+     * 5 スライダーを一度に表示できる状態にする。
+     * 既に tasting がある場合は no-op。
      */
-    fun onTastingChanged(scores: TastingScores) {
-        _state.update { it.copy(draft = it.draft.copy(tasting = scores.clamped())) }
+    fun onTastingAdded() {
+        if (_state.value.draft.tasting == null) {
+            _state.update {
+                it.copy(draft = it.draft.copy(tasting = TastingScores(5, 5, 5, 5, 5)))
+            }
+        }
     }
 
-    /** 甘味を更新する。null で未設定に戻る。設定値は 1..10 にクランプされる。 */
-    fun onSweetnessChanged(value: Int?) {
-        _state.update { it.copy(draft = it.draft.copy(tasting = it.draft.tasting.copy(sweetness = value?.clampTasting()))) }
+    /**
+     * テイスティングをクリアする（削除ボタン相当）。
+     *
+     * `draft.tasting` を null に戻す。スライダーをすべて非表示にする。
+     */
+    fun onTastingCleared() {
+        _state.update { it.copy(draft = it.draft.copy(tasting = null)) }
     }
 
-    /** ボディ（コク）を更新する。null で未設定に戻る。設定値は 1..10 にクランプされる。 */
-    fun onBodyChanged(value: Int?) {
-        _state.update { it.copy(draft = it.draft.copy(tasting = it.draft.tasting.copy(body = value?.clampTasting()))) }
+    /**
+     * 甘味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op（先に [onTastingAdded] を呼ぶ必要がある）。
+     */
+    fun onSweetnessChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(sweetness = value.clampTasting())))
+            } ?: state
+        }
     }
 
-    /** 酸味を更新する。null で未設定に戻る。設定値は 1..10 にクランプされる。 */
-    fun onAcidityChanged(value: Int?) {
-        _state.update { it.copy(draft = it.draft.copy(tasting = it.draft.tasting.copy(acidity = value?.clampTasting()))) }
+    /**
+     * ボディ（コク）を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onBodyChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(body = value.clampTasting())))
+            } ?: state
+        }
     }
 
-    /** 風味を更新する。null で未設定に戻る。設定値は 1..10 にクランプされる。 */
-    fun onFlavorChanged(value: Int?) {
-        _state.update { it.copy(draft = it.draft.copy(tasting = it.draft.tasting.copy(flavor = value?.clampTasting()))) }
+    /**
+     * 酸味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onAcidityChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(acidity = value.clampTasting())))
+            } ?: state
+        }
     }
 
-    /** 後味を更新する。null で未設定に戻る。設定値は 1..10 にクランプされる。 */
-    fun onAftertasteChanged(value: Int?) {
-        _state.update { it.copy(draft = it.draft.copy(tasting = it.draft.tasting.copy(aftertaste = value?.clampTasting()))) }
+    /**
+     * 風味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onFlavorChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(flavor = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 後味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onAftertasteChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(aftertaste = value.clampTasting())))
+            } ?: state
+        }
     }
 
     /**
@@ -525,7 +577,7 @@ class CoffeeEditorViewModel(
             processing = draft.processing,
             roastLevel = draft.roastLevel,
             cup = draft.cup.takeIf { it.isNotBlank() },
-            tasting = draft.tasting.clamped(),
+            tasting = draft.tasting?.clamped(),
             createdAt = createdAt,
             updatedAt = now,
         )
@@ -552,7 +604,7 @@ class CoffeeEditorViewModel(
             processing = null,
             roastLevel = null,
             cup = "",
-            tasting = TastingScores(),
+            tasting = null,  // all-or-nothing: 初期状態は tasting なし
         )
     }
 }
@@ -580,21 +632,21 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
         processing = processing,
         roastLevel = roastLevel,
         cup = cup ?: "",
-        tasting = tasting,
+        tasting = tasting,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット（edit モードで既存 tasting を反映）
     )
 
 /**
  * テイスティングスコアの各要素を `1..10` の範囲にクランプした新しいインスタンスを返す。
  *
- * null（未設定）はそのまま維持する。入力範囲外（< 1 または > 10）の値はクランプする。
+ * 各フィールドは非 null（all-or-nothing）。入力範囲外（< 1 または > 10）の値はクランプする。
  * バリデーション規約: `data-model.md` §1.1a
  */
 private fun TastingScores.clamped(): TastingScores = TastingScores(
-    sweetness = sweetness?.clampTasting(),
-    body = body?.clampTasting(),
-    acidity = acidity?.clampTasting(),
-    flavor = flavor?.clampTasting(),
-    aftertaste = aftertaste?.clampTasting(),
+    sweetness = sweetness.clampTasting(),
+    body = body.clampTasting(),
+    acidity = acidity.clampTasting(),
+    flavor = flavor.clampTasting(),
+    aftertaste = aftertaste.clampTasting(),
 )
 
 /** `1..10` の範囲にクランプする拡張関数。 */

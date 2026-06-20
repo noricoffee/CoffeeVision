@@ -9,7 +9,6 @@ import com.noricoffee.domain.model.MonthlyStat
 import com.noricoffee.domain.model.RatingBucket
 import com.noricoffee.domain.model.RecordDigest
 import com.noricoffee.domain.model.TastingAverages
-import com.noricoffee.domain.model.TastingRatedCount
 
 /**
  * `List<CoffeeRecord>` から [CoffeeStats] を決定論的に算出する UseCase。
@@ -242,31 +241,23 @@ class BuildCoffeeStatsUseCase {
     /**
      * テイスティング 5 要素それぞれの平均を構築する。
      *
-     * 各要素は `null`（未設定）の記録を母数から除外した平均を算出する。
-     * 1 件も設定が無い要素は `null`。[TastingRatedCount] に各要素の設定済み件数を入れる。
+     * all-or-nothing 方式のため、`tasting != null` の記録だけを母数にする。
+     * tasting を持つ記録が 1 件も無い場合は各要素 null、ratedCount = 0。
+     * 5 要素の母数は常に同じ（ratedCount は単一 Int）。
      *
      * @see [data-model.md] §1.6 集計ルール（tastingAverages）
      */
     private fun buildTastingAverages(records: List<CoffeeRecord>): TastingAverages {
-        val sweetnessList = records.mapNotNull { it.tasting.sweetness }
-        val bodyList = records.mapNotNull { it.tasting.body }
-        val acidityList = records.mapNotNull { it.tasting.acidity }
-        val flavorList = records.mapNotNull { it.tasting.flavor }
-        val aftertasteList = records.mapNotNull { it.tasting.aftertaste }
+        val tastingRecords = records.filter { it.tasting != null }
+        val ratedCount = tastingRecords.size
 
         return TastingAverages(
-            sweetness = computeIntAverage(sweetnessList),
-            body = computeIntAverage(bodyList),
-            acidity = computeIntAverage(acidityList),
-            flavor = computeIntAverage(flavorList),
-            aftertaste = computeIntAverage(aftertasteList),
-            ratedCount = TastingRatedCount(
-                sweetness = sweetnessList.size,
-                body = bodyList.size,
-                acidity = acidityList.size,
-                flavor = flavorList.size,
-                aftertaste = aftertasteList.size,
-            ),
+            sweetness = computeIntAverage(tastingRecords.map { it.tasting!!.sweetness }),
+            body = computeIntAverage(tastingRecords.map { it.tasting!!.body }),
+            acidity = computeIntAverage(tastingRecords.map { it.tasting!!.acidity }),
+            flavor = computeIntAverage(tastingRecords.map { it.tasting!!.flavor }),
+            aftertaste = computeIntAverage(tastingRecords.map { it.tasting!!.aftertaste }),
+            ratedCount = ratedCount,
         )
     }
 

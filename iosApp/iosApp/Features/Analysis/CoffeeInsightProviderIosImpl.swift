@@ -27,19 +27,42 @@ import SharedLogic
 @available(iOS 26.0, *)
 final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
+    // MARK: - State
+
+    /// KMP の `CoffeeRecordQuery`。
+    ///
+    /// `AppContainer` 構築後に `attachRecordQuery(_:)` で後付けする（依存サイクル解消）。
+    /// `nil` のまま `answer` が呼ばれた場合は digest-only セッションにフォールバックする。
+    private var recordQuery: CoffeeRecordQuery?
+
     // MARK: - Factory
 
     /// `SystemLanguageModel` の可否を確認し、利用可能なときだけインスタンスを返す。
     ///
     /// `.available` 以外（`deviceNotEligible` / `appleIntelligenceNotEnabled` / `modelNotReady`）
     /// の場合は nil を返す。呼び出し元（AppState）は nil を AppContainer に渡す。
-    static func makeIfAvailable() -> (any CoffeeInsightProvider)? {
+    ///
+    /// - Returns: `CoffeeInsightProviderIosImpl` のインスタンス（具象型）。
+    ///   `AppState` が `attachRecordQuery` を呼べるよう具象型を返す。
+    static func makeIfAvailable() -> CoffeeInsightProviderIosImpl? {
         guard SystemLanguageModel.default.availability == .available else {
             print("[CoffeeVision] Foundation Models unavailable: \(SystemLanguageModel.default.availability)")
             return nil
         }
         print("[CoffeeVision] Foundation Models available — creating CoffeeInsightProviderIosImpl")
         return CoffeeInsightProviderIosImpl()
+    }
+
+    // MARK: - 遅延アタッチ（依存サイクル解消）
+
+    /// `AppContainer` 構築後に `coffeeRecordQuery` を後付けする。
+    ///
+    /// `CoffeeInsightProviderIosImpl` は `AppContainer` の constructor argument になるため、
+    /// container 構築時には `coffeeRecordQuery` がまだ存在しない。
+    /// そのため `bootstrap()` で container 構築後にこのメソッドで後付けする。
+    /// `answer(question:stats:)` が呼ばれるのは初期化完了後のため、競合リスクはない。
+    func attachRecordQuery(_ query: CoffeeRecordQuery) {
+        self.recordQuery = query
     }
 
     // MARK: - CoffeeInsightProvider protocol witness（SKIE completion handler 形式）
@@ -95,27 +118,28 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
     // MARK: - Private: LLM 生成ロジック
 
-    /// `CoffeeStats` を基に Foundation Models で回答を生成する（Q&A v1）。
+    /// `CoffeeStats` を基に Foundation Models で回答を生成する（Q&A v2）。
     ///
-    /// - digest（`CoffeeStats`）のみを文脈注入。生レコード・tool 不使用
+    /// - `recordQuery` がアタッチ済みなら `SearchCoffeeRecordsTool` を登録した tool-calling セッションを使う
+    /// - `recordQuery` が nil（アタッチ前 / 非対応）なら digest-only セッションにフォールバックする
+    /// - digest（`CoffeeStats`）はどちらのモードでもプロンプトに含める（ハイブリッド）
     /// - `LanguageModelSession` はリクエストごとに生成（ステートレス）
     /// - グラウンディング制約を instructions に明示してハルシネーション抑制
     /// - 回答はプレーンテキスト（`@Generable` 不使用）
     private func generateAnswer(question: String, stats: CoffeeStats) async throws -> String {
         let digest = buildPrompt(from: stats)
 
-        let session = LanguageModelSession(
-            instructions: """
-            あなたはコーヒー記録アプリのアシスタントです。
-            ユーザーからコーヒー記録の統計データ（digest）が提供されます。
-            以下のルールを厳守して質問に回答してください:
-            1. 与えられた統計データの範囲内でのみ回答する
-            2. digest に記載のない情報を求められた場合は「記録からは分かりません」と正直に返す
-            3. 数値の再計算や推測は行わない（提示された数値をそのまま引用する）
-            4. 日本語で 2〜4 文程度、簡潔かつ丁寧に答える
-            5. 統計データに基づく事実のみを述べ、根拠のない推測や意見を加えない
-            """
-        )
+        let instructions = """
+        あなたはコーヒー記録アプリのアシスタントです。
+        ユーザーからコーヒー記録の統計データ（digest）が提供されます。
+        digest で答えられない個別レコードの問いは searchCoffeeRecords ツールで照会してよい。
+        以下のルールを厳守して質問に回答してください:
+        1. 与えられた統計データの範囲内でのみ回答する
+        2. digest に記載のない情報を求められた場合は searchCoffeeRecords で照会してから答える
+        3. ツール結果に含まれていない情報は推測・補完しない。不明なら「記録からは分かりません」と返す
+        4. 数値の再計算はしない（提示された数値をそのまま引用する）
+        5. 日本語で 2〜4 文程度、簡潔かつ丁寧に答える
+        """
 
         let prompt = """
         \(digest)
@@ -124,8 +148,20 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         \(question)
         """
 
-        let response = try await session.respond(to: prompt)
-        return response.content
+        if let rq = recordQuery {
+            // tool-calling セッション（v2）
+            let session = LanguageModelSession(
+                tools: [SearchCoffeeRecordsTool(recordQuery: rq)],
+                instructions: instructions
+            )
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } else {
+            // digest-only セッション（v1 フォールバック）
+            let session = LanguageModelSession(instructions: instructions)
+            let response = try await session.respond(to: prompt)
+            return response.content
+        }
     }
 
     /// `CoffeeStats` を基に Foundation Models で要約を生成する。

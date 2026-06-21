@@ -391,12 +391,12 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | 親: `CoffeeRecordQuery.searchRecords(filter)` の契約 + filter/summary モデル + 配線（遅延アタッチ）方針を docs に固定 | 2026-06-21 / requirements §9-4b・data-model §1.6・kmp-bridge・implementation_note |
-| [ ] | KMP（kmp-engineer）: `CoffeeRecordQuery` interface + `CoffeeRecordFilter`/`CoffeeRecordSummary` + `CoffeeRecordQueryImpl`（userId 内部解決・全件読み→filter→sort→limit）+ `AppContainer.coffeeRecordQuery` 公開 + commonTest | 寛容マッチ / rating=0 除外 / 期間 / limit |
-| [ ] | KMP（kmp-engineer）: XCFramework に `searchRecords(filter:) async throws -> [CoffeeRecordSummary]` が出力されるか確認 | SKIE calling direction（witness 不要） |
-| [ ] | iOS（ios-engineer）: PoC で `recordQuery.searchRecords(...)` の SKIE async round-trip を本実装前に確認 | CLAUDE.md ブリッジ規約 |
-| [ ] | iOS（ios-engineer）: `SearchCoffeeRecordsTool: Tool`（`@Generable Arguments` → `CoffeeRecordFilter`、結果を compact 行に整形）+ `generateAnswer` を tool セッション化（recordQuery 未アタッチ時は digest-only フォールバック） | digest 併用ハイブリッド。brew/roast は既存ローカライズ流用 |
-| [ ] | iOS（ios-engineer）: `AppState` で `attachRecordQuery(container.coffeeRecordQuery)` 配線 | 依存サイクル解消 |
-| [ ] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip はユーザー目視 | 「○○カフェで飲んだのは？」「先月飲んだのは？」等 |
+| [x] | KMP（kmp-engineer）: `CoffeeRecordQuery` interface + `CoffeeRecordFilter`/`CoffeeRecordSummary` + `CoffeeRecordQueryImpl`（userId 内部解決・全件読み→filter→sort→limit）+ `AppContainer.coffeeRecordQuery` 公開 + commonTest | 2026-06-21 / shared/domain model/。limit clamp 10/100、寛容マッチ、rating=0 除外。commonTest 30 件 green |
+| [x] | KMP（kmp-engineer）: XCFramework に `searchRecords(filter:) async throws -> [CoffeeRecordSummary]` が出力されるか確認 | 2026-06-21 / SKIE calling direction（witness 不要）。swiftinterface / ObjC ヘッダで確認済 |
+| [x] | iOS（ios-engineer）: PoC で `recordQuery.searchRecords(...)` の SKIE async round-trip を本実装前に確認 | 2026-06-21 / Tool.call から `try await` 呼び出し・`KotlinDouble(value:)` ラップ・`Tool.Output==String` をビルドで確認 |
+| [x] | iOS（ios-engineer）: `SearchCoffeeRecordsTool: Tool`（`@Generable Arguments` → `CoffeeRecordFilter`、結果を compact 行に整形）+ `generateAnswer` を tool セッション化（recordQuery 未アタッチ時は digest-only フォールバック） | 2026-06-21 / digest 併用ハイブリッド。`@preconcurrency` import で Sendable 警告抑制。ローカライズは複製（共通化は将来） |
+| [x] | iOS（ios-engineer）: `AppState` で `attachRecordQuery(container.coffeeRecordQuery)` 配線 | 2026-06-21 / `makeIfAvailable()` を具象型 `CoffeeInsightProviderIosImpl?` 返しに変更し container 構築後に attach |
+| [~] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip はユーザー目視 | 2026-06-21 / KMP 30 件 green・`xcodebuild` BUILD SUCCEEDED・新規 warning ゼロ。**Apple Intelligence 有効実機での tool 経由 round-trip（「○○カフェで飲んだのは？」「先月飲んだのは？」等）/ digest で足りる質問は従来どおり / 非対応端末で非表示 はユーザー目視** |
 
 | [ ] | B-4: 好みのカフェをマップ連携 | 将来。分析結果とマップの連携 |
 

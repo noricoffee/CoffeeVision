@@ -1532,3 +1532,9 @@ digest で答えられない個別レコード単位の問いに対応するた�
 
 - **`limit` ガード**: `CoffeeRecordFilter.limit` は負数・0 を `DEFAULT_LIMIT=10` に、`MAX_LIMIT=100` 超を 100 に clamp する（LLM が不正値を生成した場合の防御）。定数は `CoffeeRecordFilter.companion` に公開。`CoffeeRecordQueryImpl` は `shared/domain` の `model/` ディレクトリに `CoffeeRecordQuery` interface / 2 DTO と同居（UseCase ではなく "Query" 責務として model/ に共置）。
 - **`minRating`/`maxRating` は Swift で `KotlinDouble?` になる**: Kotlin の `Double?` は SKIE 経由でも `KotlinDouble?` として見えるため、iOS の `@Generable Arguments` → `CoffeeRecordFilter` 変換で評価値フィールドは `KotlinDouble(value:)` ラップが必要。`String?`（origin/cafeName 等）は直接渡せる。
+
+実装後の追記（2026-06-21 iOS 実装完了時）:
+
+- **iOS 実装の確定形**: `SearchCoffeeRecordsTool: Tool`（`@Generable Arguments` 全 optional、`Tool.Output == String`（`PromptRepresentable` 準拠））を新設。`CoffeeInsightProviderIosImpl` に `attachRecordQuery(_:)` を追加し、`generateAnswer` を「recordQuery あり → `LanguageModelSession(tools:[...])` / nil → digest-only」のハイブリッドに。`makeIfAvailable()` の戻り値型は `any CoffeeInsightProvider?` → 具象 `CoffeeInsightProviderIosImpl?` に変更（attach に具象参照が要るため。`AppContainer` 引数は `any CoffeeInsightProvider?` のままで互換）。`AppState` は provider を具象型で受け、container 構築後に `attachRecordQuery(container.coffeeRecordQuery)`。`SearchCoffeeRecordsTool.swift` の import に `@preconcurrency` を付け Sendable 警告を抑制。
+- **instructions の v1→v2 差分**: 「digest に無い情報は『記録からは分かりません』」→「`searchCoffeeRecords` で照会してから答える / ツール結果に含まれない情報は推測・補完しない」。limit（既定 10）超のレコードは「全部教えて」に対し上限内しか返らない仕様上の限界が残る。
+- **`localizedBrewMethod`/`localizedRoastLevel` が 3 箇所に重複**（`AnalysisView.swift` / `CoffeeInsightProviderIosImpl.swift` / `SearchCoffeeRecordsTool.swift`）。今回は影響最小のため複製を許容。将来 `iosApp/iosApp/Utilities/CoffeeLocalizer.swift` 等に共通化推奨（昇格候補）。

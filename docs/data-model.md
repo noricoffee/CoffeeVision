@@ -250,14 +250,15 @@ enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
     1. 母数: `rating > 0.0` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
     2. 候補: 各軸で件数 `>= minSampleSize`（既定 3）かつ平均評価ありの label。
     3. **経験ベイズ収縮**: 各候補の評価を `shrunkMean = (n·mean + k·globalMean) / (n + k)` で全体平均へ寄せる（`k = SHRINKAGE_PRIOR_WEIGHT`、既定 5 ＝「全体平均を 5 杯ぶん事前に混ぜる」）。少数群の極端値を抑える。
-    4. 選定: `shrunkMean` 最大の候補。ただし **`shrunkMean > globalMean`（全体平均を上回る正方向）のときだけ**信号にする（「好み」= 平均超え。下回る/同等なら `null`）。
-    5. 返す `CategoryStat` は**生の `averageRating` と `count`**（収縮値は選定キーとして内部利用のみ。`count` が小さければ言語化で「但し書き」に使う）。タイ時は件数多 → label 昇順で決定論化。
+    4. 選定: `shrunkMean` 最大の候補（n=1 外れ値に頑健な選定キー）。ただし信号化は **n 連動の信頼区間ゲート**で足切りする: `mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)`（一標本 z 検定近似。`globalStd` = 全評価済 rating の母標準偏差、`n` = 候補群の件数、`mean` = 候補群の生平均）。これを満たす最良候補だけ信号にする。**固定オフセット δ（`shrunkMean - globalMean > δ`）は特異度を上げられない**（最良群の偶然の上振れ＝winner's curse がサンプリングばらつき σ/√n に比例して膨らみ、固定 δ では止まらない。B-1b 100% / B-1c 不均等でも 86.7% と実測）。よって**ばらつき連動（n 連動）の閾値**で足切りする。`CATEGORY_MIN_EFFECT = 0.20` は「統計的有意だが実用上は誤差レベル」を弾く小さな絶対下限として併用してよい（z ゲートと AND）。
+    5. 返す `CategoryStat` は**生の `averageRating` と `count`**（収縮値・effect-size は選定/足切りの内部利用のみ。`count` が小さければ言語化で「但し書き」に使う）。タイ時は件数多 → label 昇順で決定論化。
   - **好みの軸（`dominantTastingAxis`）= テイスティング軸と評価の相関**:
     1. 母数: `tasting != null` かつ `rating > 0.0` の記録。`CORRELATION_MIN_SAMPLE`（既定 5）未満なら `null`。
     2. 5 軸それぞれと `rating` の**ピアソン相関係数 r**（符号付き）を計算。分散 0 の軸（全件同値）は相関定義不可のためスキップ。
-    3. `|r|` 最大の軸を採用。ただし **`|r| >= CORRELATION_MIN_ABS`（既定 0.3）のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。
+    3. `|r|` 最大の軸を採用。ただし **`|r| >= CORRELATION_ABS_FLOOR`（サンプル数連動の下限。下記）のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。**5 軸の max|r| を採る多重比較で偽陽性が乗る**（B-1b 実測 40%）ため、固定 0.3 ではなくサンプル数に応じて締める。
   - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
-  - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5` / `CORRELATION_MIN_SAMPLE = 5` / `CORRELATION_MIN_ABS = 0.3`。`minSampleSize` は `FavoriteSignals` 既定 3。
+  - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（カテゴリ z ゲート係数 ≈95% 信頼区間。B-1d sweep で確定。heavy-skew 偽陽性 9.3%・検出力 P2–P4 維持。`globalStd==0` は z ゲートをスキップしδ下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20`（z ゲートと AND する絶対下限）/ テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_MIN_ABS = 0.3` と `CORRELATION_ABS_FLOOR_C = 1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。値は `FavoriteSignalsPersonaTest` の sweep（150 シード）で検出力 P1–P4・P7 維持を確認して確定。
+  - **既知の限界 / 経緯**: tasting 軸の偽陽性は 40%→22%（c 連動 floor、B-1c）。カテゴリ信号は固定 δ では下がらず（均等 100% / heavy-skew 86.7%、B-1d 前段実測）、**n 連動 z ゲートで根治**（B-1d 本体）。winner's curse は固定オフセットでなくばらつき連動の閾値で抑えるのが要点。詳細経緯は実装ノート 2026-06-22 B-1b〜B-1d。
 - **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。

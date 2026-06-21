@@ -587,24 +587,26 @@ class BuildCoffeeStatsUseCaseTest {
 
     @Test
     fun favoriteSignals_bestBrewMethod_highVolumeHighRated_isSelected() {
-        // HandDrip が高件数かつ高評価 → shrunkMean > globalMean → 採用
-        // globalMean = (4.5×3 + 3.0×3) / 6 = 3.75
-        // shrunk(HandDrip, n=3) = (3×4.5 + 5×3.75) / 8 = 4.031 > 3.75 → 採用
-        // shrunk(Espresso, n=3) = (3×3.0 + 5×3.75) / 8 = 3.468 < 3.75 → 候補なし
-        val records = listOf(
-            record("r1", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r2", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r3", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r4", rating = 3.0, brewMethod = BrewMethod.Espresso),
-            record("r5", rating = 3.0, brewMethod = BrewMethod.Espresso),
-            record("r6", rating = 3.0, brewMethod = BrewMethod.Espresso),
-        )
+        // HandDrip が高件数かつ高評価 → z ゲートと δ 下限を満たして採用
+        // n=10 で z ゲートを通るデータ設計（z=2.0 の場合 threshold = 2.0 * globalStd / sqrt(n)）
+        // globalMean = (4.5×10 + 3.0×10) / 20 = 3.75
+        // globalStd = sqrt((10×0.5625 + 10×0.5625) / 20) = 0.75
+        // HandDrip: mean=4.5, n=10, zThreshold = 2.0 * 0.75 / sqrt(10) ≈ 0.474
+        //   mean - globalMean = 0.75 > 0.474 → z ゲート通過
+        // shrunk(HandDrip, n=10) = (10×4.5 + 5×3.75) / 15 = 4.25 > 3.75
+        //   shrunkMean - globalMean = 0.50 > 0.20(δ) → δ 下限通過 → 採用
+        // Espresso: mean=3.0 → z ゲートで弾かれる（mean - globalMean = -0.75 < 0）
+        val records = (1..10).map { i ->
+            record("r-hd-$i", rating = 4.5, brewMethod = BrewMethod.HandDrip)
+        } + (1..10).map { i ->
+            record("r-esp-$i", rating = 3.0, brewMethod = BrewMethod.Espresso)
+        }
 
         val stats = useCase(records)
 
         assertNotNull(stats.favoriteSignals.bestBrewMethod)
         assertEquals("HandDrip", stats.favoriteSignals.bestBrewMethod!!.label)
-        assertEquals(3, stats.favoriteSignals.bestBrewMethod!!.count)
+        assertEquals(10, stats.favoriteSignals.bestBrewMethod!!.count)
         assertEquals(4.5, stats.favoriteSignals.bestBrewMethod!!.averageRating)
     }
 
@@ -647,24 +649,23 @@ class BuildCoffeeStatsUseCaseTest {
     @Test
     fun favoriteSignals_bestBrewMethod_tieByCountThenLabel() {
         // 収縮平均が同じときは件数多 → label 昇順で決定論化
-        // AeroPress n=4 mean=4.5 と HandDrip n=4 mean=4.5 はまったく同一の shrunkMean
+        // AeroPress n=10 mean=4.5 と HandDrip n=10 mean=4.5 はまったく同一の shrunkMean
         // → 件数同等 → label 昇順（AeroPress < HandDrip） → AeroPress が選ばれる
-        // globalMean = (4.5×4 + 4.5×4 + 2.0×3) / 11 = 3.909...
-        // shrunk(AeroPress, n=4) = (4×4.5 + 5×3.909) / 9 = 4.172
-        // shrunk(HandDrip, n=4) = 同じ → label 昇順で AeroPress
-        val records = listOf(
-            record("r1", rating = 4.5, brewMethod = BrewMethod.AeroPress),
-            record("r2", rating = 4.5, brewMethod = BrewMethod.AeroPress),
-            record("r3", rating = 4.5, brewMethod = BrewMethod.AeroPress),
-            record("r4", rating = 4.5, brewMethod = BrewMethod.AeroPress),
-            record("r5", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r6", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r7", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r8", rating = 4.5, brewMethod = BrewMethod.HandDrip),
-            record("r9", rating = 2.0, brewMethod = BrewMethod.Espresso),
-            record("r10", rating = 2.0, brewMethod = BrewMethod.Espresso),
-            record("r11", rating = 2.0, brewMethod = BrewMethod.Espresso),
-        )
+        // n=10 で z ゲートを通るデータ設計:
+        // globalMean = (4.5×10 + 4.5×10 + 2.0×10) / 30 ≈ 3.667
+        // globalStd = sqrt((10×0.694 + 10×0.694 + 10×2.778)/30) ≈ 1.178
+        // AeroPress: mean=4.5, n=10, zThreshold = 2.0 * 1.178 / sqrt(10) ≈ 0.745
+        //   mean - globalMean ≈ 0.833 > 0.745 → z ゲート通過
+        // shrunk(AeroPress, n=10) = (10×4.5 + 5×3.667) / 15 = 4.222
+        //   shrunkMean - globalMean ≈ 0.556 > 0.20(δ) → 採用
+        // AeroPress と HandDrip は shrunkMean も n も同じ → label 昇順で AeroPress
+        val records = (1..10).map { i ->
+            record("r-aero-$i", rating = 4.5, brewMethod = BrewMethod.AeroPress)
+        } + (1..10).map { i ->
+            record("r-hand-$i", rating = 4.5, brewMethod = BrewMethod.HandDrip)
+        } + (1..10).map { i ->
+            record("r-esp-$i", rating = 2.0, brewMethod = BrewMethod.Espresso)
+        }
 
         val stats = useCase(records)
 
@@ -675,16 +676,18 @@ class BuildCoffeeStatsUseCaseTest {
     @Test
     fun favoriteSignals_bestRoastLevel_nullRoastIsExcluded() {
         // roastLevel=null のレコードは bestRoastLevel の集計から除外
-        // Light n=3 rating=4.5 は候補、null roast n=5 は除外
-        // globalMean = (4.5×3 + 3.0×2) / 5 = 3.9
-        // shrunk(Light, n=3) = (3×4.5 + 5×3.9) / 8 = 4.125 > 3.9 → 採用
-        val records = listOf(
-            record("r1", rating = 4.5, roastLevel = RoastLevel.Light),
-            record("r2", rating = 4.5, roastLevel = RoastLevel.Light),
-            record("r3", rating = 4.5, roastLevel = RoastLevel.Light),
-            record("r4", rating = 3.0, roastLevel = null),
-            record("r5", rating = 3.0, roastLevel = null),
-        )
+        // Light n=10, null roast n=10（集計対象外）
+        // globalMean = (4.5×10 + 3.0×10) / 20 = 3.75
+        // globalStd = 0.75
+        // Light: mean=4.5, n=10, zThreshold = 2.0 * 0.75 / sqrt(10) ≈ 0.474
+        //   mean - globalMean = 0.75 > 0.474 → z ゲート通過
+        // shrunk(Light, n=10) = (10×4.5 + 5×3.75) / 15 = 4.25
+        //   shrunkMean - globalMean = 0.50 > 0.20(δ) → 採用
+        val records = (1..10).map { i ->
+            record("r-light-$i", rating = 4.5, roastLevel = RoastLevel.Light)
+        } + (1..10).map { i ->
+            record("r-null-$i", rating = 3.0, roastLevel = null)
+        }
 
         val stats = useCase(records)
 
@@ -696,22 +699,31 @@ class BuildCoffeeStatsUseCaseTest {
     fun favoriteSignals_bestOrigin_normalizationGroupsVariants() {
         // "Ethiopia" / "ethiopia" / " Ethiopia " は同一グループとして集計される（trim().lowercase()）
         // 表示ラベルはグループ内最初の元表記の trim()（= "Ethiopia"）
-        // n=3 で minSampleSize 満たす
-        val records = listOf(
+        // n=10 で z ゲートを通るデータ設計:
+        // globalMean = (4.5×10 + 2.0×10) / 20 = 3.25
+        // globalStd = sqrt((10×1.5625 + 10×1.5625) / 20) = 1.25
+        // Ethiopia: mean=4.5, n=10, zThreshold = 2.0 * 1.25 / sqrt(10) ≈ 0.790
+        //   mean - globalMean = 1.25 > 0.790 → z ゲート通過
+        // shrunk(Ethiopia, n=10) = (10×4.5 + 5×3.25) / 15 = 4.083
+        //   shrunkMean - globalMean = 0.833 > 0.20(δ) → 採用
+        val ethioRecords = listOf(
             record("r1", rating = 4.5, origin = "Ethiopia"),
-            record("r2", rating = 4.5, origin = "ethiopia"),
-            record("r3", rating = 4.5, origin = " Ethiopia "),
-            record("r4", rating = 2.0, origin = "Brazil"),
-            record("r5", rating = 2.0, origin = "Brazil"),
-            record("r6", rating = 2.0, origin = "Brazil"),
-        )
+            record("r2", rating = 4.5, origin = "ethiopia"),    // 正規化で Ethiopia と同グループ
+            record("r3", rating = 4.5, origin = " Ethiopia "), // 正規化で Ethiopia と同グループ
+        ) + (4..10).map { i ->
+            record("r$i", rating = 4.5, origin = "Ethiopia")
+        }
+        val brazilRecords = (1..10).map { i ->
+            record("rb$i", rating = 2.0, origin = "Brazil")
+        }
+        val records = ethioRecords + brazilRecords
 
         val stats = useCase(records)
 
         assertNotNull(stats.favoriteSignals.bestOrigin)
         // 表示ラベルは最初の元表記の trim()
         assertEquals("Ethiopia", stats.favoriteSignals.bestOrigin!!.label)
-        assertEquals(3, stats.favoriteSignals.bestOrigin!!.count)
+        assertEquals(10, stats.favoriteSignals.bestOrigin!!.count)
     }
 
     // ---- dominantTastingAxis ----

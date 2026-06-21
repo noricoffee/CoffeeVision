@@ -1613,3 +1613,98 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - **SourceKit の `No such module 'SharedLogic'` 診断は偽陽性**（XCFramework は gradle 生成のため IDE インデックスがラグる）。`xcodebuild` は成功。
 - **親が DummyCoffeeData の閾値充足を検算（追加 dispatch 不要と判断）**: 現行30件・globalMean≈4.0 で 4 信号すべて非 null。`bestOrigin`=Ethiopia(評価済4件/平均4.5・収縮4.22) / `bestRoastLevel`=Light(6件/4.58・収縮4.32) / `bestBrewMethod`=AeroPress(3件/4.5・収縮4.19) / `dominantTastingAxis`=Flavor(tasting20件・評価と強い正相関)。**DummyCoffeeData 調整は不要**。
 - **残: デモ用スクショ取得のみ**（要シミュレータ起動。`SEED_DUMMY_DATA=1` の dev Scheme でユーザー実機/シミュレータ確認）。
+
+### 2026-06-22: Phase B-1b 好み判定のペルソナ比較検証戦略
+
+- 領域: Shared（test 戦略）→ KMP（test 実装予定）
+- 関連: `shared/domain` commonTest（新規）/ `BuildCoffeeStatsUseCase` / `FavoriteSignals` / `docs/data-model.md` §1.6
+- 背景: 既存テストは「収縮が小群を打ち消すか」「相関の符号/閾値」など**機構ごとの単体テスト**。だが「複数の評価から好みを判定できるか」（iOSDC トーク柱2）の正しさは **1 ケースでなく、複数の合成ペルソナを横断して**初めて見える。特に **最大 |r| を 5 軸から拾う設計は多重比較（winner's curse）で偽陽性を生みやすい** ——これを実測で押さえる。**production コード・data-model §1.6 の仕様は変更しない。テスト追加のみ。**
+
+**検証する 2 軸**:
+1. **検出力（power / sensitivity）**: 既知の好みを仕込んだペルソナで、対応する信号が出るか。
+2. **特異度（specificity / 偽陽性抑制）**: 好みが実在しないペルソナで信号が `null` になるか。**これが最重要**（断定しない設計の根拠を数値で裏付ける）。
+
+**ペルソナ定義（固定シード乱数で決定論生成・テストにコミット）**:
+- P1「酸味党」: `acidity` が高いほど rating 高（線形＋小ノイズ）→ `dominantTastingAxis == Acidity`, `r>0`。
+- P2「深煎り党」: `roastLevel=Dark` 群が高評価 → `bestRoastLevel == Dark`。
+- P3「産地偏重」: 特定 origin が高評価 → `bestOrigin ==` その産地。
+- P4「抽出方法党」: 特定 brewMethod が高評価 → `bestBrewMethod ==` それ。
+- P5「無相関ノイズ」（**null ペルソナ**）: rating が全属性と独立なランダム → 全フィールド `null` を期待。**偽陽性チェックの本丸**。
+- P6「サンプル不足」: 全体件数は多いが各カテゴリ `n < minSampleSize` → カテゴリ信号 null（相関は母数次第）。
+- P7「逆相関」: `body` が低いほど高評価 → `dominantTastingAxis.correlation < 0`。
+
+**決定論性**: `BuildCoffeeStatsUseCase` は純粋関数。データは `kotlin.random.Random(seed)` の固定シードで生成し、ground truth に対し label / 軸を exact 一致で assert。
+
+**偽陽性の測定（多重比較の影響を実測）**: P5 を単一固定シードの決定論 assert に加え、**多シード（例 100〜200）で生成して `dominantTastingAxis` / カテゴリ信号が非 null になる割合（偽陽性率）を集計・レポート**する。理論上、n≈30 で 5 軸の max|r|≥0.3 は偶然でも ~40% 起こりうる想定 → 高い実測値が出たら設計の弱点を示す**有用な発見**として扱う。よって **hard-fail は catastrophic な上限（例 60%）だけに留め、実測値を親へレポート**（恣意的な低閾値で偶然 pass させない）。
+
+**この結果の使い道**: 偽陽性率が高ければ Phase B-1c（**多重比較ガード**: サンプル数連動の動的閾値、または相関の信頼区間下限で判定）へ進む判断材料にする。スピアマン化・不確実性提示は優先度低（実測で必要性が出たら）。
+
+**dispatch**: `kmp-engineer`（commonTest 新規ファイルにペルソナ生成ヘルパ＋P1–P7 決定論 assert＋P5 偽陽性率測定）。スコープは `shared/domain` の test のみ、production・docs は不変。閾値判断は親。
+
+**実装完了の追記（2026-06-22）— 偽陽性率の実測発見**:
+- 関連: `shared/domain/src/commonTest/.../FavoriteSignalsPersonaTest.kt`（新規・8 テスト）。`:shared:domain:testAndroidHostTest` で新規 8＋既存 47＝計 55 件 green、production 無変更。
+- **実測（150 シード, n=30/seed, 無相関ノイズ）**:
+  - `dominantTastingAxis` 偽陽性率: **40.0%**（理論予測 ~40% に一致。5 軸 max|r|≥0.3 の多重比較 winner's curse）。
+  - **カテゴリ信号（bestBrewMethod/bestRoastLevel/bestOrigin いずれか非 null）偽陽性率: 100.0%**。
+- **カテゴリ 100% の本質（親の精査）**: 選定は「最大 shrunkMean の群を `shrunkMean > globalMean` のときだけ信号化」。globalMean は全体平均なので**およそ半数の群が上回り、その最大が選ばれる ＝「複数群の最良が平均を超えるか」はほぼ恒真**。収縮 k=5 は「極端値の大きさ」は抑えるが「これは本物の好みか」のゲートになっていない。**テストの人工物ではなく、複数カテゴリを均等に使う実ユーザーでも構造的に起きる**。
+- **検出力は良好**: P1–P4・P7 で仕込んだ好みは正しく検出（酸味党→Acidity r>0、深煎り党→Dark、産地偏重→Ethiopia、抽出方法党、逆相関→Body r<0）。問題は特異度（偽陽性抑制）側に局在。
+- **解釈と判断**:
+  - tasting 軸の 40% は「弱い傾向止まり＋LLM 断定禁止」の現設計と一応整合（が、改善余地は大）。
+  - カテゴリ信号の 100% は「好みを判定できるか」（トーク柱2）への答えとして弱い。**好みが無いユーザーにも必ず『○○がお好みのようです』と出てしまう**＝グラウンディングの土台（言える範囲を計算で確定）が崩れる。
+  - → **Phase B-1c（カテゴリ信号の特異度ガード）に進む価値が高い**。最小コストの第一候補は **effect-size 閾値**（`shrunkMean - globalMean > δ`、δ は評価レンジ 0.5..5.0 に対し例えば 0.15〜0.25）。より堅牢にするなら bootstrap 信頼区間下限 > globalMean。tasting 軸はサンプル数連動の動的 |r| 閾値（or CI 下限）。**閾値導入後はこのペルソナ検証で偽陽性率の改善を再測定**（検出力 P1–P4 を割らないこと）。
+  - 進めるか / δ 値 / どこまでやるかは**ユーザー判断待ち**（product 品質とトーク narrative のトレードオフ）。
+
+### 2026-06-22: Phase B-1c 好み判定の特異度ガード（effect-size 閾値）— ユーザー承認
+
+- 領域: Shared（spec）→ KMP（実装予定）
+- 関連: `docs/data-model.md` §1.6（更新済）/ `BuildCoffeeStatsUseCase` / `FavoriteSignalsPersonaTest`
+- 決定（AskUserQuestion 2026-06-22）: **effect-size 閾値で対処**を採用。理由 = B-1b でカテゴリ偽陽性 100%・tasting 軸 40% が判明し、「平均超え」だけでは特異度がゼロ。最小コストで効く「ゼロからの距離」での足切りを選んだ（信頼区間ベースは将来余地）。
+
+**確定した仕様変更（data-model §1.6 に反映済）**:
+- **カテゴリ好み**: 信号化条件を `shrunkMean > globalMean` → **`shrunkMean - globalMean > CATEGORY_MIN_EFFECT`（δ）** に変更。δ 候補 0.15〜0.25。
+- **テイスティング軸**: 固定 `CORRELATION_MIN_ABS = 0.3` を **サンプル数連動の `CORRELATION_ABS_FLOOR`** に変更（or 併用）。5 軸 max|r| の多重比較ぶん、n が小さいほど締める。
+- **公開 API は不変**: `FavoriteSignals` / `CategoryStat` / `TastingAxisCorrelation` の型は変えない。返す `CategoryStat` は従来どおり生平均＋件数（δ・floor は内部の足切りのみ）。→ iOS / SKIE への影響なし。
+
+**確定方法（重要）**: δ と floor の値は **`FavoriteSignalsPersonaTest` で sweep して決める**。受け入れ基準 = ①無相関ノイズの偽陽性率が現状（カテゴリ100% / tasting40%）から大きく改善 ②検出力 P1–P4・P7 を割らない（仕込んだ好みは引き続き検出）。kmp-engineer が候補値で偽陽性率と検出力の表を出し、**親が最終値を確定**して data-model の「候補」表記を実値に更新する。
+
+**dispatch**: `kmp-engineer`（`BuildCoffeeStatsUseCase` に δ・floor を実装＋既存ユニットテスト追随＋ペルソナテストで sweep 表を出力）。production 変更あり、公開 API は不変。docs 更新は親。
+
+**実装完了の追記（2026-06-22）— 確定値と「カテゴリは固定 δ で解けない」発見**:
+- 関連: `shared/domain/.../usecase/BuildCoffeeStatsUseCase.kt`・`FavoriteSignalsPersonaTest.kt`。`:shared:domain` 111 件 green、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL、公開 API 不変。
+- **確定値**: `CATEGORY_MIN_EFFECT = 0.20`、テイスティング |r| 下限 = `max(0.3, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_ABS_FLOOR_C = 1.97`、n=30 で実効 ≈0.36）。既存単体テストは effect-size 計算上いずれも δ=0.20 超で**追随変更ゼロ**（bestBrewMethod 高評価 δ=0.28 / roastLevel δ=0.23 / origin δ=0.47）。
+- **sweep 結果（150 シード, n=30）**: tasting 偽陽性は c=1.97 で **22%**（c=2.30 なら 8.7%）に改善、検出力 P1–P4・P7 はいずれの候補でも維持。**カテゴリ偽陽性は δ=0.10–0.20 で 100%、0.25 で 95%、0.30 で 87%** とほとんど下がらない。
+- **親の精査（重要・エンジニアの『テスト人工物』説への留保）**: カテゴリが下がらないのは数理的に必然。固定オフセット δ は「最良群が偶然平均を超える幅（winner's curse）」がサンプリングのばらつき σ/√n に比例して膨らむのを止められない。実際、K 群・n=6・σ≈1.2 だと最良群の生 gap ≈ 0.57、収縮後 ≈0.31 で δ=0.2 を常に超える。**tasting が改善したのは floor を `c/√n` とばらつき連動にしたからで、カテゴリゲートも本来は n 連動（信頼区間ゲート）にすべき**。「均等割当だから／実データなら下がる」は未実証の仮説（不均等でも小 n 群は収縮で潰れ、大 n 群は SE が縮むだけで winner's curse は別軸）。
+- **判断**: δ=0.20 / c=1.97 を**ship**（tasting の実改善＋検出力維持は確実な前進、API 不変で安全）。カテゴリの根治は別タスク（B-1d 候補）に切り出し、まず**現実的な不均等分布の null ペルソナで「本当に問題か」を実測**してから、必要なら n 連動カテゴリゲート（`gap > z·globalStd/√n` のような軽量・決定論・on-device 可な信頼区間近似）を入れる。現時点はカテゴリ信号を「弱い傾向（LLM 断定禁止）」として使う方針で許容。ユーザー判断待ち。
+
+### 2026-06-22: Phase B-1d 前段実測（不均等分布での偽陽性率）→ n 連動ゲート決定
+
+- 領域: KMP / テスト / 関連: `shared/domain/.../FavoriteSignalsPersonaTest.kt`（セクション E、テストのみ・production 不変）
+- **実測結果（150 シード, n=30, δ=0.20, c=1.97）**:
+
+  | 指標 | 均等割当 | mild-skew | heavy-skew |
+  |---|---|---|---|
+  | 平均候補カテゴリ数 | 21.0 | 13.0 | 8.0 |
+  | カテゴリ FP 率 | 100.0% | 96.7% | **86.7%** |
+  | brewMethod | 98.7% | 75.3% | 54.0% |
+  | roastLevel | 98.7% | 70.0% | 28.7% |
+  | origin | 82.0% | 83.3% | 58.0% |
+
+- **結論**: 仮説「不均等分布なら下がる」は**部分的にしか真でない**。候補数 21→8（2.6 倍減）でも合計 FP は 13.3pt しか下がらず heavy-skew でも 86.7%。**「均等割当だけが原因（実データなら解消）」は実測で否定**された。固定 δ は winner's curse を止められないという B-1c の精査が裏付けられた。origin はむしろ Ethiopia×12 の支配群で改善しにくい（大 n 群の winner's curse 固定化）。
+- **決定（ユーザー承認: AskUserQuestion 2026-06-22「stays high → n 連動ゲートへ」）**: **B-1d 本体 = カテゴリにも n 連動の信頼区間ゲートを導入**する。形は `mean - globalMean > z · globalStd / sqrt(n)`（globalStd = 全評価済 rating の母標準偏差）の一標本 z 検定近似。**選定キーは従来どおり shrunkMean（n=1 外れ値に頑健）、ゲートだけ z 連動に置換**。z は sweep で確定（候補 1.5/2.0/2.5/3.0、必要なら候補数 K の Bonferroni 的補正も評価）。受け入れ基準 = heavy-skew カテゴリ FP を大きく下げつつ検出力 P2–P4（および tasting P1・P7）を割らない。軽量・決定論・on-device 可であること。
+
+### 2026-06-22: Phase B-1d 本体完了 — カテゴリ n 連動 z ゲート（CATEGORY_Z=2.0 確定）
+
+- 領域: KMP / 関連: `shared/domain/.../usecase/BuildCoffeeStatsUseCase.kt`・`FavoriteSignalsPersonaTest.kt`
+- **変更**: カテゴリ好み（bestBrewMethod/bestOrigin/bestRoastLevel）の足切りを固定 δ 単独（B-1c）→ **`mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)` AND `shrunkMean - globalMean > δ(0.20)`** の 2 条件 AND に置換。`globalStd` = 全評価済 rating の母標準偏差。`globalStd==0`（全件同値）は z ゲートをスキップしδ下限のみ（ゼロ除算回避）。**選定キーは shrunkMean のまま**、公開 API 不変（`CATEGORY_Z` companion 追加のみ）。
+- **確定値 `CATEGORY_Z = 2.0`**。sweep（150 シード, n=30, δ=0.20, floorC=1.97）:
+
+  | z | 均等 FP | mild FP | heavy FP | 検出力 P2–P4 |
+  |---|---|---|---|---|
+  | 1.5 | 58.7% | 47.3% | 25.3% | 全 OK |
+  | **2.0** | **22.0%** | **14.0%** | **9.3%** | 全 OK |
+  | 2.5 | 3.3% | 2.0% | 1.3% | 全 OK |
+  | 3.0 | 0.0% | 0.0% | 0.0% | 全 OK |
+
+  z=2.0 採用（heavy-skew 9.3% で目標達成・検出力維持・95% CI 慣例値）。z=2.5/3.0 はほぼ 0% にできるが**ペルソナは強い好みを仕込んでいるため z=3.0 でも検出できるだけで、実データの弱い好みを弾きすぎるリスク**があり不採用。均等 22% が残るのは「K 候補から最良を選ぶ」多重比較の構造的残差（完全 0 化には Bonferroni で K 分 z を上げる必要があり実用上過剰）。
+- **既存単体テスト追随**: z=2.0 で n=3〜4 の小群は閾値が上がり信号化されないため、検出系 4 テスト（bestBrewMethod_highVolume / bestRoastLevel_nullRoastIsExcluded / bestOrigin_normalization / tieByCountThenLabel）のデータを n=10 に増量。検証意図（高件数高評価の検出・タイブレーク）は維持。`:shared:domain` 113 件 green、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL、新規警告ゼロ。
+- **好み判定（B-1）の特異度ワークはこれで一区切り**: tasting 軸 40%→22%（B-1c, c=1.97）、カテゴリ 100%→9.3%（B-1d, z=2.0, heavy-skew）。検出力 P1–P4・P7 は全工程で維持。iOS 追随は不要（API 不変）。

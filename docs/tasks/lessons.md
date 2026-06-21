@@ -353,3 +353,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **改善パターン**: ①個別データの問いには「**必ず**ツールを呼ぶ／ツールを呼ばずに分からないとは言わない」と命令形で書く ②「分かりません」は「**ツールを呼んだ結果が 0 件のときだけ**」に限定して早期 escape を塞ぐ ③tool description も指示的にする
 - **切り分けの仕込み**: tool の `call` 冒頭/末尾と、セッション選択経路に診断 `print` を入れ、「tool が呼ばれていない」のか「呼ばれたが 0 件（filter マッチ漏れ）」なのかを実機ログで判別できるようにする。instructions 強化だけで不足なら、質問をプロンプト側で「個別 / 全体傾向」に事前分類してセッション分岐する案が次の手
 - 発生源: 9-4b 対話 Q&A v2（個別記録の質問に「不明」を返す → instructions の逃げ道が原因）
+
+## 2026-06-22
+
+### `commonMain` で `Map.mapNotNull` + ローカル `data class` + `maxWith(compareByDescending)` が実行時に全 null を返した（原因未確定）
+
+- `map.mapNotNull { (k, v) -> ローカル data class Candidate(...) }` のリストに対し `.maxWith(compareByDescending<Candidate> { ... }.thenBy { ... })` をチェーンしたところ、**コンパイルは通るが実行時に常に null / 期待外れの結果**になる現象が Phase B-1（`BuildCoffeeStatsUseCase` の好み判定）で発生
+- 疑い: `compareByDescending<Candidate>` の型推論が `Candidate?` 側に解釈され比較が壊れた可能性（**根本原因は未確定**）。これは仮説なので鵜呑みにしない
+- **対処**: 明示的な `for ((label, group) in map)` ループ＋並列 `MutableList`＋手動比較に書き直して解消。ユニットテストで挙動を担保（収縮逆転・タイ時のラベル順など境界ケース）
+- **教訓**: 集計の選定ロジックは「コンパイルが通る＝正しい」ではない。`mapNotNull`＋ローカル data class＋`maxWith(comparator)` の合わせ技は避けるか、**必ず境界ケースのユニットテストで実挙動を確認**する

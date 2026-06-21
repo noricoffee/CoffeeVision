@@ -226,23 +226,44 @@ data class RecordDigest(
 )
 
 data class FavoriteSignals(
-    val bestBrewMethod: CategoryStat?,         // 平均評価が突出する抽出方法（閾値未満なら null）
+    val bestBrewMethod: CategoryStat?,         // 収縮平均で全体平均を最も上回る抽出方法（弱い好み信号。閾値・正方向のみ）
     val bestOrigin: CategoryStat?,
     val bestRoastLevel: CategoryStat?,
+    val dominantTastingAxis: TastingAxisCorrelation?,  // 評価と最も相関するテイスティング軸（|r| 閾値以上のみ）
     val minSampleSize: Int,                    // この件数未満の群は信号にしない（既定 3）
 )
+
+data class TastingAxisCorrelation(
+    val axis: TastingAxis,                     // 相関が最大だった軸
+    val correlation: Double,                   // ピアソン相関係数 r（-1.0..1.0、符号付き）
+    val sampleSize: Int,                       // 相関の母数（rating>0 かつ tasting!=null の件数）
+)
+
+enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
 ```
 
 ### 集計ルール（決定論）
 
 - **平均評価**: `rating == 0.0`（未評価 sentinel）は常に母数から除外。対象が 0 件なら `null`。
-- **`favoriteSignals`（階層2）**: 各カテゴリ軸で「件数 `>= minSampleSize` かつ平均評価が全体平均を最も上回る label」を 1 つ選ぶ。閾値を満たす群が無ければ `null`。サンプル不足の過大解釈を避けるためのガード。
+- **`favoriteSignals`（階層2 / 好み判定）**: 「複数の評価から好みを統計的に抽出する」層。**生平均のランキングはサンプル数の罠に弱い**（n=1 の 5.0 が最上位に来る）ため、以下の補正を入れる。出力は常に **「弱い傾向」止まり**（断定しない。理由は交絡 = 下記）。
+  - **カテゴリ好み（`bestBrewMethod` / `bestOrigin` / `bestRoastLevel`）= 収縮平均による選定**:
+    1. 母数: `rating > 0.0` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
+    2. 候補: 各軸で件数 `>= minSampleSize`（既定 3）かつ平均評価ありの label。
+    3. **経験ベイズ収縮**: 各候補の評価を `shrunkMean = (n·mean + k·globalMean) / (n + k)` で全体平均へ寄せる（`k = SHRINKAGE_PRIOR_WEIGHT`、既定 5 ＝「全体平均を 5 杯ぶん事前に混ぜる」）。少数群の極端値を抑える。
+    4. 選定: `shrunkMean` 最大の候補。ただし **`shrunkMean > globalMean`（全体平均を上回る正方向）のときだけ**信号にする（「好み」= 平均超え。下回る/同等なら `null`）。
+    5. 返す `CategoryStat` は**生の `averageRating` と `count`**（収縮値は選定キーとして内部利用のみ。`count` が小さければ言語化で「但し書き」に使う）。タイ時は件数多 → label 昇順で決定論化。
+  - **好みの軸（`dominantTastingAxis`）= テイスティング軸と評価の相関**:
+    1. 母数: `tasting != null` かつ `rating > 0.0` の記録。`CORRELATION_MIN_SAMPLE`（既定 5）未満なら `null`。
+    2. 5 軸それぞれと `rating` の**ピアソン相関係数 r**（符号付き）を計算。分散 0 の軸（全件同値）は相関定義不可のためスキップ。
+    3. `|r|` 最大の軸を採用。ただし **`|r| >= CORRELATION_MIN_ABS`（既定 0.3）のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。
+  - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
+  - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5` / `CORRELATION_MIN_SAMPLE = 5` / `CORRELATION_MIN_ABS = 0.3`。`minSampleSize` は `FavoriteSignals` 既定 3。
 - **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
 
-> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は Phase B-1 で実体化する（それまでは全フィールド null の空 `FavoriteSignals` を返す）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。
+> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は **Phase B-1（好み判定）で上記仕様により実体化**する（収縮平均＋相関軸。それ以前は全フィールド null の空 `FavoriteSignals`）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。`favoriteSignals` は階層3（要約・Q&A）の `buildPrompt` にも「弱い傾向＋件数の但し書き」として渡し、LLM は断定せず言語化する。
 
 ### 階層3（自然言語解釈）のインターフェース
 

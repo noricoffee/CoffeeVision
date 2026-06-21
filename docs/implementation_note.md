@@ -1573,3 +1573,32 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - POI タップハンドラ `poiSelectionChanged` の `allowedCategories` を `[.cafe, .restaurant, .bakery]` → `[.cafe, .bakery]` に揃え、表示されない POI をタップ受付しないよう一致させた（`restaurant` 除外）。
 
 **トレードオフ**: 「コーヒーを出すレストラン / ビストロ」を記録したいユースケースが将来出たら `restaurant` 再追加を検討。その際は表示フィルタとタップ許可の両箇所を同時に変更すること（非対称にするとタップ導線がズレる）。`PointOfInterestCategories.including` は iOS 16+ で利用可（最小ターゲット充足）。
+
+### 2026-06-22: Phase B-1 好み判定（FavoriteSignals）の統計仕様確定
+
+- 領域: Shared（spec）→ KMP（実装予定）
+- 関連: `docs/data-model.md` §1.6 / `shared/domain` `CoffeeStats.kt` `FavoriteSignals` / `BuildCoffeeStatsUseCase`
+- 背景: iOSDC 20分版トーク（二本柱の柱2「複数の評価から好みを判定できるか」）のデモ素材を兼ね、未実装（全 null）だった `FavoriteSignals` を実体化する。トーク自体は KMP 文脈を出さないが、実装は通常どおり `shared/domain` に置く。
+
+**確定した統計方針（素朴な生平均ランキングを採らない理由込み）**:
+
+- **生平均の最大値を「好み」とするのは誤り**: n=1 の 5.0 が n=20 の 4.2 を上回ってしまう（サンプルサイズの罠）。これを 2 段で抑える。
+  1. **件数ガード**: `count >= minSampleSize`（既定 3）未満の群は候補にしない（既存設計の踏襲）。
+  2. **経験ベイズ収縮**: `shrunkMean = (n·mean + k·globalMean)/(n+k)`（`k=SHRINKAGE_PRIOR_WEIGHT` 既定 5）で全体平均へ寄せ、少数群の極端値を抑えてからランキング。
+- **正方向のみ信号化**: `shrunkMean > globalMean` のときだけ `bestX` を立てる（「好み」= 平均超え。下回るなら null）。
+- **好みの「軸」= 相関**: テイスティング 5 軸 × `rating` のピアソン相関を取り、`|r|` 最大かつ `|r| >= 0.3`（`CORRELATION_MIN_ABS`）、母数 `>= 5`（`CORRELATION_MIN_SAMPLE`）のときだけ `dominantTastingAxis` を立てる。符号で「高い/低いほど高評価」を言語化に渡す。分散 0 の軸はスキップ。
+- **交絡は計算しない（明示的な仕様判断）**: 「産地が好き」か「その産地を出す店が好き」かは個人の観測データでは分離不能。層別で n が枯れ、有意性検定も前提が崩れる。よって多変量・検定は行わず、ヒューリスティックで「弱い傾向」だけを出す。**この『言える範囲を計算で確定し、LLM はその範囲でしか言わない』がトークの核（グラウンディングの実例）**。
+
+**影響 / トレードオフ**:
+- `FavoriteSignals` に `dominantTastingAxis: TastingAxisCorrelation?` と `enum TastingAxis` を新設（公開 API 追加）。`CategoryStat` は不変で再利用（`bestX` は生平均＋件数を載せ、収縮値は内部選定キーに留める）→ iOS / SKIE への影響は加算的。
+- `k` / 閾値はすべて `companion` 公開でチューニング可。デモ約 30 件のダミーデータ（`DummyCoffeeData`）で `bestX` / `dominantTastingAxis` が非 null になるか実装時に確認する（足りなければダミーを調整）。
+- 階層3 連携: `buildPrompt` に好み信号を「弱い傾向＋件数の但し書き」として追記し、instructions で断定を禁じる（iOS 側タスク）。
+
+**dispatch**: `kmp-engineer`（`BuildCoffeeStatsUseCase` の `favoriteSignals` 実体化＋純粋関数ユニットテスト）→ レポート統合後 `ios-engineer`（`buildPrompt` 連携・好みカード表示・デモスクショ）。公開 API 差分（`dominantTastingAxis` / `TastingAxis`）は本ノートで凍結済。
+
+**実装完了の追記（2026-06-22 KMP 実装完了時）**:
+- `kmp-engineer` が `shared/domain` に実装完了。公開 API は凍結仕様どおり（`enum TastingAxis` / `data class TastingAxisCorrelation` / `FavoriteSignals.dominantTastingAxis` / companion 定数 `SHRINKAGE_PRIOR_WEIGHT=5` `CORRELATION_MIN_SAMPLE=5` `CORRELATION_MIN_ABS=0.3`）。**仕様ドリフトなし**。
+- 検証: `:shared:domain` ユニットテスト 47 件 green（収縮逆転・件数ガード・正方向のみ・相関の符号/閾値/母数/分散0スキップ・タイ時のラベル順）、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL（SKIE 警告は既存の Ktor 名前衝突のみ、追加型起因なし）。
+- 実装上の落とし穴 1 件を `tasks/lessons.md` 2026-06-22 に記録（`mapNotNull`+ローカル data class+`maxWith(compareByDescending)` が実行時に全 null。原因未確定、`for` ループで解消、テストで担保）。
+- **dominantTastingAxis は符号付き**（r<0＝「低いほど高評価」も最大 |r| なら返す）。「高い/低いほど好む」の出し分けは iOS UI 判断。
+- **残: iOS 追随（`ios-engineer` 未 dispatch）**: ① `buildPrompt(from:)` に好み信号（収縮 bestX ＋ dominantTastingAxis）を「弱い傾向＋件数の但し書き」で追記し instructions で断定禁止 ② 分析タブに好みカード表示（任意）③ デモ用スクショ。SKIE 生成名は `TastingAxis`=`@frozen enum`、`TastingAxisCorrelation`=`struct` の見込み。

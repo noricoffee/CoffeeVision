@@ -1527,3 +1527,8 @@ digest で答えられない個別レコード単位の問いに対応するた�
 - **配線は遅延アタッチ（依存サイクル解消）**: provider は AppState で container より先に生成され container 引数になる一方 `coffeeRecordQuery` は container 内で組む。両者を構築時に結べないため `attachRecordQuery(_:)` で container 構築後に後付け（`searchRecords` は `answer` 時 = 初期化完了後にしか使わないため安全）。詳細は kmp-bridge.md。
 - **digest 併用ハイブリッド**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き digest を含める。
 - ブリッジ方向は v1 の Q&A と逆で **Swift→Kotlin の calling direction**（SKIE が `searchRecords(filter:) async throws` を生成、protocol witness 不要）。実装前に小 PoC で round-trip 確認（CLAUDE.md ブリッジ規約）。
+
+実装後の追記（2026-06-21 KMP 実装完了時）:
+
+- **`limit` ガード**: `CoffeeRecordFilter.limit` は負数・0 を `DEFAULT_LIMIT=10` に、`MAX_LIMIT=100` 超を 100 に clamp する（LLM が不正値を生成した場合の防御）。定数は `CoffeeRecordFilter.companion` に公開。`CoffeeRecordQueryImpl` は `shared/domain` の `model/` ディレクトリに `CoffeeRecordQuery` interface / 2 DTO と同居（UseCase ではなく "Query" 責務として model/ に共置）。
+- **`minRating`/`maxRating` は Swift で `KotlinDouble?` になる**: Kotlin の `Double?` は SKIE 経由でも `KotlinDouble?` として見えるため、iOS の `@Generable Arguments` → `CoffeeRecordFilter` 変換で評価値フィールドは `KotlinDouble(value:)` ラップが必要。`String?`（origin/cafeName 等）は直接渡せる。

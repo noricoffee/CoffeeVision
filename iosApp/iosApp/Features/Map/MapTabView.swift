@@ -218,7 +218,7 @@ struct MapTabView: View {
                     }
                 }
             }
-            .mapStyle(.standard)
+            .mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))
             .ignoresSafeArea()
 
             // フローティングコントロール（セーフエリア内に自然に収まる）
@@ -408,7 +408,7 @@ struct MapTabView: View {
             return
         }
 
-        let allowedCategories: Set<MKPointOfInterestCategory> = [.cafe, .restaurant, .bakery]
+        let allowedCategories: Set<MKPointOfInterestCategory> = [.cafe, .bakery]
         guard allowedCategories.contains(category) else {
             mapFeatureSelection = nil
             return

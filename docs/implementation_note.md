@@ -1561,3 +1561,15 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 **トレードオフ**: Secrets に実 `google-services.json` を base64 で置く案より運用が軽い反面、CI で実 Firebase に到達するテスト（Firestore 結合テスト等）は将来も別途仕組みが要る。現状 Android 側に実接続テストは無いため問題なし。
 
 **検証**: ローカルで実ファイルを退避→ダミーに差し替えて `processDebugGoogleServices --rerun-tasks` が BUILD SUCCESSFUL を確認（実ファイルは復元）。push 後の CI で Android / iOS 両ジョブ SUCCESS。
+
+### 2026-06-21: マップ POI フィルタを cafe/bakery のみに限定
+
+- 領域: iOS UI（`iosApp/iosApp/Features/Map/MapTabView.swift`）
+
+ユーザーから「マップにカフェ以外（病院など）が出る」との指摘。アプリ独自ピン（訪問済み茶 / 周辺グレー）は Places API リクエスト側で既に `cafe` 限定済みだが、Apple Maps ベース地図の標準 POI ラベルは `.mapStyle(.standard)` のまま全カテゴリ素通しで描画されていた（フィルタ未適用）。
+
+**対応**:
+- `.mapStyle(.standard)` → `.mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))` でベース地図 POI をカフェ・ベーカリーに限定。
+- POI タップハンドラ `poiSelectionChanged` の `allowedCategories` を `[.cafe, .restaurant, .bakery]` → `[.cafe, .bakery]` に揃え、表示されない POI をタップ受付しないよう一致させた（`restaurant` 除外）。
+
+**トレードオフ**: 「コーヒーを出すレストラン / ビストロ」を記録したいユースケースが将来出たら `restaurant` 再追加を検討。その際は表示フィルタとタップ許可の両箇所を同時に変更すること（非対称にするとタップ導線がズレる）。`PointOfInterestCategories.including` は iOS 16+ で利用可（最小ターゲット充足）。

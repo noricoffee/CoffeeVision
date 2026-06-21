@@ -1546,3 +1546,18 @@ digest で答えられない個別レコード単位の問いに対応するた�
 - **追調査（実機ログ）**: digest の「よく行くカフェ」に載るカフェ（例ブルーボトル）は tool 呼び出し成功、digest に載らない低頻度カフェ（例フグレン）は tool 未呼び出しと判明。モデルが **digest を全記録の網羅リストと誤認**し「digest に無い＝記録に無い」と諦める逃げ道が残っていた。instructions に「digest は非網羅の要約／digest に出ない名前でも必ず検索／記録の有無は tool 結果のみで判断」を明示して対処。なお tool 呼び出し時、モデルは digest を使って `cafeName` をフルネーム補完する（"ブルーボトルコーヒー"→"ブルーボトルコーヒー 三軒茶屋"、部分一致で命中）。
 - instructions 強化でも不足なら、次の手は **質問の構造化事前抽出 → 決定的 tool 呼び出し**（Swift が固有名詞/期間を検出して tool を直接呼び、結果を digest に追記して LLM は整形のみ）。固有名詞抽出の偽陰性とのトレードオフあり（lessons.md 2026-06-21）。
 - **追々調査（実機ログ・第2段）**: instructions 修正後、tool は呼ばれるようになったが今度は **フィールド誤分類**が発覚（"フグレン"=カフェを `origin` に入れて 0 件）。モデルの分類精度に依存しない解として、KMP の `CoffeeRecordQueryImpl` で **`origin`/`cafeName` をフィールド横断 free-text term 化**（`{cafe名/産地/コーヒー名/品種}` の union に部分一致）。公開 API（`CoffeeRecordFilter` の形）は不変のため Swift 追随不要だが、実装が変わるので iOS は通常 Xcode ビルド（override フラグ無し）で framework 再生成して反映する。data-model §1.6 に確定挙動を反映済。
+
+### 2026-06-21: CI Android ジョブでダミー google-services.json を生成
+
+- 領域: Build（`.github/workflows/ci.yml`）
+- 関連: `androidApp/build.gradle.kts`（`googleServices` プラグイン + Firebase 依存）
+
+feature/analyze で androidApp に `googleServices` プラグインと Firebase 依存（auth/firestore）を追加した結果、`:androidApp:assembleDebug` が `processDebugGoogleServices` で `google-services.json` を必須とするようになり、PR#2 の Android CI が `File google-services.json is missing.` で失敗した。同ファイルは秘匿情報として gitignore 済みで CI ランナーに存在しない（ローカルには `androidApp/google-services.json` がある）。PR#1 まではプラグイン未適用だったため通っていた。
+
+**対応**: CI の Android ジョブに、Gradle 実行前にダミー `google-services.json` を `androidApp/` へ書き出すステップを追加。
+
+**判断根拠**: Android はリリース対象外の KMP 共通層検証ターゲットで、`assembleDebug` の目的は共通層が Android でコンパイル/リンクできることの確認。実 Firebase 接続は不要なため、google-services プラグインを通すだけのダミー（package_name = `com.noricoffee.coffeevision`、project_number / app_id / api_key はゼロ埋めダミー）で十分とし、**GitHub Secrets 管理を不要にした**。
+
+**トレードオフ**: Secrets に実 `google-services.json` を base64 で置く案より運用が軽い反面、CI で実 Firebase に到達するテスト（Firestore 結合テスト等）は将来も別途仕組みが要る。現状 Android 側に実接続テストは無いため問題なし。
+
+**検証**: ローカルで実ファイルを退避→ダミーに差し替えて `processDebugGoogleServices --rerun-tasks` が BUILD SUCCESSFUL を確認（実ファイルは復元）。push 後の CI で Android / iOS 両ジョブ SUCCESS。

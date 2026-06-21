@@ -179,7 +179,7 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 | 9-2 | Foundation Models による傾向要約サマリ（階層3） | ○ | `CoffeeStats` を入力に 2–3 文で要約。Apple Intelligence 無効 / 非対応端末では階層1 のみ表示にフォールバック |
 | 9-3 | 高評価群の傾向抽出（階層2） | △ | `FavoriteSignals`。サンプル数が閾値未満の信号は出さない |
 | 9-4 | 対話 Q&A v1（階層3 / 単発・digest 文脈注入） | ○ | 「好きな産地は？」「一番高評価だったコーヒーは？」等を **1 問 1 答（ステートレス）** で回答。`CoffeeStats` digest のみを文脈注入（生レコード・tool 無し / 計算は KMP、LLM は解釈と整形のみ）。digest に無い問いは「記録からは分かりません」。非対応端末（Apple Intelligence 無効）は Q&A UI 非表示。逐次表示なし（suspend 一発） |
-| 9-4b | 対話 Q&A v2（tool calling / 生レコード参照） | ○（着手中） | digest で答えられない**個別レコード単位**の問い（特定カフェ・特定月・産地別の個別記録等）向けに、Foundation Models の `Tool` で KMP の生レコード照会（`CoffeeRecordQuery.searchRecords`）を呼ぶ。絞り込みは KMP 側（計算は KMP・LLM は呼び出し判断と整形のみ）。digest はベース文脈として併用（ハイブリッド）。可否判定は v1 と共有（`CoffeeInsightProvider != null` の端末のみ）。インターフェース・設計は [`data-model.md`](./data-model.md) §1.6「対話 Q&A v2」、ブリッジは [`kmp-bridge.md`](./kmp-bridge.md) |
+| 9-4b | 対話 Q&A v2（tool calling / 生レコード参照） | ○ | digest で答えられない**個別レコード単位**の問い（特定カフェ・特定月・産地別の個別記録等）向けに、Foundation Models の `Tool` で KMP の生レコード照会（`CoffeeRecordQuery.searchRecords`）を呼ぶ。絞り込みは KMP 側（計算は KMP・LLM は呼び出し判断と整形のみ）。digest はベース文脈として併用（ハイブリッド）。可否判定は v1 と共有（`CoffeeInsightProvider != null` の端末のみ）。インターフェース・設計は [`data-model.md`](./data-model.md) §1.6「対話 Q&A v2」、ブリッジは [`kmp-bridge.md`](./kmp-bridge.md) |
 | 9-5 | 好みのカフェをマップで探す | ✕（将来） | 要件外。分析結果とマップの連携は後続フェーズ |
 
 > Foundation Models は **iOS 専用**のため、Android（KMP 検証ターゲット）では分析タブ自体を表示しない。階層1・2 の集計（`CoffeeStats` / `BuildCoffeeStatsUseCase`）は KMP 共通層に置き、両 OS でビルド・テスト可能とする。

@@ -396,7 +396,8 @@
 | [x] | iOS（ios-engineer）: PoC で `recordQuery.searchRecords(...)` の SKIE async round-trip を本実装前に確認 | 2026-06-21 / Tool.call から `try await` 呼び出し・`KotlinDouble(value:)` ラップ・`Tool.Output==String` をビルドで確認 |
 | [x] | iOS（ios-engineer）: `SearchCoffeeRecordsTool: Tool`（`@Generable Arguments` → `CoffeeRecordFilter`、結果を compact 行に整形）+ `generateAnswer` を tool セッション化（recordQuery 未アタッチ時は digest-only フォールバック） | 2026-06-21 / digest 併用ハイブリッド。`@preconcurrency` import で Sendable 警告抑制。ローカライズは複製（共通化は将来） |
 | [x] | iOS（ios-engineer）: `AppState` で `attachRecordQuery(container.coffeeRecordQuery)` 配線 | 2026-06-21 / `makeIfAvailable()` を具象型 `CoffeeInsightProviderIosImpl?` 返しに変更し container 構築後に attach |
-| [~] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip はユーザー目視 | 2026-06-21 / KMP 30 件 green・`xcodebuild` BUILD SUCCEEDED・新規 warning ゼロ。**Apple Intelligence 有効実機での tool 経由 round-trip（「○○カフェで飲んだのは？」「先月飲んだのは？」等）/ digest で足りる質問は従来どおり / 非対応端末で非表示 はユーザー目視** |
+| [x] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip をユーザー目視 | 2026-06-21 / KMP 43 件 green・`xcodebuild` BUILD SUCCEEDED・新規 warning ゼロ。**ユーザー実機確認 OK**（「ブルーボトル/フグレンで飲んだのは？」で tool 呼び出し→ヒット→回答を確認） |
+| - | 実機検証で発覚し修正した点（同日） | ①平均評価 0.0 表示（`KotlinDouble?` を `String(format:)` に直渡し）→ `.doubleValue` 8 箇所補完 ②Q&A が tool を呼ばない（instructions の逃げ道 / digest 非網羅性の誤認）→ instructions 強化 ③フィールド誤分類（カフェ名を origin へ）→ KMP テキスト検索を横断寛容化。詳細は lessons.md / implementation_note 2026-06-21 |
 
 | [ ] | B-4: 好みのカフェをマップ連携 | 将来。分析結果とマップの連携 |
 

@@ -30,9 +30,10 @@ struct SearchCoffeeRecordsTool: Tool {
 
     let name = "searchCoffeeRecords"
     let description = """
-        digest（統計サマリ）に含まれていない個別のコーヒー記録を条件で検索する。
-        特定のカフェ・産地・焙煎度・抽出方法・評価範囲・期間で絞り込んで記録を取得したいときに使う。
-        digest で答えられる質問（総杯数、平均評価、よく飲む産地など）にはこのツールを使わない。
+        個別のコーヒー記録について聞かれたら必ずこのツールを使う。
+        特定のカフェ・産地・焙煎度・抽出方法・評価範囲・期間などに関する質問は、必ずこのツールで実際の記録を検索してから回答すること。
+        ツールを呼ばずに「分かりません」と答えることは禁止。
+        digest（統計サマリ）だけで答えられる質問（総杯数・平均評価・最多産地など全体傾向）にはこのツールを使わなくてよい。
         """
 
     // MARK: - Arguments
@@ -106,7 +107,11 @@ struct SearchCoffeeRecordsTool: Tool {
             limit: Int32(arguments.limit ?? 10)
         )
 
+        print("[CoffeeVision] SearchCoffeeRecordsTool.call: origin=\(arguments.origin ?? "nil"), cafeName=\(arguments.cafeName ?? "nil"), brewMethod=\(arguments.brewMethod ?? "nil"), roastLevel=\(arguments.roastLevel ?? "nil"), from=\(arguments.fromYearMonth ?? "nil"), to=\(arguments.toYearMonth ?? "nil")")
+
         let summaries = try await recordQuery.searchRecords(filter: filter)
+
+        print("[CoffeeVision] SearchCoffeeRecordsTool.call: 取得件数=\(summaries.count)")
 
         guard !summaries.isEmpty else {
             return "該当するコーヒー記録は見つかりませんでした。"

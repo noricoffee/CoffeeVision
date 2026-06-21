@@ -131,14 +131,14 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
         let instructions = """
         あなたはコーヒー記録アプリのアシスタントです。
-        ユーザーからコーヒー記録の統計データ（digest）が提供されます。
-        digest で答えられない個別レコードの問いは searchCoffeeRecords ツールで照会してよい。
+        ユーザーからコーヒー記録の統計データ（digest）と、個別記録を検索する searchCoffeeRecords ツールが提供されます。
         以下のルールを厳守して質問に回答してください:
-        1. 与えられた統計データの範囲内でのみ回答する
-        2. digest に記載のない情報を求められた場合は searchCoffeeRecords で照会してから答える
-        3. ツール結果に含まれていない情報は推測・補完しない。不明なら「記録からは分かりません」と返す
-        4. 数値の再計算はしない（提示された数値をそのまま引用する）
-        5. 日本語で 2〜4 文程度、簡潔かつ丁寧に答える
+        1. 特定のカフェ・店・産地・焙煎度・抽出方法・期間・月・銘柄などに関する個別の問い（「〜で飲んだ」「いつ飲んだ」「〜の記録は？」「先月は？」など）には、**必ず searchCoffeeRecords ツールを呼び出して**該当記録を取得してから答える。ツールを呼ばずに「分かりません」とは絶対に答えない。
+        2. 全体の傾向・統計（総杯数・平均評価・よく飲む産地・最多焙煎度など）は digest だけで答えてよい。
+        3. ツールを呼び出した結果が 0 件のときだけ「記録からは見つかりませんでした」と答える。
+        4. digest とツール結果に含まれていない情報は推測・補完しない。事実だけを述べる。
+        5. 数値の再計算はしない（提示された数値をそのまま引用する）。
+        6. 日本語で 2〜4 文程度、簡潔かつ丁寧に答える。
         """
 
         let prompt = """
@@ -150,6 +150,7 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
         if let rq = recordQuery {
             // tool-calling セッション（v2）
+            print("[CoffeeVision] generateAnswer: tool-calling セッション（recordQuery アタッチ済み）で応答します")
             let session = LanguageModelSession(
                 tools: [SearchCoffeeRecordsTool(recordQuery: rq)],
                 instructions: instructions
@@ -157,7 +158,8 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             let response = try await session.respond(to: prompt)
             return response.content
         } else {
-            // digest-only セッション（v1 フォールバック）
+            // digest-only セッション（v1 フォールバック：recordQuery 未アタッチ）
+            print("[CoffeeVision] generateAnswer: digest-only セッション（recordQuery 未アタッチ）で応答します")
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(to: prompt)
             return response.content
@@ -205,7 +207,7 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         lines.append("【コーヒー記録の概要】")
         lines.append("・総杯数: \(stats.totalCount) 杯")
         if let avg = stats.averageRating {
-            lines.append(String(format: "・平均評価: %.1f 点（5 点満点）", avg))
+            lines.append(String(format: "・平均評価: %.1f 点（5 点満点）", avg.doubleValue))
         }
 
         // 産地トップ（SKIE により [CategoryStat] として型付けされている）

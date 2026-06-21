@@ -163,7 +163,7 @@ struct AnalysisView: View {
                     .frame(height: 56)
                 summaryCard(
                     title: String(localized: "平均評価"),
-                    value: stats.averageRating.map { String(format: "%.1f", $0) } ?? "—",
+                    value: stats.averageRating.map { String(format: "%.1f", $0.doubleValue) } ?? "—",
                     unit: stats.averageRating != nil ? String(localized: "点") : "",
                     systemImage: "star.fill"
                 )
@@ -312,7 +312,7 @@ struct AnalysisView: View {
                     .foregroundStyle(Color.accentColor)
                     .accessibilityLabel(
                         "\(item.label): \(item.count) 件"
-                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0) } ?? "")
+                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
                     )
                 }
                 .frame(height: max(120, CGFloat(stats.originRanking.count) * 32))
@@ -347,7 +347,7 @@ struct AnalysisView: View {
                     .foregroundStyle(Color.accentColor)
                     .accessibilityLabel(
                         "\(localizedRoastLevel(item.label)): \(item.count) 件"
-                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0) } ?? "")
+                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
                     )
                 }
                 .frame(height: 160)
@@ -382,7 +382,7 @@ struct AnalysisView: View {
                     .foregroundStyle(Color.accentColor)
                     .accessibilityLabel(
                         "\(localizedBrewMethod(item.label)): \(item.count) 件"
-                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0) } ?? "")
+                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
                     )
                 }
                 .frame(height: 160)
@@ -418,7 +418,7 @@ struct AnalysisView: View {
                     .symbol(.circle)
                     .accessibilityLabel(
                         "\(item.yearMonth): \(item.count) 件"
-                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0) } ?? "")
+                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
                     )
                 }
                 .frame(height: 160)
@@ -892,7 +892,7 @@ private struct CafeStatRow: View {
                             .font(.caption2)
                             .foregroundStyle(.yellow)
                             .accessibilityHidden(true)
-                        Text(String(format: "%.1f", avg))
+                        Text(String(format: "%.1f", avg.doubleValue))
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
@@ -910,7 +910,7 @@ private struct CafeStatRow: View {
     private func buildCafeStatAccessibilityLabel() -> String {
         var label = "\(rank)位 \(cafeStat.name) \(cafeStat.count)杯"
         if let avg = cafeStat.averageRating {
-            label += String(format: " 平均評価 %.1f 点", avg)
+            label += String(format: " 平均評価 %.1f 点", avg.doubleValue)
         }
         return label
     }
@@ -961,7 +961,7 @@ private struct AnalysisViewPreviewContent: View {
                         Divider().frame(height: 56)
                         summaryCard(
                             "平均評価",
-                            stats.averageRating.map { String(format: "%.1f", $0) } ?? "—",
+                            stats.averageRating.map { String(format: "%.1f", $0.doubleValue) } ?? "—",
                             stats.averageRating != nil ? "点" : ""
                         )
                     }

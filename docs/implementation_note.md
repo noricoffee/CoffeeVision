@@ -1513,3 +1513,17 @@ Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸�
 - `suggestedQuestions` は `Array(AnalysisViewModel.companion.SUGGESTED_QUESTIONS)` で取得（`as? [String]` は "always succeeds" warning が出るため `Array()` を使う）。
 - UI は `QaSectionContainer` 内で `qaStatus` の `is` 分岐（`insightCardSection` と同じパターン）。`Unsupported` は `EmptyView()`、`Asking` は ProgressView（逐次表示なし）、`Answered` は質問+回答+クリア、`Failed` は同じ質問で再送。入力欄は `Answered` でも表示し、新規送信で前カードを上書き。
 - `error` は insight 系と共用のため、Q&A 失敗と要約再生成失敗が同時発火するとメッセージが上書きされうる（実運用上は稀、`qaStatus`/`insightStatus` でどちらか判別可。許容）。
+
+### 2026-06-21: 対話 Q&A v2（tool calling / 生レコード参照、9-4b）の設計確定
+
+- 領域: Shared / KMP / iOS
+- 関連: `shared/domain`（`CoffeeRecordQuery` 新設）/ `shared/core/AppContainer.kt` / `iosApp/.../Features/Analysis/`（`SearchCoffeeRecordsTool.swift` 新設・`CoffeeInsightProviderIosImpl.swift`）/ `AppState.swift`
+
+digest で答えられない個別レコード単位の問いに対応するため、Foundation Models の `Tool` から KMP の生レコード照会を呼ぶ。確定した設計判断:
+
+- **既存インターフェース・VM・UI は不変の加算的変更**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI / domain interface は触らない。これが最もエレガント（v1 の状態機械をそのまま再利用）。
+- **単一の柔軟な検索 tool**: `CoffeeRecordQuery.searchRecords(filter)` 1 本。filter は全 String/Double/Int（enum を持ち込まない）で、LLM 生成文字列を KMP 側で寛容マッチ（enum `.name` 大小無視 + 部分一致、産地/カフェ名 部分一致、rating=0.0 は評価範囲外）。複数専用 tool より Foundation Models が安定し KMP も 1 メソッドで済む。
+- **userId は KMP 実装が内部解決**: `CoffeeRecordQueryImpl` が `authRepository.signInAnonymouslyIfNeeded()` → `coffeeRepository.observeAll(uid).first()` → Kotlin で filter/sort/limit → `CoffeeRecordSummary`。Swift tool は userId を意識しない。`shared/domain` 内に置き interface のみ依存（テスト容易）、`AppContainer` が `coffeeRecordQuery` で公開。
+- **配線は遅延アタッチ（依存サイクル解消）**: provider は AppState で container より先に生成され container 引数になる一方 `coffeeRecordQuery` は container 内で組む。両者を構築時に結べないため `attachRecordQuery(_:)` で container 構築後に後付け（`searchRecords` は `answer` 時 = 初期化完了後にしか使わないため安全）。詳細は kmp-bridge.md。
+- **digest 併用ハイブリッド**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き digest を含める。
+- ブリッジ方向は v1 の Q&A と逆で **Swift→Kotlin の calling direction**（SKIE が `searchRecords(filter:) async throws` を生成、protocol witness 不要）。実装前に小 PoC で round-trip 確認（CLAUDE.md ブリッジ規約）。

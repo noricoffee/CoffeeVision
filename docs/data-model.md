@@ -279,6 +279,49 @@ data class CoffeeInsight(
 - **可否判定は要約と共有**: 新たなゲートは設けない。`CoffeeInsightProvider != null`（= `summarize` が使える端末）なら Q&A も使える。`null` の端末は Q&A UI 自体を出さない。
 - **tool calling（生レコード参照）は Phase 2（9-4b）**: digest で答えられない粒度の質問は将来 Foundation Models の `Tool` で KMP 照会を呼ぶ。v1 のインターフェースは tool を持ち込まない。
 
+#### 対話 Q&A v2（Phase B-3 / 9-4b）の設計
+
+digest で答えられない**個別レコード単位の問い**（「○○カフェで飲んだコーヒーは？」「先月飲んだのは？」「エチオピアの記録は？」）に対応するため、Foundation Models の `Tool`（function calling）から KMP の生レコード照会を呼べるようにする。**v1 と同じ "計算は KMP・LLM は解釈と整形のみ" 原則を踏襲**し、絞り込みは KMP 側で行う。
+
+```kotlin
+// shared/domain — 9-4b。iOS の Foundation Models Tool から呼ばれる生レコード照会
+interface CoffeeRecordQuery {
+    // 単一の柔軟な検索。userId は実装が内部で解決するため Swift は filter だけ渡す。
+    @Throws(Exception::class)
+    suspend fun searchRecords(filter: CoffeeRecordFilter): List<CoffeeRecordSummary>
+}
+
+data class CoffeeRecordFilter(
+    val origin: String? = null,        // 産地（部分一致・大小無視）
+    val brewMethod: String? = null,    // 抽出方法（enum 名/日本語ラベルに寛容マッチ）
+    val roastLevel: String? = null,    // 焙煎度（同上）
+    val cafeName: String? = null,      // カフェ名（部分一致）
+    val minRating: Double? = null,
+    val maxRating: Double? = null,
+    val fromYearMonth: String? = null, // "YYYY-MM" 以降（含む）
+    val toYearMonth: String? = null,   // "YYYY-MM" まで（含む）
+    val limit: Int = 10,
+)
+
+data class CoffeeRecordSummary(
+    val name: String,
+    val cafeName: String?,
+    val origin: String?,
+    val brewMethod: String,   // enum 名（iOS 側で日本語化）
+    val roastLevel: String?,  // enum 名 or null
+    val rating: Double,       // 0.0 = 未評価
+    val visitedOn: String,    // "YYYY-MM-DD"
+)
+```
+
+設計上の決め事:
+
+- **単一の柔軟な検索 tool**: 複数の専用 tool に分けず、`searchRecords` 1 本に絞り込み条件を optional で並べる。Foundation Models は引数説明が充実した単一 tool の方が安定し、KMP 照会 API も 1 メソッドで済む。
+- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、`origin`/`cafeName` は部分一致、`rating=0.0`（未評価 sentinel）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。
+- **userId は実装が内部で解決**: `CoffeeRecordQueryImpl` は `authRepository.signInAnonymouslyIfNeeded()` で現在 uid を取得し、`coffeeRepository.observeAll(uid).first()` で全件取得 → Kotlin で filter 適用 → `visitedOn` 降順 → `limit` 件に切って `CoffeeRecordSummary` 化する。個人アプリ規模（数十〜数百件）のため全件読みで十分。`shared/domain` 内に置き、`CoffeeRepository` + `AuthRepository` インターフェースのみに依存させる（テスト容易）。`AppContainer` が組み立てて `val coffeeRecordQuery` で公開する。
+- **digest はベース文脈として併用（ハイブリッド）**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き `buildPrompt(stats)` の digest を含める。
+- **既存インターフェース・VM・UI は不変**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI は変更しない（変更は純粋に加算的）。ブリッジ方向（Swift→Kotlin calling direction）と配線は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
+
 ---
 
 # 2. SQLDelight スキーマ

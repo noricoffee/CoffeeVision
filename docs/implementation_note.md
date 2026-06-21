@@ -1602,3 +1602,14 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 実装上の落とし穴 1 件を `tasks/lessons.md` 2026-06-22 に記録（`mapNotNull`+ローカル data class+`maxWith(compareByDescending)` が実行時に全 null。原因未確定、`for` ループで解消、テストで担保）。
 - **dominantTastingAxis は符号付き**（r<0＝「低いほど高評価」も最大 |r| なら返す）。「高い/低いほど好む」の出し分けは iOS UI 判断。
 - **残: iOS 追随（`ios-engineer` 未 dispatch）**: ① `buildPrompt(from:)` に好み信号（収縮 bestX ＋ dominantTastingAxis）を「弱い傾向＋件数の但し書き」で追記し instructions で断定禁止 ② 分析タブに好みカード表示（任意）③ デモ用スクショ。SKIE 生成名は `TastingAxis`=`@frozen enum`、`TastingAxisCorrelation`=`struct` の見込み。
+
+**iOS 追随完了の追記（2026-06-22）**:
+- 領域: iOS / 関連: `iosApp/iosApp/Features/Analysis/CoffeeInsightProviderIosImpl.swift`・`AnalysisView.swift`・`PreviewSupport/PreviewSamples.swift`
+- `ios-engineer` が実装完了。`xcodebuild`（iphonesimulator/Debug）BUILD SUCCEEDED、新規 warning ゼロ。
+  1. `buildPrompt(from:)` に好み信号セクション（`buildFavoriteSignalsPromptLines`）を追記。`CategoryStat.averageRating`(`KotlinDouble?`)は `.doubleValue` 経由、`TastingAxisCorrelation.correlation`(native `Double`)は直接渡し（lessons.md 2026-06-21 の 0.0 バグ回避）。
+  2. instructions に断定禁止グラウンディング（「やや/傾向止まり」「サンプル少なら添え書き」「交絡は断定しない」）。
+  3. `FavoriteSignalsCard` / `FavoriteSignalRow` / `TastingAxisSignalRow` を `AnalysisView` に追加。全 null は `EmptyView()`。件数・平均併記、5件未満は「（サンプル少）」注記。
+  4. `TastingAxis` の `switch` は `@frozen enum` のため全 case 網羅・`default` なし（追加時にコンパイルエラーで気づける設計）。
+- **SourceKit の `No such module 'SharedLogic'` 診断は偽陽性**（XCFramework は gradle 生成のため IDE インデックスがラグる）。`xcodebuild` は成功。
+- **親が DummyCoffeeData の閾値充足を検算（追加 dispatch 不要と判断）**: 現行30件・globalMean≈4.0 で 4 信号すべて非 null。`bestOrigin`=Ethiopia(評価済4件/平均4.5・収縮4.22) / `bestRoastLevel`=Light(6件/4.58・収縮4.32) / `bestBrewMethod`=AeroPress(3件/4.5・収縮4.19) / `dominantTastingAxis`=Flavor(tasting20件・評価と強い正相関)。**DummyCoffeeData 調整は不要**。
+- **残: デモ用スクショ取得のみ**（要シミュレータ起動。`SEED_DUMMY_DATA=1` の dev Scheme でユーザー実機/シミュレータ確認）。

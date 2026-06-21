@@ -269,9 +269,14 @@ enum PreviewSamples {
             ),
         ],
         favoriteSignals: FavoriteSignals(
-            bestBrewMethod: nil,
-            bestOrigin: nil,
-            bestRoastLevel: nil,
+            bestBrewMethod: CategoryStat(label: "HandDrip", count: 7, averageRating: KotlinDouble(value: 4.3)),
+            bestOrigin: CategoryStat(label: "エチオピア", count: 5, averageRating: KotlinDouble(value: 4.4)),
+            bestRoastLevel: CategoryStat(label: "Light", count: 5, averageRating: KotlinDouble(value: 4.4)),
+            dominantTastingAxis: TastingAxisCorrelation(
+                axis: TastingAxis.acidity,
+                correlation: 0.62,
+                sampleSize: 8
+            ),
             minSampleSize: 3
         ),
         tastingAverages: TastingAverages(

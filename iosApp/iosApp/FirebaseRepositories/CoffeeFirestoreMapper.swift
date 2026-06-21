@@ -74,6 +74,11 @@ enum CoffeeFirestoreMapper {
         if let roastLevel = record.roastLevel { doc["roastLevel"] = roastLevel.name }
         if let cup = record.cup { doc["cup"] = cup }
 
+        // tasting: nil なら tasting キーを省略。非 nil なら 5 要素すべてのマップを書き出す
+        if let tasting = record.tasting {
+            doc["tasting"] = tastingToMap(tasting)
+        }
+
         return doc
     }
 
@@ -134,6 +139,14 @@ enum CoffeeFirestoreMapper {
             epochMilliseconds: Int64(updatedAtTs.dateValue().timeIntervalSince1970 * 1000)
         )
 
+        // tasting: マップが存在し 5 要素揃っていれば TastingScores。欠如 or 不完全なら nil（防御的）
+        let tasting: TastingScores?
+        if let tastingDict = data["tasting"] as? [String: Any] {
+            tasting = tastingFromMap(tastingDict)
+        } else {
+            tasting = nil
+        }
+
         return CoffeeRecord(
             id: id,
             userId: userId,
@@ -149,6 +162,7 @@ enum CoffeeFirestoreMapper {
             processing: processing,
             roastLevel: roastLevel,
             cup: data["cup"] as? String,
+            tasting: tasting,
             createdAt: createdAt,
             updatedAt: updatedAt
         )
@@ -243,6 +257,47 @@ enum CoffeeFirestoreMapper {
             createdAt: createdAt
         )
         return (photo, sortOrder)
+    }
+
+    // MARK: - Tasting Map
+
+    /// `TastingScores`（all-or-nothing、5 要素すべて非 null）を Firestore マップに変換する。
+    ///
+    /// 5 要素すべてを書き出す。呼び出し元は `tasting != nil` のときだけ呼ぶこと。
+    private static func tastingToMap(_ tasting: TastingScores) -> [String: Any] {
+        return [
+            "sweetness": Int(tasting.sweetness),
+            "body": Int(tasting.body),
+            "acidity": Int(tasting.acidity),
+            "flavor": Int(tasting.flavor),
+            "aftertaste": Int(tasting.aftertaste),
+        ]
+    }
+
+    /// Firestore の `tasting` マップを `TastingScores?` に変換する。
+    ///
+    /// 5 要素すべて揃っていれば `TastingScores`、いずれかが欠如していれば `nil`（防御的）。
+    private static func tastingFromMap(_ dict: [String: Any]) -> TastingScores? {
+        func parseInt(_ key: String) -> Int32? {
+            guard let n = dict[key] as? NSNumber else { return nil }
+            return n.int32Value
+        }
+        guard
+            let sweetness = parseInt("sweetness"),
+            let body = parseInt("body"),
+            let acidity = parseInt("acidity"),
+            let flavor = parseInt("flavor"),
+            let aftertaste = parseInt("aftertaste")
+        else {
+            return nil
+        }
+        return TastingScores(
+            sweetness: sweetness,
+            body: body,
+            acidity: acidity,
+            flavor: flavor,
+            aftertaste: aftertaste
+        )
     }
 
     // MARK: - Helpers

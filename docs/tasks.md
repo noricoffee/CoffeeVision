@@ -317,6 +317,141 @@
 
 ---
 
+## フェーズ 8: 分析タブ（コーヒー傾向分析）
+
+> 2026-06-19 着手。これまでの `CoffeeRecord` 群を分析する「分析」タブを追加する。3 階層構成（階層1 記述統計 / 階層2 傾向抽出 = KMP 共通、階層3 自然言語解釈 = iOS Foundation Models）。確定仕様は [`requirements.md`](./requirements.md) §9、集計モデルは [`data-model.md`](./data-model.md) §1.6、設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-19 分析機能エントリ。**設計原則: 集計は KMP で決定論的に正確に、その集約済みサマリ（`CoffeeStats`）だけを Foundation Models に渡す**。Foundation Models は iOS 専用のため Android は分析タブ非表示。
+
+### Phase 0: docs（親）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `requirements.md` §9 + 画面一覧に分析タブを追加 | 2026-06-19 |
+| [x] | `data-model.md` §1.6 `CoffeeStats` 集計モデル + `CoffeeInsightProvider` インターフェースを定義 | 2026-06-19 |
+| [x] | `tasks.md` フェーズ 8 追加 + `implementation_note.md` に設計判断を記録 | 2026-06-19 |
+
+### Phase A-1: 階層1 集計（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared/domain`: `CoffeeStats` / `RatingBucket` / `CategoryStat` / `MonthlyStat` / `CafeStat` / `RecordDigest` / `FavoriteSignals` / `CoffeeInsight` / `CoffeeInsightProvider` を追加 | 2026-06-19 / `model/CoffeeStats.kt`。`favoriteSignals` は空（`minSampleSize=3`）|
+| [x] | `shared/domain`: `BuildCoffeeStatsUseCase`（`List<CoffeeRecord>` → `CoffeeStats`）+ `ObserveCoffeeStatsUseCase`（`CoffeeRepository.observeAll(userId).map { ... }`） | 2026-06-19 / `usecase/`。定数 `ORIGIN_RANKING_LIMIT=10` / `TOP_CAFES_LIMIT=10` / `RECENT_HIGHLIGHTS_LIMIT=5` / `HIGHLIGHTS_MIN_RATING=4.0` を companion 公開 |
+| [x] | `commonTest`: 集計ロジックのユニットテスト（空 / 単一 / 未評価除外 / カテゴリ集計 / 月次 / topCafes が cafe==null 除外 / 平均の null 条件） | 2026-06-19 / `BuildCoffeeStatsUseCaseTest` 31 件 |
+| [x] | 検証: `:shared:domain:test`（または `:shared:data-local:testAndroidHostTest`）成功 | 2026-06-19 / `:shared:domain:testAndroidHostTest` 43 件 pass（新規31+既存12）、`compileKotlinIosSimulatorArm64` / `assembleSharedLogicXCFramework` 成功 |
+
+### Phase A-2: AnalysisViewModel（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | **モジュール分割**: `shared/feature/analysis` モジュール作成（`kmp.feature` 適用、namespace `com.noricoffee.feature.analysis`） | 2026-06-19 / `settings.gradle.kts` include 追加 |
+| [x] | `AnalysisViewModel(observeCoffeeStatsUseCase, insightProvider: CoffeeInsightProvider?, userId, scope)` + `AnalysisUiState(stats, isLoading, insight, insightStatus, error)` | 2026-06-19 / `InsightStatus` = sealed interface（Unsupported/Idle/Loading/Loaded/Failed）。`insightProvider==null` は Unsupported。`onAppear()` 引数なし |
+| [x] | `shared/framework`: `api` / `export` + `AppContainer.makeAnalysisViewModel()` 拡張関数追加。`AppContainer` に `coffeeInsightProvider: CoffeeInsightProvider?` 注入経路を追加（既定 null、iOS が実装を注入） | 2026-06-19 / `AppContainer` コンストラクタ 3 系統（6/5/4 引数）。Android・現状 iOS は 4 引数で無変更、iOS は A-4 で 5 引数化 |
+| [x] | 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 成功 | 2026-06-19 / 両成功。XCFramework ヘッダに `AnalysisViewModel` / `makeAnalysisViewModel` / `InsightStatus` 出力確認。domain/data-local テスト計 62 件リグレッションなし |
+
+### Phase A-3: 分析タブ UI（ios-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `RootTabView` に「分析」タブ追加（SF Symbols `chart.bar` 等）。`AnalysisView` + `AnalysisViewModelBridge` 新設 | 2026-06-19 / `chart.bar.xaxis`、タブ順=マップ/コーヒー/分析/検索（search 右端固定）。Bridge は insight 系も読むが描画は stats のみ |
+| [x] | 階層1 の可視化（Swift Charts で産地分布 / 焙煎度 / 月次推移 / 評価ヒストグラム、よく行く店リスト、サマリ数値） | 2026-06-19 / 棒（ヒストグラム/カテゴリ）/ 横棒（産地）/ 折れ線（月次）/ リスト（店）。`ScrollView`+`LazyVStack`、enum 日本語化ヘルパ内包、accessibilityLabel 付与 |
+| [x] | 空状態（記録 0 件）の `ContentUnavailableView` | 2026-06-19 / `stats==nil` または `totalCount==0`、isLoading は ProgressView で分離 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | 2026-06-19 / BUILD SUCCEEDED・新規 warning ゼロ。**シミュレータ目視（タブ表示/各グラフ/空状態/VoiceOver 数値読み上げ）はユーザー作業** |
+
+### Phase A-4: Foundation Models 要約（親が契約確定 → ios-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | iOS `CoffeeInsightProvider` 実装（`shared/domain` インターフェース準拠の Swift クラス）。`CoffeeStats` をコンパクトなテキストに整形 → `LanguageModelSession` で 2–3 文要約（`@Generable` で headline/body 構造化） | 2026-06-19 / `CoffeeInsightProviderIosImpl`。SKIE protocol witness `__summarize(stats:completionHandler:)`。`buildPrompt` は KMP 集計済み事実を文章化（LLM に計算させない）。`@Generable` は private struct（SwiftUI `body` 競合回避） |
+| [x] | `AppState` / `AppContainer` 構築で `CoffeeInsightProvider` を注入。`AnalysisView` に要約カード + ローディング / 非対応フォールバック表示 | 2026-06-19 / `makeIfAvailable()`（`SystemLanguageModel.availability` で不可なら nil）→ 5 引数コンストラクタへ。`insightCardSection` は `Unsupported`=非表示 / `Loading` / `Loaded` / `Failed`（retry）を `is` 分岐 |
+| [x] | 小さな PoC で Foundation Models 呼び出しの round-trip を先に確認してから本実装に組み込む | 2026-06-19 / PoC でビルド通過確認後に本実装 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。実機 / Apple Intelligence 有効端末での要約確認はユーザー作業 | 2026-06-19 / BUILD SUCCEEDED・新規 warning ゼロ。**Apple Intelligence 有効な実機での要約生成確認はユーザー作業** |
+
+### Phase B（後続）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | B-1: `FavoriteSignals`（階層2）を `BuildCoffeeStatsUseCase` に実装 + テスト（kmp-engineer） | minSampleSize 閾値ガード |
+| [ ] | B-2: 対話 Q&A v1（ツール無し・`CoffeeStats` 文脈注入）（ios-engineer） | `CoffeeInsightProvider` に Q&A API 追加を親が確定してから |
+| [ ] | B-3: 対話 Q&A v2（tool calling）/ 好みのカフェをマップ連携 | 将来 |
+
+---
+
+## 開発支援: ダミーデータ Scheme
+
+> 2026-06-19。分析タブ等の確認用に、専用 Xcode Scheme で起動したときだけ約 30 件のダミー `CoffeeRecord` が入るようにする。**ローカル DB のみ**（Firestore 非汚染）/ 固定 ID で冪等 / DEBUG 限定。設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-19 ダミーデータ Scheme エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | KMP: `shared/core` に `DummyCoffeeData`（固定 ID `dummy-0001`..`dummy-0030`、産地/焙煎度/抽出方法/評価/日付/カフェ有無を分散した約 30 件を生成） | 2026-06-19 / `com.noricoffee.dev.DummyCoffeeData`。`visitedOn` は `Clock.System.todayIn` から逆算（常に直近12ヶ月）。cafe 有り20件（5カフェ使い回し）/ null 10件、rating=0.0 を 2 件 |
+| [x] | KMP: `AppContainer` に local-only の `seedDummyData(userId)` / `clearDummyData(userId)`（`localCoffeeRepository` 経由、Firestore に流さない） | 2026-06-19 / `@Throws suspend`。SKIE → Swift `try await ...(userId:)` |
+| [x] | iOS: 共有 Scheme「iosApp (Dummy Data)」を作成（環境変数 `SEED_DUMMY_DATA=1`） | 2026-06-19 / `xcshareddata/xcschemes/` に `iosApp.xcscheme`（通常）+ `iosApp (Dummy Data).xcscheme` を明示作成・コミット。Build Config = Debug |
+| [x] | iOS: `AppState.bootstrap` で `#if DEBUG` かつ uid 確定後、`SEED_DUMMY_DATA==1` なら seed / それ以外は clear | 2026-06-19 / `seedOrClearDummyData(userId:)` ヘルパ、bridge 生成前。失敗は `print` のみ（通常起動の clear で赤バナーを出さない） |
+| [~] | 検証: `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` / `xcodebuild` 成功。ダミー Scheme で 30 件・通常 Scheme で 0 件はユーザー目視 | 2026-06-19 / KMP 全ビルド + 両 Scheme `xcodebuild` BUILD SUCCEEDED、`-list` で両 Scheme 認識。**シミュレータ目視（ダミー30件 / 通常0件）はユーザー作業** |
+
+---
+
+## フェーズ 9: テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）
+
+> 2026-06-20 着手。Blue Bottle「Elements of Coffee Tasting」由来の 5 要素を `CoffeeRecord.tasting: TastingScores` として追加。各要素 **1〜10 の強度（任意・未入力=null）**。総合評価 `rating`（0.5 刻み）とは別軸。分析タブに各要素の平均も反映。確定仕様は [`data-model.md`](./data-model.md) §1.1a / §1.6、設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-20 エントリ。**クリーンブレイク**（DB 列追加、マイグレーション無し。テスト端末はアプリ削除→再インストール）。
+
+### Phase 0: docs（親）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `data-model.md`: `TastingScores`（§1.1a）+ `CoffeeRecord.tasting` + SQLDelight 5 列 + Firestore `tasting` マップ + `CoffeeStats.tastingAverages`（§1.6） | 2026-06-20 |
+| [x] | `requirements.md` §3 / §9 にテイスティング要素を追加、変更履歴 | 2026-06-20 |
+| [x] | `tasks.md` フェーズ 9 追加 + `implementation_note.md` 設計判断 | 2026-06-20 |
+
+### Phase 1: KMP（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared/domain`: `TastingScores`（5 要素 `Int?`）+ `CoffeeRecord.tasting: TastingScores` | 2026-06-20 / `TastingScores.kt` + `CoffeeRecord` 引数追加 |
+| [x] | `shared/data-local`: `CoffeeRecord.sq` に 5 列（INTEGER nullable）+ `upsert` 更新、`Mapper` 往復、テスト（部分入力・全 null の往復ケース） | 2026-06-20 / SQLDelight は INTEGER→`Long?` 生成のため Mapper で `toInt`/`toLong` 変換。往復テスト 2 件追加 |
+| [x] | `shared/core`: `BuildCoffeeStatsUseCase` に `tastingAverages`（各要素 null 除外平均 + ratedCount）+ テスト。`CoffeeStats` に `TastingAverages` / `TastingRatedCount` | 2026-06-20 / 新規 3 テスト |
+| [x] | `shared/core`: `DummyCoffeeData` の 30 件に tasting を分散付与（一部要素 null も混ぜる） | 2026-06-20 / 約 22 件に設定（部分入力含む） |
+| [x] | `shared/feature/coffee-editor`: `CoffeeEditorViewModel` の draft に tasting + 各要素セッター + バリデーション（設定値は 1..10） | 2026-06-20 / 個別 5 本（`onSweetnessChanged(Int?)` 等）+ バルク `onTastingChanged(TastingScores)`。範囲外は `coerceIn(1,10)` クランプ |
+| [x] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` に `tasting` マップ（非 null のみ書き出し / 全 null は省略 / decode 補完） | 2026-06-20 / `tastingToMap`/`tastingFromMap` |
+| [x] | 検証: `:shared:domain:test` / `:shared:data-local:testAndroidHostTest` / `:shared:core:test` / `:shared:framework:assembleSharedLogicXCFramework` / `:androidApp:assembleDebug` 全成功 | 2026-06-20 / domain 34 / data-local 21 / account 12 green、XCFramework + androidApp 成功。ヘッダに `TastingScores`/`tastingAverages`/セッター確認 |
+
+### Phase 2: iOS（ios-engineer, Phase 1 完了後）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `CoffeeEditorView`: テイスティング 5 要素のスライダー入力 UI（1..10、未設定トグル/クリア可）+ Bridge 追随 | 2026-06-20 / `+`/`×` ボタンで未設定↔設定、ON 時のみスライダー（初期値 5）。`accessibilityAdjustableAction` 対応。Form 順=カフェ→コーヒー→テイスティング→記録→写真 |
+| [x] | `CoffeeDetailView`: 5 要素の表示（設定済みのみ or 未設定明示） | 2026-06-20 / `TastingScoreBar`（バー+数値）、設定済みのみ表示。全未設定はセクション非表示 |
+| [x] | `FirebaseRepositories/CoffeeFirestoreMapper.swift`: `tasting` マップの read/write 追随 | 2026-06-20 / `tastingToMap`/`tastingFromMap`、Android と対称（非null のみ/全null省略/欠如補完） |
+| [x] | `AnalysisView`: テイスティング 5 要素の平均を可視化（棒 or レーダー風）+ `CoffeeInsightProviderIosImpl` の prompt に平均を追加 | 2026-06-20 / 横棒グラフ（母数>0 のみ、`chartXScale 0...10`）。prompt に平均 1 行追記 |
+| [x] | `PreviewSamples` / 各 `#Preview` に tasting を追随 | 2026-06-20 / `CoffeeRecord` 3 件 + `CoffeeStats` 追随 |
+| [~] | 検証: `xcodebuild -sdk iphonesimulator` 成功。シミュレータ目視はユーザー作業 | 2026-06-20 / BUILD SUCCEEDED・新規 warning ゼロ。**シミュレータ目視（入力/未設定切替/詳細/分析グラフ/round-trip/VoiceOver）はユーザー作業。DB 列追加のためアプリ削除→再インストール必須** |
+
+---
+
+## フェーズ 9.1: テイスティングを all-or-nothing 化（5 要素必須）
+
+> 2026-06-20。フェーズ 9 の「各要素独立 nullable」を「テイスティングを付けるなら 5 要素必須」に変更。型で partial を表現不可能にする（`TastingScores` の 5 フィールドを非 null、`CoffeeRecord.tasting` を nullable）。UX は `+` で 5 スライダー一括表示・削除で null。確定仕様は [`data-model.md`](./data-model.md) §1.1a、判断は [`implementation_note.md`](./implementation_note.md) 2026-06-20 all-or-nothing エントリ。**クリーンブレイク**（再インストール）。
+
+### Phase 1: KMP（kmp-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared/domain`: `TastingScores` の 5 フィールドを `Int?` → `Int`（非 null）、`CoffeeRecord.tasting` を `TastingScores?` に | 2026-06-20 |
+| [x] | `shared/data-local`: `Mapper` を「5 列全セット→`TastingScores` / それ以外→null」に。`upsert` は `tasting?.x` を渡す。テスト（あり/なし往復） | 2026-06-20 / 5 列は nullable のまま。LocalCoffeeRepositoryTest 13 件 |
+| [x] | `shared/core`: `BuildCoffeeStatsUseCase` を `tasting != null` の記録のみ集計に。`TastingAverages.ratedCount` を単一 `Int` 化、`TastingRatedCount` 削除。テスト追随 | 2026-06-20 |
+| [x] | `shared/core`: `DummyCoffeeData` を「tasting あり（5要素）/ null」の二択に（部分入力を排除） | 2026-06-20 / 部分入力を 5 要素補完 or null 化 |
+| [x] | `shared/feature/coffee-editor`: セッターを非 null Int 化 + `onTastingAdded()`（デフォルト 5 で生成）/ `onTastingCleared()`（null）追加。draft 初期化追随 | 2026-06-20 / `onTastingChanged(TastingScores)` は削除。個別セッターは tasting==null で no-op |
+| [x] | `shared/data-firebase`（androidMain）: `CoffeeFirestoreMapper` を「tasting!=null で 5 要素マップ / null 省略」に | 2026-06-20 |
+| [x] | 検証: domain/data-local/core テスト + XCFramework + androidApp assembleDebug 全成功 | 2026-06-20 / 全 green、ヘッダで非null/optional/ratedCount:Int/TastingRatedCount削除を確認 |
+
+### Phase 2: iOS（ios-engineer, Phase 1 完了後）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `CoffeeEditorView`: 個別 +/× を廃止し、`tasting==nil` 時は「+ テイスティングを追加」1 ボタン → 押下で 5 スライダー一括表示。削除ボタンで nil | 2026-06-20 / Bridge を `onTastingAdded`/`onTastingCleared` + 非 null `Int32` セッターに追随。`accessibilityAdjustableAction` 維持 |
+| [x] | `CoffeeDetailView` / `AnalysisView` / `CoffeeFirestoreMapper.swift` / `PreviewSamples` を新 API（`tasting: TastingScores?` / 非 null フィールド / `ratedCount: Int`）に追随 | 2026-06-20 / Detail は `if let tasting` で 5 要素表示。Mapper は tasting!=nil で 5 要素マップ / read は 5 要素揃えば `TastingScores` 否なら nil |
+| [x] | 検証: `xcodebuild` 成功。シミュレータ目視はユーザー作業 | 2026-06-20 / 親が BUILD SUCCEEDED 確認（新規 warning ゼロ）。**シミュレータ目視（+で5スライダー一括/削除/詳細/分析/round-trip）はユーザー作業。DB は再インストール必須** |
+
+---
+
 ## フェーズ 6（任意 / 後続）
 
 | 状態 | タスク | 備考 |

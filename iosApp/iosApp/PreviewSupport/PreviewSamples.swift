@@ -137,6 +137,13 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .medium,
         cup: "ノリタケ",
+        tasting: TastingScores(
+            sweetness: 7,
+            body: 5,
+            acidity: 9,
+            flavor: 7,
+            aftertaste: 6
+        ),
         createdAt: instant(year: 2026, month: 6, day: 2),
         updatedAt: instant(year: 2026, month: 6, day: 2)
     )
@@ -166,6 +173,7 @@ enum PreviewSamples {
         processing: .natural,
         roastLevel: .fullCity,
         cup: nil,
+        tasting: nil,
         createdAt: instant(year: 2026, month: 5, day: 28),
         updatedAt: instant(year: 2026, month: 5, day: 28)
     )
@@ -186,6 +194,13 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .light,
         cup: nil,
+        tasting: TastingScores(
+            sweetness: 8,
+            body: 4,
+            acidity: 7,
+            flavor: 9,
+            aftertaste: 6
+        ),
         createdAt: instant(year: 2026, month: 6, day: 19),
         updatedAt: instant(year: 2026, month: 6, day: 19)
     )
@@ -196,4 +211,76 @@ enum PreviewSamples {
         sampleCoffeeRecordWithoutPhotos,
         sampleCoffeeRecordSelfBrew,
     ]
+
+    // MARK: - CoffeeStats（分析 Preview 用）
+
+    /// 分析ビュー Preview 用のサンプル統計データ。
+    ///
+    /// 各セクション（ヒストグラム / 産地 / 焙煎度 / 抽出方法 / 月次推移 / よく行く店）が
+    /// 非空であることを確認できるよう、複数パターンのデータを含める。
+    static let sampleCoffeeStats: CoffeeStats = CoffeeStats(
+        totalCount: 12,
+        ratedCount: 10,
+        averageRating: 4.1,
+        ratingHistogram: [
+            RatingBucket(rating: 3.0, count: 1),
+            RatingBucket(rating: 3.5, count: 1),
+            RatingBucket(rating: 4.0, count: 4),
+            RatingBucket(rating: 4.5, count: 3),
+            RatingBucket(rating: 5.0, count: 1),
+        ],
+        byBrewMethod: [
+            CategoryStat(label: "HandDrip", count: 7, averageRating: 4.3),
+            CategoryStat(label: "Espresso", count: 3, averageRating: 3.8),
+            CategoryStat(label: "FrenchPress", count: 2, averageRating: 4.0),
+        ],
+        byRoastLevel: [
+            CategoryStat(label: "Light", count: 5, averageRating: 4.4),
+            CategoryStat(label: "Medium", count: 4, averageRating: 4.0),
+            CategoryStat(label: "FullCity", count: 3, averageRating: 3.8),
+        ],
+        byProcessing: [
+            CategoryStat(label: "Washed", count: 7, averageRating: 4.2),
+            CategoryStat(label: "Natural", count: 4, averageRating: 4.0),
+            CategoryStat(label: "Honey", count: 1, averageRating: 4.5),
+        ],
+        originRanking: [
+            CategoryStat(label: "エチオピア", count: 5, averageRating: 4.4),
+            CategoryStat(label: "ケニア", count: 3, averageRating: 4.2),
+            CategoryStat(label: "コロンビア", count: 2, averageRating: 3.9),
+            CategoryStat(label: "グアテマラ", count: 2, averageRating: 4.0),
+        ],
+        monthlyTrend: [
+            MonthlyStat(yearMonth: "2026-04", count: 3, averageRating: 4.0),
+            MonthlyStat(yearMonth: "2026-05", count: 4, averageRating: 4.1),
+            MonthlyStat(yearMonth: "2026-06", count: 5, averageRating: 4.2),
+        ],
+        topCafes: [
+            CafeStat(placeId: "ChIJsampleBluBottle", name: "Blue Bottle 三軒茶屋", count: 5, averageRating: 4.4),
+            CafeStat(placeId: "ChIJsampleSteamers", name: "Streamer Coffee Company 原宿", count: 4, averageRating: 3.8),
+            CafeStat(placeId: "ChIJsampleFuglen", name: "Fuglen Tokyo", count: 3, averageRating: 4.3),
+        ],
+        recentHighlights: [
+            RecordDigest(
+                name: "本日のコーヒー（ケニア カグモイニ）",
+                rating: 4.5,
+                cafeName: "Blue Bottle 三軒茶屋",
+                visitedOn: localDate(year: 2026, month: 6, day: 19)
+            ),
+        ],
+        favoriteSignals: FavoriteSignals(
+            bestBrewMethod: nil,
+            bestOrigin: nil,
+            bestRoastLevel: nil,
+            minSampleSize: 3
+        ),
+        tastingAverages: TastingAverages(
+            sweetness: KotlinDouble(value: 7.2),
+            body: KotlinDouble(value: 5.1),
+            acidity: KotlinDouble(value: 8.0),
+            flavor: KotlinDouble(value: 7.5),
+            aftertaste: KotlinDouble(value: 6.3),
+            ratedCount: 8
+        )
+    )
 }

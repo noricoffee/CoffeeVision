@@ -7,6 +7,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 
@@ -68,8 +69,27 @@ object CoffeeFirestoreMapper {
         record.roastLevel?.let { doc["roastLevel"] = it.name }
         record.cup?.let { doc["cup"] = it }
 
+        // tasting: all-or-nothing。非 null のとき 5 要素すべてを書き出す。null なら tasting ごと省略
+        record.tasting?.let { doc["tasting"] = tastingToMap(it) }
+
         return doc
     }
+
+    /**
+     * [TastingScores] を Firestore の `tasting` マップに変換する。
+     *
+     * all-or-nothing: 5 要素すべてをキーに含む（各フィールドは非 null）。
+     * 呼び出し側は `tasting != null` のときのみこのメソッドを呼ぶ。
+     *
+     * @see [data-model.md] §3.2
+     */
+    private fun tastingToMap(tasting: TastingScores): Map<String, Any> = mapOf(
+        "sweetness" to tasting.sweetness,
+        "body" to tasting.body,
+        "acidity" to tasting.acidity,
+        "flavor" to tasting.flavor,
+        "aftertaste" to tasting.aftertaste,
+    )
 
     private fun cafeToMap(cafe: Cafe): Map<String, Any?> {
         val map = mutableMapOf<String, Any?>(
@@ -153,6 +173,9 @@ object CoffeeFirestoreMapper {
             .sortedBy { it.second }
             .map { it.first }
 
+        // tasting: all-or-nothing。マップがあり 5 要素揃えば TastingScores、欠如（またはいずれかキー不足）なら null
+        val tasting = (data["tasting"] as? Map<String, Any>)?.let { tastingFromMap(it) }
+
         return CoffeeRecord(
             id = id,
             userId = userId,
@@ -168,6 +191,7 @@ object CoffeeFirestoreMapper {
             processing = processing,
             roastLevel = roastLevel,
             cup = cup,
+            tasting = tasting,
             createdAt = Instant.fromEpochSeconds(
                 epochSeconds = createdAtTs.seconds,
                 nanosecondAdjustment = createdAtTs.nanoseconds.toLong(),
@@ -218,6 +242,27 @@ object CoffeeFirestoreMapper {
             ),
         )
         return photo to sortOrder
+    }
+
+    /**
+     * Firestore `tasting` マップを [TastingScores] に変換する。
+     *
+     * all-or-nothing: 5 要素すべてが揃っている場合のみ [TastingScores] を返す。
+     * いずれかのキーが欠如または型不一致の場合は null を返す（防御的処理）。
+     */
+    private fun tastingFromMap(map: Map<String, Any>): TastingScores? {
+        val sweetness = (map["sweetness"] as? Number)?.toInt() ?: return null
+        val body = (map["body"] as? Number)?.toInt() ?: return null
+        val acidity = (map["acidity"] as? Number)?.toInt() ?: return null
+        val flavor = (map["flavor"] as? Number)?.toInt() ?: return null
+        val aftertaste = (map["aftertaste"] as? Number)?.toInt() ?: return null
+        return TastingScores(
+            sweetness = sweetness,
+            body = body,
+            acidity = acidity,
+            flavor = flavor,
+            aftertaste = aftertaste,
+        )
     }
 
     // ─────────────────────────────────────────────────

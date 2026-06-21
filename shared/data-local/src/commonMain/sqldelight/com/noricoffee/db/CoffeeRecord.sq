@@ -22,6 +22,12 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
+    -- テイスティング 5 要素（各 1..10、null = 未設定）
+    sweetness INTEGER,
+    body INTEGER,
+    acidity INTEGER,
+    flavor INTEGER,
+    aftertaste INTEGER,
     created_at INTEGER NOT NULL,           -- epoch millis
     updated_at INTEGER NOT NULL
 );
@@ -45,8 +51,9 @@ INSERT OR REPLACE INTO coffee_record (
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
     name, brew_method, origin, variety, processing, roast_level, cup,
+    sweetness, body, acidity, flavor, aftertaste,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;

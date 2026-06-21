@@ -19,6 +19,7 @@ data class CoffeeRecord(
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
+    val tasting: TastingScores?,           // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須（all-or-nothing）
     // --- メタ ---
     val createdAt: Instant,
     val updatedAt: Instant,

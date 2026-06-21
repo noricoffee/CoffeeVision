@@ -112,6 +112,43 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onCupChanged(cup: cup)
     }
 
+    // MARK: - テイスティング転送（all-or-nothing）
+
+    /// テイスティングを追加する。KMP 側でデフォルト値 TastingScores(5,5,5,5,5) が生成される。
+    func onTastingAdded() {
+        kotlin.onTastingAdded()
+    }
+
+    /// テイスティングを削除する（draft.tasting を nil に戻す）。
+    func onTastingCleared() {
+        kotlin.onTastingCleared()
+    }
+
+    /// 甘味を変更する。draft.tasting が nil の場合は no-op。
+    func onSweetnessChanged(_ value: Int32) {
+        kotlin.onSweetnessChanged(value: value)
+    }
+
+    /// ボディを変更する。draft.tasting が nil の場合は no-op。
+    func onBodyChanged(_ value: Int32) {
+        kotlin.onBodyChanged(value: value)
+    }
+
+    /// 酸味を変更する。draft.tasting が nil の場合は no-op。
+    func onAcidityChanged(_ value: Int32) {
+        kotlin.onAcidityChanged(value: value)
+    }
+
+    /// 風味を変更する。draft.tasting が nil の場合は no-op。
+    func onFlavorChanged(_ value: Int32) {
+        kotlin.onFlavorChanged(value: value)
+    }
+
+    /// 後味を変更する。draft.tasting が nil の場合は no-op。
+    func onAftertasteChanged(_ value: Int32) {
+        kotlin.onAftertasteChanged(value: value)
+    }
+
     // MARK: - 写真操作転送
 
     func onPhotoUpserted(item: Photo_) {

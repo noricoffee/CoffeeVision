@@ -1365,3 +1365,135 @@ Phase 5 最初のタスク「設定画面」のスコープと設置場所をユ
 - **バリデーション**（`CoffeeEditorViewModel`）: `rating < 0.5 || rating > 5.0 || (rating * 2) % 1.0 != 0.0` で 0.5 刻みを強制（`*2` してから整数判定）
 - **Firestore 後方互換**: rating を Double で書くが、旧 Int 保存ドキュメントは SDK から Long/NSNumber で届くため、Android は `(Number).toDouble()`、iOS は `(Double) ?? (NSNumber).doubleValue ?? 0.0` で受ける。マイグレーション不要
 - **iOS ハーフスター入力**: `StarRatingView` を Double 化。表示は `star.fill` / `star.leadinghalf.filled` / `star` を rating 比較で出し分け。入力は星を左右 2 分割した透明タップ領域（`StarTapCell`、`GeometryReader` + `Color.clear.onTapGesture`）で左=‐0.5/右=フルを判定。`accessibilityAdjustableAction` は 0.5 刻み、値は「3.5星」表記。`SpatialTapGesture`(iOS17+)/`DragGesture` は連続入力や最小バージョンの懸念で不採用
+
+### 2026-06-19: 分析機能の 3 階層分離と Foundation Models の使いどころ
+
+- 領域: Shared / KMP / iOS / Docs
+- 関連: `docs/requirements.md` §9, `docs/data-model.md` §1.6, `docs/tasks.md` フェーズ 8
+
+「これまで登録したコーヒー情報を分析する分析タブを追加。分析には iOS の Foundation Models を使う」という要望を、**3 階層に分離**して設計した。
+
+**確定した設計判断（ユーザー承認済み、AskUserQuestion 2026-06-19）**:
+- 主目的 = **統計（階層1）＋ AI 要約（階層3）の両方**
+- Foundation Models の役割 = **傾向の要約サマリ** ＋ **対話 Q&A**
+- Android（KMP 検証ターゲット）= **分析タブ非表示**（Foundation Models が iOS 専用のため）
+
+**核となる設計原則 — 集計は KMP、解釈は LLM**:
+- 階層1（記述統計）/ 階層2（傾向抽出 = 高評価群の共通属性）は **KMP 共通層で決定論的に算出**（`CoffeeStats` / `BuildCoffeeStatsUseCase`）。テスト可能で正確。
+- 階層3（自然言語の要約・Q&A）だけ iOS の Foundation Models。**入力は集約済み `CoffeeStats` のみ**で、生レコードは LLM に渡さない。
+- 理由: ①正確性（「平均 4.2」を LLM に計算させない）②オンデバイス LLM（約 3B）のコンテキスト窓が狭く全レコードは入らないが集約サマリなら収まる ③再現性・ユニットテスト容易性 ④3 ロール体制に綺麗に割れる（集計 = kmp-engineer、Foundation Models ブリッジ = ios-engineer）。
+
+**プラットフォーム非対称の吸収**:
+- `shared/domain` に `CoffeeInsightProvider` インターフェース（`summarize(stats): CoffeeInsight`）を置き、iOS = `LanguageModelSession` 実装、Android = 注入しない（null）。Firebase の `RemoteCoffeeDataSource` と同じ「インターフェースは domain、実装はプラットフォーム別、AppContainer 注入」パターン。
+- `AnalysisViewModel` は `CoffeeInsightProvider?` を受け、null なら階層3 を非対応状態にする。Apple Intelligence 無効 / 非対応端末も `SystemLanguageModel.availability` 判定で同じフォールバック（統計のみ表示）。
+
+**対話 Q&A の段階化**:
+- v1（Phase B-2）は **ツール無し**で実装する。`CoffeeStats` に `recentHighlights` / `topCafes` を含めて十分リッチにすれば「一番高評価だった店は？」程度はセッションへの文脈注入だけで答えられる。
+- v2（Phase B-3）で tool calling（Swift のツールが KMP のクエリ API を呼ぶ）に拡張。初手で KMP 側にクエリ境界を新設するのは過剰。
+
+**フェーズ分割**: A-1 集計（domain + UseCase + test）→ A-2 `feature/analysis` + ViewModel → A-3 分析タブ UI（Swift Charts）→ A-4 Foundation Models 要約。階層2（`favoriteSignals`）と Q&A は Phase B。A-4 は Foundation Models の round-trip を小さな PoC で確認してから本実装に組み込む（KMP / 新規 API ブリッジの鉄則）。「好みのカフェをマップで探す」は要件外（将来）。
+
+### 2026-06-19: Phase A-2 — AnalysisViewModel の insightStatus 設計と AppContainer コンストラクタ拡張
+
+- 領域: KMP / Shared / iOS Bridge
+- 関連: `shared/feature/analysis/.../AnalysisViewModel.kt`, `shared/core/.../AppContainer.kt`, `shared/framework/.../AppContainerViewModelFactory.kt`
+
+- **統計と要約を独立ロード状態に**: `AnalysisUiState(stats, isLoading, insight, insightStatus, error)`。統計（階層1）は `ObserveCoffeeStatsUseCase` の Flow で即時反映、要約（階層3）は後追いで `insightProvider?.summarize(stats)` を呼んで埋める。要約が失敗・非対応でも統計画面は完全機能する。
+- **`InsightStatus` は `sealed interface` + `data object`**（`Unsupported` / `Idle` / `Loading` / `Loaded` / `Failed`）。SKIE SealedInterop で Swift には `AnalysisViewModelInsightStatus` protocol + 5 実装として届き、`is` チェックで分岐。将来 `Failed(message)` 等の関連値を付ける拡張に強い。`insightProvider == null`（Android / Apple Intelligence 非対応）は初期値 `Unsupported`。
+- **`AppContainer` のコンストラクタが 3 系統**: プライマリ（6 引数 = テスト用 scope 注入）/ セカンダリ A（5 引数 = iOS で `CoffeeInsightProvider` 注入、MainScope 内部生成）/ セカンダリ B（4 引数 = Android 互換、`coffeeInsightProvider` null 固定、MainScope 内部生成）。SKIE がデフォルト引数を Swift に出さない制約への対処（既存の scope 隠蔽パターンの踏襲）。**Android の `CoffeeVisionApp.kt` と現状の iOS `AppState.swift` は 4 引数のままで無変更**。iOS は A-4 で `CoffeeInsightProvider` 実装を注入する際に 5 引数へ切り替える。
+- **`AnalysisViewModel.onAppear()` は引数なし**（`userId` はコンストラクタ確定）。`makeAnalysisViewModel(userId)` で生成し、TabBar 常時生存パターン（`mapBridge` と同じく `AppState` 1 つ保持）を想定。
+- **要約再生成トリガ**: 現状「統計更新のたびに再生成」。リアルタイム同期で連続 emit する場合は LLM 呼び出しコストが上がるため、A-4 でデバウンス / 手動トリガ化を検討する余地あり（要 follow-up）。
+
+### 2026-06-19: Phase A-3 — 分析タブ iOS UI（Swift Charts）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Analysis/{AnalysisView,AnalysisViewModelBridge}.swift`, `RootTabView.swift`, `AppState.swift`, `PreviewSupport/PreviewSamples.swift`
+
+- **タブ順**: マップ / コーヒー / **分析** / 検索。`Tab(role: .search)` の右端固定を維持し、分析はコーヒーの次。SF Symbol `chart.bar.xaxis`。
+- **グラフ種別**: 縦棒（評価ヒストグラム / 焙煎度 / 抽出方法）/ 横棒（産地 = 日本語名が長く横軸向き）/ 折れ線（月次推移）/ カスタムリスト（よく行く店 = ランキング形式）。レイアウトは `ScrollView` + `LazyVStack` のカード方式（グラフが多く Form より適）。
+- **空状態**: `stats == nil`（ロード前）OR `totalCount == 0`（記録ゼロ）を空状態、`isLoading` は `ProgressView` で分離。`ContentUnavailableView` でコーヒータブ誘導。
+- **Bridge**: `insightStatus` を `any AnalysisViewModelInsightStatus`（existential）で保持。A-3 では常に `Unsupported`（provider 未注入）で UI 非描画だが、A-4 の `is` チェック分岐に備えて型を維持。`AppContainer` は **4 引数のまま無変更**（A-4 で 5 引数化）。`analysisBridge` は `AppState` 1 つ保持（`mapBridge` と同パターン）。
+- **enum 日本語化**: `RoastLevel` / `BrewMethod` の `enum.name`（英語）→ 日本語変換ヘルパを `AnalysisView` に内包。既存の他画面（CoffeeDetail 等）の enum 表示は英語のままで、日本語化は元々別タスク扱い。**分析タブが先行して独自ヘルパを持つ形になったため、将来 enum 表示の日本語化を全画面で行う際に共通化する候補**（follow-up）。
+- **SKIE 型の注意**: `CoffeeStats` を `Identifiable` 適合させる際 `id: Int32 { totalCount }`（KMP の `Int` は Swift で `Int32`）。
+
+### 2026-06-19: Phase A-4 — Foundation Models による傾向要約（階層3）
+
+- 領域: iOS / KMP Bridge
+- 関連: `iosApp/iosApp/Features/Analysis/CoffeeInsightProviderIosImpl.swift`, `AnalysisView.swift`, `AppState.swift`
+
+- **`CoffeeInsightProviderIosImpl`**: Kotlin `CoffeeInsightProvider`（凍結 IF）の SKIE protocol witness 実装。`__summarize(stats:completionHandler:)` の completion handler 形式（`RemoteCoffeeDataSourceIosImpl.__upload`/`.__remove` と同パターン）。内部で `Task { LanguageModelSession.respond(to:generating:) }` → completion 変換。
+- **`@Generable` 構造化出力**: `CoffeeInsightOutput(headline, body)` を `@Guide` で長さ・用途制約付き宣言。**SwiftUI `View.body` との名前競合を避けるため private struct に閉じる**（外部公開が要るならフィールド名を `insightBody` 等にリネーム）。
+- **prompt 整形**: `buildPrompt(from: CoffeeStats)` で KMP が**集計済みの事実**（総杯数・平均評価・産地トップ・焙煎度/抽出方法・よく行く店・recentHighlights）を日本語テキスト化して渡す。**数値計算は LLM にさせない**（階層分離の原則）。`LanguageModelSession` はリクエストごとに生成（ステートレス。会話 follow-up は Q&A の Phase B-2 で扱う）。
+- **可否判定（契約 = 注入時）**: `CoffeeInsightProviderIosImpl.makeIfAvailable()` が `SystemLanguageModel.default.availability == .available` のときだけ実装を返し、不可なら nil。`AppState` で 5 引数 `AppContainer` コンストラクタの `coffeeInsightProvider:` に渡す。nil → `AnalysisViewModel` が `InsightStatus.Unsupported` → 要約カード非表示（統計のみ）。KMP 変更ゼロで graceful degradation。
+- **要約カード UI**: `insightCardSection` が `insightStatus` を `is` 分岐。`Unsupported`=`EmptyView()`（タブ高を変えない）/ `Loading` / `Loaded`（headline+body）/ `Failed`（`onRetryInsight()` でリトライ）。
+- **follow-up（未対応・実害小）**: ① availability 判定は `AppState.init()` の起動時 1 回のみ。起動後に Apple Intelligence を有効化しても次回起動まで反映されない（動的再チェックは `scenePhase` active で再評価する案、現フェーズ不要）。② 要約再生成が「統計更新のたび」のため、リアルタイム同期の連続 emit で LLM 呼び出しが増える懸念（デバウンス / 手動トリガ化は実機計測後に判断）。③ `unavailable(reason)` の理由別ユーザー案内 UI は未実装（仕様未定）。
+
+### 2026-06-19: ダミーデータ Scheme（開発支援）
+
+- 領域: KMP / iOS / Build
+- 関連: `shared/core/.../dev/DummyCoffeeData.kt`, `shared/core/.../AppContainer.kt`, `iosApp/iosApp.xcodeproj/xcshareddata/xcschemes/iosApp (Dummy Data).xcscheme`, `iosApp/iosApp/AppState.swift`
+
+分析タブ等の確認用に、専用 Xcode Scheme で起動したときだけ約 30 件のダミー `CoffeeRecord` が入る仕組み。
+
+- **投入先はローカル DB のみ**: `AppContainer.seedDummyData(userId)` / `clearDummyData(userId)` は private `localCoffeeRepository` 経由で `save` / `delete`。合成 `coffeeRepository`（Firestore 込み）は使わず、**dev データを Firestore に流さない**。`startSync` は remote→local の upsert のみで local を消さないため、ローカルのダミーは sync で消えない。
+- **固定 ID で冪等**: `DummyCoffeeData`（`com.noricoffee.dev`）が `dummy-0001`..`dummy-0030` を生成。再 seed は upsert で常に 30 件（増えない）。`clear` は同 ID をローカル削除（実データ = UUID には触れない）。
+- **`visitedOn` は動的算出**: `Clock.System.todayIn(...)` から逆算（`object` で呼び出しのたびに今日基準）。固定日付より「常に直近 12 ヶ月」が保証され、月次推移グラフが映える。cafe 有り 20 件（5 カフェ使い回し → `topCafes` に偏り）/ null 10 件、rating=0.0 を 2 件（未評価除外パス確認）。
+- **DEBUG 限定 + 環境変数で分離**: Kotlin に DEBUG フラグはないため `DummyCoffeeData` / メソッドは常にコンパイルされるが、呼び出しは iOS の `AppState.bootstrap()` 内 `#if DEBUG` ガード + `ProcessInfo...environment["SEED_DUMMY_DATA"]` 判定に閉じる。**ダミー Scheme（env=1）→ seed / 通常 Scheme（env なし）→ clear**。Release ビルドは seed/clear とも無効。これで「ダミー Scheme でだけ 30 件、通常 Scheme は綺麗」を実現。
+- **共有 Scheme をリポジトリ管理化**: `xcshareddata/xcschemes/` が無かったため新規作成し、`iosApp.xcscheme`（通常）+ `iosApp (Dummy Data).xcscheme`（env `SEED_DUMMY_DATA=1` / Build Config Debug）を**明示ファイルとしてコミット**。pbxproj のターゲット UUID `A5D55589987A954070545386` / product `coffeevision.app` を参照。
+- **seed/clear の失敗は `print` のみ**（`lastError` に乗せない）。`clear` は通常起動毎に走るため、ユーザー可視エラーにすると通常起動で赤バナーが出かねないため。
+- **注意**: `resetAndRebootstrap()`（サインアウト/削除後）も `bootstrap()` 経由で同ブロックを通る。ダミー Scheme でサインアウトすると新 uid に再 seed される（dev 用途として許容）。
+
+### 2026-06-20: テイスティング 5 要素（Elements of Coffee Tasting）
+
+- 領域: 全レイヤー（domain / data-local / data-firebase / feature / core / iosApp）+ Docs
+- 関連: `docs/data-model.md` §1.1a / §1.6, `docs/requirements.md` §3 / §9
+
+Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸味 / 風味 / 後味** を `CoffeeRecord.tasting: TastingScores` として追加。
+
+**確定した設計判断（ユーザー承認済み、AskUserQuestion 2026-06-20）**:
+- **スケール = 1〜10 の強度**（カッピング寄り。UI はスライダー）。総合評価 `rating`（0.5 刻みハーフスター）とは**別軸**。「良し悪し」ではなく強度（酸味 10 = 酸が強い）。
+- **任意入力**: 各要素 `Int?`、未入力 = `null`。`tasting` フィールド自体は非 null（全要素 null の `TastingScores()` が「未入力」）。rating の `0.0` sentinel 方式ではなく **nullable Int** を採用（新規フィールドは null の方が明快、星 UI も流用しないため）。
+- **分析タブに即反映**: `CoffeeStats.tastingAverages`（各要素 null 除外平均 + `ratedCount`）を追加。AnalysisView に平均の可視化、`CoffeeInsightProviderIosImpl` の prompt にも平均を含める。
+
+**表現**:
+- ドメイン: `TastingScores`（5 × `Int?`）を `CoffeeRecord` に埋め込み（nested value object。5 要素が 1 つの概念のため flat 展開より凝集度を優先）。
+- SQLDelight: `coffee_record` に 5 列（`sweetness`/`body`/`acidity`/`flavor`/`aftertaste` INTEGER nullable）。Mapper で `TastingScores` に組み立て。
+- Firestore: nested map `tasting`。**非 null の要素だけ書き出し / 全 null は `tasting` ごと省略**（nullable コーヒー属性と同じ「キー省略」流儀）。decode で欠如キーは null、空マップ/欠如は `TastingScores()`。
+
+**クリーンブレイク**: 未リリースのため DB 列追加にマイグレーションを書かない（テスト端末はアプリ削除→再インストール）。Firestore は旧ドキュメントに `tasting` が無くても decode が `TastingScores()` で吸収するため後方互換あり。**TestFlight 配布が始まったら SQLDelight マイグレーションが必須**になる（既存ローカル DB にスキーマ不一致でクラッシュするため）。これは tasting 追加に限らず以降の DB 列変更すべてに効く転換点（要 follow-up）。
+
+**スケール型 `Int?`（`Double?` 不採用）**: `rating` は 0.5 刻みで `Double` 化した経緯があるが、テイスティングは整数 1..10 スライダー前提のため中間値の必要がなく `Int?`。バリデーションは `coerceIn(1,10)` クランプ（エラー返却なし）。`CoffeeEditorViewModel` は個別セッター 5 本 + バルク `onTastingChanged(TastingScores)` の両方を公開（iOS の実装自由度のため）。
+
+### 2026-06-20: テイスティングを all-or-nothing 化（5 要素必須）
+
+- 領域: 全レイヤー + Docs
+- 関連: `docs/data-model.md` §1.1a / §1.1 / §1.6
+
+[2026-06-20: テイスティング 5 要素] の **各要素独立 nullable** 方式を、**all-or-nothing（テイスティングを付けるなら 5 要素必須）** に変更。ユーザー要望「テイスティングが存在する場合は 5 項目全て必須、`+` ボタンで各種スライダーが一度に表示」。
+
+**型でモデル化（partial を表現不可能に）**:
+- `TastingScores` の 5 フィールドを `Int?` → **`Int`（非 null）** に変更。`CoffeeRecord.tasting` を `TastingScores` → **`TastingScores?`（nullable）** に変更。「null = 未記入 / 非 null = 5 要素全部ある」を型が保証。バリデーションのエラー経路が不要になる（部分状態を作れない）。
+- SQLDelight の 5 列は nullable のまま（all-null = なし / all-set = あり）。Mapper は **5 列全セットなら `TastingScores`、それ以外 `null`**。
+- Firestore は `tasting != null` のとき 5 要素のマップ、null なら省略。decode はキー欠如を防御的に `null` 扱い。
+- `CoffeeStats.TastingAverages.ratedCount` を `TastingRatedCount`（要素別）→ **単一 `Int`** に簡素化（all-or-nothing で 5 要素の母数が必ず一致するため）。`TastingRatedCount` 型は削除。
+
+**UX**: `tasting == null` のとき「`+` テイスティングを追加」ボタンのみ。押下で `TastingScores(5,5,5,5,5)`（デフォルト 5）を生成して 5 スライダーを一度に表示。削除ボタンで `null` に戻す。**個別セッターは非 null Int**（`tasting == null` の間は no-op）、追加/削除用に `onTastingAdded()` / `onTastingCleared()` 相当を用意。
+
+**経緯**: 前エントリの独立 nullable は「書きたい要素だけ」を想定したが、テイスティングは 5 軸セットで初めて意味を成す（プロファイルとして比較・平均する）ため、all-or-nothing が要件・分析の両面で正しい。dev データのみ（クリーンブレイク）なので即作り直し。
+
+**dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。
+
+### 2026-06-21: CI Android ジョブでダミー google-services.json を生成
+
+- 領域: Build（`.github/workflows/ci.yml`）
+- 関連: `androidApp/build.gradle.kts`（`googleServices` プラグイン + Firebase 依存）
+
+feature/analyze で androidApp に `googleServices` プラグインと Firebase 依存（auth/firestore）を追加した結果、`:androidApp:assembleDebug` が `processDebugGoogleServices` で `google-services.json` を必須とするようになり、PR#2 の Android CI が `File google-services.json is missing.` で失敗した。同ファイルは秘匿情報として gitignore 済みで CI ランナーに存在しない（ローカルには `androidApp/google-services.json` がある）。PR#1 まではプラグイン未適用だったため通っていた。
+
+**対応**: CI の Android ジョブに、Gradle 実行前にダミー `google-services.json` を `androidApp/` へ書き出すステップを追加。
+
+**判断根拠**: Android はリリース対象外の KMP 共通層検証ターゲットで、`assembleDebug` の目的は共通層が Android でコンパイル/リンクできることの確認。実 Firebase 接続は不要なため、google-services プラグインを通すだけのダミー（package_name = `com.noricoffee.coffeevision`、project_number / app_id / api_key はゼロ埋めダミー）で十分とし、**GitHub Secrets 管理を不要にした**。
+
+**トレードオフ**: Secrets に実 `google-services.json` を base64 で置く案より運用が軽い反面、CI で実 Firebase に到達するテスト（Firestore 結合テスト等）は将来も別途仕組みが要る。現状 Android 側に実接続テストは無いため問題なし。
+
+**検証**: ローカルで実ファイルを退避→ダミーに差し替えて `processDebugGoogleServices --rerun-tasks` が BUILD SUCCESSFUL を確認（実ファイルは復元）。push 後の CI で Android / iOS 両ジョブ SUCCESS。

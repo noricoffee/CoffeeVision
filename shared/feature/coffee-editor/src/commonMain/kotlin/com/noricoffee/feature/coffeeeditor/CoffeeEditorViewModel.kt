@@ -6,6 +6,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -90,6 +91,7 @@ class CoffeeEditorViewModel(
      * @property processing 精製方法（任意）
      * @property roastLevel 焙煎度（任意）
      * @property cup カップ（任意）
+     * @property tasting テイスティング 5 要素（null = 未記入。非 null = 5 要素すべてセット済み）
      */
     data class CoffeeDraft(
         val cafeName: String,
@@ -107,6 +109,7 @@ class CoffeeEditorViewModel(
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,
         val cup: String,
+        val tasting: TastingScores? = null,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット
     )
 
     /**
@@ -270,6 +273,97 @@ class CoffeeEditorViewModel(
     /** カップを更新する。 */
     fun onCupChanged(cup: String) {
         _state.update { it.copy(draft = it.draft.copy(cup = cup)) }
+    }
+
+    // --- テイスティング要素更新（all-or-nothing）---
+
+    /**
+     * テイスティングを追加する（`+` ボタン相当）。
+     *
+     * `draft.tasting == null` のとき `TastingScores(5,5,5,5,5)` をデフォルト値として生成し、
+     * 5 スライダーを一度に表示できる状態にする。
+     * 既に tasting がある場合は no-op。
+     */
+    fun onTastingAdded() {
+        if (_state.value.draft.tasting == null) {
+            _state.update {
+                it.copy(draft = it.draft.copy(tasting = TastingScores(5, 5, 5, 5, 5)))
+            }
+        }
+    }
+
+    /**
+     * テイスティングをクリアする（削除ボタン相当）。
+     *
+     * `draft.tasting` を null に戻す。スライダーをすべて非表示にする。
+     */
+    fun onTastingCleared() {
+        _state.update { it.copy(draft = it.draft.copy(tasting = null)) }
+    }
+
+    /**
+     * 甘味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op（先に [onTastingAdded] を呼ぶ必要がある）。
+     */
+    fun onSweetnessChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(sweetness = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * ボディ（コク）を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onBodyChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(body = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 酸味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onAcidityChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(acidity = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 風味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onFlavorChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(flavor = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 後味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onAftertasteChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(aftertaste = value.clampTasting())))
+            } ?: state
+        }
     }
 
     /**
@@ -483,6 +577,7 @@ class CoffeeEditorViewModel(
             processing = draft.processing,
             roastLevel = draft.roastLevel,
             cup = draft.cup.takeIf { it.isNotBlank() },
+            tasting = draft.tasting?.clamped(),
             createdAt = createdAt,
             updatedAt = now,
         )
@@ -509,6 +604,7 @@ class CoffeeEditorViewModel(
             processing = null,
             roastLevel = null,
             cup = "",
+            tasting = null,  // all-or-nothing: 初期状態は tasting なし
         )
     }
 }
@@ -536,4 +632,22 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
         processing = processing,
         roastLevel = roastLevel,
         cup = cup ?: "",
+        tasting = tasting,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット（edit モードで既存 tasting を反映）
     )
+
+/**
+ * テイスティングスコアの各要素を `1..10` の範囲にクランプした新しいインスタンスを返す。
+ *
+ * 各フィールドは非 null（all-or-nothing）。入力範囲外（< 1 または > 10）の値はクランプする。
+ * バリデーション規約: `data-model.md` §1.1a
+ */
+private fun TastingScores.clamped(): TastingScores = TastingScores(
+    sweetness = sweetness.clampTasting(),
+    body = body.clampTasting(),
+    acidity = acidity.clampTasting(),
+    flavor = flavor.clampTasting(),
+    aftertaste = aftertaste.clampTasting(),
+)
+
+/** `1..10` の範囲にクランプする拡張関数。 */
+private fun Int.clampTasting(): Int = coerceIn(1, 10)

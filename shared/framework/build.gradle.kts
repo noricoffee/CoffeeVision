@@ -53,6 +53,7 @@ kotlin {
             export(projects.shared.feature.map)
             export(projects.shared.feature.cafeDetail)
             export(projects.shared.feature.account)
+            export(projects.shared.feature.analysis)
 
             xcf.add(this)
         }
@@ -82,6 +83,7 @@ kotlin {
             api(projects.shared.feature.map)
             api(projects.shared.feature.cafeDetail)
             api(projects.shared.feature.account)
+            api(projects.shared.feature.analysis)
             implementation(libs.kotlinx.coroutines.core)
         }
     }

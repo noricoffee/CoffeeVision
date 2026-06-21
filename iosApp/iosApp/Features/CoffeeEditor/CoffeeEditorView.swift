@@ -54,6 +54,7 @@ struct CoffeeEditorView: View {
             Form {
                 cafeSection
                 coffeeSection
+                tastingSection
                 visitSection
                 photosSection
             }
@@ -244,6 +245,115 @@ struct CoffeeEditorView: View {
             )
             .accessibilityLabel(String(localized: "カップ"))
         }
+    }
+
+    // MARK: - テイスティング Section
+
+    /// テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）の入力セクション。
+    ///
+    /// all-or-nothing: `+` ボタン 1 つで 5 スライダーを一括表示（初期値 5）。
+    /// 削除ボタンで nil に戻す（＋ボタン表示に戻る）。
+    private var tastingSection: some View {
+        let tasting = viewModel.draft.tasting
+
+        return Section {
+            if let tasting = tasting {
+                // テイスティングあり: 5 スライダーを表示
+                tastingSliderRow(
+                    label: String(localized: "甘味"),
+                    value: Int(tasting.sweetness),
+                    onChanged: { viewModel.onSweetnessChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "ボディ"),
+                    value: Int(tasting.body),
+                    onChanged: { viewModel.onBodyChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "酸味"),
+                    value: Int(tasting.acidity),
+                    onChanged: { viewModel.onAcidityChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "風味"),
+                    value: Int(tasting.flavor),
+                    onChanged: { viewModel.onFlavorChanged(Int32($0)) }
+                )
+                tastingSliderRow(
+                    label: String(localized: "後味"),
+                    value: Int(tasting.aftertaste),
+                    onChanged: { viewModel.onAftertasteChanged(Int32($0)) }
+                )
+                // 削除ボタン
+                Button(role: .destructive) {
+                    viewModel.onTastingCleared()
+                } label: {
+                    Label(String(localized: "テイスティングを削除"), systemImage: "trash")
+                }
+                .accessibilityLabel(String(localized: "テイスティングを削除"))
+            } else {
+                // テイスティングなし: 追加ボタンのみ
+                Button {
+                    viewModel.onTastingAdded()
+                } label: {
+                    Label(String(localized: "テイスティングを追加"), systemImage: "plus.circle")
+                }
+                .accessibilityLabel(String(localized: "テイスティングを追加（5 要素一括）"))
+            }
+        } header: {
+            Text(String(localized: "テイスティング（任意）"))
+        } footer: {
+            if tasting != nil {
+                Text(String(localized: "1（弱）〜 10（強）の強度スケール"))
+                    .font(.caption)
+            }
+        }
+    }
+
+    /// テイスティング 1 要素のスライダー行。
+    ///
+    /// - `value`: 1..10 の整数値
+    /// - `onChanged`: 値変更時のコールバック（Int を渡す）
+    @ViewBuilder
+    private func tastingSliderRow(
+        label: String,
+        value: Int,
+        onChanged: @escaping (Int) -> Void
+    ) -> some View {
+        VStack(spacing: 4) {
+            HStack {
+                Text(label)
+                    .frame(minWidth: 44, alignment: .leading)
+                Spacer()
+                Text("\(value)/10")
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .monospacedDigit()
+                    .frame(minWidth: 44, alignment: .trailing)
+            }
+            Slider(
+                value: Binding(
+                    get: { Double(value) },
+                    set: { onChanged(Int($0.rounded())) }
+                ),
+                in: 1...10,
+                step: 1
+            )
+            .accessibilityLabel(label)
+            .accessibilityValue(String(localized: "\(label) \(value)/10"))
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    onChanged(min(value + 1, 10))
+                case .decrement:
+                    onChanged(max(value - 1, 1))
+                @unknown default:
+                    break
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(localized: "\(label) \(value)/10"))
     }
 
     // MARK: - 記録 Section
@@ -527,6 +637,26 @@ private struct PhotoThumbnailCell: View {
             Section(String(localized: "コーヒー")) {
                 TextField(String(localized: "コーヒー名（必須）"), text: .constant(""))
                 Text("ハンドドリップ").foregroundStyle(.secondary)
+            }
+
+            Section {
+                HStack {
+                    Text(String(localized: "甘味"))
+                    Spacer()
+                    Text("7/10").font(.subheadline).foregroundStyle(.secondary)
+                    Image(systemName: "xmark.circle.fill").foregroundStyle(.secondary)
+                }
+                Slider(value: .constant(7), in: 1...10, step: 1)
+                HStack {
+                    Text(String(localized: "酸味"))
+                    Spacer()
+                    Image(systemName: "plus.circle").foregroundStyle(Color.accentColor)
+                }
+            } header: {
+                Text(String(localized: "テイスティング（任意）"))
+            } footer: {
+                Text(String(localized: "1（弱）〜 10（強）の強度スケール。未設定はスキップできます。"))
+                    .font(.caption)
             }
 
             Section(String(localized: "記録")) {

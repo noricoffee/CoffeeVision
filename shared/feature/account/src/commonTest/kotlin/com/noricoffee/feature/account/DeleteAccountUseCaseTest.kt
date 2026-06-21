@@ -71,7 +71,7 @@ class DeleteAccountUseCaseTest {
         userId = userId,
         cafe = null,
         visitedOn = LocalDate(2026, 6, 1),
-        rating = 4,
+        rating = 4.0,
         notes = "",
         photos = emptyList(),
         name = "Test Coffee $id",
@@ -81,6 +81,7 @@ class DeleteAccountUseCaseTest {
         processing = null,
         roastLevel = null,
         cup = null,
+        tasting = null,
         createdAt = Instant.fromEpochSeconds(0),
         updatedAt = Instant.fromEpochSeconds(0),
     )

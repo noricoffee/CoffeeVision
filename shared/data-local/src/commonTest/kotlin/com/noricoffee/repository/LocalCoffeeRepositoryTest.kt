@@ -8,6 +8,7 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -189,6 +190,38 @@ class LocalCoffeeRepositoryTest {
         assertTrue(ids.contains("self"))
     }
 
+    // --- tasting 往復テスト ---
+
+    @Test
+    fun tasting_with_all_five_values_round_trips_correctly() = runTest {
+        // 5 要素すべて設定（all-or-nothing: TastingScores は 5 要素非 null のみ）
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val scores = TastingScores(sweetness = 6, body = 7, acidity = 8, flavor = 5, aftertaste = 9)
+        val record = sampleRecord().copy(tasting = scores)
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertEquals(scores, loaded?.tasting)
+        assertEquals(6, loaded?.tasting?.sweetness)
+        assertEquals(7, loaded?.tasting?.body)
+        assertEquals(8, loaded?.tasting?.acidity)
+        assertEquals(5, loaded?.tasting?.flavor)
+        assertEquals(9, loaded?.tasting?.aftertaste)
+    }
+
+    @Test
+    fun tasting_null_round_trips_correctly() = runTest {
+        // tasting = null（未入力）
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord().copy(tasting = null)
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertNull(loaded?.tasting, "tasting = null のレコードは null として往復するべき")
+    }
+
     private companion object {
         const val USER_ID = "test-user"
 
@@ -231,6 +264,7 @@ class LocalCoffeeRepositoryTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = "ノリタケ",
+            tasting = TastingScores(sweetness = 7, body = 5, acidity = 9, flavor = 7, aftertaste = 6), // all-or-nothing: 5 要素すべてセット
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
         )

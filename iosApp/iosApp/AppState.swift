@@ -36,6 +36,12 @@ final class AppState {
     /// サインアウト / 削除後は `resetAndRebootstrap()` で nil に戻す。
     private(set) var accountBridge: AccountViewModelBridge?
 
+    /// AnalysisView 用の ViewModel ブリッジ。
+    ///
+    /// 分析タブは TabBar 常時生存のため `mapBridge` と同等のライフサイクルで管理する。
+    /// `bootstrap()` 完了後（uid 確定後）に 1 度だけ生成する。
+    private(set) var analysisBridge: AnalysisViewModelBridge?
+
     /// Google Places Photo Media API から写真 URL を取得するローダー。
     ///
     /// uid 不要なので `init` で即座に生成する（`bootstrap()` 前から利用可能）。
@@ -56,11 +62,23 @@ final class AppState {
         // Secrets.xcconfig が存在しない場合（CI 環境等）は空文字フォールバック。
         // 空文字の場合もアプリは起動するが Places API 呼び出しは 401 を返す。
         let placesApiKey = (Bundle.main.object(forInfoDictionaryKey: "PLACES_API_KEY") as? String) ?? ""
+
+        // Foundation Models の可否を判定し、利用可能なときだけ Provider を注入する。
+        // iOS 26 未満 / Apple Intelligence 無効 / 非対応端末では nil を渡す。
+        // AnalysisViewModel は provider == nil のとき InsightStatus.Unsupported を返す。
+        let insightProvider: (any CoffeeInsightProvider)? = {
+            if #available(iOS 26.0, *) {
+                return CoffeeInsightProviderIosImpl.makeIfAvailable()
+            }
+            return nil
+        }()
+
         let container = AppContainer(
             sqlDriver: sqlDriver,
             remoteCoffeeDataSource: remoteDataSource,
             authRepository: authRepo,
-            placesApiKey: placesApiKey
+            placesApiKey: placesApiKey,
+            coffeeInsightProvider: insightProvider
         )
         self.container = container
         // uid 不要なので bootstrap() 前から利用可能
@@ -85,6 +103,12 @@ final class AppState {
             let uid = try await container.startInitialSync()
             self.uid = uid
             self.status = .ready
+            // [DEBUG] ダミーデータの seed / clear（bridge 生成前に実行し、最初の Flow emit からダミーが反映されるようにする）
+            // 専用 Scheme「iosApp (Dummy Data)」で起動したときだけ seed、それ以外は clear する。
+            // seed / clear は開発用途のため失敗しても致命扱いにせずログのみ出す。
+            #if DEBUG
+            await seedOrClearDummyData(userId: uid)
+            #endif
             // CoffeeListViewModelBridge を 1 度だけ生成する
             if coffeeListBridge == nil {
                 coffeeListBridge = CoffeeListViewModelBridge(kotlin: container.makeCoffeeListViewModel())
@@ -97,11 +121,43 @@ final class AppState {
             if accountBridge == nil {
                 accountBridge = AccountViewModelBridge(viewModel: container.makeAccountViewModel())
             }
+            // AnalysisViewModelBridge を 1 度だけ生成する（uid が必要）
+            if analysisBridge == nil {
+                analysisBridge = AnalysisViewModelBridge(viewModel: container.makeAnalysisViewModel(userId: uid))
+            }
             print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
         } catch {
             self.lastError = error.localizedDescription
             self.status = .failed
             print("[CoffeeVision] startInitialSync failed: \(error)")
+        }
+    }
+
+    // MARK: - Private helpers
+
+    /// ダミーデータを seed または clear する（DEBUG ビルド専用）。
+    ///
+    /// - 環境変数 `SEED_DUMMY_DATA == "1"` のとき seed（冪等 upsert）
+    /// - それ以外のとき clear（固定 ID `dummy-0001`..`dummy-0030` をローカル削除）
+    ///
+    /// ローカル DB のみ操作し Firestore には流れない。
+    /// 失敗しても致命扱いにせずログのみ出す（開発支援用途のため）。
+    @MainActor
+    private func seedOrClearDummyData(userId: String) async {
+        if ProcessInfo.processInfo.environment["SEED_DUMMY_DATA"] == "1" {
+            do {
+                try await container.seedDummyData(userId: userId)
+                print("[CoffeeVision] seedDummyData succeeded uid=\(userId)")
+            } catch {
+                print("[CoffeeVision] seedDummyData failed (ignored): \(error)")
+            }
+        } else {
+            do {
+                try await container.clearDummyData(userId: userId)
+                print("[CoffeeVision] clearDummyData succeeded uid=\(userId)")
+            } catch {
+                print("[CoffeeVision] clearDummyData failed (ignored): \(error)")
+            }
         }
     }
 
@@ -114,10 +170,12 @@ final class AppState {
         coffeeListBridge?.onDisappear()
         mapBridge?.cancel()
         accountBridge?.onDisappear()
+        analysisBridge?.cancel()
 
         coffeeListBridge = nil
         mapBridge = nil
         accountBridge = nil
+        analysisBridge = nil
         uid = nil
         status = .idle
         lastError = nil

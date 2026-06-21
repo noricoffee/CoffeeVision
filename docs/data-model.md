@@ -52,13 +52,33 @@ data class CoffeeRecord(
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
+    val tasting: TastingScores?,          // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須
     // --- メタ ---
     val createdAt: Instant,
     val updatedAt: Instant,
 )
 ```
 
+> **`tasting` の統合**: Blue Bottle「Elements of Coffee Tasting」に基づくテイスティング 5 要素（甘味 / ボディ / 酸味 / 風味 / 後味）を `TastingScores`（§1.1a）として持つ。各要素は **1〜10 の強度**。**テイスティングは任意だが、付ける場合は 5 要素すべて必須**（all-or-nothing）。「付けない」は `tasting = null`。総合評価 `rating`（0.5 刻みハーフスター）とは別軸の **強度スケール**であることに注意。
+
 > **rating / notes の統合**: 旧モデルでは Visit と CoffeeItem の双方に rating / notes があったが、コーヒー主体では 1 杯につき 1 本に統一する。旧 `ambiance`（カフェの雰囲気）と `FoodItem`（フード）は構造化フィールドとして廃止し、必要なら自由メモ `notes` に書く方針。
+
+## 1.1a TastingScores
+
+```kotlin
+data class TastingScores(
+    val sweetness: Int,                    // 甘味     1..10
+    val body: Int,                         // ボディ（コク）
+    val acidity: Int,                      // 酸味
+    val flavor: Int,                       // 風味
+    val aftertaste: Int,                   // 後味
+)
+```
+
+- 各要素は **1〜10 の整数**（強度スケール。UI はスライダー）。
+- **5 要素は不可分（all-or-nothing）**: テイスティングを付ける場合は 5 要素すべて必須。「付けない」は `CoffeeRecord.tasting = null`（§1.1）で表す。**部分入力は型として表現不可能**（各フィールドが非 null）。
+- 「良し悪し」ではなく**強度**を表す軸（酸味 10 = 酸が強い、であって優劣ではない）。総合評価 `rating` とは意味が異なる。
+- バリデーション: 各値は `1..10`。UI は `+` でデフォルト値（5）の `TastingScores` を生成して 5 スライダーを一度に出し、削除で `null` に戻すため、部分状態は発生しない。
 
 ## 1.2 Cafe
 
@@ -145,6 +165,104 @@ data class VisitedCafe(
 
 > マップ表示・カフェ集計用。`ObserveVisitedCafesUseCase` が `CoffeeRecord` のうち **`cafe != null` のものだけ** を `cafe.placeId` でグループ化して生成する。セルフ抽出（cafe == null）は集計対象外（座標が無くマップに出せないため）。名前は互換性のため `VisitedCafe` を維持するが、意味は「コーヒー記録のあるカフェ」。
 
+## 1.6 CoffeeStats（分析用 集計モデル）
+
+`shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/CoffeeStats.kt`
+
+分析タブ（[`requirements.md`](./requirements.md) §9）の **階層1（記述統計）+ 階層2（傾向抽出）** の結果。`CoffeeRecord` 群から `BuildCoffeeStatsUseCase` が決定論的に生成する。**永続化しない派生モデル**（DB / Firestore 表現は持たない）。この `CoffeeStats` が ① 統計 UI の入力であり、② 階層3（Foundation Models）に渡す**唯一の入力**でもある（生レコードは LLM に渡さない）。
+
+```kotlin
+data class CoffeeStats(
+    val totalCount: Int,                       // 全記録件数
+    val ratedCount: Int,                       // rating >= 0.5 の件数
+    val averageRating: Double?,                // 未評価(0.0)除外の平均。全未評価なら null
+    val ratingHistogram: List<RatingBucket>,   // 0.5 刻みの度数（存在する刻みのみ、昇順）
+    val byBrewMethod: List<CategoryStat>,      // 抽出方法別（label = enum.name）
+    val byRoastLevel: List<CategoryStat>,      // 焙煎度別
+    val byProcessing: List<CategoryStat>,      // 精製方法別
+    val originRanking: List<CategoryStat>,     // 産地別（自由文字列を軽く正規化、件数降順 上位N）
+    val monthlyTrend: List<MonthlyStat>,       // visitedOn の年月別（昇順）
+    val topCafes: List<CafeStat>,              // cafe != null をグループ化（件数降順 上位N）
+    val recentHighlights: List<RecordDigest>,  // Q&A 文脈用の代表レコード（高評価・直近）
+    val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
+    val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
+)
+
+data class TastingAverages(
+    val sweetness: Double?,                    // 甘味の平均（tasting ありの記録のみ、無ければ null）
+    val body: Double?,
+    val acidity: Double?,
+    val flavor: Double?,
+    val aftertaste: Double?,
+    val ratedCount: Int,                       // tasting を持つ記録の件数（all-or-nothing なので 5 要素共通）
+)
+
+data class RatingBucket(val rating: Double, val count: Int)
+
+data class CategoryStat(
+    val label: String,                         // enum.name / 正規化済み産地など
+    val count: Int,
+    val averageRating: Double?,                // その群の平均（未評価除外、全未評価なら null）
+)
+
+data class MonthlyStat(
+    val yearMonth: String,                     // "YYYY-MM"
+    val count: Int,
+    val averageRating: Double?,
+)
+
+data class CafeStat(
+    val placeId: String,
+    val name: String,
+    val count: Int,
+    val averageRating: Double?,
+)
+
+data class RecordDigest(
+    val name: String,
+    val rating: Double,
+    val cafeName: String?,                     // セルフ抽出は null
+    val visitedOn: LocalDate,
+)
+
+data class FavoriteSignals(
+    val bestBrewMethod: CategoryStat?,         // 平均評価が突出する抽出方法（閾値未満なら null）
+    val bestOrigin: CategoryStat?,
+    val bestRoastLevel: CategoryStat?,
+    val minSampleSize: Int,                    // この件数未満の群は信号にしない（既定 3）
+)
+```
+
+### 集計ルール（決定論）
+
+- **平均評価**: `rating == 0.0`（未評価 sentinel）は常に母数から除外。対象が 0 件なら `null`。
+- **`favoriteSignals`（階層2）**: 各カテゴリ軸で「件数 `>= minSampleSize` かつ平均評価が全体平均を最も上回る label」を 1 つ選ぶ。閾値を満たす群が無ければ `null`。サンプル不足の過大解釈を避けるためのガード。
+- **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
+- **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
+- **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
+- **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
+
+> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は Phase B-1 で実体化する（それまでは全フィールド null の空 `FavoriteSignals` を返す）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。
+
+### 階層3（自然言語解釈）のインターフェース
+
+iOS の Foundation Models 実装を `shared/domain` のインターフェースで抽象化し、プラットフォーム非対称を吸収する（Firebase の `RemoteCoffeeDataSource` と同じパターン）。
+
+```kotlin
+// shared/domain — 階層3。iOS = Foundation Models 実装、Android = 注入しない（分析タブ非表示）
+interface CoffeeInsightProvider {
+    suspend fun summarize(stats: CoffeeStats): CoffeeInsight
+    // 対話 Q&A（Phase B-2）の API はインターフェース確定時に追加
+}
+
+data class CoffeeInsight(
+    val headline: String,
+    val body: String,
+)
+```
+
+> `AnalysisViewModel` には `CoffeeInsightProvider?` を注入する（null = 階層3 非対応 = Android / Apple Intelligence 無効時）。**可否判定は iOS の注入時に行う**: `SystemLanguageModel` が `.available` のときだけ `CoffeeInsightProvider` の実装を注入し、不可なら null を渡す。`AnalysisViewModel` は `provider == null → InsightStatus.Unsupported` を既に実装済みのため、KMP 側を変更せず graceful degradation が成立する（インターフェースは凍結のまま）。iOS 実装は `summarize` 内で `LanguageModelSession` を用い、`@Generable` で `headline` / `body` を構造化生成する。`summarize` 自体の失敗（生成エラー等）は `Failed` 扱い。
+
 ---
 
 # 2. SQLDelight スキーマ
@@ -181,6 +299,12 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
+    -- テイスティング 5 要素（各 1..10）。5 列は all-or-nothing（全列 NULL = tasting なし / 全列セット = tasting あり）
+    sweetness INTEGER,
+    body INTEGER,
+    acidity INTEGER,
+    flavor INTEGER,
+    aftertaste INTEGER,
     created_at INTEGER NOT NULL,           -- epoch millis
     updated_at INTEGER NOT NULL
 );
@@ -204,8 +328,9 @@ INSERT OR REPLACE INTO coffee_record (
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
     name, brew_method, origin, variety, processing, roast_level, cup,
+    sweetness, body, acidity, flavor, aftertaste,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;
@@ -304,6 +429,13 @@ users/{uid}
   "processing": "Washed",
   "roastLevel": "Medium",
   "cup": "ノリタケ",
+  "tasting": {
+    "sweetness": 7,
+    "body": 5,
+    "acidity": 9,
+    "flavor": 7,
+    "aftertaste": 6
+  },
   "photos": [
     {
       "id": "uuid-v4",
@@ -321,6 +453,7 @@ users/{uid}
 
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
 - **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup）: null の場合はキーごと省略
+- **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **photos**: 埋め込み配列。`localPath` は端末固有値のため Firestore には書かない。`remoteUrl` も書かない（Storage 採用見送り）。`sortOrder` は配列 index を upload 時に採番、decode 時はソート用途で破棄
 - `visitedOn` は `"YYYY-MM-DD"` 文字列、`createdAt` / `updatedAt` は Firestore `Timestamp`
 

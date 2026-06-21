@@ -469,6 +469,183 @@ class CoffeeRecordQueryImplTest {
         assertEquals(CoffeeRecordFilter.MAX_LIMIT, result.size)
     }
 
+    // ----- テスト: テキスト横断マッチ（origin / cafeName のフィールド横断）-----
+
+    @Test
+    fun originFilter_cafeNameGiven_hitsRecord_fugulen_regression() = runTest {
+        // 「フグレンで飲んだコーヒーは？」でモデルが cafeName ではなく origin に "フグレン" を入れた場合の回帰テスト
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "フグレン東京"), origin = "エチオピア", name = "シングルオリジン"),
+            record("r2", cafe = cafe("p2", "Blue Bottle"), origin = "ケニア", name = "本日のコーヒー"),
+        )
+        val query = makeQuery(records)
+
+        // origin に "フグレン"（カフェ名）が入っても cafe名の union でヒットする
+        val result = query.searchRecords(CoffeeRecordFilter(origin = "フグレン"))
+        assertEquals(1, result.size)
+        assertEquals("フグレン東京", result[0].cafeName)
+    }
+
+    @Test
+    fun cafeNameFilter_originGiven_hitsRecord() = runTest {
+        // cafeName に産地名を渡してもヒットする（逆方向の誤分類）
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "Blue Bottle"), origin = "エチオピア", name = "シングルオリジン"),
+            record("r2", cafe = null, origin = "ケニア", name = "ハンドドリップ"),
+        )
+        val query = makeQuery(records)
+
+        // cafeName に "エチオピア"（産地名）が入っても origin の union でヒットする
+        val result = query.searchRecords(CoffeeRecordFilter(cafeName = "エチオピア"))
+        assertEquals(1, result.size)
+        assertEquals("エチオピア", result[0].origin)
+    }
+
+    @Test
+    fun originFilter_coffeeName_hitsRecord() = runTest {
+        // origin にコーヒー名が入った場合も record.name の union でヒットする
+        val records = listOf(
+            record("r1", cafe = null, origin = "ブラジル", name = "ゲイシャ"),
+            record("r2", cafe = null, origin = "コロンビア", name = "ティピカ"),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(CoffeeRecordFilter(origin = "ゲイシャ"))
+        assertEquals(1, result.size)
+        assertEquals("ゲイシャ", result[0].name)
+    }
+
+    @Test
+    fun originFilter_variety_hitsRecord() = runTest {
+        // origin に品種名が入った場合も record.variety の union でヒットする
+        val records = listOf(
+            record("r1", cafe = null, origin = "エチオピア", name = "コーヒーA"),
+            record("r2", cafe = null, origin = "ケニア", name = "コーヒーB"),
+        )
+        // variety を持つレコードを手動構築
+        val recordWithVariety = CoffeeRecord(
+            id = "r3",
+            userId = "user-1",
+            cafe = cafe("p1", "テストカフェ"),
+            visitedOn = LocalDate(2026, 6, 1),
+            rating = 4.0,
+            notes = "",
+            photos = emptyList(),
+            name = "ゲイシャ エステート",
+            brewMethod = BrewMethod.HandDrip,
+            origin = "パナマ",
+            variety = "Geisha",
+            processing = null,
+            roastLevel = null,
+            cup = null,
+            tasting = null,
+            createdAt = Instant.fromEpochMilliseconds(0),
+            updatedAt = Instant.fromEpochMilliseconds(0),
+        )
+        val query = makeQuery(records + recordWithVariety)
+
+        // origin に "Geisha"（品種名）が入っても variety の union でヒットする
+        val result = query.searchRecords(CoffeeRecordFilter(origin = "Geisha"))
+        assertEquals(1, result.size)
+        assertEquals("ゲイシャ エステート", result[0].name)
+    }
+
+    @Test
+    fun originFilter_traditional_originMatch_stillWorks() = runTest {
+        // 従来の「origin に産地名」が引き続きヒットする（後方互換）
+        val records = listOf(
+            record("r1", origin = "エチオピア", name = "シングルオリジン"),
+            record("r2", origin = "ケニア", name = "ブレンド"),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(CoffeeRecordFilter(origin = "エチオピア"))
+        assertEquals(1, result.size)
+        assertEquals("エチオピア", result[0].origin)
+    }
+
+    @Test
+    fun cafeNameFilter_traditional_cafeNameMatch_stillWorks() = runTest {
+        // 従来の「cafeName にカフェ名」が引き続きヒットする（後方互換）
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "Blue Bottle 三軒茶屋"), origin = "ケニア"),
+            record("r2", cafe = cafe("p2", "Starbucks Reserve"), origin = "ブラジル"),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(CoffeeRecordFilter(cafeName = "Blue Bottle"))
+        assertEquals(1, result.size)
+        assertEquals("Blue Bottle 三軒茶屋", result[0].cafeName)
+    }
+
+    @Test
+    fun textTermMatch_caseInsensitive_acrossAllCandidates() = runTest {
+        // 大小無視が横断対象すべてで効く
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "FUGLEN"), origin = "ETHIOPIA", name = "HAND DRIP"),
+        )
+        val query = makeQuery(records)
+
+        val fuglen = query.searchRecords(CoffeeRecordFilter(origin = "fuglen"))
+        assertEquals(1, fuglen.size)
+
+        val ethiopia = query.searchRecords(CoffeeRecordFilter(cafeName = "ethiopia"))
+        assertEquals(1, ethiopia.size)
+
+        val handDrip = query.searchRecords(CoffeeRecordFilter(origin = "hand drip"))
+        assertEquals(1, handDrip.size)
+    }
+
+    @Test
+    fun bothOriginAndCafeNameSpecified_AND_logic() = runTest {
+        // origin と cafeName を両方指定した場合は AND（各 term が union のいずれかにヒット）
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "フグレン東京"), origin = "エチオピア", name = "シングル"),
+            record("r2", cafe = cafe("p2", "Blue Bottle"), origin = "エチオピア", name = "ブレンド"),
+            record("r3", cafe = cafe("p1", "フグレン東京"), origin = "ケニア", name = "アナエロビック"),
+        )
+        val query = makeQuery(records)
+
+        // フグレン かつ エチオピア の両方を満たすのは r1 のみ
+        val result = query.searchRecords(
+            CoffeeRecordFilter(origin = "フグレン", cafeName = "エチオピア")
+        )
+        assertEquals(1, result.size)
+        assertEquals("フグレン東京", result[0].cafeName)
+        assertEquals("エチオピア", result[0].origin)
+    }
+
+    @Test
+    fun noHit_whenTermMatchesNoneOfCandidates() = runTest {
+        // union のどのフィールドにもヒットしない term は 0 件
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "Blue Bottle"), origin = "エチオピア", name = "シングル"),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(CoffeeRecordFilter(origin = "存在しないカフェ名"))
+        assertTrue(result.isEmpty())
+    }
+
+    @Test
+    fun textMatch_withRatingFilter_combinedFacet() = runTest {
+        // 横断テキストマッチ + rating facet の組み合わせが機能する
+        val records = listOf(
+            record("r1", cafe = cafe("p1", "フグレン"), origin = "エチオピア", rating = 4.5),
+            record("r2", cafe = cafe("p1", "フグレン"), origin = "ケニア", rating = 2.0),
+            record("r3", cafe = cafe("p2", "Blue Bottle"), origin = "エチオピア", rating = 4.5),
+        )
+        val query = makeQuery(records)
+
+        // origin に "フグレン"（カフェ名）+ minRating=4.0 → r1 のみヒット
+        val result = query.searchRecords(
+            CoffeeRecordFilter(origin = "フグレン", minRating = 4.0)
+        )
+        assertEquals(1, result.size)
+        assertEquals(4.5, result[0].rating)
+        assertEquals("フグレン", result[0].cafeName)
+    }
+
     // ----- テスト: 複合フィルタ -----
 
     @Test

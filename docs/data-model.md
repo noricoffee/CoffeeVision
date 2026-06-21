@@ -317,7 +317,8 @@ data class CoffeeRecordSummary(
 設計上の決め事:
 
 - **単一の柔軟な検索 tool**: 複数の専用 tool に分けず、`searchRecords` 1 本に絞り込み条件を optional で並べる。Foundation Models は引数説明が充実した単一 tool の方が安定し、KMP 照会 API も 1 メソッドで済む。
-- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、`origin`/`cafeName` は部分一致、`rating=0.0`（未評価 sentinel）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。
+- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、`rating=0.0`（未評価 sentinel）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。
+- **`origin`/`cafeName` はフィールド横断の free-text term**（2026-06-21 横断化）: 各 term が `record.cafe?.name`（カフェ名）/ `record.origin`（産地）/ `record.name`（コーヒー名）/ `record.variety`（品種）のいずれかに部分一致（大小無視）すればマッチ。両方指定時は AND（各 term がそれぞれ union のいずれかにヒット）。どちらも null ならこのテキスト条件は無視。背景: Foundation Models が `cafeName` と `origin` を誤分類しても確実にヒットさせるため（例: "フグレン" を `origin` に入れても cafe 名にマッチ）。トレードオフとして、コーヒー名に地名が含まれる場合の偽陽性が増えるが個人アプリ規模では許容。
 - **userId は実装が内部で解決**: `CoffeeRecordQueryImpl` は `authRepository.signInAnonymouslyIfNeeded()` で現在 uid を取得し、`coffeeRepository.observeAll(uid).first()` で全件取得 → Kotlin で filter 適用 → `visitedOn` 降順 → `limit` 件に切って `CoffeeRecordSummary` 化する。個人アプリ規模（数十〜数百件）のため全件読みで十分。`shared/domain` 内に置き、`CoffeeRepository` + `AuthRepository` インターフェースのみに依存させる（テスト容易）。`AppContainer` が組み立てて `val coffeeRecordQuery` で公開する。
 - **digest はベース文脈として併用（ハイブリッド）**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き `buildPrompt(stats)` の digest を含める。
 - **既存インターフェース・VM・UI は不変**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI は変更しない（変更は純粋に加算的）。ブリッジ方向（Swift→Kotlin calling direction）と配線は [`kmp-bridge.md`](./kmp-bridge.md) を参照。

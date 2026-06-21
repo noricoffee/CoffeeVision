@@ -38,7 +38,11 @@ interface CoffeeRecordQuery {
  *
  * ## マッチング仕様
  *
- * - [origin] / [cafeName]: 部分一致・大小無視
+ * - [origin] / [cafeName]: **フィールド横断の部分一致・大小無視**。
+ *   どちらのフィールドに入っても、次の union のいずれかに部分一致すればマッチとする:
+ *   `record.cafe?.name`（カフェ名）/ `record.origin`（産地）/ `record.name`（コーヒー名）/ `record.variety`（品種）。
+ *   両方指定された場合は AND（各 term が union のいずれかにヒットすること）。
+ *   どちらも null ならこのテキスト条件は無視する。
  * - [brewMethod] / [roastLevel]: enum `.name`（"HandDrip" 等）に対し大小無視 + 部分一致
  *   （例: "drip" は "HandDrip" にマッチ）。roastLevel が null のレコードは [roastLevel] 指定時は除外。
  * - [minRating] / [maxRating]: `rating` の範囲。`rating == 0.0`（未評価 sentinel）は
@@ -64,10 +68,10 @@ interface CoffeeRecordQuery {
  * ```
  */
 data class CoffeeRecordFilter(
-    val origin: String? = null,         // 産地（部分一致・大小無視）
+    val origin: String? = null,         // free-text term（横断マッチ: cafe名/産地/コーヒー名/品種のいずれかに部分一致）
     val brewMethod: String? = null,     // 抽出方法（enum 名に寛容マッチ）
     val roastLevel: String? = null,     // 焙煎度（enum 名に寛容マッチ）
-    val cafeName: String? = null,       // カフェ名（部分一致・大小無視。cafe=null のレコードは除外）
+    val cafeName: String? = null,       // free-text term（横断マッチ: cafe名/産地/コーヒー名/品種のいずれかに部分一致）
     val minRating: Double? = null,      // 評価の下限（含む）
     val maxRating: Double? = null,      // 評価の上限（含む）
     val fromYearMonth: String? = null,  // "YYYY-MM" 以降（含む）
@@ -135,17 +139,10 @@ class CoffeeRecordQueryImpl(
     // ----- フィルタ適用 -----
 
     private fun applyFilter(record: CoffeeRecord, filter: CoffeeRecordFilter): Boolean {
-        // origin: 部分一致・大小無視
-        if (filter.origin != null) {
-            val originValue = record.origin ?: return false
-            if (!originValue.contains(filter.origin, ignoreCase = true)) return false
-        }
-
-        // cafeName: 部分一致・大小無視。cafe=null のレコードは除外
-        if (filter.cafeName != null) {
-            val cafeNameValue = record.cafe?.name ?: return false
-            if (!cafeNameValue.contains(filter.cafeName, ignoreCase = true)) return false
-        }
+        // origin / cafeName: フィールド横断の free-text term マッチ（AND）
+        // 各 term が cafe名 / 産地 / コーヒー名 / 品種 のいずれかに部分一致すればヒット
+        if (filter.origin != null && !matchesTextTerm(record, filter.origin)) return false
+        if (filter.cafeName != null && !matchesTextTerm(record, filter.cafeName)) return false
 
         // brewMethod: enum.name に大小無視 + 部分一致
         if (filter.brewMethod != null) {
@@ -191,6 +188,28 @@ class CoffeeRecordQueryImpl(
     )
 
     // ----- ヘルパ -----
+
+    /**
+     * `term` がレコードのテキスト union（カフェ名 / 産地 / コーヒー名 / 品種）のいずれかに
+     * 部分一致（大小無視）するか判定する。
+     *
+     * LLM が `origin` と `cafeName` を誤分類した場合でも、
+     * どちらのフィールドに入っていても同じ union に当てるためのフィールド横断マッチ。
+     *
+     * - `record.cafe?.name`: cafe が null（セルフ抽出）のときは比較対象から除外
+     * - `record.origin`: null のときは比較対象から除外
+     * - `record.name`: コーヒー名（必須フィールド、常に比較対象）
+     * - `record.variety`: null のときは比較対象から除外
+     */
+    private fun matchesTextTerm(record: CoffeeRecord, term: String): Boolean {
+        val candidates = listOfNotNull(
+            record.cafe?.name,
+            record.origin,
+            record.name,
+            record.variety,
+        )
+        return candidates.any { it.contains(term, ignoreCase = true) }
+    }
 
     /**
      * LocalDate を "YYYY-MM" 形式に変換する。

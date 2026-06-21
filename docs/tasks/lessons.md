@@ -334,3 +334,22 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - サブエージェントが override フラグ付きで「BUILD SUCCEEDED」と報告したら、親は **フラグ無しで再検証**してから完了扱いにする
 - IDE（SourceKit）の `No such module 'SharedLogic'` 診断は、フレームワーク未ビルドのインデックス環境では出る**偽陽性**のことが多い。`xcodebuild` の実ビルド結果を真とする
 - 発生源: Phase 7 Phase 3（ios-engineer が override フラグ付きで成功報告 → 親のフラグ無し再検証で原因切り分け）
+
+---
+
+## 2026-06-21
+
+### `KotlinDouble?` を `String(format:)` に直接渡すと 0.0 になる（nullable primitive の SKIE ブリッジ）
+
+- Kotlin の nullable primitive（`Double?` / `Int?` 等）は SKIE 経由でも Swift では `KotlinDouble?` / `KotlinInt?`（= `NSNumber` 派生）になり、Swift native の `Double?` には**ならない**
+- `String(format: "%.1f", kotlinDouble)` のように `KotlinDouble`(NSNumber) を `%f` に直接渡すと、`%f` が NSNumber のポインタ値を double として誤読し **0.0**（や不正値）を表示する。**コンパイルは通る**（NSNumber は CVarArg 準拠）ため気づきにくい
+- **修正パターン**: `kotlinDouble.doubleValue` で Swift `Double` に変換してから渡す。算術演算に使う場合も同様
+- **参照パターン**: 同一ファイル内で正しく `.doubleValue` を使っている箇所（例: `tastingAverages.sweetness?.doubleValue`）があれば、それに揃っているか全 use を grep で点検する
+- 発生源: 分析タブの平均評価が 0.0 表示（`AnalysisView` の `CoffeeStats`/`CategoryStat`/`CafeStat` の `averageRating` 計 8 箇所。Phase A-3 からの潜在バグが 9-4b 作業中に発覚）
+
+### オンデバイス小型 LLM（Foundation Models）の tool calling は instructions の「逃げ道」で呼ばれなくなる
+
+- Foundation Models（Apple Intelligence のオンデバイス小型モデル）に `Tool` を登録しても、instructions が「ツールで照会して**よい**」（許可形）＋「不明なら『分かりません』と返す」（tool 未使用の早期 escape）を併記していると、モデルは tool を呼ばず安易に「分かりません」を返しがち
+- **改善パターン**: ①個別データの問いには「**必ず**ツールを呼ぶ／ツールを呼ばずに分からないとは言わない」と命令形で書く ②「分かりません」は「**ツールを呼んだ結果が 0 件のときだけ**」に限定して早期 escape を塞ぐ ③tool description も指示的にする
+- **切り分けの仕込み**: tool の `call` 冒頭/末尾と、セッション選択経路に診断 `print` を入れ、「tool が呼ばれていない」のか「呼ばれたが 0 件（filter マッチ漏れ）」なのかを実機ログで判別できるようにする。instructions 強化だけで不足なら、質問をプロンプト側で「個別 / 全体傾向」に事前分類してセッション分岐する案が次の手
+- 発生源: 9-4b 対話 Q&A v2（個別記録の質問に「不明」を返す → instructions の逃げ道が原因）

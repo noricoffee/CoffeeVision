@@ -1483,6 +1483,70 @@ Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸�
 
 **dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。
 
+### 2026-06-21: 対話 Q&A v1（単発・digest 文脈注入）の設計確定
+
+- 領域: Shared（contract）→ KMP → iOS
+- 関連: `docs/data-model.md` §1.6 / `shared/domain` `CoffeeInsightProvider` / `shared/feature/analysis` `AnalysisViewModel`
+
+分析タブに自然言語 Q&A（「好きな産地は？」等）を追加する。Phase A-4 の傾向要約（`CoffeeInsightProvider.summarize`）の仕組みをそのまま拡張する形に決定。
+
+**インターフェース**: `CoffeeInsightProvider` に `@Throws suspend fun answer(question: String, stats: CoffeeStats): String` を 1 本追加するだけ。`summarize` と同列。iOS は `__answer(question:stats:completionHandler:)` の protocol witness で実装、Android は注入しない（分析タブ非表示）。可否ゲートは要約と共有（`provider != null` なら Q&A も可）。
+
+**v1 のスコープ（あえて削ったもの）**:
+- **単発・ステートレス**: 1 問 1 答。`LanguageModelSession` は質問ごとに新規生成、会話履歴を持たない。UI も入力欄 + 直近回答カード 1 枚のみ。チャットスレッド型は不採用（履歴状態 + session ライフサイクル管理が重い）。
+- **digest のみ接地**: 生レコード・tool 無し。要約と同じく `CoffeeStats` が唯一の入力（計算は KMP 済み、LLM は解釈と整形のみ）。
+- **逐次表示なし**: `streamResponse` → `Flow<String>` 化は「Swift 側で Flow を作る」ハードパス（`kmp-bridge.md`）になるため v1 では採らず suspend 一発で最終 `String` を返す。回答待ちは ProgressView。
+
+**ハルシネーション対策**: instructions で「与えられた統計の範囲でのみ答える / digest に無い情報は『記録からは分かりません』/ 再計算しない / 日本語で簡潔に」と縛る。
+
+**AnalysisViewModel の Q&A 状態**: `QaStatus` sealed（Unsupported/Idle/Asking/Answered/Failed）+ `qaQuestion`/`qaAnswer`、`onQuestionAsked(question)` / `onQaCleared()`、候補質問 `SUGGESTED_QUESTIONS`。`insight` と同じ Job 再起動・null=Unsupported パターンに揃える。空質問・`stats==null`・`provider==null` はガードして no-op。`error` は既存フィールドを共用。
+
+**経緯**: ユーザーは UI=単発Q&A型 / データ接地=tool で生レコード参照も、を選択。ただし tool→KMP 照会の bridge（Swift Tool.call から KMP suspend を await）は新規で要 PoC のため、リスク分割して v1（B-2）= digest 接地のみ、tool calling = B-3（9-4b）に分離した。
+
+### 2026-06-21: Phase B-2 対話 Q&A v1 iOS 実装（digest 文脈注入）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Analysis/`（`CoffeeInsightProviderIosImpl.swift` / `AnalysisViewModelBridge.swift` / `AnalysisView.swift`）
+
+`__answer(question:stats:completionHandler:)` は `__summarize` と同じ protocol witness パターン。`generateAnswer` で `buildPrompt(from:)`（要約と共用の digest 整形）を流用して digest を提示し、末尾に質問を付ける。`LanguageModelSession` はリクエストごとに新規生成（ステートレス）。回答はプレーンテキスト（`session.respond(to:).content`、`@Generable` 不使用）。instructions にグラウンディング 5 か条（統計範囲のみ / 不明は「記録からは分かりません」/ 再計算しない / 日本語 2〜4 文 / 推測しない）。
+
+- `suggestedQuestions` は `Array(AnalysisViewModel.companion.SUGGESTED_QUESTIONS)` で取得（`as? [String]` は "always succeeds" warning が出るため `Array()` を使う）。
+- UI は `QaSectionContainer` 内で `qaStatus` の `is` 分岐（`insightCardSection` と同じパターン）。`Unsupported` は `EmptyView()`、`Asking` は ProgressView（逐次表示なし）、`Answered` は質問+回答+クリア、`Failed` は同じ質問で再送。入力欄は `Answered` でも表示し、新規送信で前カードを上書き。
+- `error` は insight 系と共用のため、Q&A 失敗と要約再生成失敗が同時発火するとメッセージが上書きされうる（実運用上は稀、`qaStatus`/`insightStatus` でどちらか判別可。許容）。
+
+### 2026-06-21: 対話 Q&A v2（tool calling / 生レコード参照、9-4b）の設計確定
+
+- 領域: Shared / KMP / iOS
+- 関連: `shared/domain`（`CoffeeRecordQuery` 新設）/ `shared/core/AppContainer.kt` / `iosApp/.../Features/Analysis/`（`SearchCoffeeRecordsTool.swift` 新設・`CoffeeInsightProviderIosImpl.swift`）/ `AppState.swift`
+
+digest で答えられない個別レコード単位の問いに対応するため、Foundation Models の `Tool` から KMP の生レコード照会を呼ぶ。確定した設計判断:
+
+- **既存インターフェース・VM・UI は不変の加算的変更**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI / domain interface は触らない。これが最もエレガント（v1 の状態機械をそのまま再利用）。
+- **単一の柔軟な検索 tool**: `CoffeeRecordQuery.searchRecords(filter)` 1 本。filter は全 String/Double/Int（enum を持ち込まない）で、LLM 生成文字列を KMP 側で寛容マッチ（enum `.name` 大小無視 + 部分一致、産地/カフェ名 部分一致、rating=0.0 は評価範囲外）。複数専用 tool より Foundation Models が安定し KMP も 1 メソッドで済む。
+- **userId は KMP 実装が内部解決**: `CoffeeRecordQueryImpl` が `authRepository.signInAnonymouslyIfNeeded()` → `coffeeRepository.observeAll(uid).first()` → Kotlin で filter/sort/limit → `CoffeeRecordSummary`。Swift tool は userId を意識しない。`shared/domain` 内に置き interface のみ依存（テスト容易）、`AppContainer` が `coffeeRecordQuery` で公開。
+- **配線は遅延アタッチ（依存サイクル解消）**: provider は AppState で container より先に生成され container 引数になる一方 `coffeeRecordQuery` は container 内で組む。両者を構築時に結べないため `attachRecordQuery(_:)` で container 構築後に後付け（`searchRecords` は `answer` 時 = 初期化完了後にしか使わないため安全）。詳細は kmp-bridge.md。
+- **digest 併用ハイブリッド**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き digest を含める。
+- ブリッジ方向は v1 の Q&A と逆で **Swift→Kotlin の calling direction**（SKIE が `searchRecords(filter:) async throws` を生成、protocol witness 不要）。実装前に小 PoC で round-trip 確認（CLAUDE.md ブリッジ規約）。
+
+実装後の追記（2026-06-21 KMP 実装完了時）:
+
+- **`limit` ガード**: `CoffeeRecordFilter.limit` は負数・0 を `DEFAULT_LIMIT=10` に、`MAX_LIMIT=100` 超を 100 に clamp する（LLM が不正値を生成した場合の防御）。定数は `CoffeeRecordFilter.companion` に公開。`CoffeeRecordQueryImpl` は `shared/domain` の `model/` ディレクトリに `CoffeeRecordQuery` interface / 2 DTO と同居（UseCase ではなく "Query" 責務として model/ に共置）。
+- **`minRating`/`maxRating` は Swift で `KotlinDouble?` になる**: Kotlin の `Double?` は SKIE 経由でも `KotlinDouble?` として見えるため、iOS の `@Generable Arguments` → `CoffeeRecordFilter` 変換で評価値フィールドは `KotlinDouble(value:)` ラップが必要。`String?`（origin/cafeName 等）は直接渡せる。
+
+実装後の追記（2026-06-21 iOS 実装完了時）:
+
+- **iOS 実装の確定形**: `SearchCoffeeRecordsTool: Tool`（`@Generable Arguments` 全 optional、`Tool.Output == String`（`PromptRepresentable` 準拠））を新設。`CoffeeInsightProviderIosImpl` に `attachRecordQuery(_:)` を追加し、`generateAnswer` を「recordQuery あり → `LanguageModelSession(tools:[...])` / nil → digest-only」のハイブリッドに。`makeIfAvailable()` の戻り値型は `any CoffeeInsightProvider?` → 具象 `CoffeeInsightProviderIosImpl?` に変更（attach に具象参照が要るため。`AppContainer` 引数は `any CoffeeInsightProvider?` のままで互換）。`AppState` は provider を具象型で受け、container 構築後に `attachRecordQuery(container.coffeeRecordQuery)`。`SearchCoffeeRecordsTool.swift` の import に `@preconcurrency` を付け Sendable 警告を抑制。
+- **instructions の v1→v2 差分**: 「digest に無い情報は『記録からは分かりません』」→「`searchCoffeeRecords` で照会してから答える / ツール結果に含まれない情報は推測・補完しない」。limit（既定 10）超のレコードは「全部教えて」に対し上限内しか返らない仕様上の限界が残る。
+- **`localizedBrewMethod`/`localizedRoastLevel` が 3 箇所に重複**（`AnalysisView.swift` / `CoffeeInsightProviderIosImpl.swift` / `SearchCoffeeRecordsTool.swift`）。今回は影響最小のため複製を許容。将来 `iosApp/iosApp/Utilities/CoffeeLocalizer.swift` 等に共通化推奨（昇格候補）。
+
+実装直後のバグ修正（2026-06-21 ユーザー実機確認時）:
+
+- **平均評価 0.0 バグ（9-4b と無関係の既存バグ）**: `AnalysisView` / `buildPrompt` で `CoffeeStats`/`CategoryStat`/`CafeStat` の `averageRating`（Swift では `KotlinDouble?`）を `String(format: "%.1f", $0)` に直接渡しており、`%f` が NSNumber を誤読して 0.0 表示。計 8 箇所に `.doubleValue` を補って修正。詳細・汎用化は lessons.md 2026-06-21。
+- **Q&A v2 が個別記録の問いに「不明」を返す**: tool・配線・ブリッジは正常で、原因は instructions の「逃げ道」（許可形 + tool 未使用の早期 escape）。instructions を「個別の問いは必ず tool を呼ぶ / 0 件のときだけ見つからないと答える」に命令形で書き換え、tool description も指示的に強化。`generateAnswer` の経路選択と `SearchCoffeeRecordsTool.call`（filter / 取得件数）に診断 `print` を追加し、実機ログで「未呼び出し」か「0 件（マッチ漏れ）」かを切り分け可能にした。
+- **追調査（実機ログ）**: digest の「よく行くカフェ」に載るカフェ（例ブルーボトル）は tool 呼び出し成功、digest に載らない低頻度カフェ（例フグレン）は tool 未呼び出しと判明。モデルが **digest を全記録の網羅リストと誤認**し「digest に無い＝記録に無い」と諦める逃げ道が残っていた。instructions に「digest は非網羅の要約／digest に出ない名前でも必ず検索／記録の有無は tool 結果のみで判断」を明示して対処。なお tool 呼び出し時、モデルは digest を使って `cafeName` をフルネーム補完する（"ブルーボトルコーヒー"→"ブルーボトルコーヒー 三軒茶屋"、部分一致で命中）。
+- instructions 強化でも不足なら、次の手は **質問の構造化事前抽出 → 決定的 tool 呼び出し**（Swift が固有名詞/期間を検出して tool を直接呼び、結果を digest に追記して LLM は整形のみ）。固有名詞抽出の偽陰性とのトレードオフあり（lessons.md 2026-06-21）。
+- **追々調査（実機ログ・第2段）**: instructions 修正後、tool は呼ばれるようになったが今度は **フィールド誤分類**が発覚（"フグレン"=カフェを `origin` に入れて 0 件）。モデルの分類精度に依存しない解として、KMP の `CoffeeRecordQueryImpl` で **`origin`/`cafeName` をフィールド横断 free-text term 化**（`{cafe名/産地/コーヒー名/品種}` の union に部分一致）。公開 API（`CoffeeRecordFilter` の形）は不変のため Swift 追随不要だが、実装が変わるので iOS は通常 Xcode ビルド（override フラグ無し）で framework 再生成して反映する。data-model §1.6 に確定挙動を反映済。
+
 ### 2026-06-21: CI Android ジョブでダミー google-services.json を生成
 
 - 領域: Build（`.github/workflows/ci.yml`）

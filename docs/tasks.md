@@ -370,8 +370,36 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [ ] | B-1: `FavoriteSignals`（階層2）を `BuildCoffeeStatsUseCase` に実装 + テスト（kmp-engineer） | minSampleSize 閾値ガード |
-| [ ] | B-2: 対話 Q&A v1（ツール無し・`CoffeeStats` 文脈注入）（ios-engineer） | `CoffeeInsightProvider` に Q&A API 追加を親が確定してから |
-| [ ] | B-3: 対話 Q&A v2（tool calling）/ 好みのカフェをマップ連携 | 将来 |
+
+### Phase B-2: 対話 Q&A v1（単発・digest 文脈注入）
+
+> 2026-06-21 着手。分析タブに自然言語 Q&A を追加する。**単発（1 問 1 答・ステートレス）/ `CoffeeStats` digest のみ文脈注入 / 逐次表示なし**。確定仕様は [`requirements.md`](./requirements.md) §9-4、インターフェース・設計判断は [`data-model.md`](./data-model.md) §1.6「対話 Q&A v1」、bridge は [`kmp-bridge.md`](./kmp-bridge.md) protocol witness 表、設計ログは [`implementation_note.md`](./implementation_note.md) 2026-06-21 Q&A v1 エントリ。tool calling（生レコード参照）は B-3 に分離。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: `CoffeeInsightProvider.answer(question, stats): String` の契約 + `AnalysisViewModel` の Q&A 状態仕様を docs に固定 | 2026-06-21 / requirements §9-4・data-model §1.6・kmp-bridge・implementation_note |
+| [x] | KMP（kmp-engineer）: `CoffeeInsightProvider` に `@Throws suspend fun answer(question, stats): String` を追加 | 2026-06-21 / `summarize` と同列。XCFramework に `answer(question:stats:completionHandler:)` 出力確認 |
+| [x] | KMP（kmp-engineer）: `AnalysisViewModel` に Q&A 状態を追加（`QaStatus` sealed: Unsupported/Idle/Asking/Answered/Failed、`qaQuestion`/`qaAnswer`、`onQuestionAsked(question)`/`onQaCleared()`、候補質問 `SUGGESTED_QUESTIONS`） | 2026-06-21 / `insight` と同じ Job 再起動・null=Unsupported パターン。`error` 共用。状態遷移テスト 10 件 green |
+| [x] | iOS（ios-engineer）: `CoffeeInsightProviderIosImpl.__answer(question:stats:completionHandler:)` 実装 | 2026-06-21 / `__summarize` と同型。`generateAnswer` で `buildPrompt` 流用 + 質問付与、grounding 5 か条 instructions、`session.respond(to:)` プレーンテキスト |
+| [x] | iOS（ios-engineer）: `AnalysisView` に Q&A UI（入力欄 + 送信 + 候補チップ + 回答カード + Asking スピナ + Failed リトライ）。`Unsupported` は非表示 | 2026-06-21 / `QaSectionContainer` で `qaStatus` の `is` 分岐。`suggestedQuestions` は `Array(...SUGGESTED_QUESTIONS)`。Bridge に qa 系公開 |
+| [~] | 検証: `xcodebuild` 成功 + Apple Intelligence 有効端末での round-trip はユーザー目視 | 2026-06-21 / BUILD SUCCEEDED・新規 warning ゼロ。**Apple Intelligence 有効実機での round-trip / 非対応端末で非表示 / 候補チップ / クリア / 再試行はユーザー目視** |
+
+### Phase B-3: 対話 Q&A v2（tool calling / 生レコード参照）
+
+> 2026-06-21 着手。digest で答えられない**個別レコード単位**の問いに対応するため、Foundation Models の `Tool` で KMP の生レコード照会（`CoffeeRecordQuery.searchRecords`）を呼ぶ。**単一の柔軟な検索 tool / filter は全 String・Double で KMP が寛容マッチ / digest 併用ハイブリッド / 既存インターフェース・VM・UI は不変の加算的変更**。確定仕様は [`requirements.md`](./requirements.md) §9-4b、インターフェース・設計判断は [`data-model.md`](./data-model.md) §1.6「対話 Q&A v2」、bridge（Swift→Kotlin calling direction / 遅延アタッチ）は [`kmp-bridge.md`](./kmp-bridge.md)、設計ログは [`implementation_note.md`](./implementation_note.md) 2026-06-21 Q&A v2 エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: `CoffeeRecordQuery.searchRecords(filter)` の契約 + filter/summary モデル + 配線（遅延アタッチ）方針を docs に固定 | 2026-06-21 / requirements §9-4b・data-model §1.6・kmp-bridge・implementation_note |
+| [x] | KMP（kmp-engineer）: `CoffeeRecordQuery` interface + `CoffeeRecordFilter`/`CoffeeRecordSummary` + `CoffeeRecordQueryImpl`（userId 内部解決・全件読み→filter→sort→limit）+ `AppContainer.coffeeRecordQuery` 公開 + commonTest | 2026-06-21 / shared/domain model/。limit clamp 10/100、寛容マッチ、rating=0 除外。commonTest 30 件 green |
+| [x] | KMP（kmp-engineer）: XCFramework に `searchRecords(filter:) async throws -> [CoffeeRecordSummary]` が出力されるか確認 | 2026-06-21 / SKIE calling direction（witness 不要）。swiftinterface / ObjC ヘッダで確認済 |
+| [x] | iOS（ios-engineer）: PoC で `recordQuery.searchRecords(...)` の SKIE async round-trip を本実装前に確認 | 2026-06-21 / Tool.call から `try await` 呼び出し・`KotlinDouble(value:)` ラップ・`Tool.Output==String` をビルドで確認 |
+| [x] | iOS（ios-engineer）: `SearchCoffeeRecordsTool: Tool`（`@Generable Arguments` → `CoffeeRecordFilter`、結果を compact 行に整形）+ `generateAnswer` を tool セッション化（recordQuery 未アタッチ時は digest-only フォールバック） | 2026-06-21 / digest 併用ハイブリッド。`@preconcurrency` import で Sendable 警告抑制。ローカライズは複製（共通化は将来） |
+| [x] | iOS（ios-engineer）: `AppState` で `attachRecordQuery(container.coffeeRecordQuery)` 配線 | 2026-06-21 / `makeIfAvailable()` を具象型 `CoffeeInsightProviderIosImpl?` 返しに変更し container 構築後に attach |
+| [x] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip をユーザー目視 | 2026-06-21 / KMP 43 件 green・`xcodebuild` BUILD SUCCEEDED・新規 warning ゼロ。**ユーザー実機確認 OK**（「ブルーボトル/フグレンで飲んだのは？」で tool 呼び出し→ヒット→回答を確認） |
+| - | 実機検証で発覚し修正した点（同日） | ①平均評価 0.0 表示（`KotlinDouble?` を `String(format:)` に直渡し）→ `.doubleValue` 8 箇所補完 ②Q&A が tool を呼ばない（instructions の逃げ道 / digest 非網羅性の誤認）→ instructions 強化 ③フィールド誤分類（カフェ名を origin へ）→ KMP テキスト検索を横断寛容化。詳細は lessons.md / implementation_note 2026-06-21 |
+
+| [ ] | B-4: 好みのカフェをマップ連携 | 将来。分析結果とマップの連携 |
 
 ---
 

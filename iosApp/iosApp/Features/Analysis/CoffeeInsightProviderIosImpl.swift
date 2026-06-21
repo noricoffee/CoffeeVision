@@ -27,19 +27,42 @@ import SharedLogic
 @available(iOS 26.0, *)
 final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
+    // MARK: - State
+
+    /// KMP の `CoffeeRecordQuery`。
+    ///
+    /// `AppContainer` 構築後に `attachRecordQuery(_:)` で後付けする（依存サイクル解消）。
+    /// `nil` のまま `answer` が呼ばれた場合は digest-only セッションにフォールバックする。
+    private var recordQuery: CoffeeRecordQuery?
+
     // MARK: - Factory
 
     /// `SystemLanguageModel` の可否を確認し、利用可能なときだけインスタンスを返す。
     ///
     /// `.available` 以外（`deviceNotEligible` / `appleIntelligenceNotEnabled` / `modelNotReady`）
     /// の場合は nil を返す。呼び出し元（AppState）は nil を AppContainer に渡す。
-    static func makeIfAvailable() -> (any CoffeeInsightProvider)? {
+    ///
+    /// - Returns: `CoffeeInsightProviderIosImpl` のインスタンス（具象型）。
+    ///   `AppState` が `attachRecordQuery` を呼べるよう具象型を返す。
+    static func makeIfAvailable() -> CoffeeInsightProviderIosImpl? {
         guard SystemLanguageModel.default.availability == .available else {
             print("[CoffeeVision] Foundation Models unavailable: \(SystemLanguageModel.default.availability)")
             return nil
         }
         print("[CoffeeVision] Foundation Models available — creating CoffeeInsightProviderIosImpl")
         return CoffeeInsightProviderIosImpl()
+    }
+
+    // MARK: - 遅延アタッチ（依存サイクル解消）
+
+    /// `AppContainer` 構築後に `coffeeRecordQuery` を後付けする。
+    ///
+    /// `CoffeeInsightProviderIosImpl` は `AppContainer` の constructor argument になるため、
+    /// container 構築時には `coffeeRecordQuery` がまだ存在しない。
+    /// そのため `bootstrap()` で container 構築後にこのメソッドで後付けする。
+    /// `answer(question:stats:)` が呼ばれるのは初期化完了後のため、競合リスクはない。
+    func attachRecordQuery(_ query: CoffeeRecordQuery) {
+        self.recordQuery = query
     }
 
     // MARK: - CoffeeInsightProvider protocol witness（SKIE completion handler 形式）
@@ -68,7 +91,85 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         }
     }
 
+    /// ユーザーの質問に対して Foundation Models で回答を生成して completion に返す（Phase B-2）。
+    ///
+    /// `summarize` と同じ `__` プレフィックス付き protocol witness パターン。
+    /// `LanguageModelSession` はリクエストごとに新規生成（ステートレス / 会話履歴なし）。
+    /// 回答はプレーンテキスト（`@Generable` 不使用）で日本語 2〜4 文程度を返す。
+    ///
+    /// - Parameter question: ユーザーが入力した質問テキスト
+    /// - Parameter stats: 集計済みの `CoffeeStats`。digest として LLM に渡す唯一の入力
+    /// - Parameter completionHandler: 成功時 `(answer, nil)`、失敗時 `(nil, error)`
+    func __answer(
+        question: String,
+        stats: CoffeeStats,
+        completionHandler: @escaping @Sendable (String?, (any Error)?) -> Void
+    ) {
+        Task {
+            do {
+                let answer = try await self.generateAnswer(question: question, stats: stats)
+                completionHandler(answer, nil)
+            } catch {
+                print("[CoffeeVision] Foundation Models Q&A failed: \(error)")
+                completionHandler(nil, error)
+            }
+        }
+    }
+
     // MARK: - Private: LLM 生成ロジック
+
+    /// `CoffeeStats` を基に Foundation Models で回答を生成する（Q&A v2）。
+    ///
+    /// - `recordQuery` がアタッチ済みなら `SearchCoffeeRecordsTool` を登録した tool-calling セッションを使う
+    /// - `recordQuery` が nil（アタッチ前 / 非対応）なら digest-only セッションにフォールバックする
+    /// - digest（`CoffeeStats`）はどちらのモードでもプロンプトに含める（ハイブリッド）
+    /// - `LanguageModelSession` はリクエストごとに生成（ステートレス）
+    /// - グラウンディング制約を instructions に明示してハルシネーション抑制
+    /// - 回答はプレーンテキスト（`@Generable` 不使用）
+    private func generateAnswer(question: String, stats: CoffeeStats) async throws -> String {
+        let digest = buildPrompt(from: stats)
+
+        let instructions = """
+        あなたはコーヒー記録アプリのアシスタントです。
+        ユーザーからコーヒー記録の統計データ（digest）と、個別記録を検索する searchCoffeeRecords ツールが提供されます。
+
+        【digest について必ず理解すること】
+        digest はすべての記録の「上位集計の抜粋」です。よく行くカフェは上位数件だけ、よく飲む産地も上位数件だけが載っています。digest に名前が出てこないカフェ・店・産地・銘柄でも、記録は存在します。たとえば「フグレン」が digest に載っていなくても、フグレンの記録がある可能性は十分あります。digest に載っていないことは「記録がない」証拠にはなりません。
+
+        以下のルールを厳守して質問に回答してください:
+
+        1. 特定のカフェ名・店名・産地・銘柄・焙煎度・抽出方法・期間・月など固有の条件が質問に含まれる場合は、digest にその名前が載っているかどうかに関わらず、必ず searchCoffeeRecords を呼び出してから答える。「digest に載っていないから記録がない」と判断してはならない。
+        2. 全体の傾向・統計（総杯数・平均評価・よく飲む産地・最多焙煎度など）は digest だけで答えてよい。
+        3. 「記録からは見つかりませんでした」と答えてよいのは、searchCoffeeRecords を呼び出した結果が 0 件だったときだけ。ツールを呼ばずにこの表現を使ってはならない。
+        4. digest とツール結果に含まれていない情報は推測・補完しない。事実だけを述べる。
+        5. 数値の再計算はしない（提示された数値をそのまま引用する）。
+        6. 日本語で 2〜4 文程度、簡潔かつ丁寧に答える。
+        """
+
+        let prompt = """
+        \(digest)
+
+        【質問】
+        \(question)
+        """
+
+        if let rq = recordQuery {
+            // tool-calling セッション（v2）
+            print("[CoffeeVision] generateAnswer: tool-calling セッション（recordQuery アタッチ済み）で応答します")
+            let session = LanguageModelSession(
+                tools: [SearchCoffeeRecordsTool(recordQuery: rq)],
+                instructions: instructions
+            )
+            let response = try await session.respond(to: prompt)
+            return response.content
+        } else {
+            // digest-only セッション（v1 フォールバック：recordQuery 未アタッチ）
+            print("[CoffeeVision] generateAnswer: digest-only セッション（recordQuery 未アタッチ）で応答します")
+            let session = LanguageModelSession(instructions: instructions)
+            let response = try await session.respond(to: prompt)
+            return response.content
+        }
+    }
 
     /// `CoffeeStats` を基に Foundation Models で要約を生成する。
     ///
@@ -111,7 +212,7 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         lines.append("【コーヒー記録の概要】")
         lines.append("・総杯数: \(stats.totalCount) 杯")
         if let avg = stats.averageRating {
-            lines.append(String(format: "・平均評価: %.1f 点（5 点満点）", avg))
+            lines.append(String(format: "・平均評価: %.1f 点（5 点満点）", avg.doubleValue))
         }
 
         // 産地トップ（SKIE により [CategoryStat] として型付けされている）

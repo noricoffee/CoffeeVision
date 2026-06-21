@@ -68,9 +68,16 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 |----------------------|------------------------------|
 | `suspend fun signInAnonymouslyIfNeeded(): String` | `func signInAnonymouslyIfNeeded(completionHandler: @escaping (String?, Error?) -> Void)` |
 | `suspend fun upload(visit: Visit)` | `func upload(visit: Visit, completionHandler: @escaping (Error?) -> Void)` |
+| `suspend fun answer(question: String, stats: CoffeeStats): String` | `func answer(question:stats:completionHandler:)`（実装側は `__answer(...)`、completion は `(String?, Error?)`） |
 | `fun observeUserId(): Flow<String?>` | `func observeUserId() -> any Kotlinx_coroutines_coreFlow`（Kotlin Flow を返す。Swift の `AsyncStream` を直接返せない） |
 
 呼び出し側（ViewModel ブリッジ等）の Swift コードは `async throws` / `for await` をそのまま使えますが、`FirebaseRepositories/` 配下のプラットフォーム実装クラスは上記の生シグネチャを実装します。
+
+> **Foundation Models の Q&A（`CoffeeInsightProvider.answer`、Phase B-2）** は `summarize` と同じ protocol witness パターン（実装側 `__answer(question:stats:completionHandler:)`）で iOS が実装する。**逐次表示（`streamResponse` → `Flow`）は採用しない**: Kotlin interface が `Flow<String>` を返す形にすると「Swift 側で Flow を作る」上記ハードパス（`MutableStateFlow` を Swift から構築して流し込む）が必要になり v1 には過剰。`answer` は suspend 一発で最終回答 `String` を返し、UI は回答到着まで ProgressView を出す。逐次表示が要れば Phase 2 で `MutableStateFlow` ブリッジ方式を検討する。
+
+> **対話 Q&A v2（`CoffeeRecordQuery.searchRecords`、Phase B-3 / 9-4b）** は上記の Q&A とブリッジ方向が逆で、**Swift が Kotlin を「呼び出す」側**（calling direction）になる。`shared/domain` の `CoffeeRecordQuery` を iOS は実装せず、Foundation Models の `Tool.call` の中から呼ぶだけなので、SKIE がそのまま `func searchRecords(filter: CoffeeRecordFilter) async throws -> [CoffeeRecordSummary]` を生成する（**protocol witness 不要**。`__` プレフィックスも不要）。`@Generable Arguments`（LLM 生成）→ `CoffeeRecordFilter` への変換は Swift 側 `Tool.call` が担い、`userId` は KMP 実装が内部で解決するため Swift は filter だけ渡す。
+>
+> **配線の注意（依存サイクル）**: `CoffeeInsightProviderIosImpl` は `AppState` で `AppContainer` より先に生成され container のコンストラクタ引数になる一方、`coffeeRecordQuery` は container 内のリポジトリから組み立てる。両者を構築時に結べないため、provider に `attachRecordQuery(_:)` を設けて container 構築後に後付けする（`searchRecords` は `answer` 呼び出し時 = 初期化完了後にしか使わないため安全）。
 
 #### Swift から `Flow` を「作って」返す方法
 

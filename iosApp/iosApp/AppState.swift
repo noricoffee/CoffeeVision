@@ -66,7 +66,10 @@ final class AppState {
         // Foundation Models の可否を判定し、利用可能なときだけ Provider を注入する。
         // iOS 26 未満 / Apple Intelligence 無効 / 非対応端末では nil を渡す。
         // AnalysisViewModel は provider == nil のとき InsightStatus.Unsupported を返す。
-        let insightProvider: (any CoffeeInsightProvider)? = {
+        //
+        // 具象型（CoffeeInsightProviderIosImpl）で保持することで、container 構築後に
+        // attachRecordQuery(_:) を呼べるようにする（依存サイクル解消のための遅延アタッチ）。
+        let providerImpl: CoffeeInsightProviderIosImpl? = {
             if #available(iOS 26.0, *) {
                 return CoffeeInsightProviderIosImpl.makeIfAvailable()
             }
@@ -78,9 +81,15 @@ final class AppState {
             remoteCoffeeDataSource: remoteDataSource,
             authRepository: authRepo,
             placesApiKey: placesApiKey,
-            coffeeInsightProvider: insightProvider
+            coffeeInsightProvider: providerImpl
         )
         self.container = container
+
+        // container 構築後に coffeeRecordQuery を遅延アタッチする。
+        // providerImpl が nil（非対応端末）の場合は何もしない。
+        if #available(iOS 26.0, *) {
+            providerImpl?.attachRecordQuery(container.coffeeRecordQuery)
+        }
         // uid 不要なので bootstrap() 前から利用可能
         self.placePhotoLoader = PlacePhotoLoader(repository: container.cafeRepository)
     }

@@ -5,6 +5,8 @@ import com.noricoffee.data.places.createCafeRepository
 import com.noricoffee.db.AppDatabase
 import com.noricoffee.dev.DummyCoffeeData
 import com.noricoffee.domain.model.CoffeeInsightProvider
+import com.noricoffee.domain.model.CoffeeRecordQuery
+import com.noricoffee.domain.model.CoffeeRecordQueryImpl
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
@@ -117,6 +119,19 @@ class AppContainer(
     val coffeeRepository: CoffeeRepository = CoffeeRepositoryImpl(
         local = localCoffeeRepository,
         remote = remoteCoffeeDataSource,
+    )
+
+    /**
+     * iOS の Foundation Models `Tool`（function calling）から呼ばれる生レコード照会 API（Phase B-3 / 9-4b）。
+     *
+     * Swift からの呼び出しシグネチャ（SKIE）:
+     * `coffeeRecordQuery.searchRecords(filter: CoffeeRecordFilter) async throws -> [CoffeeRecordSummary]`
+     *
+     * userId は [CoffeeRecordQueryImpl] が内部で解決するため、Swift は [CoffeeRecordFilter] だけ渡す。
+     */
+    val coffeeRecordQuery: CoffeeRecordQuery = CoffeeRecordQueryImpl(
+        coffeeRepository = coffeeRepository,
+        authRepository = authRepository,
     )
 
     val cafeRepository: CafeRepository = createCafeRepository(apiKey = placesApiKey)

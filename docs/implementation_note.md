@@ -1482,3 +1482,18 @@ Blue Bottle「Elements of Coffee Tasting」由来の **甘味 / ボディ / 酸�
 **経緯**: 前エントリの独立 nullable は「書きたい要素だけ」を想定したが、テイスティングは 5 軸セットで初めて意味を成す（プロファイルとして比較・平均する）ため、all-or-nothing が要件・分析の両面で正しい。dev データのみ（クリーンブレイク）なので即作り直し。
 
 **dispatch 順序**: KMP（domain→data-local→core(stats/dummy)→feature/coffee-editor→data-firebase）で公開 API を凍結し XCFramework 成功を iOS 着手の前提にする（CoffeeRecord 再設計と同じ流れ）。`CoffeeRecord` のコンストラクタに引数が 1 つ増えるため、`DummyCoffeeData` / 既存テスト / iOS の `CoffeeRecord` 生成箇所すべてが追随対象。
+
+### 2026-06-21: CI Android ジョブでダミー google-services.json を生成
+
+- 領域: Build（`.github/workflows/ci.yml`）
+- 関連: `androidApp/build.gradle.kts`（`googleServices` プラグイン + Firebase 依存）
+
+feature/analyze で androidApp に `googleServices` プラグインと Firebase 依存（auth/firestore）を追加した結果、`:androidApp:assembleDebug` が `processDebugGoogleServices` で `google-services.json` を必須とするようになり、PR#2 の Android CI が `File google-services.json is missing.` で失敗した。同ファイルは秘匿情報として gitignore 済みで CI ランナーに存在しない（ローカルには `androidApp/google-services.json` がある）。PR#1 まではプラグイン未適用だったため通っていた。
+
+**対応**: CI の Android ジョブに、Gradle 実行前にダミー `google-services.json` を `androidApp/` へ書き出すステップを追加。
+
+**判断根拠**: Android はリリース対象外の KMP 共通層検証ターゲットで、`assembleDebug` の目的は共通層が Android でコンパイル/リンクできることの確認。実 Firebase 接続は不要なため、google-services プラグインを通すだけのダミー（package_name = `com.noricoffee.coffeevision`、project_number / app_id / api_key はゼロ埋めダミー）で十分とし、**GitHub Secrets 管理を不要にした**。
+
+**トレードオフ**: Secrets に実 `google-services.json` を base64 で置く案より運用が軽い反面、CI で実 Firebase に到達するテスト（Firestore 結合テスト等）は将来も別途仕組みが要る。現状 Android 側に実接続テストは無いため問題なし。
+
+**検証**: ローカルで実ファイルを退避→ダミーに差し替えて `processDebugGoogleServices --rerun-tasks` が BUILD SUCCESSFUL を確認（実ファイルは復元）。push 後の CI で Android / iOS 両ジョブ SUCCESS。

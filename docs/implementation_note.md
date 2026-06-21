@@ -1542,4 +1542,6 @@ digest で答えられない個別レコード単位の問いに対応するた�
 実装直後のバグ修正（2026-06-21 ユーザー実機確認時）:
 
 - **平均評価 0.0 バグ（9-4b と無関係の既存バグ）**: `AnalysisView` / `buildPrompt` で `CoffeeStats`/`CategoryStat`/`CafeStat` の `averageRating`（Swift では `KotlinDouble?`）を `String(format: "%.1f", $0)` に直接渡しており、`%f` が NSNumber を誤読して 0.0 表示。計 8 箇所に `.doubleValue` を補って修正。詳細・汎用化は lessons.md 2026-06-21。
-- **Q&A v2 が個別記録の問いに「不明」を返す**: tool・配線・ブリッジは正常で、原因は instructions の「逃げ道」（許可形 + tool 未使用の早期 escape）。instructions を「個別の問いは必ず tool を呼ぶ / 0 件のときだけ見つからないと答える」に命令形で書き換え、tool description も指示的に強化。`generateAnswer` の経路選択と `SearchCoffeeRecordsTool.call`（filter / 取得件数）に診断 `print` を追加し、実機ログで「未呼び出し」か「0 件（マッチ漏れ）」かを切り分け可能にした。instructions 強化で不足なら質問の事前分類→セッション分岐が次の手（lessons.md 2026-06-21）。
+- **Q&A v2 が個別記録の問いに「不明」を返す**: tool・配線・ブリッジは正常で、原因は instructions の「逃げ道」（許可形 + tool 未使用の早期 escape）。instructions を「個別の問いは必ず tool を呼ぶ / 0 件のときだけ見つからないと答える」に命令形で書き換え、tool description も指示的に強化。`generateAnswer` の経路選択と `SearchCoffeeRecordsTool.call`（filter / 取得件数）に診断 `print` を追加し、実機ログで「未呼び出し」か「0 件（マッチ漏れ）」かを切り分け可能にした。
+- **追調査（実機ログ）**: digest の「よく行くカフェ」に載るカフェ（例ブルーボトル）は tool 呼び出し成功、digest に載らない低頻度カフェ（例フグレン）は tool 未呼び出しと判明。モデルが **digest を全記録の網羅リストと誤認**し「digest に無い＝記録に無い」と諦める逃げ道が残っていた。instructions に「digest は非網羅の要約／digest に出ない名前でも必ず検索／記録の有無は tool 結果のみで判断」を明示して対処。なお tool 呼び出し時、モデルは digest を使って `cafeName` をフルネーム補完する（"ブルーボトルコーヒー"→"ブルーボトルコーヒー 三軒茶屋"、部分一致で命中）。
+- instructions 強化でも不足なら、次の手は **質問の構造化事前抽出 → 決定的 tool 呼び出し**（Swift が固有名詞/期間を検出して tool を直接呼び、結果を digest に追記して LLM は整形のみ）。固有名詞抽出の偽陰性とのトレードオフあり（lessons.md 2026-06-21）。

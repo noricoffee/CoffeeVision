@@ -1708,3 +1708,48 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
   z=2.0 採用（heavy-skew 9.3% で目標達成・検出力維持・95% CI 慣例値）。z=2.5/3.0 はほぼ 0% にできるが**ペルソナは強い好みを仕込んでいるため z=3.0 でも検出できるだけで、実データの弱い好みを弾きすぎるリスク**があり不採用。均等 22% が残るのは「K 候補から最良を選ぶ」多重比較の構造的残差（完全 0 化には Bonferroni で K 分 z を上げる必要があり実用上過剰）。
 - **既存単体テスト追随**: z=2.0 で n=3〜4 の小群は閾値が上がり信号化されないため、検出系 4 テスト（bestBrewMethod_highVolume / bestRoastLevel_nullRoastIsExcluded / bestOrigin_normalization / tieByCountThenLabel）のデータを n=10 に増量。検証意図（高件数高評価の検出・タイブレーク）は維持。`:shared:domain` 113 件 green、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL、新規警告ゼロ。
 - **好み判定（B-1）の特異度ワークはこれで一区切り**: tasting 軸 40%→22%（B-1c, c=1.97）、カテゴリ 100%→9.3%（B-1d, z=2.0, heavy-skew）。検出力 P1–P4・P7 は全工程で維持。iOS 追随は不要（API 不変）。
+
+### 2026-06-22: Phase B-4 味覚プロファイル一致カフェのマップ連携（設計確定）
+
+- 領域: Shared（spec）→ KMP → iOS / 関連: `docs/requirements.md` 9-5・`docs/data-model.md` §1.7・`shared/feature/map` `MapViewModel`・`iosApp` `MapTabView`
+- 背景: 要件 9-5「好みのカフェをマップで探す」を着手。`FavoriteSignals`（B-1）のカテゴリ好みに一致する高評価記録があるカフェを「あなた好みの一杯があった店」としてマップで強調＋理由表示する。**コンテンツベース推薦の v1**。
+- **確定した設計判断（ユーザー承認: AskUserQuestion 2026-06-22 + 後続の将来像 Q&A）**:
+  - **一致定義**: カフェに `rating >= 4.0`（`HIGHLIGHTS_MIN_RATING` 再利用）かつ `FavoriteSignals` のカテゴリ好み（bestOrigin/RoastLevel/BrewMethod の非 null）いずれかに一致する記録が 1 件以上。**`dominantTastingAxis`（相関軸）は v1 では一致条件に使わない**（相関は per-record categorical 一致に変換不能・理由表示が曖昧）。
+  - **高評価しきい値 4.0 / 味覚相関軸 v1 除外**はユーザーと明示合意済。
+  - **将来移行を見据えた境界設計**（重要・将来像 Q&A の結論を反映）: 推薦を `CafeRecommendationProvider`（interface）の裏に置き、`MapViewModel` は中身を知らない。v1 = ローカル決定論実装 `ObserveTasteMatchedCafesUseCase`、将来 9-6 = サーバ（GCP 等）リモート実装に**差し替えるだけ**で UI/VM/FM 言語化層は不変。
+  - **reason は `sealed RecommendationReason`** で表現し、v1 の `TasteProfileMatch` に将来 `SimilarUsers(...)` 等を**種類追加**できる形（enum 固定にしない）。
+  - **モデルにカフェ訪問を前提化しない**: `RecommendedCafe.cafe` は `Cafe`（placeId＋座標）だけ持ち、未訪問カフェ推薦に拡張できる契約にする。
+- **公開 API 追加（加算的）**: `RecommendedCafe` / `RecommendationReason` / `PreferenceMatchAxis` / `CafeRecommendationProvider` / `MapViewModel.UIState.recommendedCafes`。SKIE 越えの新型あり → kmp-engineer レポートの公開差分を親が `kmp-bridge.md` に固定してから iOS dispatch。
+- **dispatch**: ①kmp-engineer（domain モデル＋`ObserveTasteMatchedCafesUseCase`＋単体テスト＋`MapViewModel` 状態＋`AppContainer`/`framework` 配線）→ ②親が公開差分を docs/kmp-bridge に固定 → ③ios-engineer（`MapViewModelBridge`＋`MapTabView` 区別ピン・理由表示）→ ④親が統合・commit。
+
+### 2026-06-22: Future Direction — 協調フィルタリング推薦（9-6）と FoundationModel の住み分け
+
+- 領域: アーキテクチャ方針（将来 / 未着手）/ 関連: requirements 9-6・data-model §1.7 `CafeRecommendationProvider`
+- 将来像（ユーザー意向）: 複数ユーザーが好みを登録し、**好みが近い他ユーザーの高評価カフェを提案**する（協調フィルタリング）。本エントリは「今は作らないが設計の北極星」として残す。
+- **方式の住み分け**: v1（9-5）= コンテンツベース（自分の好み属性 ↔ カフェ）。将来（9-6）= 協調フィルタ（ユーザー間類似度）。両者はハイブリッドで共存し、9-6 は v1 に**追加**で載る（content→collaborative は典型的な発展経路）。
+- **味覚の類似度は LLM 不要・決定論**: 好みは既に構造化数値（`tastingAverages` の 5 軸＋カテゴリ別評価分布）＝そのまま特徴ベクトル。cosine 等で決定論的に類似度計算できる。**テキスト埋め込み学習は不要**。これは本アプリの「計算は決定論、LLM は言語化」哲学と一致。
+- **FoundationModel は類似度エンジンではない**: Apple の Foundation Models（`LanguageModelSession`）は生成・tool calling 向けで、汎用 embedding を返す公開 API ではない。自由文をベクトル化するなら別フレームワーク（Natural Language の `NLEmbedding`/`NLContextualEmbedding`）だが、構造化データなので基本不要。**FM の役割は将来も「計算済みの推薦結果を一言で言語化」一点**（既存 `CoffeeInsightProvider` のグラウンディング構図と同じ）。
+- **横断ベクトル計算はサーバ側（GCP 等）**: 全ユーザーの KNN は本質的にサーバ。**右サイズ重要** — 5〜10 次元・中規模なら重い vector DB は不要で、Firestore のベクトル KNN or Cloud Function の総当たり cosine で十分。大規模／テキスト埋め込みに進むなら Vertex AI Vector Search 等に格上げ。
+- **本体の難所は計算でなく基盤**: ①プロファイルベクトルのサーバ集約（現状 per-user・path-uid のみ → 横断読みは別セキュリティモデル）②好み/評価を他者推薦に使う**明示同意/オプトイン**（写真ローカル等の現方針と同じ慎重さ）③カフェ識別子は placeId で共有可能＝協調フィルタの item キーに好都合 ④コールドスタート（少人数では効かない＝だから v1 content-based が先、が正しい順序）。
+- **結論**: v1 の `CafeRecommendationProvider` 境界 ＋ `tastingAverages` をベクトル基盤と認識しておけば、GCP のベクトル分析は**純粋に追加**で差し込め、FM 言語化層は最初から将来と共通。
+
+### 2026-06-22: Phase B-4 KMP 実装完了（味覚一致カフェ）
+
+- 領域: KMP / 関連: `shared/domain/.../model/RecommendedCafe.kt`・`.../usecase/ObserveTasteMatchedCafesUseCase.kt`・`shared/feature/map/.../MapViewModel.kt`・`shared/framework/.../AppContainerViewModelFactory.kt`
+- `kmp-engineer` が docs §1.7 どおり実装。`:shared:domain` 129 件（うち新規 16）・`:shared:feature:map` 7 件 green、`:androidApp:assembleDebug` / `assembleSharedLogicXCFramework` BUILD SUCCESSFUL。公開 API は加算的（`MapViewModel` 変更は既存不変、生成は `makeMapViewModel` 経由で Bridge 影響なし）。
+- **公開 API 差分は `kmp-bridge.md` に固定済**（`sealed RecommendationReason` の `onEnum(of:)` 表現、`PreferenceMatchAxis` の Swift case 名 `.origin`/`.roastLevel`/`.brewMethod`（camelCase。kmp-engineer の初回報告「全小文字」は誤り→ios-engineer が `.swiftinterface` 実地確認で訂正）、`UIState.recommendedCafes`/`recommendedPlaceIds` 追加）。
+- **実装判断 / 落とし穴**:
+  - `ObserveTasteMatchedCafesUseCase` は `FavoriteSignals` だけ必要だが `BuildCoffeeStatsUseCase` 全体を実行（重複排除優先）。数十件規模で無問題、将来重ければ `FavoriteSignals` 専用軽量 UseCase を分離（YAGNI）。
+  - `maxWith(compareByDescending {...})` が意図と逆（最低 rating を返す）バグを発見→`sortedWith(...).first()` で修正、テストで担保。lessons.md 2026-06-22 に汎用化。
+  - `PreferenceMatchAxis` の Swift case 名が全小文字に潰れる件は `@ObjCName` で明示も可能だが、iOS が case 名を把握すれば足りるため v1 は KMP 変更せず docs 記載のみ。
+- **残: iOS 追随（ios-engineer）**: `MapViewModelBridge` に `recommendedCafes`/`recommendedPlaceIds` 反映 ＋ `MapTabView` に区別ピン・理由表示・凡例。
+
+### 2026-06-22: Phase B-4 iOS 追随完了（味覚一致カフェのマップ表示）
+
+- 領域: iOS / 関連: `iosApp/.../Features/Map/MapViewModelBridge.swift`・`MapTabView.swift`・`PreviewSupport/PreviewSamples.swift`
+- `ios-engineer` が実装。`xcodebuild`（iphonesimulator/Debug）**BUILD SUCCEEDED・新規 warning ゼロ**。SourceKit の `No such module 'SharedLogic'` は既知の偽陽性。
+  - `MapViewModelBridge` に `recommendedCafes`/`recommendedPlaceIds` を加算的に反映（`Set<String>` は SKIE/KN で Swift `Set<String>` に透過変換、キャスト不要）。
+  - `MapTabView`: 好み一致カフェ（`recommendedPlaceIds.contains` で O(1) 判定）をアクセントカラー＋`heart.fill`（38pt）で強調。**通常訪問ピン（茶・NavigationLink）/ 周辺ピン（グレー）は不変**。一致ピンはタップで `RecommendationMatchSheet`（理由一覧＋「このカフェの記録を見る」で詳細 push）を表示。凡例バッジ `RecommendedLegendBadge`（データ不足時は非表示）。
+  - **理由表示の UX 判断**: 一致ピンは「即詳細（1 タップ）」でなく「理由シート→詳細（2 タップ）」。"なぜおすすめか" を先に見せる狙い。callout で 1 タップ化は v2 余地（ios-engineer 申し送り）。
+  - `PreferenceMatchAxis` の `switch` は `.origin`/`.roastLevel`/`.brewMethod` 全網羅・`default` なし。
+- **B-4 v1 完了**: KMP（決定論集計＋プロバイダ境界）＋ iOS（強調・理由表示）。将来 9-6（協調フィルタ）は `CafeRecommendationProvider` のリモート実装差し替えで載る設計（Future Direction 参照）。**残はシミュレータ/実機目視（一致ピン・理由シート・空時非表示・VoiceOver）＝ユーザー作業**。

@@ -347,6 +347,70 @@ data class CoffeeRecordSummary(
 
 ---
 
+## 1.7 RecommendedCafe（味覚プロファイル一致カフェ / 要件 9-5）
+
+マップ上で「あなた好みの一杯があった店」を強調するための**派生集計モデル**（永続化しない）。`CoffeeRecord` 群と `FavoriteSignals` から決定論的に算出する。
+
+### モデル（`shared/domain`）
+
+```kotlin
+// 推薦カフェ 1 件。matches は非空（理由が 1 つ以上あるカフェだけを返す）。
+data class RecommendedCafe(
+    val cafe: Cafe,                       // placeId / 座標を持つ（マップピン用）。最新記録時スナップショット
+    val matches: List<RecommendationReason>, // なぜ推薦されたか（非空）
+)
+
+// 推薦理由。将来の協調フィルタリングでも種類を増やして再利用できるよう sealed で表現する。
+sealed interface RecommendationReason {
+    // v1（コンテンツベース）: 自分の好み属性に一致する高評価記録があった
+    data class TasteProfileMatch(
+        val axis: PreferenceMatchAxis,    // Origin / RoastLevel / BrewMethod
+        val matchedLabel: String,         // "Ethiopia" / "Light" / "AeroPress"（表示用ラベル）
+        val exampleRecordName: String,    // 代表記録のコーヒー名
+        val exampleRating: Double,        // その記録の評価
+    ) : RecommendationReason
+    // 将来（9-6 協調フィルタ）: SimilarUsers(count, ...) 等をここに追加（UI/VM/FM は不変のまま種類追加）
+}
+
+enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod }
+```
+
+### 推薦ソースの抽象化（将来の差し替えポイント）
+
+```kotlin
+// 推薦の供給元。v1 はローカル決定論実装、将来はサーバ（GCP 等）リモート実装に差し替える。
+// MapViewModel はこの interface にだけ依存し、中身（ローカル集計 / 横断ベクトル類似）を知らない。
+interface CafeRecommendationProvider {
+    fun observeRecommendedCafes(userId: String): Flow<List<RecommendedCafe>>
+}
+```
+
+- **v1 実装 = `ObserveTasteMatchedCafesUseCase`**（`CafeRecommendationProvider` のローカル実装）。`CoffeeRepository.observeAll(userId)` ＋ `BuildCoffeeStatsUseCase` の `FavoriteSignals` から算出。
+- **将来 9-6** はこの interface のリモート実装（横断ベクトル類似はサーバ側）を `AppContainer` で差し替えるだけ。`MapViewModel` / iOS UI / Foundation Models 言語化層は不変。
+
+### 一致ルール（決定論 / v1 コンテンツベース）
+
+あるカフェ（`cafe.placeId` でグループ化、`cafe == null` のセルフ抽出は座標が無いため対象外）に、次を**両方**満たす `CoffeeRecord` が 1 件以上あれば `RecommendedCafe` として返す:
+
+1. `rating >= HIGHLIGHTS_MIN_RATING`（= 4.0。`recentHighlights` と統一）
+2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` のうち **非 null のもの**）のいずれかに一致:
+   - `origin`: `trim().lowercase()` 正規化で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
+   - `roastLevel`: enum 一致（`bestRoastLevel.label == record.roastLevel?.name`）
+   - `brewMethod`: enum 一致（`bestBrewMethod.label == record.brewMethod.name`）
+
+- **`matches` の構築**: 一致した軸ごとに 1 つの `TasteProfileMatch` を作る。同じ軸に複数の一致記録があれば**評価最高の記録**を代表（`exampleRecordName` / `exampleRating`）に採用。タイは `visitedOn` 新しい順 → コーヒー名昇順で決定論化。
+- **`dominantTastingAxis`（相関軸）は v1 では一致条件に使わない**: 相関は per-record の categorical 一致に変換できず、理由表示も曖昧になるため。カテゴリ好み 3 軸に限定。
+- **`FavoriteSignals` が全 null（データ不足）** なら一致 0 件 → 空リスト（マップは強調なし）。
+- **並び順**: `matches` 件数降順 → 代表記録評価の最大降順 → placeId 昇順（決定論）。
+
+### マップ連携（`MapViewModel` / iOS）
+
+- `MapViewModel` は `CafeRecommendationProvider.observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。公開 API 追加は加算的。
+- iOS `MapTabView`: 一致カフェを**区別ピン**（アクセント色＋ハート/星）で強調し、タップで理由（`matches`）を表示。理由文言（「好みのエチオピアを高評価で記録（〇〇 ★4.5）」）は iOS でローカライズ生成。
+- **Foundation Models 連携は将来 9-6 で「推薦理由の自然言語化」一点に限定**（v1 は構造化 reason を iOS が定型文で表示。LLM は使わない）。
+
+---
+
 # 2. SQLDelight スキーマ
 
 ローカル DB は **検索・オフライン参照の高速化** が目的。Firestore のキャッシュとは別途に持つ。

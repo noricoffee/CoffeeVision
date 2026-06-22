@@ -435,7 +435,19 @@
 | [x] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip をユーザー目視 | 2026-06-21 / KMP 43 件 green・`xcodebuild` BUILD SUCCEEDED・新規 warning ゼロ。**ユーザー実機確認 OK**（「ブルーボトル/フグレンで飲んだのは？」で tool 呼び出し→ヒット→回答を確認） |
 | - | 実機検証で発覚し修正した点（同日） | ①平均評価 0.0 表示（`KotlinDouble?` を `String(format:)` に直渡し）→ `.doubleValue` 8 箇所補完 ②Q&A が tool を呼ばない（instructions の逃げ道 / digest 非網羅性の誤認）→ instructions 強化 ③フィールド誤分類（カフェ名を origin へ）→ KMP テキスト検索を横断寛容化。詳細は lessons.md / implementation_note 2026-06-21 |
 
-| [ ] | B-4: 好みのカフェをマップ連携 | 将来。分析結果とマップの連携 |
+### Phase B-4: 味覚プロファイル一致カフェのマップ連携（要件 9-5 / コンテンツベース v1）
+
+> 2026-06-22 着手。`FavoriteSignals` のカテゴリ好みに一致する高評価記録（rating ≥ 4.0）があるカフェを「あなた好みの一杯があった店」としてマップで強調＋理由表示する。**推薦は `CafeRecommendationProvider`（interface）の裏に置き、将来の協調フィルタリング（9-6）はリモート実装の差し替えで追加**できる設計。確定仕様は [`requirements.md`](./requirements.md) 9-5、モデル・一致ルール・境界設計は [`data-model.md`](./data-model.md) §1.7、設計ログ・将来方向は [`implementation_note.md`](./implementation_note.md) 2026-06-22 B-4 / Future Direction エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: 一致ルール・新規モデル・プロバイダ境界・将来方向を docs に固定 | 2026-06-22 / requirements 9-5/9-6・data-model §1.7・implementation_note |
+| [x] | KMP（kmp-engineer）: `RecommendedCafe`/`RecommendationReason`(sealed)/`PreferenceMatchAxis`/`CafeRecommendationProvider` + `ObserveTasteMatchedCafesUseCase`（ローカル実装）+ 単体テスト | 2026-06-22 / `:shared:domain` 129 件 green（新規 16）。`dominantTastingAxis` 不使用 |
+| [x] | KMP（kmp-engineer）: `MapViewModel.UIState` に `recommendedCafes` + 一致 placeId 集合を追加（購読）+ `AppContainer`/`framework` 配線 | 2026-06-22 / map 7 件 green・XCFramework OK・加算的 |
+| [x] | 親: kmp-engineer レポートの公開 API 差分を `kmp-bridge.md` に固定（SKIE 越えの新型） | 2026-06-22 / `onEnum(of:)`・case 全小文字・UIState 追加を記載 |
+| [x] | iOS（ios-engineer）: `MapViewModelBridge` 追随 + `MapTabView` に区別ピン（アクセント色＋`heart.fill`）+ タップで理由シート + 凡例バッジ | 2026-06-22 / `RecommendationMatchSheet`。通常ピン不変。`xcodebuild` BUILD SUCCEEDED・warning ゼロ |
+| [~] | 検証: KMP テスト green + `xcodebuild` 成功。シミュレータ目視（一致ピン強調 / 理由シート / データ不足時は強調なし / VoiceOver）はユーザー作業 | 2026-06-22 / KMP 129+7 green・`xcodebuild` BUILD SUCCEEDED。**目視はユーザー作業** |
+| [ ] | （将来 9-6）協調フィルタリング: `CafeRecommendationProvider` のサーバ（GCP）リモート実装。横断データ基盤＋同意フローが本体 | Future Direction。未着手 |
 
 ---
 

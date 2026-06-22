@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import SharedLogic
 
@@ -17,6 +18,10 @@ final class MapViewModelBridge {
     // MARK: - SwiftUI が観測するプロパティ
 
     private(set) var visitedCafes: [VisitedCafe] = []
+    /// 好み一致カフェ（マップ強調ピン用）。FavoriteSignals 不足時は空。
+    private(set) var recommendedCafes: [RecommendedCafe] = []
+    /// 好み一致カフェの placeId 集合（ピン強調判定を O(1) にする）。
+    private(set) var recommendedPlaceIds: Set<String> = []
     private(set) var nearbyPlaces: [Cafe] = []
     private(set) var showVisited: Bool = true
     private(set) var showNearby: Bool = true
@@ -100,6 +105,8 @@ final class MapViewModelBridge {
 
     private func apply(_ state: MapViewModel.UIState) {
         self.visitedCafes = state.visitedCafes
+        self.recommendedCafes = state.recommendedCafes
+        self.recommendedPlaceIds = state.recommendedPlaceIds
         self.nearbyPlaces = state.nearbyPlaces
         self.showVisited = state.showVisited
         self.showNearby = state.showNearby

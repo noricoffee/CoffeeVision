@@ -59,6 +59,24 @@ plugins {
 | `sealed class Result { object Loading; data class Success(...) }` | `enum Result { case loading; case success(...) }`（Swift の `switch` で網羅性チェックが効く） |
 | `enum class BrewMethod { HandDrip, FullCity, ... }` | `@frozen enum BrewMethod: Hashable, CaseIterable { case handDrip, fullCity, ... }` — case 名は **camelCase 変換**。全列挙は `.allCases`（CaseIterable）、Obj-C ヘッダの `.entries` は Swift 側からは使わない。`.name` プロパティで Kotlin 側の元名（`"HandDrip"`）を取得可能 |
 
+#### `sealed interface RecommendationReason`（B-4 / 9-5）の Swift 表現
+
+`shared/domain` の `sealed interface RecommendationReason`（味覚一致カフェの推薦理由）は SKIE の SealedInterop で **`onEnum(of:)` による switch** に変換される（**Swift が「使う」側＝ calling direction**、protocol witness 不要）:
+
+```swift
+// reason: RecommendationReason
+switch onEnum(of: reason) {
+case .tasteProfileMatch(let match):   // match: RecommendationReasonTasteProfileMatch
+    let axis = match.axis              // PreferenceMatchAxis
+    let label = match.matchedLabel     // String（"Ethiopia" 等の表示ラベル）
+    let name = match.exampleRecordName // String（代表コーヒー名）
+    let rating = match.exampleRating   // Double（native。0.0 バグ回避の .doubleValue は不要）
+}
+```
+
+- **`enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod }` の Swift case 名は camelCase**: `.origin` / `.roastLevel` / `.brewMethod`（SKIE 標準変換。先頭のみ小文字化）。`@frozen` なので `switch` は `default` なし全網羅にする。**case 名の真は `.swiftinterface`**（Obj-C ヘッダ `.h` の表記は異なることがある。2026-06-22 B-4 で実地確認）。
+- `MapViewModel.UIState` には `recommendedCafes: [RecommendedCafe]` と `recommendedPlaceIds: Set<String>`（ピン強調用）が加わる（既存フィールドは不変・加算的）。iOS は `makeMapViewModel(userId:)` ファクトリ経由で生成するため、`MapViewModel` のコンストラクタ引数追加（`cafeRecommendationProvider`）は Bridge 側に影響しない。
+
 ### ⚠ 重要: SKIE は「呼び出し方向限定」
 
 SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` 関数や `Flow` を「呼び出す」側**にしか効きません。

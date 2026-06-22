@@ -180,7 +180,8 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 | 9-3 | 高評価群の傾向抽出（階層2） | △ | `FavoriteSignals`。サンプル数が閾値未満の信号は出さない |
 | 9-4 | 対話 Q&A v1（階層3 / 単発・digest 文脈注入） | ○ | 「好きな産地は？」「一番高評価だったコーヒーは？」等を **1 問 1 答（ステートレス）** で回答。`CoffeeStats` digest のみを文脈注入（生レコード・tool 無し / 計算は KMP、LLM は解釈と整形のみ）。digest に無い問いは「記録からは分かりません」。非対応端末（Apple Intelligence 無効）は Q&A UI 非表示。逐次表示なし（suspend 一発） |
 | 9-4b | 対話 Q&A v2（tool calling / 生レコード参照） | ○ | digest で答えられない**個別レコード単位**の問い（特定カフェ・特定月・産地別の個別記録等）向けに、Foundation Models の `Tool` で KMP の生レコード照会（`CoffeeRecordQuery.searchRecords`）を呼ぶ。絞り込みは KMP 側（計算は KMP・LLM は呼び出し判断と整形のみ）。digest はベース文脈として併用（ハイブリッド）。可否判定は v1 と共有（`CoffeeInsightProvider != null` の端末のみ）。インターフェース・設計は [`data-model.md`](./data-model.md) §1.6「対話 Q&A v2」、ブリッジは [`kmp-bridge.md`](./kmp-bridge.md) |
-| 9-5 | 好みのカフェをマップで探す | ✕（将来） | 要件外。分析結果とマップの連携は後続フェーズ |
+| 9-5 | 好みのカフェをマップで探す（味覚プロファイル一致 / コンテンツベース v1） | △ | `FavoriteSignals` のカテゴリ好み（産地/焙煎/抽出）に一致する高評価記録（rating ≥ 4.0）があるカフェを「あなた好みの一杯があった店」としてマップ上で強調＋理由表示。集計は KMP 共通層で決定論的（`CafeRecommendationProvider` のローカル実装 = `ObserveTasteMatchedCafesUseCase`）。設計は [`data-model.md`](./data-model.md) §1.7、経緯は [`implementation_note.md`](./implementation_note.md) 2026-06-22 B-4 エントリ。**将来の協調フィルタリング（好みが近い他ユーザーの高評価カフェ提案）は同 interface の差し替えで追加**（下記 Future Direction） |
+| 9-6 | 協調フィルタリング推薦（好みが近い他ユーザーの高評価カフェ） | ✕（将来 / Future Direction） | 横断ベクトル類似はサーバ側（GCP 等。初期は Firestore KNN / Cloud Function で十分）で計算し、`CafeRecommendationProvider` のリモート実装として差し込む。プロファイルベクトルは `tastingAverages`（5 軸）が基盤。Foundation Models は端末で推薦理由を言語化する一点に限定（類似度計算には使わない）。**本体の難所は計算でなく横断データ基盤＋同意フロー**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-22 Future Direction エントリ |
 
 > Foundation Models は **iOS 専用**のため、Android（KMP 検証ターゲット）では分析タブ自体を表示しない。階層1・2 の集計（`CoffeeStats` / `BuildCoffeeStatsUseCase`）は KMP 共通層に置き、両 OS でビルド・テスト可能とする。
 
@@ -208,7 +209,7 @@ Visit に紐づくフード（軽食 / スイーツなど）の記録。
 | 画面名 | 配置 | 説明 | 対応機能 |
 |--------|------|------|---------|
 | スプラッシュ画面 | ルート前 | 起動時のローディング | - |
-| マップ画面 | Tab 1（左） | 訪問済みカフェのピンと現在地周辺の Places ピンを色で区別して同時表示。フィルタトグルで個別表示の切替が可能。Apple Maps が標準表示する POI（カフェ / レストラン / ベーカリー）のタップで Google Places に照合してカフェ詳細に進める | 2-4, 2-7, 5-1, 5-2, 5-3 |
+| マップ画面 | Tab 1（左） | 訪問済みカフェのピンと現在地周辺の Places ピンを色で区別して同時表示。**味覚プロファイル一致カフェ（9-5）は区別ピンで強調し、タップで一致理由を表示**。フィルタトグルで個別表示の切替が可能。Apple Maps が標準表示する POI（カフェ / レストラン / ベーカリー）のタップで Google Places に照合してカフェ詳細に進める | 2-4, 2-7, 5-1, 5-2, 5-3, 9-5 |
 | Visit 一覧画面 | Tab 2（中） | 直近の Visit 一覧（時系列）。新規追加導線はここには持たない | 2-4 |
 | カフェ検索画面 | Tab 3（右、`role: .search`） | テキスト検索・現在地周辺検索の結果リスト | 5-1, 5-2, 5-3 |
 | カフェ詳細画面 | Tab 1 / Tab 3 から push | カフェ情報（Places スナップショット）+ 同じカフェへの過去 Visit 一覧 + 「+ Visit を追加」ボタン。要件のカフェ別 Visit 一覧をここに統合 | 2-7 |

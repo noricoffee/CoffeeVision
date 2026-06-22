@@ -369,6 +369,18 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 実例: `FavoriteSignals` のカテゴリ好みは「最大群が globalMean を超えたら信号化」だが、これは「複数群の最良が平均を超えるか」＝**ほぼ恒真**で偽陽性率 100%。tasting 軸の「5 軸 max|r|≥0.3」も多重比較で 40%。どちらも単体テストでは検出不能だった
 - **教訓**: ①「最大値が全体平均を超えたら採用」は閾値ガードにならない（最良は大抵平均を超える）。effect-size 閾値（差 > δ）や信頼区間下限など「ゼロからの距離」で見る ②複数候補から max を拾う設計は多重比較で偽陽性が乗る ③assert 閾値は**測定してから**決める（理論値を仮置きで hard-fail させると、偶然 pass か設計欠陥かを取り違える）。null ペルソナで「全フィールド null」を期待する固定シード assert を書く前に、本当に null になるシードが存在するかスキャンで確認する
 
+### SKIE enum の Swift case 名は `.swiftinterface` を真とする（Obj-C ヘッダと異なる）
+
+- Kotlin `enum class` を SKIE が Swift `@frozen enum` に変換する際の case 名は、**Obj-C ヘッダ（`.h`）と Swift の `.swiftinterface` で表記が異なる**ことがある。h では全小文字に見えても、Swift 実コードは camelCase（`RoastLevel`→`roastLevel`）が正しい
+- 2026-06-22 B-4 で kmp-engineer が「`.roastlevel`（全小文字）」と報告したが、ios-engineer が `.swiftinterface` を確認し `.roastLevel`（camelCase）が正と判明（ビルド成功が裏付け）
+- **教訓**: enum の Swift case 名を docs に固定する前に `*.swiftinterface` を確認する。`strings <...>.swiftinterface | grep "case "` で実体を見る。Obj-C ヘッダの表記を鵜呑みにしない
+
+### `maxWith(compareByDescending { ... })` は意図と逆の要素を返す
+
+- `maxWith(Comparator)` は **Comparator 上で「最大」** の要素を返す。`compareByDescending { it.rating }` は「rating が大きいほど Comparator では小さい（前に来る）」順序なので、`maxWith` と組み合わせると **最低 rating の要素が選ばれる**（意図と逆）。コンパイルは通るので気づきにくい
+- **正しいパターン**: 単一キーなら `maxByOrNull { it.rating }`。複合キー（rating 降順→日付降順→名前昇順 等）なら `sortedWith(compareByDescending<T>{ it.rating }.thenByDescending{...}.thenBy{...}).firstOrNull()`
+- 2026-06-22 B-4（`ObserveTasteMatchedCafesUseCase` の代表記録選定）で発生。これは [[同日の mapNotNull+maxWith で全 null]] の「原因未確定」だった件の有力な真因でもある（`maxWith`+`compareByDescending` の取り違え）。**選定ロジックは必ず境界ケースのユニットテストで実挙動を確認する**（B-4 はテストで検出・修正済）
+
 ### winner's curse には「固定オフセット閾値」でなく「ばらつき連動（n 連動）閾値」で対処する
 
 - 複数候補から最良を選ぶと、最良の推定値は偶然ぶん上振れする（winner's curse）。この上振れ幅は**サンプリングのばらつき σ/√n に比例して膨らむ**ので、`値 − 基準 > 固定δ` のような固定オフセット足切りでは止まらない（B-1c 実測: カテゴリ偽陽性は δ を 0.10→0.30 に上げても 100%→87% しか下がらない）

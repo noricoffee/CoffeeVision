@@ -2,6 +2,170 @@ import SwiftUI
 import MapKit
 import SharedLogic
 
+// MARK: - RecommendationMatchSheet
+
+/// 好み一致カフェの推薦理由を表示するシート。
+///
+/// - 推薦理由（`RecommendedCafe.matches`）を列挙し、軸ごとに定型文で表示する
+/// - 「詳細を見る」でカフェ詳細画面へ push できる
+struct RecommendationMatchSheet: View {
+
+    let recommendedCafe: RecommendedCafe
+    let onOpenDetail: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: 0) {
+                // ヘッダ
+                VStack(alignment: .leading, spacing: 4) {
+                    Label(
+                        String(localized: "好み一致"),
+                        systemImage: "heart.fill"
+                    )
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(.pink)
+
+                    Text(recommendedCafe.cafe.name)
+                        .font(.title3.weight(.semibold))
+                        .foregroundStyle(.primary)
+                }
+                .padding(.horizontal, 20)
+                .padding(.top, 20)
+                .padding(.bottom, 12)
+
+                Divider()
+
+                // 推薦理由一覧
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 12) {
+                        ForEach(Array(recommendedCafe.matches.enumerated()), id: \.offset) { _, reason in
+                            matchRow(reason: reason)
+                        }
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 16)
+                }
+
+                Divider()
+
+                // 詳細ボタン
+                Button(action: onOpenDetail) {
+                    HStack {
+                        Text(String(localized: "このカフェの記録を見る"))
+                            .font(.body.weight(.medium))
+                        Spacer()
+                        Image(systemName: "chevron.right")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(.horizontal, 20)
+                    .padding(.vertical, 14)
+                    .frame(minHeight: 44)
+                }
+                .foregroundStyle(.primary)
+                .background(Color(.secondarySystemBackground))
+            }
+            .navigationTitle(String(localized: "好みのコーヒーがあった店"))
+            .navigationBarTitleDisplayMode(.inline)
+        }
+        .presentationDetents([.medium, .large])
+        .presentationDragIndicator(.visible)
+        .accessibilityLabel(
+            String(localized: "好み一致のカフェ、\(recommendedCafe.cafe.name)。\(accessibilitySummary)")
+        )
+    }
+
+    // MARK: - 推薦理由行
+
+    @ViewBuilder
+    private func matchRow(reason: RecommendationReason) -> some View {
+        switch onEnum(of: reason) {
+        case .tasteProfileMatch(let match):
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: axisIcon(match.axis))
+                    .font(.body)
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 24, height: 24)
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(matchTitle(match))
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                    Text(matchDetail(match))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(matchAccessibilityLabel(match))
+        }
+    }
+
+    // MARK: - 文言生成
+
+    /// 軸に対応する SF Symbols 名。
+    private func axisIcon(_ axis: PreferenceMatchAxis) -> String {
+        switch axis {
+        case .origin:
+            return "globe.asia.australia"
+        case .roastLevel:
+            return "flame"
+        case .brewMethod:
+            return "cup.and.saucer"
+        }
+    }
+
+    /// 推薦理由のタイトル文（例「好みの産地: エチオピア」）。
+    private func matchTitle(_ match: RecommendationReasonTasteProfileMatch) -> String {
+        let axisLabel = axisName(match.axis)
+        return String(localized: "好みの\(axisLabel): \(match.matchedLabel)")
+    }
+
+    /// 推薦理由の補足文（代表記録名 + 評価）。
+    private func matchDetail(_ match: RecommendationReasonTasteProfileMatch) -> String {
+        let stars = formatRating(match.exampleRating)
+        return String(localized: "\(match.exampleRecordName) \(stars)")
+    }
+
+    /// アクセシビリティ用ラベル（VoiceOver 読み上げ）。
+    private func matchAccessibilityLabel(_ match: RecommendationReasonTasteProfileMatch) -> String {
+        let axisLabel = axisName(match.axis)
+        let stars = formatRating(match.exampleRating)
+        return String(
+            localized: "好みの\(axisLabel) \(match.matchedLabel) を高評価で記録。\(match.exampleRecordName) \(stars)"
+        )
+    }
+
+    /// 軸名の日本語ラベル。
+    private func axisName(_ axis: PreferenceMatchAxis) -> String {
+        switch axis {
+        case .origin:
+            return String(localized: "産地")
+        case .roastLevel:
+            return String(localized: "焙煎度")
+        case .brewMethod:
+            return String(localized: "抽出方法")
+        }
+    }
+
+    /// 評価値を「★4.5」形式の文字列に変換する。
+    private func formatRating(_ rating: Double) -> String {
+        // 0.5 刻みのため小数点 1 桁で表示
+        let formatted = String(format: "%.1f", rating)
+        return "★\(formatted)"
+    }
+
+    /// シート全体のアクセシビリティサマリ（VoiceOver 用）。
+    private var accessibilitySummary: String {
+        recommendedCafe.matches.compactMap { reason -> String? in
+            switch onEnum(of: reason) {
+            case .tasteProfileMatch(let match):
+                return matchAccessibilityLabel(match)
+            }
+        }.joined(separator: "。")
+    }
+}
+
 // MARK: - ナビゲーションルート
 
 /// マップ → カフェ詳細 への push ナビゲーション引数。
@@ -57,6 +221,10 @@ struct MapTabView: View {
     /// `lastLocation` を nil にしないため、`setupLocation` の周辺カフェ検索に副作用を与えない。
     @State private var pendingRecenter = false
 
+    /// 好み一致ピンタップ時に推薦理由シートで表示する対象。nil = シート非表示。
+    @State private var selectedRecommendedCafe: RecommendedCafe? = nil
+
+
     // MARK: - Body
 
     var body: some View {
@@ -103,6 +271,27 @@ struct MapTabView: View {
                         )
                         .errorToast(message: activeToast(bridge: bridge)?.message) {
                             activeToast(bridge: bridge)?.dismiss()
+                        }
+                        // 好み一致推薦理由シート
+                        .sheet(
+                            isPresented: Binding(
+                                get: { selectedRecommendedCafe != nil },
+                                set: { if !$0 { selectedRecommendedCafe = nil } }
+                            )
+                        ) {
+                            if let recommended = selectedRecommendedCafe {
+                                RecommendationMatchSheet(
+                                    recommendedCafe: recommended
+                                ) {
+                                    selectedRecommendedCafe = nil
+                                    navigationPath.append(
+                                        CafeDetailRoute(
+                                            placeId: recommended.cafe.placeId,
+                                            initialCafe: recommended.cafe
+                                        )
+                                    )
+                                }
+                            }
                         }
                         .onChange(of: mapFeatureSelection) { _, newSelection in
                             poiSelectionChanged(newSelection, bridge: bridge)
@@ -166,11 +355,14 @@ struct MapTabView: View {
     private func mapContent(bridge: MapViewModelBridge) -> some View {
         ZStack(alignment: .top) {
             Map(position: $cameraPosition, selection: $mapFeatureSelection) {
-                // 訪問済みカフェピン（ブラウン）
+                // 訪問済みカフェピン（通常: ブラウン / 好み一致: アクセントカラー+ハート）
                 if bridge.showVisited {
                     ForEach(bridge.visitedCafes, id: \.cafe.placeId) { visitedCafe in
                         if let lat = visitedCafe.cafe.latitude?.doubleValue,
                            let lng = visitedCafe.cafe.longitude?.doubleValue {
+                            let isRecommended = bridge.recommendedPlaceIds.contains(
+                                visitedCafe.cafe.placeId
+                            )
                             Annotation(
                                 visitedCafe.cafe.name,
                                 coordinate: CLLocationCoordinate2D(
@@ -178,15 +370,29 @@ struct MapTabView: View {
                                     longitude: lng
                                 )
                             ) {
-                                NavigationLink(
-                                    value: CafeDetailRoute(
-                                        placeId: visitedCafe.cafe.placeId,
-                                        initialCafe: visitedCafe.cafe
-                                    )
-                                ) {
-                                    visitedCafePin(visitedCafe: visitedCafe)
+                                if isRecommended,
+                                   let recommended = bridge.recommendedCafes.first(
+                                    where: { $0.cafe.placeId == visitedCafe.cafe.placeId }
+                                   ) {
+                                    // 好み一致ピン: タップで推薦理由シートを表示
+                                    Button {
+                                        selectedRecommendedCafe = recommended
+                                    } label: {
+                                        recommendedCafePin(visitedCafe: visitedCafe)
+                                    }
+                                    .buttonStyle(.plain)
+                                } else {
+                                    // 通常訪問済みピン: タップでカフェ詳細へ push
+                                    NavigationLink(
+                                        value: CafeDetailRoute(
+                                            placeId: visitedCafe.cafe.placeId,
+                                            initialCafe: visitedCafe.cafe
+                                        )
+                                    ) {
+                                        visitedCafePin(visitedCafe: visitedCafe)
+                                    }
+                                    .buttonStyle(.plain)
                                 }
-                                .buttonStyle(.plain)
                             }
                         }
                     }
@@ -251,6 +457,11 @@ struct MapTabView: View {
             ) {
                 bridge.onShowNearbyToggled(!bridge.showNearby)
             }
+
+            // 好み一致カフェが 1 件以上あるときのみ凡例バッジを表示（インタラクションなし）
+            if !bridge.recommendedCafes.isEmpty {
+                RecommendedLegendBadge()
+            }
         }
     }
 
@@ -268,6 +479,26 @@ struct MapTabView: View {
         }
         .accessibilityLabel(
             String(localized: "\(visitedCafe.cafe.name) 訪問済み \(visitedCafe.visitCount)回")
+        )
+    }
+
+    /// 好み一致カフェピン（アクセントカラー + ハート）。
+    ///
+    /// 通常訪問済みピン（茶）よりひとまわり大きく表示して視覚的に区別する。
+    private func recommendedCafePin(visitedCafe: VisitedCafe) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.accentColor)
+                .frame(width: 38, height: 38)
+                .shadow(color: Color.accentColor.opacity(0.4), radius: 4, x: 0, y: 2)
+            Image(systemName: "heart.fill")
+                .font(.caption.weight(.bold))
+                .foregroundStyle(.white)
+        }
+        .accessibilityLabel(
+            String(
+                localized: "好み一致のカフェ、\(visitedCafe.cafe.name)。タップして理由を確認"
+            )
         )
     }
 
@@ -531,6 +762,33 @@ struct MapTabView: View {
             )
             cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
         }
+    }
+}
+
+// MARK: - RecommendedLegendBadge
+
+/// 好み一致カフェが存在するときだけ表示する凡例バッジ。
+///
+/// ハートアイコン＋「好み一致」テキストで、ピンの意味をユーザーに伝える。
+/// トグル機能は持たない（v1 は強調 + 理由表示を優先）。
+private struct RecommendedLegendBadge: View {
+
+    var body: some View {
+        Label(
+            String(localized: "好み一致"),
+            systemImage: "heart.fill"
+        )
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(.pink)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .frame(minWidth: 44, minHeight: 44)
+        .background(
+            Capsule()
+                .fill(.regularMaterial)
+        )
+        .accessibilityLabel(String(localized: "好み一致のカフェが強調表示されています"))
+        .accessibilityAddTraits(.isStaticText)
     }
 }
 

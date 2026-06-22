@@ -644,3 +644,14 @@
 - 残課題 / フォローアップ:
   - 🟠整合パック（A-4〜A-7）→ 2026-06-16 完了（コミット `7c86ab5`）
   - 🟠設計判断パック（B 系）/ C-1 / D-1 → 後回し可。本ファイル上部の「docs / 設計判断バックログ（後回し可）」節に移管
+
+### 2026-06-23 - マップ「周辺」フィルタチップ撤去（周辺ピン常時表示）
+- 背景: 現在地 FAB（カメラを現在地へ recenter）があるため、周辺ピンの表示/非表示トグル（`showNearby`）は冗長というユーザー判断。周辺ピンは常時表示に統一。`訪問済み` チップは維持。
+- タスク:
+  - [x] KMP: `MapViewModel.UIState.showNearby` と `onShowNearbyToggled` を撤去（`nearbyPlaces` は常時公開のまま）。KDoc 追随
+  - [x] iOS: `MapViewModelBridge` の `showNearby` プロパティ / `onShowNearbyToggled` / state 同期を撤去
+  - [x] iOS: `MapTabView` の「周辺」`FilterChip` を撤去、`if bridge.showNearby` ゲートを常時表示化
+- 動作確認:
+  - [x] KMP `:shared:feature:map:compileKotlinIosSimulatorArm64` / `testAndroidHostTest` BUILD SUCCESSFUL、iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）
+  - [ ] シミュレータ目視（周辺ピン常時表示 / 訪問済みチップは機能 / 現在地 FAB）はユーザー作業
+- 所見: FilterChip 行は「訪問済み」+（好み一致カフェ時のみ）`RecommendedLegendBadge` が残る。`HStack(spacing: 8)` 先頭詰めでレイアウト崩れなし

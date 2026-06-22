@@ -22,7 +22,7 @@ import kotlinx.coroutines.launch
  * - [CafeRecommendationProvider] を常時購読し、好み一致カフェのピン強調を [UIState.recommendedCafes] で管理
  * - [onLocationUpdated] で現在地周辺のカフェ（周辺 Places）を [CafeRepository.searchNearby] で取得し、
  *   [UIState.nearbyPlaces] として公開する
- * - [onShowVisitedToggled] / [onShowNearbyToggled] でマップ上のピン表示 / 非表示を切り替える
+ * - [onShowVisitedToggled] でマップ上の訪問済みピン表示 / 非表示を切り替える
  *
  * ## CoroutineScope の注意
  *
@@ -54,7 +54,6 @@ class MapViewModel(
      *   iOS 側のマップピン強調（区別ピン判定）に使う
      * @property nearbyPlaces 現在地周辺の Places API 検索結果（マップ上のグレーピン）
      * @property showVisited 訪問済みカフェのピンを表示するか
-     * @property showNearby 周辺カフェのピンを表示するか
      * @property isLoadingNearby 周辺カフェ検索中かどうか
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      * @property isLookingUpPoi Apple Maps POI タップ後の Places ルックアップ中かどうか
@@ -69,7 +68,6 @@ class MapViewModel(
         val recommendedPlaceIds: Set<String> = emptySet(),
         val nearbyPlaces: List<Cafe> = emptyList(),
         val showVisited: Boolean = true,
-        val showNearby: Boolean = true,
         val isLoadingNearby: Boolean = false,
         val error: String? = null,
         val isLookingUpPoi: Boolean = false,
@@ -144,15 +142,6 @@ class MapViewModel(
      */
     fun onShowVisitedToggled(show: Boolean) {
         _state.update { it.copy(showVisited = show) }
-    }
-
-    /**
-     * 周辺カフェのピン表示 / 非表示を切り替える。
-     *
-     * @param show true のとき周辺ピンを表示する
-     */
-    fun onShowNearbyToggled(show: Boolean) {
-        _state.update { it.copy(showNearby = show) }
     }
 
     /**

@@ -1753,3 +1753,11 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
   - **理由表示の UX 判断**: 一致ピンは「即詳細（1 タップ）」でなく「理由シート→詳細（2 タップ）」。"なぜおすすめか" を先に見せる狙い。callout で 1 タップ化は v2 余地（ios-engineer 申し送り）。
   - `PreferenceMatchAxis` の `switch` は `.origin`/`.roastLevel`/`.brewMethod` 全網羅・`default` なし。
 - **B-4 v1 完了**: KMP（決定論集計＋プロバイダ境界）＋ iOS（強調・理由表示）。将来 9-6（協調フィルタ）は `CafeRecommendationProvider` のリモート実装差し替えで載る設計（Future Direction 参照）。**残はシミュレータ/実機目視（一致ピン・理由シート・空時非表示・VoiceOver）＝ユーザー作業**。
+
+### 2026-06-23: マップ「周辺」フィルタチップ撤去（周辺ピン常時表示）
+
+- 領域: KMP + iOS / 関連: `shared/feature/map/.../MapViewModel.kt`・`iosApp/.../Features/Map/MapViewModelBridge.swift`・`MapTabView.swift`
+- 経緯: 現在地 FAB（カメラを現在地へ recenter）があるため、周辺ピンの表示/非表示トグル（`showNearby`）は冗長というユーザー判断。周辺ピンを常時表示に統一。
+- 変更: KMP は `UIState.showNearby` プロパティと `onShowNearbyToggled` を撤去（公開 API の減算的変更）。`nearbyPlaces`/`isLoadingNearby`/`onLocationUpdated` の周辺検索ロジックは不変、トグルだけ撤去。iOS は Bridge の `showNearby`/`onShowNearbyToggled`/state 同期を削除し、`MapTabView` の周辺ピン描画ゲート `if bridge.showNearby` を撤去（常時 `ForEach` 展開）＋「周辺」`FilterChip` 削除。
+- 影響/所見: FilterChip 行には「訪問済み」+（好み一致カフェ時のみ）`RecommendedLegendBadge` が残る。`HStack(spacing: 8)` 先頭詰めでレイアウト崩れなし。`訪問済み` トグルは維持（ピンを隠して周辺/一致に集中する用途が残るため）。
+- 検証: KMP `:shared:feature:map` compile/test green、iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）。目視はユーザー作業。

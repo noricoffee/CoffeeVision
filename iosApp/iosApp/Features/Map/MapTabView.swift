@@ -398,28 +398,26 @@ struct MapTabView: View {
                     }
                 }
 
-                // 周辺カフェピン（グレー）
-                if bridge.showNearby {
-                    ForEach(bridge.nearbyPlaces, id: \.placeId) { cafe in
-                        if let lat = cafe.latitude?.doubleValue,
-                           let lng = cafe.longitude?.doubleValue {
-                            Annotation(
-                                cafe.name,
-                                coordinate: CLLocationCoordinate2D(
-                                    latitude: lat,
-                                    longitude: lng
+                // 周辺カフェピン（グレー）— 常時表示
+                ForEach(bridge.nearbyPlaces, id: \.placeId) { cafe in
+                    if let lat = cafe.latitude?.doubleValue,
+                       let lng = cafe.longitude?.doubleValue {
+                        Annotation(
+                            cafe.name,
+                            coordinate: CLLocationCoordinate2D(
+                                latitude: lat,
+                                longitude: lng
+                            )
+                        ) {
+                            NavigationLink(
+                                value: CafeDetailRoute(
+                                    placeId: cafe.placeId,
+                                    initialCafe: cafe
                                 )
                             ) {
-                                NavigationLink(
-                                    value: CafeDetailRoute(
-                                        placeId: cafe.placeId,
-                                        initialCafe: cafe
-                                    )
-                                ) {
-                                    nearbyPin
-                                }
-                                .buttonStyle(.plain)
+                                nearbyPin
                             }
+                            .buttonStyle(.plain)
                         }
                     }
                 }
@@ -448,14 +446,6 @@ struct MapTabView: View {
                 isOn: bridge.showVisited
             ) {
                 bridge.onShowVisitedToggled(!bridge.showVisited)
-            }
-
-            FilterChip(
-                label: String(localized: "周辺"),
-                systemImage: "mappin",
-                isOn: bridge.showNearby
-            ) {
-                bridge.onShowNearbyToggled(!bridge.showNearby)
             }
 
             // 好み一致カフェが 1 件以上あるときのみ凡例バッジを表示（インタラクションなし）

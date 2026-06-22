@@ -24,7 +24,6 @@ final class MapViewModelBridge {
     private(set) var recommendedPlaceIds: Set<String> = []
     private(set) var nearbyPlaces: [Cafe] = []
     private(set) var showVisited: Bool = true
-    private(set) var showNearby: Bool = true
     private(set) var isLoadingNearby: Bool = false
     private(set) var error: String?
 
@@ -59,11 +58,6 @@ final class MapViewModelBridge {
     /// 訪問済みカフェのピン表示 / 非表示を切り替える。
     func onShowVisitedToggled(_ show: Bool) {
         kotlin.onShowVisitedToggled(show: show)
-    }
-
-    /// 周辺カフェのピン表示 / 非表示を切り替える。
-    func onShowNearbyToggled(_ show: Bool) {
-        kotlin.onShowNearbyToggled(show: show)
     }
 
     /// エラーアラートを閉じたときに呼ぶ。
@@ -109,7 +103,6 @@ final class MapViewModelBridge {
         self.recommendedPlaceIds = state.recommendedPlaceIds
         self.nearbyPlaces = state.nearbyPlaces
         self.showVisited = state.showVisited
-        self.showNearby = state.showNearby
         self.isLoadingNearby = state.isLoadingNearby
         self.error = state.error
         self.isLookingUpPoi = state.isLookingUpPoi

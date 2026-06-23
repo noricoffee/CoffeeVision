@@ -243,11 +243,6 @@ struct MapTabView: View {
                                 appState: appState
                             )
                         }
-                        .overlay(alignment: .bottom) {
-                            if bridge.isLoadingNearby {
-                                loadingBanner
-                            }
-                        }
                         .overlay {
                             if bridge.isLookingUpPoi {
                                 ProgressView()
@@ -398,29 +393,6 @@ struct MapTabView: View {
                     }
                 }
 
-                // 周辺カフェピン（グレー）— 常時表示
-                ForEach(bridge.nearbyPlaces, id: \.placeId) { cafe in
-                    if let lat = cafe.latitude?.doubleValue,
-                       let lng = cafe.longitude?.doubleValue {
-                        Annotation(
-                            cafe.name,
-                            coordinate: CLLocationCoordinate2D(
-                                latitude: lat,
-                                longitude: lng
-                            )
-                        ) {
-                            NavigationLink(
-                                value: CafeDetailRoute(
-                                    placeId: cafe.placeId,
-                                    initialCafe: cafe
-                                )
-                            ) {
-                                nearbyPin
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
             }
             .mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))
             .ignoresSafeArea()
@@ -492,36 +464,6 @@ struct MapTabView: View {
         )
     }
 
-    /// 周辺カフェピン（グレー）。
-    private var nearbyPin: some View {
-        ZStack {
-            Circle()
-                .fill(Color(.systemGray3))
-                .frame(width: 28, height: 28)
-            Image(systemName: "cup.and.saucer.fill")
-                .font(.caption2)
-                .foregroundStyle(.primary)
-        }
-        .accessibilityLabel(String(localized: "周辺のカフェ"))
-    }
-
-    // MARK: - ローディングバナー
-
-    private var loadingBanner: some View {
-        HStack(spacing: 8) {
-            ProgressView()
-                .progressViewStyle(.circular)
-            Text(String(localized: "周辺を検索中..."))
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 8)
-        .background(.regularMaterial, in: Capsule())
-        .padding(.bottom, 24)
-        .accessibilityLabel(String(localized: "周辺を検索中"))
-    }
-
     // MARK: - 設定フローティングボタン
 
     private var settingsFloatingButton: some View {
@@ -575,8 +517,7 @@ struct MapTabView: View {
 
     /// FAB タップ時に現在地へセンタリング＋ズームリセットする。
     ///
-    /// `lastLocation` を nil にしないフラグ方式を採用し、
-    /// `setupLocation` の `bridge.onLocationUpdated`（周辺カフェ検索）への副作用を防ぐ。
+    /// `lastLocation` を nil にしないフラグ方式を採用し、初期カメラ移動との競合を防ぐ。
     private func recenterToCurrentLocation() {
         switch locationManager.authorizationStatus {
         case .authorizedWhenInUse, .authorizedAlways:
@@ -664,12 +605,8 @@ struct MapTabView: View {
             break
         }
 
-        // 位置情報が届いたら Bridge に通知してカメラを移動
+        // 位置情報が届いたら初期カメラを移動
         for await location in locationStream() {
-            bridge.onLocationUpdated(
-                lat: location.latitude,
-                lng: location.longitude
-            )
             if !didSetInitialCamera {
                 withAnimation {
                     cameraPosition = .region(

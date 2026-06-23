@@ -20,8 +20,7 @@ import kotlinx.coroutines.launch
  *
  * - [ObserveVisitedCafesUseCase] を常時購読し、訪問済みカフェのピンを [UIState.visitedCafes] で管理
  * - [CafeRecommendationProvider] を常時購読し、好み一致カフェのピン強調を [UIState.recommendedCafes] で管理
- * - [onLocationUpdated] で現在地周辺のカフェ（周辺 Places）を [CafeRepository.searchNearby] で取得し、
- *   [UIState.nearbyPlaces] として公開する
+ * - [onPoiTapped] で Apple Maps POI タップ時に Places 解決（searchText 経路）を実行する
  * - [onShowVisitedToggled] でマップ上の訪問済みピン表示 / 非表示を切り替える
  *
  * ## CoroutineScope の注意
@@ -31,7 +30,7 @@ import kotlinx.coroutines.launch
  *
  * @param observeVisitedCafesUseCase 訪問済みカフェ集計の UseCase
  * @param cafeRecommendationProvider 好み一致カフェの推薦プロバイダ（v1 = [com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase]）
- * @param cafeRepository 周辺カフェ検索を担うリポジトリ
+ * @param cafeRepository POI タップ時の Places テキスト検索を担うリポジトリ
  * @param userId 現在サインイン中のユーザー ID
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
  */
@@ -52,9 +51,7 @@ class MapViewModel(
      *   matches 件数降順 → 代表評価降順 → placeId 昇順
      * @property recommendedPlaceIds [recommendedCafes] から導出した placeId の集合。
      *   iOS 側のマップピン強調（区別ピン判定）に使う
-     * @property nearbyPlaces 現在地周辺の Places API 検索結果（マップ上のグレーピン）
      * @property showVisited 訪問済みカフェのピンを表示するか
-     * @property isLoadingNearby 周辺カフェ検索中かどうか
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      * @property isLookingUpPoi Apple Maps POI タップ後の Places ルックアップ中かどうか
      * @property poiLookupResult POI ルックアップで取得した [Cafe]。View が消費（NavigationPath への append 等）
@@ -66,9 +63,7 @@ class MapViewModel(
         val visitedCafes: List<VisitedCafe> = emptyList(),
         val recommendedCafes: List<RecommendedCafe> = emptyList(),
         val recommendedPlaceIds: Set<String> = emptySet(),
-        val nearbyPlaces: List<Cafe> = emptyList(),
         val showVisited: Boolean = true,
-        val isLoadingNearby: Boolean = false,
         val error: String? = null,
         val isLookingUpPoi: Boolean = false,
         val poiLookupResult: Cafe? = null,
@@ -77,9 +72,6 @@ class MapViewModel(
 
     private val _state = MutableStateFlow(UIState())
     val state: StateFlow<UIState> = _state.asStateFlow()
-
-    // 周辺検索 Job。新しい位置情報が来るたびにキャンセルして再起動する。
-    private var nearbySearchJob: Job? = null
 
     // POI ルックアップ Job。POI タップのたびにキャンセルして再起動する（連打耐性）。
     private var poiLookupJob: Job? = null
@@ -104,34 +96,6 @@ class MapViewModel(
                     )
                 }
             }
-        }
-    }
-
-    /**
-     * 現在地が更新されたときに呼ぶ。周辺カフェ検索を 500m 半径で実行する。
-     *
-     * 前回の検索 Job が実行中の場合はキャンセルして新しい検索を起動する
-     * （[com.noricoffee.feature.cafesearch.CafeSearchViewModel.onNearbySearchRequested] と同パターン）。
-     *
-     * @param latitude 現在地の緯度
-     * @param longitude 現在地の経度
-     */
-    fun onLocationUpdated(latitude: Double, longitude: Double) {
-        nearbySearchJob?.cancel()
-        nearbySearchJob = scope.launch {
-            _state.update { it.copy(isLoadingNearby = true, error = null) }
-            runCatching { cafeRepository.searchNearby(latitude, longitude) }
-                .onSuccess { places ->
-                    _state.update { it.copy(nearbyPlaces = places, isLoadingNearby = false) }
-                }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            isLoadingNearby = false,
-                            error = e.message ?: "周辺カフェの取得に失敗しました",
-                        )
-                    }
-                }
         }
     }
 

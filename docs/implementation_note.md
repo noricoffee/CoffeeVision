@@ -1789,3 +1789,12 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
   2. **`includedTypes`（cafe を副次に含む場所）+ prominence 順**だと Tower Records・ホテルが上位に来る → `includedPrimaryTypes=["cafe","coffee_shop"]`（主タイプが cafe）+ `rankPreference="DISTANCE"`（距離順）に変更。curl 実証で OBSCURA COFFEE / スタバ / 星乃珈琲 / PRONTO が近い順に並ぶことを確認。`coffee_shop` を併記するのはチェーン店が `cafe` でなく `coffee_shop` に分類されるケースがあるため。
 - iOS 側: 周辺ピンのアイコンを `mappin` → `cup.and.saucer.fill`（グレー円は維持、茶円＝訪問済みと区別）。
 - 検証: `:shared:data-places` test green（既存 searchText テストは FakePlacesClient のため影響なし）、xcframework assemble green、iosApp Debug ビルド・上書きインストールで実機表示確認（ユーザー目視 OK）。
+
+### 2026-06-23: マップ近隣表示を Apple POI に一本化（proactive searchNearby 撤去）
+
+- 領域: KMP（feature/map）+ iOS（map） / 関連: `shared/feature/map/.../MapViewModel.kt`・`iosApp/.../Features/Map/MapTabView.swift`・`MapViewModelBridge.swift`
+- 経緯: マップを開くたびに Places `searchNearby`（課金 SKU）を 1 回叩いて周辺グレーピンを出していたが、(1) Apple Maps ネイティブ POI（`.mapStyle(pointsOfInterest: .including([.cafe,.bakery]))` で無料表示）と二重表示になり、(2) 同じ店でも Apple POI と Google 座標が微妙にズレる、(3) ユーザー意図と無関係に課金が発生、という問題があった。近隣表示を Apple POI に一本化し、Places はユーザーが Apple POI をタップした時だけ（`onPoiTapped`→`searchText` で Google placeId に解決）使う方針に変更。
+- KMP 減算（公開 API 変更）: `MapViewModel.UIState` から `nearbyPlaces` / `isLoadingNearby` を削除、`onLocationUpdated` メソッドと `nearbySearchJob` を削除。`onPoiTapped`/`poiLookupResult`/`visitedCafes`/`recommendedCafes`/`showVisited`/`error` は不変。テストは `nearbyPlaces` assertion を除去。
+- iOS 追従: グレーピン `ForEach(nearbyPlaces)` と `nearbyPin`、`isLoadingNearby` ゲートの `loadingBanner`、`setupLocation` 内の `onLocationUpdated` 呼び出し、Bridge の該当プロパティ/メソッドを削除。位置情報は初期カメラ移動・現在地 FAB に引き続き使用。`.mapStyle` の Apple POI 表示と POI タップ経路は保持。
+- **`CafeRepository.searchNearby` / `CafeRepositoryImpl` / `PlacesClientImpl.searchNearby` は data 層 capability として保持**（map から呼ばれなくなるだけ。今回 encodeDefaults/includedPrimaryTypes で精度改善した実装はそのまま温存）。→ 現状この capability は未使用（dead capability）。将来再利用しないなら別途撤去候補。
+- 検証: `:shared:feature:map` test green（6件）・`:androidApp:assembleDebug` green、iosApp Debug ビルド成功・上書きインストール起動。実機目視（グレーピン消滅・Apple POI 残存・POI タップ→詳細遷移）はユーザー作業。

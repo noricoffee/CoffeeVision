@@ -22,9 +22,7 @@ final class MapViewModelBridge {
     private(set) var recommendedCafes: [RecommendedCafe] = []
     /// 好み一致カフェの placeId 集合（ピン強調判定を O(1) にする）。
     private(set) var recommendedPlaceIds: Set<String> = []
-    private(set) var nearbyPlaces: [Cafe] = []
     private(set) var showVisited: Bool = true
-    private(set) var isLoadingNearby: Bool = false
     private(set) var error: String?
 
     // MARK: - POI ルックアップ状態
@@ -49,11 +47,6 @@ final class MapViewModelBridge {
     }
 
     // MARK: - ユーザーアクション
-
-    /// 現在地が更新されたときに呼ぶ。周辺カフェを 500m 半径で検索する。
-    func onLocationUpdated(lat: Double, lng: Double) {
-        kotlin.onLocationUpdated(latitude: lat, longitude: lng)
-    }
 
     /// 訪問済みカフェのピン表示 / 非表示を切り替える。
     func onShowVisitedToggled(_ show: Bool) {
@@ -101,9 +94,7 @@ final class MapViewModelBridge {
         self.visitedCafes = state.visitedCafes
         self.recommendedCafes = state.recommendedCafes
         self.recommendedPlaceIds = state.recommendedPlaceIds
-        self.nearbyPlaces = state.nearbyPlaces
         self.showVisited = state.showVisited
-        self.isLoadingNearby = state.isLoadingNearby
         self.error = state.error
         self.isLookingUpPoi = state.isLookingUpPoi
         self.poiLookupResult = state.poiLookupResult

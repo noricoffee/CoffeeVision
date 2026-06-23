@@ -244,7 +244,7 @@ class MapViewModelPoiLookupTest {
     }
 
     @Test
-    fun onPoiTapped_retainsPreviousNearbyPlaces() = runTest {
+    fun onPoiTapped_retainsVisitedCafes() = runTest {
         fakeCafeRepo.searchTextResult = listOf(makeCafe("poi-001"))
 
         val vm = MapViewModel(
@@ -261,8 +261,7 @@ class MapViewModelPoiLookupTest {
         val state = vm.state.value
         assertFalse(state.isLookingUpPoi)
         assertNotNull(state.poiLookupResult)
-        // nearbyPlaces / visitedCafes は変化していない
-        assertTrue(state.nearbyPlaces.isEmpty())
+        // visitedCafes は変化していない
         assertTrue(state.visitedCafes.isEmpty())
     }
 }

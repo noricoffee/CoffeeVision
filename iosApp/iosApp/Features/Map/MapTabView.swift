@@ -498,8 +498,8 @@ struct MapTabView: View {
             Circle()
                 .fill(Color(.systemGray3))
                 .frame(width: 28, height: 28)
-            Image(systemName: "mappin")
-                .font(.caption)
+            Image(systemName: "cup.and.saucer.fill")
+                .font(.caption2)
                 .foregroundStyle(.primary)
         }
         .accessibilityLabel(String(localized: "周辺のカフェ"))

@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./iosApp/Configuration/Secrets.xcconfig)",
+      "Read(./iosApp/Configuration/Secrets*.xcconfig)",
+      "Read(./iosApp/Configuration/Secrets/**)",
+      "Read(./local.properties)",
+      "Read(**/GoogleService-Info.plist)",
+      "Read(**/google-services.json)",
+      "Read(./.firebase/**)"
+    ]
+  }
+}

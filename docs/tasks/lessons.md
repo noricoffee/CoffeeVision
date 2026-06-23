@@ -411,3 +411,10 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-23 の Places で、`SearchNearbyRequest.includedTypes=listOf("cafe")` がデフォルト値ゆえに送信されず、型フィルタ無しの searchNearby になり駅・観光地が周辺ピンに並んだ。UI 上はエラーも出ず「それっぽい結果」が返るため気づきにくく、curl でリクエストボディを実送信比較して初めて発覚
 - **教訓**: 外部 API クライアントの `Json{}` には `encodeDefaults=true` を明示する。`explicitNulls=false` と併用すれば null デフォルトは省略されるので「必須は送る・null は省く」が両立する。「サーバが期待するフィールドを送っているはず」を疑い、ビルドした実体の送信ボディを curl と突き合わせる
 - 関連: Places searchNearby は `includedTypes`（副次タイプ含む・prominence 順）より `includedPrimaryTypes`（主タイプ）+ `rankPreference="DISTANCE"` の方が「実カフェを近い順」に絞れる
+
+### 「実機 debug でのみ重い」UI ジャンクは debug ビルド/デバッガアタッチのアーティファクトを最初に疑う
+
+- 2026-06-23 カフェ検索タブで「キーボードを開くと重い」+ `Gesture: System gesture gate timed out.` / `Received external candidate resultset` / `containerToPush is nil` のログ。当初は MapKit 常駐や `.searchable` バインディングを疑ったが、ユーザー確認で **debug 状態以外では重くない**ことが判明し、実在の性能バグではなかった
+- 原因の構造: (1) Kotlin/Native debug ビルドは非最適化で SKIE 往復・SwiftUI 再評価が桁違いに遅い、(2) Xcode デバッガアタッチ中は GeoServices 等がメインスレッドから吐く大量の os_log をコンソールへ転送するオーバーヘッドだけでメインスレッドが詰まり、キーボード提示のジェスチャが gate timeout する。Release（デバッガ非アタッチ）では消える
+- **教訓**: 「重い」報告は最初に **(a) Release/Profile ビルドで再現するか (b) デバッガをデタッチして再現するか** を切り分ける。debug 限定なら追わない（MapKit ライフサイクル制御や Tab 構成の作り変えは実在しない問題への過剰設計になる）。`candidate resultset` / `containerToPush` / `gesture gate timed out` は OS フレームワーク由来のログでアプリからは抑制できない無害ノイズ
+- 補足: このとき検索欄テキストを Kotlin StateFlow 直結から View ローカル `@State` + `.onChange` 一方向転送に変えた変更は、debug 問題とは独立に「表示を非同期ラウンドトリップに依存させない」定石として正しいので残した（[`implementation_note.md`](../implementation_note.md) 2026-06-23 エントリ参照）

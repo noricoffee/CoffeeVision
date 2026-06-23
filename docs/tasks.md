@@ -655,3 +655,22 @@
   - [x] KMP `:shared:feature:map:compileKotlinIosSimulatorArm64` / `testAndroidHostTest` BUILD SUCCESSFUL、iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）
   - [ ] シミュレータ目視（周辺ピン常時表示 / 訪問済みチップは機能 / 現在地 FAB）はユーザー作業
 - 所見: FilterChip 行は「訪問済み」+（好み一致カフェ時のみ）`RecommendedLegendBadge` が残る。`HStack(spacing: 8)` 先頭詰めでレイアウト崩れなし
+
+### 2026-06-23 - カフェ検索の入力ラグ修正（検索欄テキストをローカル @State 化）
+- 背景: 実機 debug で検索タブの入力が重い。`.searchable` の text バインディングが Kotlin `StateFlow`（`bridge.query`）を真実の源にしており、1 文字ごとに onQueryChanged → StateFlow emit → SKIE AsyncSequence → apply の非同期ラウンドトリップを経てから表示が追随するため echo が遅延する。OS のサジェスト候補集約ログ（`Result accumulator timeout` 等）は OS 由来の無害ノイズで別問題。
+- タスク:
+  - [x] iOS: `CafeSearchView` の検索欄テキストをローカル `@State queryText` で即時 echo し、Kotlin へは `.onChange` で一方向転送。`bridge.query.isEmpty` 参照（表示分岐 ×2 / 検索ボタン disabled / `ContentUnavailableView.search`）を `queryText` に寄せた
+  - [x] iOS: Kotlin 側から query を外部変更するルートは現行 ViewModel に無く整合問題なしを確認（将来クリア導入時は逆方向バインディングが必要）
+- 動作確認:
+  - [x] `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ。`No such module 'SharedLogic'` は SourceKit 偽陽性）
+  - [ ] 実機での入力体感（ラグ解消）はユーザー作業
+
+### 2026-06-23 - カフェ検索「該当なし」を検索確定後のみ表示（入力中は出さない）
+- 背景: 入力中（検索未確定）でも `results` 空 + クエリ非空だと `ContentUnavailableView.search` が「該当なし "○○"」を逐次更新表示し、逐次検索しているように見える。Places は確定実行方式（入力中は API を叩かない）なので、表示も確定後のみにする。
+- 仕様: `CafeSearchViewModel.UIState` に `hasSearched: Boolean = false` を追加。`onQueryChanged` で false、`onSearchTapped` / `onNearbySearchRequested` の成功完了で true、失敗時は据え置き。iOS 表示分岐: 「results 空 && !hasSearched → 初期プロンプト」「results 空 && hasSearched && !isLoading → 該当なし」「それ以外 → 結果リスト」。
+- タスク:
+  - [x] KMP: `CafeSearchViewModel.UIState.hasSearched` 追加 + 3 メソッドの遷移更新 + commonTest 追随（11 ケース green）
+  - [x] iOS: `CafeSearchViewModelBridge.hasSearched` 公開 + `CafeSearchView` 表示分岐を `queryText.isEmpty` ベースから `hasSearched` ベースに置換
+- 動作確認:
+  - [x] KMP test green（11 ケース）/ iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ。`No such module 'SharedLogic'` は SourceKit 偽陽性）
+  - [ ] 実機/シミュレータ目視（入力中は初期プロンプト、確定後 0 件で該当なし）はユーザー作業

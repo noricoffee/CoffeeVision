@@ -1798,3 +1798,15 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - iOS 追従: グレーピン `ForEach(nearbyPlaces)` と `nearbyPin`、`isLoadingNearby` ゲートの `loadingBanner`、`setupLocation` 内の `onLocationUpdated` 呼び出し、Bridge の該当プロパティ/メソッドを削除。位置情報は初期カメラ移動・現在地 FAB に引き続き使用。`.mapStyle` の Apple POI 表示と POI タップ経路は保持。
 - **`CafeRepository.searchNearby` / `CafeRepositoryImpl` / `PlacesClientImpl.searchNearby` は data 層 capability として保持**（map から呼ばれなくなるだけ。今回 encodeDefaults/includedPrimaryTypes で精度改善した実装はそのまま温存）。→ 現状この capability は未使用（dead capability）。将来再利用しないなら別途撤去候補。
 - 検証: `:shared:feature:map` test green（6件）・`:androidApp:assembleDebug` green、iosApp Debug ビルド成功・上書きインストール起動。実機目視（グレーピン消滅・Apple POI 残存・POI タップ→詳細遷移）はユーザー作業。
+
+## 2026-06-23 - CafeSearch: 検索欄テキストをローカル `@State` で管理する（入力ラグ対策）
+- 論点: `.searchable` の表示値を `bridge.query`（Kotlin `StateFlow` 経由）にすると、`set → kotlin.onQueryChanged → StateFlow.update → SKIE AsyncSequence emit → apply() → 再描画` の非同期ラウンドトリップが完了するまで TextField に文字が echo されず、実機 debug + Kotlin/Native 非最適化ビルドで入力ラグが顕著になる（実機で「検索タブの入力が重い」と報告）。
+- 対策: `CafeSearchView` に `@State private var queryText` を持ち、これを `.searchable` 表示値の真実の源とする。Kotlin への反映は `.onChange(of: queryText)` で `bridge.onQueryChanged` に一方向転送のみ。`bridge.query.isEmpty` を見ていた箇所（表示分岐 ×2 / 検索ボタン disabled / `ContentUnavailableView.search`）も `queryText` に寄せた。
+- 一貫性: `onSearchTapped` は Kotlin 内部の `_state.value.query` を使うため、`onChange` の転送完了後にボタン/Submit する通常フローでクエリは従来どおり成立する。**Kotlin 側から `query` をクリア/リセットする経路が将来生じた場合は、`bridge.query` → `queryText` の逆方向反映が別途必要**（現行 ViewModel には該当経路なし）。
+- 補足: ユーザーが入力ごとに見た OS ログ（`Received external candidate resultset` / `Result accumulator timeout: 3.0 exceeded` / `containerToPush is nil` 等）は iOS のサジェスト候補集約サブシステム由来の無害ノイズで本件とは別問題。アプリコードからは抑制できない。
+
+## 2026-06-23 - CafeSearch: 「該当なし」を検索確定後のみ表示（UIState.hasSearched）
+- 論点: Places は確定実行方式（`onQueryChanged` では API を叩かず `onSearchTapped` で初めて検索）だが、表示側が「`results` 空 && クエリ非空」で `ContentUnavailableView.search` を出していたため、入力中も「該当なし "○○"」が逐次更新表示され、逐次検索しているように見えていた。「`results` が空である理由」を「未検索」と「検索したが 0 件」に区別する必要があった。
+- 解決: `CafeSearchViewModel.UIState` に `hasSearched: Boolean = false` を追加（単一の真実の源を ViewModel に置く）。`onQueryChanged` で false、`onSearchTapped` / `onNearbySearchRequested` の**成功完了時のみ** true、失敗時・ローディング開始時は据え置き。iOS は `CafeSearchView` の表示分岐を `queryText.isEmpty` ベースから `hasSearched` ベースへ置換（`results 空 && !hasSearched → 初期プロンプト` / `results 空 && hasSearched && !isLoading → 該当なし` / `else → 結果リスト`）。
+- 効果: 入力中は初期プロンプト維持、検索確定して 0 件のときだけ「該当なし」。0 件表示後に 1 文字でも打つと `hasSearched=false` に戻り初期プロンプトへ。ローディング中は `hasSearched=false` のまま第 1 分岐 + ProgressView overlay。
+- 補足: `emptyResultsView` の `ContentUnavailableView.search(text: queryText)` の引数は据え置き。検索確定後はタイプしていないため `queryText` == 検索語として成立する。

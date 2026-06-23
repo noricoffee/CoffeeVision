@@ -1761,3 +1761,22 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 変更: KMP は `UIState.showNearby` プロパティと `onShowNearbyToggled` を撤去（公開 API の減算的変更）。`nearbyPlaces`/`isLoadingNearby`/`onLocationUpdated` の周辺検索ロジックは不変、トグルだけ撤去。iOS は Bridge の `showNearby`/`onShowNearbyToggled`/state 同期を削除し、`MapTabView` の周辺ピン描画ゲート `if bridge.showNearby` を撤去（常時 `ForEach` 展開）＋「周辺」`FilterChip` 削除。
 - 影響/所見: FilterChip 行には「訪問済み」+（好み一致カフェ時のみ）`RecommendedLegendBadge` が残る。`HStack(spacing: 8)` 先頭詰めでレイアウト崩れなし。`訪問済み` トグルは維持（ピンを隠して周辺/一致に集中する用途が残るため）。
 - 検証: KMP `:shared:feature:map` compile/test green、iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）。目視はユーザー作業。
+
+### 2026-06-23: Places API キーの iOS バンドル ID 制限に Ktor 生 REST を追随
+
+- 領域: KMP（data-places） / 関連: `shared/data-places/src/iosMain/.../PlacesHttpClient.ios.kt`
+- 経緯: アプリ上で Places API 疎通確認を実施したところ、API キーに **iOS バンドル ID 制限**（`com.noricoffee.coffeevision`）が設定されていた。Google は `X-Ios-Bundle-Identifier` ヘッダでバンドル ID を判定するが、これを自動付与するのは公式 GMS SDK のみ。本アプリは Ktor(Darwin) で生 REST を叩くため未付与で、そのままでは `403 API_KEY_IOS_APP_BLOCKED`（iosBundleId: `<empty>`）になる。
+- 切り分け実証（curl）: ヘッダなし → 403 / `X-Ios-Bundle-Identifier: com.noricoffee.coffeevision` 付き → HTTP 200・20件。よってキー有効・Places API (New) 有効化・課金は正常で、原因はヘッダ欠落のみと確定。
+- 修正: `iosMain` の `actual createPlacesHttpClient()` で `defaultRequest { header("X-Ios-Bundle-Identifier", NSBundle.mainBundle.bundleIdentifier) }` を付与。バンドル ID は実行時取得なので署名ビルドで `TEAM_ID` が付いてもズレない。`bundleId == null`（テストホスト等）の場合はヘッダなし。
+- **設計判断**: iOS 固有制約は `iosMain` の actual に閉じ、`commonMain` の `PlacesClientImpl` / `createCafeRepository` シグネチャは不変（Android にヘッダを漏らさない）。`PlacesClientImpl` は `httpClient.config { install(ContentNegotiation) }` で再構成するが、`HttpClient.config` は `plusAssign(userConfig)` で元設定（DefaultRequest 含む）を引き継ぐため伝播する（Ktor 3.0.3 ソースで確認）。
+- 検証: `:shared:data-places` iOS compile / framework assemble / Android host test green。iosApp を iPhone 17 Pro(iOS 26.1) シミュレータにビルド＆起動成功、ビルド成果物の `CFBundleIdentifier == com.noricoffee.coffeevision`（制限値と完全一致）、`startInitialSync succeeded` を確認。**残: Search タブで実検索して結果表示の目視＝ユーザー作業**。
+
+### 2026-06-23: Places API 疎通の真因は xcconfig のキー上書き（記述順バグ）
+
+- 領域: iOS ビルド設定 / 関連: `iosApp/Configuration/Base.xcconfig`・（併せて）`shared/data-places/.../PlacesHttpClient.ios.kt`・`PlacesClientImpl.kt`
+- 経緯: 「アプリ上で Places 疎通確認」で検索が空結果（NoResult）・マップ周辺ピンも出ない。段階的に切り分けた結果、**3つの独立した問題**が重なっていた:
+  1. **（真の疎通ブロッカー）API キーが空注入**: `Base.xcconfig` が `#include? "Secrets.xcconfig"`（実キー設定）の**後ろ**に `PLACES_API_KEY =`（空フォールバック）を書いていた。xcconfig は同一キーの最後の代入が勝つため、空文字が実キーを上書きし、アプリは空キーで Places を叩いて 403（API キー無効＝`iosBundleId` フィールドを持たない 403）になっていた。→ フォールバック宣言を include の**前**に移動して解消。インストール済み `.app/Info.plist` の `PLACES_API_KEY` が空→`AIzaSy…`(39字) に変わったことで確認。
+  2. **API エラーの握り潰し**: `PlacesListResponse.places = emptyList()` デフォルト ＋ Ktor 既定 `expectSuccess=false` により、403 のエラー JSON が空 places にデコードされ、例外もトーストも出ず「結果0件」に見えていた（=#1 の発覚を遅らせた元凶）。→ `PlacesClientImpl` に `expectSuccess=true` ＋ `HttpResponseValidator.handleResponseExceptionWithRequest` で本文付き `PlacesApiException`（internal）を投げる修正。
+  3. **iOS バンドル ID ヘッダ未付与**: キー注入後に効いてくる制限。GMS SDK 以外（Ktor 生 REST）は `X-Ios-Bundle-Identifier` を自動付与しない。→ `iosMain` の `createPlacesHttpClient()` で `NSBundle.mainBundle.bundleIdentifier` を `defaultRequest` ヘッダに付与（前掲エントリ）。
+- 切り分けの決め手: ①curl はバンドル ID ヘッダ無→403`API_KEY_IOS_APP_BLOCKED`(iosBundleId:empty) / 有→200。②実機 dylib に `X-Ios-Bundle-Identifier`・`PlacesApiException` 文字列が在ることを `grep -a` で確認（修正がバイナリに反映済の裏取り）。③`.app/Info.plist` の `PLACES_API_KEY` 実値を PlistBuddy で確認（空→注入の前後比較）。④「`iosBundleId` フィールドが無い 403」という症状からキー欠落を特定。
+- 検証: `:shared:data-places` compile/test green、xcframework assemble green、iosApp Debug ビルド成功・キー注入確認・上書きインストール起動。**最終の実検索の目視はユーザー作業**。

@@ -387,3 +387,20 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 一方、テイスティング軸の |r| 下限を `max(0.3, c/√n)` と**n 連動**にしたら偽陽性 40%→22%（c 上げで 8.7%）に下がった。閾値を不確実性に合わせてスケールさせるのが効く
 - **教訓**: 「最良候補が基準を有意に超えるか」を問うガードは、固定オフセットでなく `差 > z · SE`（SE ≈ stdev/√n）のような n 連動の信頼区間ゲートにする。固定 δ は対症療法に留まると疑う
 - **親の運用**: サブエージェントの「これはテストの人工物で実データなら問題ない」という説明は、数理 or 実測で裏が取れるまで**留保**する。鵜呑みにせず「現実的な分布で測り直す」一手を挟む（CLAUDE.md No Laziness / Verification Before Done）
+
+### xcconfig はフォールバック宣言を `#include?` より「前」に置く（後ろだと実値を空で上書き）
+
+- xcconfig は**同一キーの最後の代入が勝つ**。`#include? "Secrets.xcconfig"`（実キーを設定）の**後ろ**に `PLACES_API_KEY =`（空フォールバック）を書くと、Secrets の実キーが空文字で上書きされ、ビルドは通るが実行時に空キーになる
+- 2026-06-23 の Places 疎通確認で、検索が常に「結果0件」になる真因がこれだった。フォールバックは必ず include の**前**に宣言する（`PLACES_API_KEY =` → `#include? "Secrets.xcconfig"` の順）
+- **教訓**: 「Secrets があれば上書きする」系の xcconfig は、フォールバック→include の順序が絶対。検証は**ビルド成果物の `.app/Info.plist` を PlistBuddy で実読み**する（`$(VAR)` 置換の最終結果はソースを見ても分からない）
+
+### Places/REST クライアントの DTO に `= emptyList()` デフォルト＋Ktor `expectSuccess=false` はエラーを握り潰す
+
+- Ktor は既定（`expectSuccess=false`）で非2xxを例外化しない。レスポンス DTO の必須フィールドに `= emptyList()` 等のデフォルトがあると、403/400 のエラー JSON（`{"error":{...}}`）が `ignoreUnknownKeys=true` で**空の正常レスポンスにデコードされ**、例外もエラー表示も出ず「0件」に見える。**API 障害が常に『該当なし』に化ける**最悪のサイレント失敗
+- 2026-06-23 Places 疎通確認で、空キー由来の 403 がこの経路で隠れ、真因特定が遅れた
+- **教訓**: 外部 API クライアントの Ktor は `expectSuccess=true` を基本にし、必要なら `HttpResponseValidator` で**本文を含む**例外メッセージにする（デフォルトの `ResponseException.message` は本文を含まない）。「結果が空」を見たら、まず「本当に空 200 か / 握り潰した非2xx か」を疑う
+
+### 実機バイナリに修正が入っているかは `grep -a` で文字列を直接確認できる
+
+- 「ソース修正したのに挙動が変わらない」とき、ビルド/インストールが古い可能性を**バイナリ実読み**で切り分けられる。Kotlin/Native の静的フレームワークは Debug ビルドだと `<app>/coffeevision.debug.dylib` 側に入る（メイン実行ファイルは数十KBのスタブ）
+- ヘッダ名やクラス名（例 `X-Ios-Bundle-Identifier` / `PlacesApiException`）を `LC_ALL=C grep -a -c "文字列" <dylib>` で検索し、在れば反映済・無ければ stale。`xcrun simctl get_app_container <udid> <bundleId>` で .app パスを取得

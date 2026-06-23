@@ -3,11 +3,14 @@ package com.noricoffee.data.places
 import com.noricoffee.domain.LocationBias
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
+import io.ktor.client.plugins.HttpResponseValidator
+import io.ktor.client.plugins.ResponseException
 import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
 import io.ktor.client.request.get
 import io.ktor.client.request.header
 import io.ktor.client.request.post
 import io.ktor.client.request.setBody
+import io.ktor.client.statement.bodyAsText
 import io.ktor.http.ContentType
 import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
@@ -27,12 +30,18 @@ class PlacesClientImpl(
 ) : PlacesClient {
 
     /**
-     * ContentNegotiation プラグインを install した HttpClient を内部保持する。
+     * ContentNegotiation と エラーハンドリングを install した HttpClient を内部保持する。
+     *
+     * `expectSuccess = true` により 非2xx レスポンスで [ResponseException] を投げる。
+     * デフォルトの [ResponseException] メッセージにはレスポンス本文が含まれないため、
+     * [HttpResponseValidator] で本文を読み取り診断しやすいメッセージに投げ直す。
      *
      * `httpClient` に既に ContentNegotiation が入っている場合は二重 install になるが、
      * Ktor 3.x は重複 install を無視するため問題なし。テスト用 MockEngine も同様。
      */
     private val client: HttpClient = httpClient.config {
+        expectSuccess = true
+
         install(ContentNegotiation) {
             json(
                 Json {
@@ -40,6 +49,18 @@ class PlacesClientImpl(
                     explicitNulls = false
                 }
             )
+        }
+
+        HttpResponseValidator {
+            handleResponseExceptionWithRequest { exception, request ->
+                val responseException = exception as? ResponseException ?: return@handleResponseExceptionWithRequest
+                val responseBody = responseException.response.bodyAsText()
+                val status = responseException.response.status
+                throw PlacesApiException(
+                    message = "Places API error: $status — url=${request.url} body=$responseBody",
+                    cause = responseException,
+                )
+            }
         }
     }
 
@@ -176,3 +197,18 @@ class PlacesClientImpl(
             "id,displayName,formattedAddress,location,websiteUri,googleMapsUri,photos"
     }
 }
+
+/**
+ * Places API が 非2xx ステータスを返したときに投げる例外。
+ *
+ * [PlacesClientImpl] の [HttpResponseValidator] が生成する。
+ * メッセージには HTTP ステータスコード、リクエスト URL、レスポンス本文（JSON）が含まれるため、
+ * `403 API_KEY_IOS_APP_BLOCKED` 等の診断に使える。
+ *
+ * `internal` にすることで `data-places` モジュール外には漏れない。
+ * 上位（ViewModel）は `Exception` / `Throwable` で受け取り、`message` をユーザーに表示する。
+ */
+internal class PlacesApiException(
+    message: String,
+    cause: Throwable? = null,
+) : Exception(message, cause)

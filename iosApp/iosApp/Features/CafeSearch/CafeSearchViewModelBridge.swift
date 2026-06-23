@@ -20,6 +20,10 @@ final class CafeSearchViewModelBridge {
     private(set) var results: [Cafe] = []
     private(set) var isLoading: Bool = false
     private(set) var error: String?
+    /// 検索が一度でも確定実行されたかどうか。
+    /// `onQueryChanged` で false に戻り、`onSearchTapped` / `onNearbySearchRequested` の
+    /// 成功完了で true になる（Kotlin 側の `UIState.hasSearched` を反映）。
+    private(set) var hasSearched: Bool = false
 
     // MARK: - Init
 
@@ -80,5 +84,6 @@ final class CafeSearchViewModelBridge {
         self.results = state.results
         self.isLoading = state.isLoading
         self.error = state.error
+        self.hasSearched = state.hasSearched
     }
 }

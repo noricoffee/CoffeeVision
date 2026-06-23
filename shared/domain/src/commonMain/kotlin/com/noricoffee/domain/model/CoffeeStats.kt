@@ -99,20 +99,52 @@ data class RecordDigest(
 )
 
 /**
+ * テイスティング 5 軸の識別子。
+ *
+ * [FavoriteSignals.dominantTastingAxis] で評価と最も相関する軸を特定するために使う。
+ * Blue Bottle「Elements of Coffee Tasting」の 5 要素に対応する。
+ *
+ * @see [TastingAxisCorrelation]
+ * @see [data-model.md] §1.6 集計ルール（dominantTastingAxis）
+ */
+enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
+
+/**
+ * テイスティング 1 軸と評価（rating）のピアソン相関係数の計算結果。
+ *
+ * @param axis 相関が最大だった軸
+ * @param correlation ピアソン相関係数 r（-1.0..1.0、符号付き）。
+ *   r > 0 ＝「その軸が高いほど高評価」、r < 0 ＝「低いほど高評価」
+ * @param sampleSize 相関の母数（tasting != null かつ rating > 0.0 の件数）
+ */
+data class TastingAxisCorrelation(
+    val axis: TastingAxis,
+    val correlation: Double,
+    val sampleSize: Int,
+)
+
+/**
  * 階層2（傾向抽出）の結果。
  *
- * 高評価群（rating >= 4.0）に共通する属性を最小サンプル数の閾値付きで抽出する。
- * Phase B-1 まで全フィールドは null（空の [FavoriteSignals] を返す）。
+ * 評価済みレコード群から経験ベイズ収縮＋相関分析で「弱い好み傾向」を抽出する。
+ * Phase B-1 で実体化。
  *
- * @param bestBrewMethod 平均評価が突出する抽出方法（閾値未満なら null）
- * @param bestOrigin 平均評価が突出する産地（閾値未満なら null）
- * @param bestRoastLevel 平均評価が突出する焙煎度（閾値未満なら null）
+ * @param bestBrewMethod 収縮平均で全体平均を最も上回る抽出方法（正方向のみ。閾値未満なら null）
+ * @param bestOrigin 同上、産地
+ * @param bestRoastLevel 同上、焙煎度
+ * @param dominantTastingAxis 評価と最も相関するテイスティング軸（|r| 閾値以上のみ。母数不足なら null）
  * @param minSampleSize この件数未満の群は信号にしない（既定 3）。サンプル不足の過大解釈を防ぐガード
+ *
+ * @see [BuildCoffeeStatsUseCase.SHRINKAGE_PRIOR_WEIGHT]
+ * @see [BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE]
+ * @see [BuildCoffeeStatsUseCase.CORRELATION_MIN_ABS]
+ * @see [data-model.md] §1.6 集計ルール（favoriteSignals）
  */
 data class FavoriteSignals(
     val bestBrewMethod: CategoryStat? = null,
     val bestOrigin: CategoryStat? = null,
     val bestRoastLevel: CategoryStat? = null,
+    val dominantTastingAxis: TastingAxisCorrelation? = null,
     val minSampleSize: Int = 3,
 )
 

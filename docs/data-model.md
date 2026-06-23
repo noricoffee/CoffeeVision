@@ -226,23 +226,45 @@ data class RecordDigest(
 )
 
 data class FavoriteSignals(
-    val bestBrewMethod: CategoryStat?,         // 平均評価が突出する抽出方法（閾値未満なら null）
+    val bestBrewMethod: CategoryStat?,         // 収縮平均で全体平均を最も上回る抽出方法（弱い好み信号。閾値・正方向のみ）
     val bestOrigin: CategoryStat?,
     val bestRoastLevel: CategoryStat?,
+    val dominantTastingAxis: TastingAxisCorrelation?,  // 評価と最も相関するテイスティング軸（|r| 閾値以上のみ）
     val minSampleSize: Int,                    // この件数未満の群は信号にしない（既定 3）
 )
+
+data class TastingAxisCorrelation(
+    val axis: TastingAxis,                     // 相関が最大だった軸
+    val correlation: Double,                   // ピアソン相関係数 r（-1.0..1.0、符号付き）
+    val sampleSize: Int,                       // 相関の母数（rating>0 かつ tasting!=null の件数）
+)
+
+enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
 ```
 
 ### 集計ルール（決定論）
 
 - **平均評価**: `rating == 0.0`（未評価 sentinel）は常に母数から除外。対象が 0 件なら `null`。
-- **`favoriteSignals`（階層2）**: 各カテゴリ軸で「件数 `>= minSampleSize` かつ平均評価が全体平均を最も上回る label」を 1 つ選ぶ。閾値を満たす群が無ければ `null`。サンプル不足の過大解釈を避けるためのガード。
+- **`favoriteSignals`（階層2 / 好み判定）**: 「複数の評価から好みを統計的に抽出する」層。**生平均のランキングはサンプル数の罠に弱い**（n=1 の 5.0 が最上位に来る）ため、以下の補正を入れる。出力は常に **「弱い傾向」止まり**（断定しない。理由は交絡 = 下記）。
+  - **カテゴリ好み（`bestBrewMethod` / `bestOrigin` / `bestRoastLevel`）= 収縮平均による選定**:
+    1. 母数: `rating > 0.0` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
+    2. 候補: 各軸で件数 `>= minSampleSize`（既定 3）かつ平均評価ありの label。
+    3. **経験ベイズ収縮**: 各候補の評価を `shrunkMean = (n·mean + k·globalMean) / (n + k)` で全体平均へ寄せる（`k = SHRINKAGE_PRIOR_WEIGHT`、既定 5 ＝「全体平均を 5 杯ぶん事前に混ぜる」）。少数群の極端値を抑える。
+    4. 選定: `shrunkMean` 最大の候補（n=1 外れ値に頑健な選定キー）。ただし信号化は **n 連動の信頼区間ゲート**で足切りする: `mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)`（一標本 z 検定近似。`globalStd` = 全評価済 rating の母標準偏差、`n` = 候補群の件数、`mean` = 候補群の生平均）。これを満たす最良候補だけ信号にする。**固定オフセット δ（`shrunkMean - globalMean > δ`）は特異度を上げられない**（最良群の偶然の上振れ＝winner's curse がサンプリングばらつき σ/√n に比例して膨らみ、固定 δ では止まらない。B-1b 100% / B-1c 不均等でも 86.7% と実測）。よって**ばらつき連動（n 連動）の閾値**で足切りする。`CATEGORY_MIN_EFFECT = 0.20` は「統計的有意だが実用上は誤差レベル」を弾く小さな絶対下限として併用してよい（z ゲートと AND）。
+    5. 返す `CategoryStat` は**生の `averageRating` と `count`**（収縮値・effect-size は選定/足切りの内部利用のみ。`count` が小さければ言語化で「但し書き」に使う）。タイ時は件数多 → label 昇順で決定論化。
+  - **好みの軸（`dominantTastingAxis`）= テイスティング軸と評価の相関**:
+    1. 母数: `tasting != null` かつ `rating > 0.0` の記録。`CORRELATION_MIN_SAMPLE`（既定 5）未満なら `null`。
+    2. 5 軸それぞれと `rating` の**ピアソン相関係数 r**（符号付き）を計算。分散 0 の軸（全件同値）は相関定義不可のためスキップ。
+    3. `|r|` 最大の軸を採用。ただし **`|r| >= CORRELATION_ABS_FLOOR`（サンプル数連動の下限。下記）のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。**5 軸の max|r| を採る多重比較で偽陽性が乗る**（B-1b 実測 40%）ため、固定 0.3 ではなくサンプル数に応じて締める。
+  - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
+  - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（カテゴリ z ゲート係数 ≈95% 信頼区間。B-1d sweep で確定。heavy-skew 偽陽性 9.3%・検出力 P2–P4 維持。`globalStd==0` は z ゲートをスキップしδ下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20`（z ゲートと AND する絶対下限）/ テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_MIN_ABS = 0.3` と `CORRELATION_ABS_FLOOR_C = 1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。値は `FavoriteSignalsPersonaTest` の sweep（150 シード）で検出力 P1–P4・P7 維持を確認して確定。
+  - **既知の限界 / 経緯**: tasting 軸の偽陽性は 40%→22%（c 連動 floor、B-1c）。カテゴリ信号は固定 δ では下がらず（均等 100% / heavy-skew 86.7%、B-1d 前段実測）、**n 連動 z ゲートで根治**（B-1d 本体）。winner's curse は固定オフセットでなくばらつき連動の閾値で抑えるのが要点。詳細経緯は実装ノート 2026-06-22 B-1b〜B-1d。
 - **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
 
-> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は Phase B-1 で実体化する（それまでは全フィールド null の空 `FavoriteSignals` を返す）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。
+> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は **Phase B-1（好み判定）で上記仕様により実体化**する（収縮平均＋相関軸。それ以前は全フィールド null の空 `FavoriteSignals`）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。`favoriteSignals` は階層3（要約・Q&A）の `buildPrompt` にも「弱い傾向＋件数の但し書き」として渡し、LLM は断定せず言語化する。
 
 ### 階層3（自然言語解釈）のインターフェース
 
@@ -322,6 +344,70 @@ data class CoffeeRecordSummary(
 - **userId は実装が内部で解決**: `CoffeeRecordQueryImpl` は `authRepository.signInAnonymouslyIfNeeded()` で現在 uid を取得し、`coffeeRepository.observeAll(uid).first()` で全件取得 → Kotlin で filter 適用 → `visitedOn` 降順 → `limit` 件に切って `CoffeeRecordSummary` 化する。個人アプリ規模（数十〜数百件）のため全件読みで十分。`shared/domain` 内に置き、`CoffeeRepository` + `AuthRepository` インターフェースのみに依存させる（テスト容易）。`AppContainer` が組み立てて `val coffeeRecordQuery` で公開する。
 - **digest はベース文脈として併用（ハイブリッド）**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き `buildPrompt(stats)` の digest を含める。
 - **既存インターフェース・VM・UI は不変**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI は変更しない（変更は純粋に加算的）。ブリッジ方向（Swift→Kotlin calling direction）と配線は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
+
+---
+
+## 1.7 RecommendedCafe（味覚プロファイル一致カフェ / 要件 9-5）
+
+マップ上で「あなた好みの一杯があった店」を強調するための**派生集計モデル**（永続化しない）。`CoffeeRecord` 群と `FavoriteSignals` から決定論的に算出する。
+
+### モデル（`shared/domain`）
+
+```kotlin
+// 推薦カフェ 1 件。matches は非空（理由が 1 つ以上あるカフェだけを返す）。
+data class RecommendedCafe(
+    val cafe: Cafe,                       // placeId / 座標を持つ（マップピン用）。最新記録時スナップショット
+    val matches: List<RecommendationReason>, // なぜ推薦されたか（非空）
+)
+
+// 推薦理由。将来の協調フィルタリングでも種類を増やして再利用できるよう sealed で表現する。
+sealed interface RecommendationReason {
+    // v1（コンテンツベース）: 自分の好み属性に一致する高評価記録があった
+    data class TasteProfileMatch(
+        val axis: PreferenceMatchAxis,    // Origin / RoastLevel / BrewMethod
+        val matchedLabel: String,         // "Ethiopia" / "Light" / "AeroPress"（表示用ラベル）
+        val exampleRecordName: String,    // 代表記録のコーヒー名
+        val exampleRating: Double,        // その記録の評価
+    ) : RecommendationReason
+    // 将来（9-6 協調フィルタ）: SimilarUsers(count, ...) 等をここに追加（UI/VM/FM は不変のまま種類追加）
+}
+
+enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod }
+```
+
+### 推薦ソースの抽象化（将来の差し替えポイント）
+
+```kotlin
+// 推薦の供給元。v1 はローカル決定論実装、将来はサーバ（GCP 等）リモート実装に差し替える。
+// MapViewModel はこの interface にだけ依存し、中身（ローカル集計 / 横断ベクトル類似）を知らない。
+interface CafeRecommendationProvider {
+    fun observeRecommendedCafes(userId: String): Flow<List<RecommendedCafe>>
+}
+```
+
+- **v1 実装 = `ObserveTasteMatchedCafesUseCase`**（`CafeRecommendationProvider` のローカル実装）。`CoffeeRepository.observeAll(userId)` ＋ `BuildCoffeeStatsUseCase` の `FavoriteSignals` から算出。
+- **将来 9-6** はこの interface のリモート実装（横断ベクトル類似はサーバ側）を `AppContainer` で差し替えるだけ。`MapViewModel` / iOS UI / Foundation Models 言語化層は不変。
+
+### 一致ルール（決定論 / v1 コンテンツベース）
+
+あるカフェ（`cafe.placeId` でグループ化、`cafe == null` のセルフ抽出は座標が無いため対象外）に、次を**両方**満たす `CoffeeRecord` が 1 件以上あれば `RecommendedCafe` として返す:
+
+1. `rating >= HIGHLIGHTS_MIN_RATING`（= 4.0。`recentHighlights` と統一）
+2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` のうち **非 null のもの**）のいずれかに一致:
+   - `origin`: `trim().lowercase()` 正規化で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
+   - `roastLevel`: enum 一致（`bestRoastLevel.label == record.roastLevel?.name`）
+   - `brewMethod`: enum 一致（`bestBrewMethod.label == record.brewMethod.name`）
+
+- **`matches` の構築**: 一致した軸ごとに 1 つの `TasteProfileMatch` を作る。同じ軸に複数の一致記録があれば**評価最高の記録**を代表（`exampleRecordName` / `exampleRating`）に採用。タイは `visitedOn` 新しい順 → コーヒー名昇順で決定論化。
+- **`dominantTastingAxis`（相関軸）は v1 では一致条件に使わない**: 相関は per-record の categorical 一致に変換できず、理由表示も曖昧になるため。カテゴリ好み 3 軸に限定。
+- **`FavoriteSignals` が全 null（データ不足）** なら一致 0 件 → 空リスト（マップは強調なし）。
+- **並び順**: `matches` 件数降順 → 代表記録評価の最大降順 → placeId 昇順（決定論）。
+
+### マップ連携（`MapViewModel` / iOS）
+
+- `MapViewModel` は `CafeRecommendationProvider.observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。公開 API 追加は加算的。
+- iOS `MapTabView`: 一致カフェを**区別ピン**（アクセント色＋ハート/星）で強調し、タップで理由（`matches`）を表示。理由文言（「好みのエチオピアを高評価で記録（〇〇 ★4.5）」）は iOS でローカライズ生成。
+- **Foundation Models 連携は将来 9-6 で「推薦理由の自然言語化」一点に限定**（v1 は構造化 reason を iOS が定型文で表示。LLM は使わない）。
 
 ---
 

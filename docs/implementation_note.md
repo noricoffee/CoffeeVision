@@ -1561,3 +1561,264 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 **トレードオフ**: Secrets に実 `google-services.json` を base64 で置く案より運用が軽い反面、CI で実 Firebase に到達するテスト（Firestore 結合テスト等）は将来も別途仕組みが要る。現状 Android 側に実接続テストは無いため問題なし。
 
 **検証**: ローカルで実ファイルを退避→ダミーに差し替えて `processDebugGoogleServices --rerun-tasks` が BUILD SUCCESSFUL を確認（実ファイルは復元）。push 後の CI で Android / iOS 両ジョブ SUCCESS。
+
+### 2026-06-21: マップ POI フィルタを cafe/bakery のみに限定
+
+- 領域: iOS UI（`iosApp/iosApp/Features/Map/MapTabView.swift`）
+
+ユーザーから「マップにカフェ以外（病院など）が出る」との指摘。アプリ独自ピン（訪問済み茶 / 周辺グレー）は Places API リクエスト側で既に `cafe` 限定済みだが、Apple Maps ベース地図の標準 POI ラベルは `.mapStyle(.standard)` のまま全カテゴリ素通しで描画されていた（フィルタ未適用）。
+
+**対応**:
+- `.mapStyle(.standard)` → `.mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))` でベース地図 POI をカフェ・ベーカリーに限定。
+- POI タップハンドラ `poiSelectionChanged` の `allowedCategories` を `[.cafe, .restaurant, .bakery]` → `[.cafe, .bakery]` に揃え、表示されない POI をタップ受付しないよう一致させた（`restaurant` 除外）。
+
+**トレードオフ**: 「コーヒーを出すレストラン / ビストロ」を記録したいユースケースが将来出たら `restaurant` 再追加を検討。その際は表示フィルタとタップ許可の両箇所を同時に変更すること（非対称にするとタップ導線がズレる）。`PointOfInterestCategories.including` は iOS 16+ で利用可（最小ターゲット充足）。
+
+### 2026-06-22: Phase B-1 好み判定（FavoriteSignals）の統計仕様確定
+
+- 領域: Shared（spec）→ KMP（実装予定）
+- 関連: `docs/data-model.md` §1.6 / `shared/domain` `CoffeeStats.kt` `FavoriteSignals` / `BuildCoffeeStatsUseCase`
+- 背景: iOSDC 20分版トーク（二本柱の柱2「複数の評価から好みを判定できるか」）のデモ素材を兼ね、未実装（全 null）だった `FavoriteSignals` を実体化する。トーク自体は KMP 文脈を出さないが、実装は通常どおり `shared/domain` に置く。
+
+**確定した統計方針（素朴な生平均ランキングを採らない理由込み）**:
+
+- **生平均の最大値を「好み」とするのは誤り**: n=1 の 5.0 が n=20 の 4.2 を上回ってしまう（サンプルサイズの罠）。これを 2 段で抑える。
+  1. **件数ガード**: `count >= minSampleSize`（既定 3）未満の群は候補にしない（既存設計の踏襲）。
+  2. **経験ベイズ収縮**: `shrunkMean = (n·mean + k·globalMean)/(n+k)`（`k=SHRINKAGE_PRIOR_WEIGHT` 既定 5）で全体平均へ寄せ、少数群の極端値を抑えてからランキング。
+- **正方向のみ信号化**: `shrunkMean > globalMean` のときだけ `bestX` を立てる（「好み」= 平均超え。下回るなら null）。
+- **好みの「軸」= 相関**: テイスティング 5 軸 × `rating` のピアソン相関を取り、`|r|` 最大かつ `|r| >= 0.3`（`CORRELATION_MIN_ABS`）、母数 `>= 5`（`CORRELATION_MIN_SAMPLE`）のときだけ `dominantTastingAxis` を立てる。符号で「高い/低いほど高評価」を言語化に渡す。分散 0 の軸はスキップ。
+- **交絡は計算しない（明示的な仕様判断）**: 「産地が好き」か「その産地を出す店が好き」かは個人の観測データでは分離不能。層別で n が枯れ、有意性検定も前提が崩れる。よって多変量・検定は行わず、ヒューリスティックで「弱い傾向」だけを出す。**この『言える範囲を計算で確定し、LLM はその範囲でしか言わない』がトークの核（グラウンディングの実例）**。
+
+**影響 / トレードオフ**:
+- `FavoriteSignals` に `dominantTastingAxis: TastingAxisCorrelation?` と `enum TastingAxis` を新設（公開 API 追加）。`CategoryStat` は不変で再利用（`bestX` は生平均＋件数を載せ、収縮値は内部選定キーに留める）→ iOS / SKIE への影響は加算的。
+- `k` / 閾値はすべて `companion` 公開でチューニング可。デモ約 30 件のダミーデータ（`DummyCoffeeData`）で `bestX` / `dominantTastingAxis` が非 null になるか実装時に確認する（足りなければダミーを調整）。
+- 階層3 連携: `buildPrompt` に好み信号を「弱い傾向＋件数の但し書き」として追記し、instructions で断定を禁じる（iOS 側タスク）。
+
+**dispatch**: `kmp-engineer`（`BuildCoffeeStatsUseCase` の `favoriteSignals` 実体化＋純粋関数ユニットテスト）→ レポート統合後 `ios-engineer`（`buildPrompt` 連携・好みカード表示・デモスクショ）。公開 API 差分（`dominantTastingAxis` / `TastingAxis`）は本ノートで凍結済。
+
+**実装完了の追記（2026-06-22 KMP 実装完了時）**:
+- `kmp-engineer` が `shared/domain` に実装完了。公開 API は凍結仕様どおり（`enum TastingAxis` / `data class TastingAxisCorrelation` / `FavoriteSignals.dominantTastingAxis` / companion 定数 `SHRINKAGE_PRIOR_WEIGHT=5` `CORRELATION_MIN_SAMPLE=5` `CORRELATION_MIN_ABS=0.3`）。**仕様ドリフトなし**。
+- 検証: `:shared:domain` ユニットテスト 47 件 green（収縮逆転・件数ガード・正方向のみ・相関の符号/閾値/母数/分散0スキップ・タイ時のラベル順）、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL（SKIE 警告は既存の Ktor 名前衝突のみ、追加型起因なし）。
+- 実装上の落とし穴 1 件を `tasks/lessons.md` 2026-06-22 に記録（`mapNotNull`+ローカル data class+`maxWith(compareByDescending)` が実行時に全 null。原因未確定、`for` ループで解消、テストで担保）。
+- **dominantTastingAxis は符号付き**（r<0＝「低いほど高評価」も最大 |r| なら返す）。「高い/低いほど好む」の出し分けは iOS UI 判断。
+- **残: iOS 追随（`ios-engineer` 未 dispatch）**: ① `buildPrompt(from:)` に好み信号（収縮 bestX ＋ dominantTastingAxis）を「弱い傾向＋件数の但し書き」で追記し instructions で断定禁止 ② 分析タブに好みカード表示（任意）③ デモ用スクショ。SKIE 生成名は `TastingAxis`=`@frozen enum`、`TastingAxisCorrelation`=`struct` の見込み。
+
+**iOS 追随完了の追記（2026-06-22）**:
+- 領域: iOS / 関連: `iosApp/iosApp/Features/Analysis/CoffeeInsightProviderIosImpl.swift`・`AnalysisView.swift`・`PreviewSupport/PreviewSamples.swift`
+- `ios-engineer` が実装完了。`xcodebuild`（iphonesimulator/Debug）BUILD SUCCEEDED、新規 warning ゼロ。
+  1. `buildPrompt(from:)` に好み信号セクション（`buildFavoriteSignalsPromptLines`）を追記。`CategoryStat.averageRating`(`KotlinDouble?`)は `.doubleValue` 経由、`TastingAxisCorrelation.correlation`(native `Double`)は直接渡し（lessons.md 2026-06-21 の 0.0 バグ回避）。
+  2. instructions に断定禁止グラウンディング（「やや/傾向止まり」「サンプル少なら添え書き」「交絡は断定しない」）。
+  3. `FavoriteSignalsCard` / `FavoriteSignalRow` / `TastingAxisSignalRow` を `AnalysisView` に追加。全 null は `EmptyView()`。件数・平均併記、5件未満は「（サンプル少）」注記。
+  4. `TastingAxis` の `switch` は `@frozen enum` のため全 case 網羅・`default` なし（追加時にコンパイルエラーで気づける設計）。
+- **SourceKit の `No such module 'SharedLogic'` 診断は偽陽性**（XCFramework は gradle 生成のため IDE インデックスがラグる）。`xcodebuild` は成功。
+- **親が DummyCoffeeData の閾値充足を検算（追加 dispatch 不要と判断）**: 現行30件・globalMean≈4.0 で 4 信号すべて非 null。`bestOrigin`=Ethiopia(評価済4件/平均4.5・収縮4.22) / `bestRoastLevel`=Light(6件/4.58・収縮4.32) / `bestBrewMethod`=AeroPress(3件/4.5・収縮4.19) / `dominantTastingAxis`=Flavor(tasting20件・評価と強い正相関)。**DummyCoffeeData 調整は不要**。
+- **残: デモ用スクショ取得のみ**（要シミュレータ起動。`SEED_DUMMY_DATA=1` の dev Scheme でユーザー実機/シミュレータ確認）。
+
+### 2026-06-22: Phase B-1b 好み判定のペルソナ比較検証戦略
+
+- 領域: Shared（test 戦略）→ KMP（test 実装予定）
+- 関連: `shared/domain` commonTest（新規）/ `BuildCoffeeStatsUseCase` / `FavoriteSignals` / `docs/data-model.md` §1.6
+- 背景: 既存テストは「収縮が小群を打ち消すか」「相関の符号/閾値」など**機構ごとの単体テスト**。だが「複数の評価から好みを判定できるか」（iOSDC トーク柱2）の正しさは **1 ケースでなく、複数の合成ペルソナを横断して**初めて見える。特に **最大 |r| を 5 軸から拾う設計は多重比較（winner's curse）で偽陽性を生みやすい** ——これを実測で押さえる。**production コード・data-model §1.6 の仕様は変更しない。テスト追加のみ。**
+
+**検証する 2 軸**:
+1. **検出力（power / sensitivity）**: 既知の好みを仕込んだペルソナで、対応する信号が出るか。
+2. **特異度（specificity / 偽陽性抑制）**: 好みが実在しないペルソナで信号が `null` になるか。**これが最重要**（断定しない設計の根拠を数値で裏付ける）。
+
+**ペルソナ定義（固定シード乱数で決定論生成・テストにコミット）**:
+- P1「酸味党」: `acidity` が高いほど rating 高（線形＋小ノイズ）→ `dominantTastingAxis == Acidity`, `r>0`。
+- P2「深煎り党」: `roastLevel=Dark` 群が高評価 → `bestRoastLevel == Dark`。
+- P3「産地偏重」: 特定 origin が高評価 → `bestOrigin ==` その産地。
+- P4「抽出方法党」: 特定 brewMethod が高評価 → `bestBrewMethod ==` それ。
+- P5「無相関ノイズ」（**null ペルソナ**）: rating が全属性と独立なランダム → 全フィールド `null` を期待。**偽陽性チェックの本丸**。
+- P6「サンプル不足」: 全体件数は多いが各カテゴリ `n < minSampleSize` → カテゴリ信号 null（相関は母数次第）。
+- P7「逆相関」: `body` が低いほど高評価 → `dominantTastingAxis.correlation < 0`。
+
+**決定論性**: `BuildCoffeeStatsUseCase` は純粋関数。データは `kotlin.random.Random(seed)` の固定シードで生成し、ground truth に対し label / 軸を exact 一致で assert。
+
+**偽陽性の測定（多重比較の影響を実測）**: P5 を単一固定シードの決定論 assert に加え、**多シード（例 100〜200）で生成して `dominantTastingAxis` / カテゴリ信号が非 null になる割合（偽陽性率）を集計・レポート**する。理論上、n≈30 で 5 軸の max|r|≥0.3 は偶然でも ~40% 起こりうる想定 → 高い実測値が出たら設計の弱点を示す**有用な発見**として扱う。よって **hard-fail は catastrophic な上限（例 60%）だけに留め、実測値を親へレポート**（恣意的な低閾値で偶然 pass させない）。
+
+**この結果の使い道**: 偽陽性率が高ければ Phase B-1c（**多重比較ガード**: サンプル数連動の動的閾値、または相関の信頼区間下限で判定）へ進む判断材料にする。スピアマン化・不確実性提示は優先度低（実測で必要性が出たら）。
+
+**dispatch**: `kmp-engineer`（commonTest 新規ファイルにペルソナ生成ヘルパ＋P1–P7 決定論 assert＋P5 偽陽性率測定）。スコープは `shared/domain` の test のみ、production・docs は不変。閾値判断は親。
+
+**実装完了の追記（2026-06-22）— 偽陽性率の実測発見**:
+- 関連: `shared/domain/src/commonTest/.../FavoriteSignalsPersonaTest.kt`（新規・8 テスト）。`:shared:domain:testAndroidHostTest` で新規 8＋既存 47＝計 55 件 green、production 無変更。
+- **実測（150 シード, n=30/seed, 無相関ノイズ）**:
+  - `dominantTastingAxis` 偽陽性率: **40.0%**（理論予測 ~40% に一致。5 軸 max|r|≥0.3 の多重比較 winner's curse）。
+  - **カテゴリ信号（bestBrewMethod/bestRoastLevel/bestOrigin いずれか非 null）偽陽性率: 100.0%**。
+- **カテゴリ 100% の本質（親の精査）**: 選定は「最大 shrunkMean の群を `shrunkMean > globalMean` のときだけ信号化」。globalMean は全体平均なので**およそ半数の群が上回り、その最大が選ばれる ＝「複数群の最良が平均を超えるか」はほぼ恒真**。収縮 k=5 は「極端値の大きさ」は抑えるが「これは本物の好みか」のゲートになっていない。**テストの人工物ではなく、複数カテゴリを均等に使う実ユーザーでも構造的に起きる**。
+- **検出力は良好**: P1–P4・P7 で仕込んだ好みは正しく検出（酸味党→Acidity r>0、深煎り党→Dark、産地偏重→Ethiopia、抽出方法党、逆相関→Body r<0）。問題は特異度（偽陽性抑制）側に局在。
+- **解釈と判断**:
+  - tasting 軸の 40% は「弱い傾向止まり＋LLM 断定禁止」の現設計と一応整合（が、改善余地は大）。
+  - カテゴリ信号の 100% は「好みを判定できるか」（トーク柱2）への答えとして弱い。**好みが無いユーザーにも必ず『○○がお好みのようです』と出てしまう**＝グラウンディングの土台（言える範囲を計算で確定）が崩れる。
+  - → **Phase B-1c（カテゴリ信号の特異度ガード）に進む価値が高い**。最小コストの第一候補は **effect-size 閾値**（`shrunkMean - globalMean > δ`、δ は評価レンジ 0.5..5.0 に対し例えば 0.15〜0.25）。より堅牢にするなら bootstrap 信頼区間下限 > globalMean。tasting 軸はサンプル数連動の動的 |r| 閾値（or CI 下限）。**閾値導入後はこのペルソナ検証で偽陽性率の改善を再測定**（検出力 P1–P4 を割らないこと）。
+  - 進めるか / δ 値 / どこまでやるかは**ユーザー判断待ち**（product 品質とトーク narrative のトレードオフ）。
+
+### 2026-06-22: Phase B-1c 好み判定の特異度ガード（effect-size 閾値）— ユーザー承認
+
+- 領域: Shared（spec）→ KMP（実装予定）
+- 関連: `docs/data-model.md` §1.6（更新済）/ `BuildCoffeeStatsUseCase` / `FavoriteSignalsPersonaTest`
+- 決定（AskUserQuestion 2026-06-22）: **effect-size 閾値で対処**を採用。理由 = B-1b でカテゴリ偽陽性 100%・tasting 軸 40% が判明し、「平均超え」だけでは特異度がゼロ。最小コストで効く「ゼロからの距離」での足切りを選んだ（信頼区間ベースは将来余地）。
+
+**確定した仕様変更（data-model §1.6 に反映済）**:
+- **カテゴリ好み**: 信号化条件を `shrunkMean > globalMean` → **`shrunkMean - globalMean > CATEGORY_MIN_EFFECT`（δ）** に変更。δ 候補 0.15〜0.25。
+- **テイスティング軸**: 固定 `CORRELATION_MIN_ABS = 0.3` を **サンプル数連動の `CORRELATION_ABS_FLOOR`** に変更（or 併用）。5 軸 max|r| の多重比較ぶん、n が小さいほど締める。
+- **公開 API は不変**: `FavoriteSignals` / `CategoryStat` / `TastingAxisCorrelation` の型は変えない。返す `CategoryStat` は従来どおり生平均＋件数（δ・floor は内部の足切りのみ）。→ iOS / SKIE への影響なし。
+
+**確定方法（重要）**: δ と floor の値は **`FavoriteSignalsPersonaTest` で sweep して決める**。受け入れ基準 = ①無相関ノイズの偽陽性率が現状（カテゴリ100% / tasting40%）から大きく改善 ②検出力 P1–P4・P7 を割らない（仕込んだ好みは引き続き検出）。kmp-engineer が候補値で偽陽性率と検出力の表を出し、**親が最終値を確定**して data-model の「候補」表記を実値に更新する。
+
+**dispatch**: `kmp-engineer`（`BuildCoffeeStatsUseCase` に δ・floor を実装＋既存ユニットテスト追随＋ペルソナテストで sweep 表を出力）。production 変更あり、公開 API は不変。docs 更新は親。
+
+**実装完了の追記（2026-06-22）— 確定値と「カテゴリは固定 δ で解けない」発見**:
+- 関連: `shared/domain/.../usecase/BuildCoffeeStatsUseCase.kt`・`FavoriteSignalsPersonaTest.kt`。`:shared:domain` 111 件 green、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL、公開 API 不変。
+- **確定値**: `CATEGORY_MIN_EFFECT = 0.20`、テイスティング |r| 下限 = `max(0.3, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_ABS_FLOOR_C = 1.97`、n=30 で実効 ≈0.36）。既存単体テストは effect-size 計算上いずれも δ=0.20 超で**追随変更ゼロ**（bestBrewMethod 高評価 δ=0.28 / roastLevel δ=0.23 / origin δ=0.47）。
+- **sweep 結果（150 シード, n=30）**: tasting 偽陽性は c=1.97 で **22%**（c=2.30 なら 8.7%）に改善、検出力 P1–P4・P7 はいずれの候補でも維持。**カテゴリ偽陽性は δ=0.10–0.20 で 100%、0.25 で 95%、0.30 で 87%** とほとんど下がらない。
+- **親の精査（重要・エンジニアの『テスト人工物』説への留保）**: カテゴリが下がらないのは数理的に必然。固定オフセット δ は「最良群が偶然平均を超える幅（winner's curse）」がサンプリングのばらつき σ/√n に比例して膨らむのを止められない。実際、K 群・n=6・σ≈1.2 だと最良群の生 gap ≈ 0.57、収縮後 ≈0.31 で δ=0.2 を常に超える。**tasting が改善したのは floor を `c/√n` とばらつき連動にしたからで、カテゴリゲートも本来は n 連動（信頼区間ゲート）にすべき**。「均等割当だから／実データなら下がる」は未実証の仮説（不均等でも小 n 群は収縮で潰れ、大 n 群は SE が縮むだけで winner's curse は別軸）。
+- **判断**: δ=0.20 / c=1.97 を**ship**（tasting の実改善＋検出力維持は確実な前進、API 不変で安全）。カテゴリの根治は別タスク（B-1d 候補）に切り出し、まず**現実的な不均等分布の null ペルソナで「本当に問題か」を実測**してから、必要なら n 連動カテゴリゲート（`gap > z·globalStd/√n` のような軽量・決定論・on-device 可な信頼区間近似）を入れる。現時点はカテゴリ信号を「弱い傾向（LLM 断定禁止）」として使う方針で許容。ユーザー判断待ち。
+
+### 2026-06-22: Phase B-1d 前段実測（不均等分布での偽陽性率）→ n 連動ゲート決定
+
+- 領域: KMP / テスト / 関連: `shared/domain/.../FavoriteSignalsPersonaTest.kt`（セクション E、テストのみ・production 不変）
+- **実測結果（150 シード, n=30, δ=0.20, c=1.97）**:
+
+  | 指標 | 均等割当 | mild-skew | heavy-skew |
+  |---|---|---|---|
+  | 平均候補カテゴリ数 | 21.0 | 13.0 | 8.0 |
+  | カテゴリ FP 率 | 100.0% | 96.7% | **86.7%** |
+  | brewMethod | 98.7% | 75.3% | 54.0% |
+  | roastLevel | 98.7% | 70.0% | 28.7% |
+  | origin | 82.0% | 83.3% | 58.0% |
+
+- **結論**: 仮説「不均等分布なら下がる」は**部分的にしか真でない**。候補数 21→8（2.6 倍減）でも合計 FP は 13.3pt しか下がらず heavy-skew でも 86.7%。**「均等割当だけが原因（実データなら解消）」は実測で否定**された。固定 δ は winner's curse を止められないという B-1c の精査が裏付けられた。origin はむしろ Ethiopia×12 の支配群で改善しにくい（大 n 群の winner's curse 固定化）。
+- **決定（ユーザー承認: AskUserQuestion 2026-06-22「stays high → n 連動ゲートへ」）**: **B-1d 本体 = カテゴリにも n 連動の信頼区間ゲートを導入**する。形は `mean - globalMean > z · globalStd / sqrt(n)`（globalStd = 全評価済 rating の母標準偏差）の一標本 z 検定近似。**選定キーは従来どおり shrunkMean（n=1 外れ値に頑健）、ゲートだけ z 連動に置換**。z は sweep で確定（候補 1.5/2.0/2.5/3.0、必要なら候補数 K の Bonferroni 的補正も評価）。受け入れ基準 = heavy-skew カテゴリ FP を大きく下げつつ検出力 P2–P4（および tasting P1・P7）を割らない。軽量・決定論・on-device 可であること。
+
+### 2026-06-22: Phase B-1d 本体完了 — カテゴリ n 連動 z ゲート（CATEGORY_Z=2.0 確定）
+
+- 領域: KMP / 関連: `shared/domain/.../usecase/BuildCoffeeStatsUseCase.kt`・`FavoriteSignalsPersonaTest.kt`
+- **変更**: カテゴリ好み（bestBrewMethod/bestOrigin/bestRoastLevel）の足切りを固定 δ 単独（B-1c）→ **`mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)` AND `shrunkMean - globalMean > δ(0.20)`** の 2 条件 AND に置換。`globalStd` = 全評価済 rating の母標準偏差。`globalStd==0`（全件同値）は z ゲートをスキップしδ下限のみ（ゼロ除算回避）。**選定キーは shrunkMean のまま**、公開 API 不変（`CATEGORY_Z` companion 追加のみ）。
+- **確定値 `CATEGORY_Z = 2.0`**。sweep（150 シード, n=30, δ=0.20, floorC=1.97）:
+
+  | z | 均等 FP | mild FP | heavy FP | 検出力 P2–P4 |
+  |---|---|---|---|---|
+  | 1.5 | 58.7% | 47.3% | 25.3% | 全 OK |
+  | **2.0** | **22.0%** | **14.0%** | **9.3%** | 全 OK |
+  | 2.5 | 3.3% | 2.0% | 1.3% | 全 OK |
+  | 3.0 | 0.0% | 0.0% | 0.0% | 全 OK |
+
+  z=2.0 採用（heavy-skew 9.3% で目標達成・検出力維持・95% CI 慣例値）。z=2.5/3.0 はほぼ 0% にできるが**ペルソナは強い好みを仕込んでいるため z=3.0 でも検出できるだけで、実データの弱い好みを弾きすぎるリスク**があり不採用。均等 22% が残るのは「K 候補から最良を選ぶ」多重比較の構造的残差（完全 0 化には Bonferroni で K 分 z を上げる必要があり実用上過剰）。
+- **既存単体テスト追随**: z=2.0 で n=3〜4 の小群は閾値が上がり信号化されないため、検出系 4 テスト（bestBrewMethod_highVolume / bestRoastLevel_nullRoastIsExcluded / bestOrigin_normalization / tieByCountThenLabel）のデータを n=10 に増量。検証意図（高件数高評価の検出・タイブレーク）は維持。`:shared:domain` 113 件 green、`assembleSharedLogicXCFramework` BUILD SUCCESSFUL、新規警告ゼロ。
+- **好み判定（B-1）の特異度ワークはこれで一区切り**: tasting 軸 40%→22%（B-1c, c=1.97）、カテゴリ 100%→9.3%（B-1d, z=2.0, heavy-skew）。検出力 P1–P4・P7 は全工程で維持。iOS 追随は不要（API 不変）。
+
+### 2026-06-22: Phase B-4 味覚プロファイル一致カフェのマップ連携（設計確定）
+
+- 領域: Shared（spec）→ KMP → iOS / 関連: `docs/requirements.md` 9-5・`docs/data-model.md` §1.7・`shared/feature/map` `MapViewModel`・`iosApp` `MapTabView`
+- 背景: 要件 9-5「好みのカフェをマップで探す」を着手。`FavoriteSignals`（B-1）のカテゴリ好みに一致する高評価記録があるカフェを「あなた好みの一杯があった店」としてマップで強調＋理由表示する。**コンテンツベース推薦の v1**。
+- **確定した設計判断（ユーザー承認: AskUserQuestion 2026-06-22 + 後続の将来像 Q&A）**:
+  - **一致定義**: カフェに `rating >= 4.0`（`HIGHLIGHTS_MIN_RATING` 再利用）かつ `FavoriteSignals` のカテゴリ好み（bestOrigin/RoastLevel/BrewMethod の非 null）いずれかに一致する記録が 1 件以上。**`dominantTastingAxis`（相関軸）は v1 では一致条件に使わない**（相関は per-record categorical 一致に変換不能・理由表示が曖昧）。
+  - **高評価しきい値 4.0 / 味覚相関軸 v1 除外**はユーザーと明示合意済。
+  - **将来移行を見据えた境界設計**（重要・将来像 Q&A の結論を反映）: 推薦を `CafeRecommendationProvider`（interface）の裏に置き、`MapViewModel` は中身を知らない。v1 = ローカル決定論実装 `ObserveTasteMatchedCafesUseCase`、将来 9-6 = サーバ（GCP 等）リモート実装に**差し替えるだけ**で UI/VM/FM 言語化層は不変。
+  - **reason は `sealed RecommendationReason`** で表現し、v1 の `TasteProfileMatch` に将来 `SimilarUsers(...)` 等を**種類追加**できる形（enum 固定にしない）。
+  - **モデルにカフェ訪問を前提化しない**: `RecommendedCafe.cafe` は `Cafe`（placeId＋座標）だけ持ち、未訪問カフェ推薦に拡張できる契約にする。
+- **公開 API 追加（加算的）**: `RecommendedCafe` / `RecommendationReason` / `PreferenceMatchAxis` / `CafeRecommendationProvider` / `MapViewModel.UIState.recommendedCafes`。SKIE 越えの新型あり → kmp-engineer レポートの公開差分を親が `kmp-bridge.md` に固定してから iOS dispatch。
+- **dispatch**: ①kmp-engineer（domain モデル＋`ObserveTasteMatchedCafesUseCase`＋単体テスト＋`MapViewModel` 状態＋`AppContainer`/`framework` 配線）→ ②親が公開差分を docs/kmp-bridge に固定 → ③ios-engineer（`MapViewModelBridge`＋`MapTabView` 区別ピン・理由表示）→ ④親が統合・commit。
+
+### 2026-06-22: Future Direction — 協調フィルタリング推薦（9-6）と FoundationModel の住み分け
+
+- 領域: アーキテクチャ方針（将来 / 未着手）/ 関連: requirements 9-6・data-model §1.7 `CafeRecommendationProvider`
+- 将来像（ユーザー意向）: 複数ユーザーが好みを登録し、**好みが近い他ユーザーの高評価カフェを提案**する（協調フィルタリング）。本エントリは「今は作らないが設計の北極星」として残す。
+- **方式の住み分け**: v1（9-5）= コンテンツベース（自分の好み属性 ↔ カフェ）。将来（9-6）= 協調フィルタ（ユーザー間類似度）。両者はハイブリッドで共存し、9-6 は v1 に**追加**で載る（content→collaborative は典型的な発展経路）。
+- **味覚の類似度は LLM 不要・決定論**: 好みは既に構造化数値（`tastingAverages` の 5 軸＋カテゴリ別評価分布）＝そのまま特徴ベクトル。cosine 等で決定論的に類似度計算できる。**テキスト埋め込み学習は不要**。これは本アプリの「計算は決定論、LLM は言語化」哲学と一致。
+- **FoundationModel は類似度エンジンではない**: Apple の Foundation Models（`LanguageModelSession`）は生成・tool calling 向けで、汎用 embedding を返す公開 API ではない。自由文をベクトル化するなら別フレームワーク（Natural Language の `NLEmbedding`/`NLContextualEmbedding`）だが、構造化データなので基本不要。**FM の役割は将来も「計算済みの推薦結果を一言で言語化」一点**（既存 `CoffeeInsightProvider` のグラウンディング構図と同じ）。
+- **横断ベクトル計算はサーバ側（GCP 等）**: 全ユーザーの KNN は本質的にサーバ。**右サイズ重要** — 5〜10 次元・中規模なら重い vector DB は不要で、Firestore のベクトル KNN or Cloud Function の総当たり cosine で十分。大規模／テキスト埋め込みに進むなら Vertex AI Vector Search 等に格上げ。
+- **本体の難所は計算でなく基盤**: ①プロファイルベクトルのサーバ集約（現状 per-user・path-uid のみ → 横断読みは別セキュリティモデル）②好み/評価を他者推薦に使う**明示同意/オプトイン**（写真ローカル等の現方針と同じ慎重さ）③カフェ識別子は placeId で共有可能＝協調フィルタの item キーに好都合 ④コールドスタート（少人数では効かない＝だから v1 content-based が先、が正しい順序）。
+- **結論**: v1 の `CafeRecommendationProvider` 境界 ＋ `tastingAverages` をベクトル基盤と認識しておけば、GCP のベクトル分析は**純粋に追加**で差し込め、FM 言語化層は最初から将来と共通。
+
+### 2026-06-22: Phase B-4 KMP 実装完了（味覚一致カフェ）
+
+- 領域: KMP / 関連: `shared/domain/.../model/RecommendedCafe.kt`・`.../usecase/ObserveTasteMatchedCafesUseCase.kt`・`shared/feature/map/.../MapViewModel.kt`・`shared/framework/.../AppContainerViewModelFactory.kt`
+- `kmp-engineer` が docs §1.7 どおり実装。`:shared:domain` 129 件（うち新規 16）・`:shared:feature:map` 7 件 green、`:androidApp:assembleDebug` / `assembleSharedLogicXCFramework` BUILD SUCCESSFUL。公開 API は加算的（`MapViewModel` 変更は既存不変、生成は `makeMapViewModel` 経由で Bridge 影響なし）。
+- **公開 API 差分は `kmp-bridge.md` に固定済**（`sealed RecommendationReason` の `onEnum(of:)` 表現、`PreferenceMatchAxis` の Swift case 名 `.origin`/`.roastLevel`/`.brewMethod`（camelCase。kmp-engineer の初回報告「全小文字」は誤り→ios-engineer が `.swiftinterface` 実地確認で訂正）、`UIState.recommendedCafes`/`recommendedPlaceIds` 追加）。
+- **実装判断 / 落とし穴**:
+  - `ObserveTasteMatchedCafesUseCase` は `FavoriteSignals` だけ必要だが `BuildCoffeeStatsUseCase` 全体を実行（重複排除優先）。数十件規模で無問題、将来重ければ `FavoriteSignals` 専用軽量 UseCase を分離（YAGNI）。
+  - `maxWith(compareByDescending {...})` が意図と逆（最低 rating を返す）バグを発見→`sortedWith(...).first()` で修正、テストで担保。lessons.md 2026-06-22 に汎用化。
+  - `PreferenceMatchAxis` の Swift case 名が全小文字に潰れる件は `@ObjCName` で明示も可能だが、iOS が case 名を把握すれば足りるため v1 は KMP 変更せず docs 記載のみ。
+- **残: iOS 追随（ios-engineer）**: `MapViewModelBridge` に `recommendedCafes`/`recommendedPlaceIds` 反映 ＋ `MapTabView` に区別ピン・理由表示・凡例。
+
+### 2026-06-22: Phase B-4 iOS 追随完了（味覚一致カフェのマップ表示）
+
+- 領域: iOS / 関連: `iosApp/.../Features/Map/MapViewModelBridge.swift`・`MapTabView.swift`・`PreviewSupport/PreviewSamples.swift`
+- `ios-engineer` が実装。`xcodebuild`（iphonesimulator/Debug）**BUILD SUCCEEDED・新規 warning ゼロ**。SourceKit の `No such module 'SharedLogic'` は既知の偽陽性。
+  - `MapViewModelBridge` に `recommendedCafes`/`recommendedPlaceIds` を加算的に反映（`Set<String>` は SKIE/KN で Swift `Set<String>` に透過変換、キャスト不要）。
+  - `MapTabView`: 好み一致カフェ（`recommendedPlaceIds.contains` で O(1) 判定）をアクセントカラー＋`heart.fill`（38pt）で強調。**通常訪問ピン（茶・NavigationLink）/ 周辺ピン（グレー）は不変**。一致ピンはタップで `RecommendationMatchSheet`（理由一覧＋「このカフェの記録を見る」で詳細 push）を表示。凡例バッジ `RecommendedLegendBadge`（データ不足時は非表示）。
+  - **理由表示の UX 判断**: 一致ピンは「即詳細（1 タップ）」でなく「理由シート→詳細（2 タップ）」。"なぜおすすめか" を先に見せる狙い。callout で 1 タップ化は v2 余地（ios-engineer 申し送り）。
+  - `PreferenceMatchAxis` の `switch` は `.origin`/`.roastLevel`/`.brewMethod` 全網羅・`default` なし。
+- **B-4 v1 完了**: KMP（決定論集計＋プロバイダ境界）＋ iOS（強調・理由表示）。将来 9-6（協調フィルタ）は `CafeRecommendationProvider` のリモート実装差し替えで載る設計（Future Direction 参照）。**残はシミュレータ/実機目視（一致ピン・理由シート・空時非表示・VoiceOver）＝ユーザー作業**。
+
+### 2026-06-23: マップ「周辺」フィルタチップ撤去（周辺ピン常時表示）
+
+- 領域: KMP + iOS / 関連: `shared/feature/map/.../MapViewModel.kt`・`iosApp/.../Features/Map/MapViewModelBridge.swift`・`MapTabView.swift`
+- 経緯: 現在地 FAB（カメラを現在地へ recenter）があるため、周辺ピンの表示/非表示トグル（`showNearby`）は冗長というユーザー判断。周辺ピンを常時表示に統一。
+- 変更: KMP は `UIState.showNearby` プロパティと `onShowNearbyToggled` を撤去（公開 API の減算的変更）。`nearbyPlaces`/`isLoadingNearby`/`onLocationUpdated` の周辺検索ロジックは不変、トグルだけ撤去。iOS は Bridge の `showNearby`/`onShowNearbyToggled`/state 同期を削除し、`MapTabView` の周辺ピン描画ゲート `if bridge.showNearby` を撤去（常時 `ForEach` 展開）＋「周辺」`FilterChip` 削除。
+- 影響/所見: FilterChip 行には「訪問済み」+（好み一致カフェ時のみ）`RecommendedLegendBadge` が残る。`HStack(spacing: 8)` 先頭詰めでレイアウト崩れなし。`訪問済み` トグルは維持（ピンを隠して周辺/一致に集中する用途が残るため）。
+- 検証: KMP `:shared:feature:map` compile/test green、iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）。目視はユーザー作業。
+
+### 2026-06-23: Places API キーの iOS バンドル ID 制限に Ktor 生 REST を追随
+
+- 領域: KMP（data-places） / 関連: `shared/data-places/src/iosMain/.../PlacesHttpClient.ios.kt`
+- 経緯: アプリ上で Places API 疎通確認を実施したところ、API キーに **iOS バンドル ID 制限**（`com.noricoffee.coffeevision`）が設定されていた。Google は `X-Ios-Bundle-Identifier` ヘッダでバンドル ID を判定するが、これを自動付与するのは公式 GMS SDK のみ。本アプリは Ktor(Darwin) で生 REST を叩くため未付与で、そのままでは `403 API_KEY_IOS_APP_BLOCKED`（iosBundleId: `<empty>`）になる。
+- 切り分け実証（curl）: ヘッダなし → 403 / `X-Ios-Bundle-Identifier: com.noricoffee.coffeevision` 付き → HTTP 200・20件。よってキー有効・Places API (New) 有効化・課金は正常で、原因はヘッダ欠落のみと確定。
+- 修正: `iosMain` の `actual createPlacesHttpClient()` で `defaultRequest { header("X-Ios-Bundle-Identifier", NSBundle.mainBundle.bundleIdentifier) }` を付与。バンドル ID は実行時取得なので署名ビルドで `TEAM_ID` が付いてもズレない。`bundleId == null`（テストホスト等）の場合はヘッダなし。
+- **設計判断**: iOS 固有制約は `iosMain` の actual に閉じ、`commonMain` の `PlacesClientImpl` / `createCafeRepository` シグネチャは不変（Android にヘッダを漏らさない）。`PlacesClientImpl` は `httpClient.config { install(ContentNegotiation) }` で再構成するが、`HttpClient.config` は `plusAssign(userConfig)` で元設定（DefaultRequest 含む）を引き継ぐため伝播する（Ktor 3.0.3 ソースで確認）。
+- 検証: `:shared:data-places` iOS compile / framework assemble / Android host test green。iosApp を iPhone 17 Pro(iOS 26.1) シミュレータにビルド＆起動成功、ビルド成果物の `CFBundleIdentifier == com.noricoffee.coffeevision`（制限値と完全一致）、`startInitialSync succeeded` を確認。**残: Search タブで実検索して結果表示の目視＝ユーザー作業**。
+
+### 2026-06-23: Places API 疎通の真因は xcconfig のキー上書き（記述順バグ）
+
+- 領域: iOS ビルド設定 / 関連: `iosApp/Configuration/Base.xcconfig`・（併せて）`shared/data-places/.../PlacesHttpClient.ios.kt`・`PlacesClientImpl.kt`
+- 経緯: 「アプリ上で Places 疎通確認」で検索が空結果（NoResult）・マップ周辺ピンも出ない。段階的に切り分けた結果、**3つの独立した問題**が重なっていた:
+  1. **（真の疎通ブロッカー）API キーが空注入**: `Base.xcconfig` が `#include? "Secrets.xcconfig"`（実キー設定）の**後ろ**に `PLACES_API_KEY =`（空フォールバック）を書いていた。xcconfig は同一キーの最後の代入が勝つため、空文字が実キーを上書きし、アプリは空キーで Places を叩いて 403（API キー無効＝`iosBundleId` フィールドを持たない 403）になっていた。→ フォールバック宣言を include の**前**に移動して解消。インストール済み `.app/Info.plist` の `PLACES_API_KEY` が空→`AIzaSy…`(39字) に変わったことで確認。
+  2. **API エラーの握り潰し**: `PlacesListResponse.places = emptyList()` デフォルト ＋ Ktor 既定 `expectSuccess=false` により、403 のエラー JSON が空 places にデコードされ、例外もトーストも出ず「結果0件」に見えていた（=#1 の発覚を遅らせた元凶）。→ `PlacesClientImpl` に `expectSuccess=true` ＋ `HttpResponseValidator.handleResponseExceptionWithRequest` で本文付き `PlacesApiException`（internal）を投げる修正。
+  3. **iOS バンドル ID ヘッダ未付与**: キー注入後に効いてくる制限。GMS SDK 以外（Ktor 生 REST）は `X-Ios-Bundle-Identifier` を自動付与しない。→ `iosMain` の `createPlacesHttpClient()` で `NSBundle.mainBundle.bundleIdentifier` を `defaultRequest` ヘッダに付与（前掲エントリ）。
+- 切り分けの決め手: ①curl はバンドル ID ヘッダ無→403`API_KEY_IOS_APP_BLOCKED`(iosBundleId:empty) / 有→200。②実機 dylib に `X-Ios-Bundle-Identifier`・`PlacesApiException` 文字列が在ることを `grep -a` で確認（修正がバイナリに反映済の裏取り）。③`.app/Info.plist` の `PLACES_API_KEY` 実値を PlistBuddy で確認（空→注入の前後比較）。④「`iosBundleId` フィールドが無い 403」という症状からキー欠落を特定。
+- 検証: `:shared:data-places` compile/test green、xcframework assemble green、iosApp Debug ビルド成功・キー注入確認・上書きインストール起動。**最終の実検索の目視はユーザー作業**。
+
+### 2026-06-23: 周辺カフェ検索の精度修正（encodeDefaults + includedPrimaryTypes）
+
+- 領域: KMP（data-places）+ iOS（map） / 関連: `shared/data-places/.../PlacesClientImpl.kt`・`Dto.kt`・`iosApp/.../Features/Map/MapTabView.swift`
+- 経緯: マップ周辺グレーピンに渋谷駅・ハチ公像など非カフェが並んだ。curl で切り分け、2要因が判明:
+  1. **kotlinx.serialization の `encodeDefaults=false`（既定）**で `SearchNearbyRequest` のデフォルト値フィールド（`includedTypes` 等）が JSON にエンコードされず、型フィルタ無しの searchNearby になっていた → `PlacesClientImpl` の `Json{}` に `encodeDefaults=true` を追加。`explicitNulls=false` 併用のため null デフォルト（`locationBias=null`）は引き続き省略され意図どおり。
+  2. **`includedTypes`（cafe を副次に含む場所）+ prominence 順**だと Tower Records・ホテルが上位に来る → `includedPrimaryTypes=["cafe","coffee_shop"]`（主タイプが cafe）+ `rankPreference="DISTANCE"`（距離順）に変更。curl 実証で OBSCURA COFFEE / スタバ / 星乃珈琲 / PRONTO が近い順に並ぶことを確認。`coffee_shop` を併記するのはチェーン店が `cafe` でなく `coffee_shop` に分類されるケースがあるため。
+- iOS 側: 周辺ピンのアイコンを `mappin` → `cup.and.saucer.fill`（グレー円は維持、茶円＝訪問済みと区別）。
+- 検証: `:shared:data-places` test green（既存 searchText テストは FakePlacesClient のため影響なし）、xcframework assemble green、iosApp Debug ビルド・上書きインストールで実機表示確認（ユーザー目視 OK）。
+
+### 2026-06-23: マップ近隣表示を Apple POI に一本化（proactive searchNearby 撤去）
+
+- 領域: KMP（feature/map）+ iOS（map） / 関連: `shared/feature/map/.../MapViewModel.kt`・`iosApp/.../Features/Map/MapTabView.swift`・`MapViewModelBridge.swift`
+- 経緯: マップを開くたびに Places `searchNearby`（課金 SKU）を 1 回叩いて周辺グレーピンを出していたが、(1) Apple Maps ネイティブ POI（`.mapStyle(pointsOfInterest: .including([.cafe,.bakery]))` で無料表示）と二重表示になり、(2) 同じ店でも Apple POI と Google 座標が微妙にズレる、(3) ユーザー意図と無関係に課金が発生、という問題があった。近隣表示を Apple POI に一本化し、Places はユーザーが Apple POI をタップした時だけ（`onPoiTapped`→`searchText` で Google placeId に解決）使う方針に変更。
+- KMP 減算（公開 API 変更）: `MapViewModel.UIState` から `nearbyPlaces` / `isLoadingNearby` を削除、`onLocationUpdated` メソッドと `nearbySearchJob` を削除。`onPoiTapped`/`poiLookupResult`/`visitedCafes`/`recommendedCafes`/`showVisited`/`error` は不変。テストは `nearbyPlaces` assertion を除去。
+- iOS 追従: グレーピン `ForEach(nearbyPlaces)` と `nearbyPin`、`isLoadingNearby` ゲートの `loadingBanner`、`setupLocation` 内の `onLocationUpdated` 呼び出し、Bridge の該当プロパティ/メソッドを削除。位置情報は初期カメラ移動・現在地 FAB に引き続き使用。`.mapStyle` の Apple POI 表示と POI タップ経路は保持。
+- **`CafeRepository.searchNearby` / `CafeRepositoryImpl` / `PlacesClientImpl.searchNearby` は data 層 capability として保持**（map から呼ばれなくなるだけ。今回 encodeDefaults/includedPrimaryTypes で精度改善した実装はそのまま温存）。→ 現状この capability は未使用（dead capability）。将来再利用しないなら別途撤去候補。
+- 検証: `:shared:feature:map` test green（6件）・`:androidApp:assembleDebug` green、iosApp Debug ビルド成功・上書きインストール起動。実機目視（グレーピン消滅・Apple POI 残存・POI タップ→詳細遷移）はユーザー作業。
+
+## 2026-06-23 - CafeSearch: 検索欄テキストをローカル `@State` で管理する（入力ラグ対策）
+- 論点: `.searchable` の表示値を `bridge.query`（Kotlin `StateFlow` 経由）にすると、`set → kotlin.onQueryChanged → StateFlow.update → SKIE AsyncSequence emit → apply() → 再描画` の非同期ラウンドトリップが完了するまで TextField に文字が echo されず、実機 debug + Kotlin/Native 非最適化ビルドで入力ラグが顕著になる（実機で「検索タブの入力が重い」と報告）。
+- 対策: `CafeSearchView` に `@State private var queryText` を持ち、これを `.searchable` 表示値の真実の源とする。Kotlin への反映は `.onChange(of: queryText)` で `bridge.onQueryChanged` に一方向転送のみ。`bridge.query.isEmpty` を見ていた箇所（表示分岐 ×2 / 検索ボタン disabled / `ContentUnavailableView.search`）も `queryText` に寄せた。
+- 一貫性: `onSearchTapped` は Kotlin 内部の `_state.value.query` を使うため、`onChange` の転送完了後にボタン/Submit する通常フローでクエリは従来どおり成立する。**Kotlin 側から `query` をクリア/リセットする経路が将来生じた場合は、`bridge.query` → `queryText` の逆方向反映が別途必要**（現行 ViewModel には該当経路なし）。
+- 補足: ユーザーが入力ごとに見た OS ログ（`Received external candidate resultset` / `Result accumulator timeout: 3.0 exceeded` / `containerToPush is nil` 等）は iOS のサジェスト候補集約サブシステム由来の無害ノイズで本件とは別問題。アプリコードからは抑制できない。
+
+## 2026-06-23 - CafeSearch: 「該当なし」を検索確定後のみ表示（UIState.hasSearched）
+- 論点: Places は確定実行方式（`onQueryChanged` では API を叩かず `onSearchTapped` で初めて検索）だが、表示側が「`results` 空 && クエリ非空」で `ContentUnavailableView.search` を出していたため、入力中も「該当なし "○○"」が逐次更新表示され、逐次検索しているように見えていた。「`results` が空である理由」を「未検索」と「検索したが 0 件」に区別する必要があった。
+- 解決: `CafeSearchViewModel.UIState` に `hasSearched: Boolean = false` を追加（単一の真実の源を ViewModel に置く）。`onQueryChanged` で false、`onSearchTapped` / `onNearbySearchRequested` の**成功完了時のみ** true、失敗時・ローディング開始時は据え置き。iOS は `CafeSearchView` の表示分岐を `queryText.isEmpty` ベースから `hasSearched` ベースへ置換（`results 空 && !hasSearched → 初期プロンプト` / `results 空 && hasSearched && !isLoading → 該当なし` / `else → 結果リスト`）。
+- 効果: 入力中は初期プロンプト維持、検索確定して 0 件のときだけ「該当なし」。0 件表示後に 1 文字でも打つと `hasSearched=false` に戻り初期プロンプトへ。ローディング中は `hasSearched=false` のまま第 1 分岐 + ProgressView overlay。
+- 補足: `emptyResultsView` の `ContentUnavailableView.search(text: queryText)` の引数は据え置き。検索確定後はタイプしていないため `queryText` == 検索語として成立する。
+
+## 2026-06-23 - PlacesClientImpl.searchText: 地名クエリへのカフェ語補完
+- 論点: `searchText` は `includedType="cafe"` で結果をカフェ型に絞る。地名のみ（例「渋谷」「池袋」）を渡すと Text Search が locality 型（「渋谷区」等）に一致させ、cafe フィルタで弾かれて 0 件になる。「コーヒー」「珈琲」はカフェ名/型に直接マッチするので返る。curl 実測で確定（`渋谷`+cafe→0件、`渋谷 カフェ`+cafe→20件、`コーヒー`+cafe→20件、ブランド名「スターバックス カフェ」「ブルーボトル カフェ」も正しく返る）。
+- 解決: バイアスなしの `searchText(query: String)`（ユーザーのテキスト検索）経路に限り、private `ensureCafeKeyword(query)` でカフェ語（カフェ/cafe/café/コーヒー/珈琲/coffee、`lowercase()` 比較）を含まないクエリの末尾に `" カフェ"` を補完。含む場合・blank は無補完。
+- 対象外: `searchText(query, locationBias)`（地図 POI タップの placeId 解決。bakery 等も解決するため補完すると歪む）と `searchNearby` は変更なし。`includedType="cafe"` は維持。公開 API 変更なし（iOS 変更不要）。
+- 補足: Places Text Search はカテゴリ+地域を textQuery（「渋谷 カフェ」）で表現するのが Google 推奨の自然言語パターンであり、補完はハックではなく idiomatic。
+
+## 2026-06-23 - SwiftUI Map の Legal オーナメントは `safeAreaPadding` に追随しない
+- 事象: マップ左下の Legal/帰属表記が TabBar 裏に隠れて見切れる。`MapTabView` の `Map` に `.ignoresSafeArea()`（全辺）を付けてフルブリード化しているため、内部 `MKMapView` がオーナメントを置く基準下端セーフエリアが 0 になり画面最下端＝TabBar 裏に来るのが原因。
+- 不採用: `.safeAreaPadding(.bottom, X)` で下端を復元する案。SwiftUI の `safeAreaPadding` は `Map` 内部の `MKMapView` オーナメント配置レイヤーに伝播せず、固定大値 200 でもシミュレータで Legal が一切動かないことを確認（= 機構が別レイヤー）。
+- 採用: `.ignoresSafeArea(.container, edges: [.top, .horizontal])` に変更。上辺（ステータスバー裏）・左右はフルブリード維持、下辺だけデフォルトのセーフエリア（TabBar 上端）を残すことで `MKMapView` が Legal を TabBar 上端のすぐ上に配置する。シミュレータ（iPhone 17 / OS 26.1）目視で確認済み。
+- トレードオフ: 地図下辺が TabBar 上端で止まるため、TabBar 裏まで地図が描画されるフルブリード感（下辺のみ）は喪失。Legal 表示の法的要件を優先。実機での見た目差は要確認。

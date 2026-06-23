@@ -3,6 +3,8 @@ package com.noricoffee.feature.map
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
+import com.noricoffee.domain.model.CafeRecommendationProvider
+import com.noricoffee.domain.model.RecommendedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
@@ -100,9 +102,15 @@ class MapViewModelPoiLookupTest {
 
     // --- 共通セットアップ ---
 
+    private class FakeCafeRecommendationProvider : CafeRecommendationProvider {
+        override fun observeRecommendedCafes(userId: String): Flow<List<RecommendedCafe>> =
+            flowOf(emptyList())
+    }
+
     private val fakeCafeRepo = FakeCafeRepository()
     private val fakeCoffeeRepo = FakeCoffeeRepository()
     private val useCase = ObserveVisitedCafesUseCase(fakeCoffeeRepo)
+    private val fakeRecommendationProvider = FakeCafeRecommendationProvider()
 
     // --- テスト ---
 
@@ -113,6 +121,7 @@ class MapViewModelPoiLookupTest {
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -133,6 +142,7 @@ class MapViewModelPoiLookupTest {
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -155,6 +165,7 @@ class MapViewModelPoiLookupTest {
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -175,6 +186,7 @@ class MapViewModelPoiLookupTest {
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -195,6 +207,7 @@ class MapViewModelPoiLookupTest {
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -215,6 +228,7 @@ class MapViewModelPoiLookupTest {
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -230,11 +244,12 @@ class MapViewModelPoiLookupTest {
     }
 
     @Test
-    fun onPoiTapped_retainsPreviousNearbyPlaces() = runTest {
+    fun onPoiTapped_retainsVisitedCafes() = runTest {
         fakeCafeRepo.searchTextResult = listOf(makeCafe("poi-001"))
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             userId = "user-01",
             scope = this,
@@ -246,8 +261,7 @@ class MapViewModelPoiLookupTest {
         val state = vm.state.value
         assertFalse(state.isLookingUpPoi)
         assertNotNull(state.poiLookupResult)
-        // nearbyPlaces / visitedCafes は変化していない
-        assertTrue(state.nearbyPlaces.isEmpty())
+        // visitedCafes は変化していない
         assertTrue(state.visitedCafes.isEmpty())
     }
 }

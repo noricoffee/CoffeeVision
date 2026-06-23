@@ -18,6 +18,8 @@ struct CafeSearchView: View {
     @State private var bridge: CafeSearchViewModelBridge
     @State private var locationManager = LocationManager()
     @State private var showingLocationDeniedAlert: Bool = false
+    /// 検索欄の表示テキスト。ローカル状態で即時 echo し、Kotlin StateFlow への非同期ラウンドトリップに依存しない。
+    @State private var queryText: String = ""
     @Environment(\.dismiss) private var dismiss
 
     /// コールバックモードのみ非 nil。nil のときはルートモード（NavigationLink で push）。
@@ -54,9 +56,12 @@ struct CafeSearchView: View {
 
     var body: some View {
         Group {
-            if bridge.results.isEmpty && bridge.query.isEmpty {
+            if bridge.results.isEmpty && !bridge.hasSearched {
+                // 未検索状態（入力中・ローディング中含む）は初期プロンプトを表示。
+                // isLoading == true のときも here に落ちるが、overlay の ProgressView が重なる。
                 emptyInitialView
             } else if bridge.results.isEmpty && !bridge.isLoading {
+                // 検索確定後かつ 0 件のときだけ「該当なし」を表示。
                 emptyResultsView
             } else {
                 resultsList
@@ -64,10 +69,14 @@ struct CafeSearchView: View {
         }
         .navigationTitle(String(localized: "カフェを検索"))
         .navigationBarTitleDisplayMode(.inline)
-        .searchable(text: Binding(
-            get: { bridge.query },
-            set: { bridge.onQueryChanged($0) }
-        ), placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "カフェ名で検索"))
+        // queryText をローカル @State にすることで、1 文字入力のたびに
+        // Kotlin StateFlow → SKIE AsyncSequence → apply() を経由する非同期ラウンドトリップを
+        // 表示経路から切り離し、キーストロークの echo 遅延を解消する。
+        // Kotlin 側への転送は onChange で一方向に行う。
+        .searchable(text: $queryText, placement: .navigationBarDrawer(displayMode: .always), prompt: String(localized: "カフェ名で検索"))
+        .onChange(of: queryText) { _, new in
+            bridge.onQueryChanged(new)
+        }
         .onSubmit(of: .search) {
             bridge.onSearchTapped()
         }
@@ -93,7 +102,7 @@ struct CafeSearchView: View {
                     Button(String(localized: "検索")) {
                         bridge.onSearchTapped()
                     }
-                    .disabled(bridge.query.isEmpty || bridge.isLoading)
+                    .disabled(queryText.isEmpty || bridge.isLoading)
                     .accessibilityLabel(String(localized: "検索"))
                 }
             }
@@ -176,7 +185,7 @@ struct CafeSearchView: View {
     // MARK: - 空状態（検索済み・結果なし）
 
     private var emptyResultsView: some View {
-        ContentUnavailableView.search(text: bridge.query)
+        ContentUnavailableView.search(text: queryText)
     }
 
     // MARK: - 結果リスト

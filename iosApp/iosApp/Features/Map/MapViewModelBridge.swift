@@ -1,3 +1,4 @@
+import Foundation
 import Observation
 import SharedLogic
 
@@ -17,10 +18,11 @@ final class MapViewModelBridge {
     // MARK: - SwiftUI が観測するプロパティ
 
     private(set) var visitedCafes: [VisitedCafe] = []
-    private(set) var nearbyPlaces: [Cafe] = []
+    /// 好み一致カフェ（マップ強調ピン用）。FavoriteSignals 不足時は空。
+    private(set) var recommendedCafes: [RecommendedCafe] = []
+    /// 好み一致カフェの placeId 集合（ピン強調判定を O(1) にする）。
+    private(set) var recommendedPlaceIds: Set<String> = []
     private(set) var showVisited: Bool = true
-    private(set) var showNearby: Bool = true
-    private(set) var isLoadingNearby: Bool = false
     private(set) var error: String?
 
     // MARK: - POI ルックアップ状態
@@ -46,19 +48,9 @@ final class MapViewModelBridge {
 
     // MARK: - ユーザーアクション
 
-    /// 現在地が更新されたときに呼ぶ。周辺カフェを 500m 半径で検索する。
-    func onLocationUpdated(lat: Double, lng: Double) {
-        kotlin.onLocationUpdated(latitude: lat, longitude: lng)
-    }
-
     /// 訪問済みカフェのピン表示 / 非表示を切り替える。
     func onShowVisitedToggled(_ show: Bool) {
         kotlin.onShowVisitedToggled(show: show)
-    }
-
-    /// 周辺カフェのピン表示 / 非表示を切り替える。
-    func onShowNearbyToggled(_ show: Bool) {
-        kotlin.onShowNearbyToggled(show: show)
     }
 
     /// エラーアラートを閉じたときに呼ぶ。
@@ -100,10 +92,9 @@ final class MapViewModelBridge {
 
     private func apply(_ state: MapViewModel.UIState) {
         self.visitedCafes = state.visitedCafes
-        self.nearbyPlaces = state.nearbyPlaces
+        self.recommendedCafes = state.recommendedCafes
+        self.recommendedPlaceIds = state.recommendedPlaceIds
         self.showVisited = state.showVisited
-        self.showNearby = state.showNearby
-        self.isLoadingNearby = state.isLoadingNearby
         self.error = state.error
         self.isLookingUpPoi = state.isLookingUpPoi
         self.poiLookupResult = state.poiLookupResult

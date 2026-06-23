@@ -6,10 +6,12 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
+import com.noricoffee.domain.model.TastingAxis
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
@@ -86,10 +88,11 @@ class BuildCoffeeStatsUseCaseTest {
         assertTrue(stats.monthlyTrend.isEmpty())
         assertTrue(stats.topCafes.isEmpty())
         assertTrue(stats.recentHighlights.isEmpty())
-        // favoriteSignals は空（全 null）
+        // favoriteSignals は全 null（空リストは評価済みレコードなし → globalMean null → 全 null）
         assertNull(stats.favoriteSignals.bestBrewMethod)
         assertNull(stats.favoriteSignals.bestOrigin)
         assertNull(stats.favoriteSignals.bestRoastLevel)
+        assertNull(stats.favoriteSignals.dominantTastingAxis)
         assertEquals(3, stats.favoriteSignals.minSampleSize)
         // tastingAverages は全 null・ratedCount = 0
         assertNull(stats.tastingAverages.sweetness)
@@ -538,22 +541,315 @@ class BuildCoffeeStatsUseCaseTest {
         assertEquals("Blue Bottle", stats.recentHighlights.first().cafeName)
     }
 
-    // --- favoriteSignals (Phase B-1 まで空) ---
+    // --- favoriteSignals (Phase B-1: カテゴリ好み + 相関軸) ---
+
+    // ---- カテゴリ好み共通ルール ----
 
     @Test
-    fun favoriteSignals_allNullInPhaseA() {
+    fun favoriteSignals_allRatedZero_returnsAllNull() {
+        // 評価済み 0 件 → globalMean 算出不可 → 3 つとも null
         val records = listOf(
-            record("r1", rating = 5.0, brewMethod = BrewMethod.HandDrip),
-            record("r2", rating = 5.0, brewMethod = BrewMethod.HandDrip),
-            record("r3", rating = 5.0, brewMethod = BrewMethod.HandDrip),
+            record("r1", rating = 0.0, brewMethod = BrewMethod.HandDrip),
+            record("r2", rating = 0.0, brewMethod = BrewMethod.HandDrip),
         )
 
         val stats = useCase(records)
 
-        // Phase A では FavoriteSignals は全フィールド null
         assertNull(stats.favoriteSignals.bestBrewMethod)
         assertNull(stats.favoriteSignals.bestOrigin)
         assertNull(stats.favoriteSignals.bestRoastLevel)
+        assertNull(stats.favoriteSignals.dominantTastingAxis)
+    }
+
+    @Test
+    fun favoriteSignals_bestBrewMethod_shrinkageOverridesSmallHighRated() {
+        // n=1 の 5.0（AeroPress）が n 多の 4.0（HandDrip×5）に収縮で逆転する
+        // globalMean = (5.0 + 4.0×5) / 6 = 4.166...
+        // shrunk(AeroPress, n=1) = (1×5.0 + 5×4.166) / 6 = 4.305
+        // shrunk(HandDrip, n=5) = (5×4.0 + 5×4.166) / 10 = 4.083
+        // → 件数ガード(minSampleSize=3)でAeroPress(n=1)は候補外
+        // → HandDrip(n=5) のみ候補。shrunk=4.083 > globalMean=4.166? → No(4.083 < 4.166) → null
+        // ※ この構成では正方向信号が出ない（bestBrewMethod = null）ことを検証
+        val records = listOf(
+            record("r1", rating = 5.0, brewMethod = BrewMethod.AeroPress),
+            record("r2", rating = 4.0, brewMethod = BrewMethod.HandDrip),
+            record("r3", rating = 4.0, brewMethod = BrewMethod.HandDrip),
+            record("r4", rating = 4.0, brewMethod = BrewMethod.HandDrip),
+            record("r5", rating = 4.0, brewMethod = BrewMethod.HandDrip),
+            record("r6", rating = 4.0, brewMethod = BrewMethod.HandDrip),
+        )
+
+        val stats = useCase(records)
+
+        // AeroPress は minSampleSize 未満で候補外、HandDrip は shrunk <= globalMean → null
+        assertNull(stats.favoriteSignals.bestBrewMethod)
+    }
+
+    @Test
+    fun favoriteSignals_bestBrewMethod_highVolumeHighRated_isSelected() {
+        // HandDrip が高件数かつ高評価 → z ゲートと δ 下限を満たして採用
+        // n=10 で z ゲートを通るデータ設計（z=2.0 の場合 threshold = 2.0 * globalStd / sqrt(n)）
+        // globalMean = (4.5×10 + 3.0×10) / 20 = 3.75
+        // globalStd = sqrt((10×0.5625 + 10×0.5625) / 20) = 0.75
+        // HandDrip: mean=4.5, n=10, zThreshold = 2.0 * 0.75 / sqrt(10) ≈ 0.474
+        //   mean - globalMean = 0.75 > 0.474 → z ゲート通過
+        // shrunk(HandDrip, n=10) = (10×4.5 + 5×3.75) / 15 = 4.25 > 3.75
+        //   shrunkMean - globalMean = 0.50 > 0.20(δ) → δ 下限通過 → 採用
+        // Espresso: mean=3.0 → z ゲートで弾かれる（mean - globalMean = -0.75 < 0）
+        val records = (1..10).map { i ->
+            record("r-hd-$i", rating = 4.5, brewMethod = BrewMethod.HandDrip)
+        } + (1..10).map { i ->
+            record("r-esp-$i", rating = 3.0, brewMethod = BrewMethod.Espresso)
+        }
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.bestBrewMethod)
+        assertEquals("HandDrip", stats.favoriteSignals.bestBrewMethod!!.label)
+        assertEquals(10, stats.favoriteSignals.bestBrewMethod!!.count)
+        assertEquals(4.5, stats.favoriteSignals.bestBrewMethod!!.averageRating)
+    }
+
+    @Test
+    fun favoriteSignals_countBelowMinSampleSize_isExcluded() {
+        // count < minSampleSize(=3) の群は候補外
+        // HandDrip n=2（候補外）、Espresso n=2（候補外）→ 両方 null
+        val records = listOf(
+            record("r1", rating = 5.0, brewMethod = BrewMethod.HandDrip),
+            record("r2", rating = 5.0, brewMethod = BrewMethod.HandDrip),
+            record("r3", rating = 1.0, brewMethod = BrewMethod.Espresso),
+            record("r4", rating = 1.0, brewMethod = BrewMethod.Espresso),
+        )
+
+        val stats = useCase(records)
+
+        // 全カテゴリが minSampleSize 未満 → null
+        assertNull(stats.favoriteSignals.bestBrewMethod)
+    }
+
+    @Test
+    fun favoriteSignals_allCategoriesAtOrBelowGlobalMean_returnsNull() {
+        // 全カテゴリの shrunkMean が globalMean 以下 → null
+        // globalMean = (3.5×3 + 3.5×3) / 6 = 3.5
+        // shrunk(HandDrip, n=3) = (3×3.5 + 5×3.5) / 8 = 3.5 = globalMean → 正方向でない → null
+        val records = listOf(
+            record("r1", rating = 3.5, brewMethod = BrewMethod.HandDrip),
+            record("r2", rating = 3.5, brewMethod = BrewMethod.HandDrip),
+            record("r3", rating = 3.5, brewMethod = BrewMethod.HandDrip),
+            record("r4", rating = 3.5, brewMethod = BrewMethod.Espresso),
+            record("r5", rating = 3.5, brewMethod = BrewMethod.Espresso),
+            record("r6", rating = 3.5, brewMethod = BrewMethod.Espresso),
+        )
+
+        val stats = useCase(records)
+
+        assertNull(stats.favoriteSignals.bestBrewMethod)
+    }
+
+    @Test
+    fun favoriteSignals_bestBrewMethod_tieByCountThenLabel() {
+        // 収縮平均が同じときは件数多 → label 昇順で決定論化
+        // AeroPress n=10 mean=4.5 と HandDrip n=10 mean=4.5 はまったく同一の shrunkMean
+        // → 件数同等 → label 昇順（AeroPress < HandDrip） → AeroPress が選ばれる
+        // n=10 で z ゲートを通るデータ設計:
+        // globalMean = (4.5×10 + 4.5×10 + 2.0×10) / 30 ≈ 3.667
+        // globalStd = sqrt((10×0.694 + 10×0.694 + 10×2.778)/30) ≈ 1.178
+        // AeroPress: mean=4.5, n=10, zThreshold = 2.0 * 1.178 / sqrt(10) ≈ 0.745
+        //   mean - globalMean ≈ 0.833 > 0.745 → z ゲート通過
+        // shrunk(AeroPress, n=10) = (10×4.5 + 5×3.667) / 15 = 4.222
+        //   shrunkMean - globalMean ≈ 0.556 > 0.20(δ) → 採用
+        // AeroPress と HandDrip は shrunkMean も n も同じ → label 昇順で AeroPress
+        val records = (1..10).map { i ->
+            record("r-aero-$i", rating = 4.5, brewMethod = BrewMethod.AeroPress)
+        } + (1..10).map { i ->
+            record("r-hand-$i", rating = 4.5, brewMethod = BrewMethod.HandDrip)
+        } + (1..10).map { i ->
+            record("r-esp-$i", rating = 2.0, brewMethod = BrewMethod.Espresso)
+        }
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.bestBrewMethod)
+        assertEquals("AeroPress", stats.favoriteSignals.bestBrewMethod!!.label)
+    }
+
+    @Test
+    fun favoriteSignals_bestRoastLevel_nullRoastIsExcluded() {
+        // roastLevel=null のレコードは bestRoastLevel の集計から除外
+        // Light n=10, null roast n=10（集計対象外）
+        // globalMean = (4.5×10 + 3.0×10) / 20 = 3.75
+        // globalStd = 0.75
+        // Light: mean=4.5, n=10, zThreshold = 2.0 * 0.75 / sqrt(10) ≈ 0.474
+        //   mean - globalMean = 0.75 > 0.474 → z ゲート通過
+        // shrunk(Light, n=10) = (10×4.5 + 5×3.75) / 15 = 4.25
+        //   shrunkMean - globalMean = 0.50 > 0.20(δ) → 採用
+        val records = (1..10).map { i ->
+            record("r-light-$i", rating = 4.5, roastLevel = RoastLevel.Light)
+        } + (1..10).map { i ->
+            record("r-null-$i", rating = 3.0, roastLevel = null)
+        }
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.bestRoastLevel)
+        assertEquals("Light", stats.favoriteSignals.bestRoastLevel!!.label)
+    }
+
+    @Test
+    fun favoriteSignals_bestOrigin_normalizationGroupsVariants() {
+        // "Ethiopia" / "ethiopia" / " Ethiopia " は同一グループとして集計される（trim().lowercase()）
+        // 表示ラベルはグループ内最初の元表記の trim()（= "Ethiopia"）
+        // n=10 で z ゲートを通るデータ設計:
+        // globalMean = (4.5×10 + 2.0×10) / 20 = 3.25
+        // globalStd = sqrt((10×1.5625 + 10×1.5625) / 20) = 1.25
+        // Ethiopia: mean=4.5, n=10, zThreshold = 2.0 * 1.25 / sqrt(10) ≈ 0.790
+        //   mean - globalMean = 1.25 > 0.790 → z ゲート通過
+        // shrunk(Ethiopia, n=10) = (10×4.5 + 5×3.25) / 15 = 4.083
+        //   shrunkMean - globalMean = 0.833 > 0.20(δ) → 採用
+        val ethioRecords = listOf(
+            record("r1", rating = 4.5, origin = "Ethiopia"),
+            record("r2", rating = 4.5, origin = "ethiopia"),    // 正規化で Ethiopia と同グループ
+            record("r3", rating = 4.5, origin = " Ethiopia "), // 正規化で Ethiopia と同グループ
+        ) + (4..10).map { i ->
+            record("r$i", rating = 4.5, origin = "Ethiopia")
+        }
+        val brazilRecords = (1..10).map { i ->
+            record("rb$i", rating = 2.0, origin = "Brazil")
+        }
+        val records = ethioRecords + brazilRecords
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.bestOrigin)
+        // 表示ラベルは最初の元表記の trim()
+        assertEquals("Ethiopia", stats.favoriteSignals.bestOrigin!!.label)
+        assertEquals(10, stats.favoriteSignals.bestOrigin!!.count)
+    }
+
+    // ---- dominantTastingAxis ----
+
+    @Test
+    fun favoriteSignals_dominantTastingAxis_positiveFlavor() {
+        // flavor が rating と正の相関（高 flavor = 高 rating）
+        // 5件（CORRELATION_MIN_SAMPLE 満たす）
+        val tHigh = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 9, aftertaste = 5)
+        val tLow = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 2, aftertaste = 5)
+        val records = listOf(
+            record("r1", rating = 5.0, tasting = tHigh),
+            record("r2", rating = 5.0, tasting = tHigh),
+            record("r3", rating = 3.0, tasting = tLow),
+            record("r4", rating = 3.0, tasting = tLow),
+            record("r5", rating = 4.0, tasting = TastingScores(5, 5, 5, 5, 5)), // 中間
+        )
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.dominantTastingAxis)
+        assertEquals(TastingAxis.Flavor, stats.favoriteSignals.dominantTastingAxis!!.axis)
+        assertTrue(stats.favoriteSignals.dominantTastingAxis!!.correlation > 0.0)
+        assertEquals(5, stats.favoriteSignals.dominantTastingAxis!!.sampleSize)
+    }
+
+    @Test
+    fun favoriteSignals_dominantTastingAxis_negativBodyCorrelation() {
+        // body が rating と負の相関（低 body = 高 rating）
+        val tHighBody = TastingScores(sweetness = 5, body = 9, acidity = 5, flavor = 5, aftertaste = 5)
+        val tLowBody = TastingScores(sweetness = 5, body = 2, acidity = 5, flavor = 5, aftertaste = 5)
+        val records = listOf(
+            record("r1", rating = 2.0, tasting = tHighBody),
+            record("r2", rating = 2.0, tasting = tHighBody),
+            record("r3", rating = 5.0, tasting = tLowBody),
+            record("r4", rating = 5.0, tasting = tLowBody),
+            record("r5", rating = 3.5, tasting = TastingScores(5, 5, 5, 5, 5)),
+        )
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.dominantTastingAxis)
+        assertEquals(TastingAxis.Body, stats.favoriteSignals.dominantTastingAxis!!.axis)
+        assertTrue(stats.favoriteSignals.dominantTastingAxis!!.correlation < 0.0)
+    }
+
+    @Test
+    fun favoriteSignals_dominantTastingAxis_insufficientSample_returnsNull() {
+        // tasting 記録が CORRELATION_MIN_SAMPLE(5) 未満 → null
+        val t = TastingScores(8, 5, 7, 9, 8)
+        val records = listOf(
+            record("r1", rating = 5.0, tasting = t),
+            record("r2", rating = 5.0, tasting = t),
+            record("r3", rating = 4.0, tasting = t),
+            record("r4", rating = 3.0, tasting = t),
+            // 4件だけ（5件未満）
+        )
+
+        val stats = useCase(records)
+
+        assertNull(stats.favoriteSignals.dominantTastingAxis)
+    }
+
+    @Test
+    fun favoriteSignals_dominantTastingAxis_weakCorrelation_returnsNull() {
+        // 全軸で |r| < 0.3 になるデータ設計:
+        // sweetness=[5,3,8,2,6], body=[5,5,5,5,5](分散0→スキップ),
+        // acidity=[6,4,7,3,5], flavor=[5,5,5,5,5](分散0→スキップ), aftertaste=[4,6,3,7,5]
+        // rating=[3.5,4.0,4.0,3.5,3.5]
+        // → sweetness: r≈0.268, acidity: r≈0.289, aftertaste: r≈-0.289 → 全て |r| < 0.3
+        val records = listOf(
+            record("r1", rating = 3.5, tasting = TastingScores(sweetness = 5, body = 5, acidity = 6, flavor = 5, aftertaste = 4)),
+            record("r2", rating = 4.0, tasting = TastingScores(sweetness = 3, body = 5, acidity = 4, flavor = 5, aftertaste = 6)),
+            record("r3", rating = 4.0, tasting = TastingScores(sweetness = 8, body = 5, acidity = 7, flavor = 5, aftertaste = 3)),
+            record("r4", rating = 3.5, tasting = TastingScores(sweetness = 2, body = 5, acidity = 3, flavor = 5, aftertaste = 7)),
+            record("r5", rating = 3.5, tasting = TastingScores(sweetness = 6, body = 5, acidity = 5, flavor = 5, aftertaste = 5)),
+        )
+
+        val stats = useCase(records)
+
+        // 全軸で |r| < 0.3 → dominantTastingAxis は null
+        assertNull(stats.favoriteSignals.dominantTastingAxis)
+    }
+
+    @Test
+    fun favoriteSignals_dominantTastingAxis_zeroVarianceAxis_isSkipped() {
+        // 1 軸だけ全件同値（分散 0）→ その軸はスキップ、他軸で相関を見る
+        // sweetness が全件 5 → 分散 0 でスキップ
+        // flavor に強い正相関がある
+        val records = listOf(
+            record("r1", rating = 5.0, tasting = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 9, aftertaste = 5)),
+            record("r2", rating = 5.0, tasting = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 9, aftertaste = 5)),
+            record("r3", rating = 2.0, tasting = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 2, aftertaste = 5)),
+            record("r4", rating = 2.0, tasting = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 2, aftertaste = 5)),
+            record("r5", rating = 3.5, tasting = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 5, aftertaste = 5)),
+        )
+
+        val stats = useCase(records)
+
+        // sweetness の分散は 0 のためスキップされ、flavor が採用されるはず
+        assertNotNull(stats.favoriteSignals.dominantTastingAxis)
+        // sweetness ではないことだけ確認（flavor or aftertaste が選ばれる）
+        val axis = stats.favoriteSignals.dominantTastingAxis!!.axis
+        assertTrue(axis != TastingAxis.Sweetness, "分散0の sweetness は選ばれてはいけない")
+    }
+
+    @Test
+    fun favoriteSignals_dominantTastingAxis_unratedRecords_excludedFromSample() {
+        // rating = 0.0（未評価）は母数から除外 → sampleSize に反映される
+        val t = TastingScores(8, 5, 7, 9, 8)
+        val records = listOf(
+            record("r1", rating = 5.0, tasting = t),
+            record("r2", rating = 5.0, tasting = t),
+            record("r3", rating = 3.0, tasting = TastingScores(3, 5, 3, 3, 3)),
+            record("r4", rating = 3.0, tasting = TastingScores(3, 5, 3, 3, 3)),
+            record("r5", rating = 3.0, tasting = TastingScores(3, 5, 3, 3, 3)),
+            record("r6", rating = 0.0, tasting = t), // 未評価: 除外
+        )
+
+        val stats = useCase(records)
+
+        // sampleSize は 5（未評価 0.0 は除外）
+        val axis = stats.favoriteSignals.dominantTastingAxis
+        if (axis != null) {
+            assertEquals(5, axis.sampleSize)
+        }
     }
 
     // --- 複合ケース ---

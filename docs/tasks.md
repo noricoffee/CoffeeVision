@@ -369,7 +369,43 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | B-1: `FavoriteSignals`（階層2）を `BuildCoffeeStatsUseCase` に実装 + テスト（kmp-engineer） | minSampleSize 閾値ガード |
+| [x] | B-1: `FavoriteSignals`（階層2）を `BuildCoffeeStatsUseCase` に実装 + 機構別単体テスト（kmp-engineer） | 2026-06-19/06-21 / 経験ベイズ収縮＋ピアソン相関。`BuildCoffeeStatsUseCaseTest` に収縮・相関・タイ・閾値の単体テスト |
+
+### Phase B-1b: 好み判定のペルソナ比較検証（kmp-engineer）
+
+> 2026-06-22 着手。`FavoriteSignals` の正しさを「1 ケース」でなく**複数の合成ペルソナを横断**して検証する。機構単体テストでは見えない 2 軸 ——**検出力（仕込んだ好みを拾えるか）** と **特異度（好みが無いとき黙れるか＝偽陽性抑制）**—— を可視化する。**既存 production コード・仕様（data-model §1.6）は変更しない。テスト追加のみ。** 検証戦略は [`implementation_note.md`](./implementation_note.md) 2026-06-22 ペルソナ比較検証エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: ペルソナ比較検証の戦略（ペルソナ定義・検証 2 軸・偽陽性測定方針）を docs に固定 | 2026-06-22 / implementation_note 2026-06-22 Phase B-1b エントリ |
+| [x] | KMP（kmp-engineer）: 固定シードのペルソナ生成ヘルパ + P1–P7 の決定論的 ground-truth assert（`shared/domain` commonTest 新規ファイル） | 2026-06-22 / `FavoriteSignalsPersonaTest`。新規 8＋既存 47＝55 件 green。検出力 P1–P4・P7 OK |
+| [x] | KMP（kmp-engineer）: 無相関ペルソナ（P5）の偽陽性率を多シードで**測定**し実測値をレポート（hard-fail は catastrophic 閾値のみ） | 2026-06-22 / 150 シード。`dominantTastingAxis` 40.0% / カテゴリ信号 **100.0%** |
+| [x] | 親: 偽陽性率の実測値を評価 → 必要なら Phase B-1c（多重比較ガード: 動的閾値 or 信頼区間下限）へ | 2026-06-22 / カテゴリ 100% は構造的弱点。B-1c 推奨。進行判断はユーザー待ち（implementation_note 参照）|
+
+### Phase B-1c: 好み判定の特異度ガード（偽陽性抑制）※ユーザー判断待ち
+
+> 2026-06-22 起票。B-1b の実測でカテゴリ信号の偽陽性率 100%・tasting 軸 40% が判明。「最大群が globalMean を超えたら信号化」は閾値ガードにならない（最良は大抵平均超え）。**effect-size 閾値（`shrunkMean - globalMean > δ`）を第一候補**に特異度を上げ、ペルソナ検証で偽陽性率の改善と検出力維持（P1–P4 を割らない）を再測定する。進める/δ値/範囲はユーザー判断。設計ログは [`implementation_note.md`](./implementation_note.md) 2026-06-22 B-1b エントリ末尾。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親 → ユーザー: B-1c に進むか / δ 値 / どこまでやるかを決定 | 2026-06-22 / **effect-size 閾値で対処**を承認（AskUserQuestion）|
+| [x] | 親: カテゴリ effect-size δ ＋ tasting 軸 n 連動 floor の仕様を data-model §1.6 に固定 | 2026-06-22 / 公開 API 不変。確定値は sweep 待ち |
+| [x] | KMP（kmp-engineer）: `BuildCoffeeStatsUseCase` に `CATEGORY_MIN_EFFECT`（δ）と `CORRELATION_ABS_FLOOR_C`（n 連動）を実装 + 既存ユニットテスト追随 | 2026-06-22 / δ=0.20・c=1.97。既存テスト追随ゼロ。111 件 green・XCFramework OK・API 不変 |
+| [x] | KMP（kmp-engineer）: `FavoriteSignalsPersonaTest` で δ・floor 候補を sweep → 偽陽性率と検出力（P1–P4・P7）の表をレポート | 2026-06-22 / δ5×c3×150 シード。tasting 22%(c=1.97)/8.7%(c=2.30)、検出力維持 |
+| [x] | 親: sweep 結果から δ・floor の最終値を確定 → data-model §1.6 を実値に更新 | 2026-06-22 / δ=0.20・c=1.97 を ship。**カテゴリは固定 δ で解けないと判明**（既知の限界として記載）|
+
+### Phase B-1d: カテゴリ信号の n 連動ゲート（未着手 / 任意）※ユーザー判断待ち
+
+> 2026-06-22 起票。B-1c でカテゴリ偽陽性が固定 δ では下がらないと判明（winner's curse はばらつき連動）。**まず現実的な不均等分布の null ペルソナで「実データでも問題か」を実測**し、問題が残るなら n 連動の信頼区間ゲート（`gap > z·globalStd/√n` 等、軽量・決定論・on-device 可）を入れる。やらない場合はカテゴリ信号を「弱い傾向（LLM 断定禁止）」として現状維持。設計ログは [`implementation_note.md`](./implementation_note.md) 2026-06-22 B-1c エントリ末尾。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親 → ユーザー: B-1d に進むか / 現状維持か | 2026-06-22 / **まず不均等分布で実測**を承認（AskUserQuestion）|
+| [x] | KMP（kmp-engineer）: 現実的な不均等分布の null ペルソナを追加し、カテゴリ偽陽性率を再測定（均等割当と比較） | 2026-06-22 / 均等100%→heavy-skew 86.7%。候補21→8 でも 13.3pt のみ低下 |
+| [x] | 親: 実測結果を評価 → n 連動カテゴリゲートに進むか / δ=0.20 を確定とするか判断 | 2026-06-22 / **stays high。n 連動 z ゲートへ進む**（仕様 data-model §1.6 更新済）|
+| [x] | KMP（kmp-engineer）: カテゴリゲートを `mean - globalMean > CATEGORY_Z·globalStd/√n`（z 連動）に置換 + δ=0.20 を AND 下限に。選定キーは shrunkMean 維持。既存テスト追随 | 2026-06-22 / 検出系 4 テストを n=10 増量。113 件 green・XCFramework OK・API 不変 |
+| [x] | KMP（kmp-engineer）: `FavoriteSignalsPersonaTest` で `CATEGORY_Z` を sweep（均等/mild/heavy-skew × 検出力 P2–P4・P1・P7）→ 表をレポート | 2026-06-22 / z=1.5/2.0/2.5/3.0。heavy-skew 9.3%(z=2.0) |
+| [x] | 親: sweep から `CATEGORY_Z` 最終値を確定 → data-model §1.6 を実値に更新 | 2026-06-22 / **CATEGORY_Z=2.0 確定**（95% CI・検出力維持）|
 
 ### Phase B-2: 対話 Q&A v1（単発・digest 文脈注入）
 
@@ -399,7 +435,19 @@
 | [x] | 検証: KMP テスト green + `xcodebuild` 成功。Apple Intelligence 有効端末で tool 経由 round-trip をユーザー目視 | 2026-06-21 / KMP 43 件 green・`xcodebuild` BUILD SUCCEEDED・新規 warning ゼロ。**ユーザー実機確認 OK**（「ブルーボトル/フグレンで飲んだのは？」で tool 呼び出し→ヒット→回答を確認） |
 | - | 実機検証で発覚し修正した点（同日） | ①平均評価 0.0 表示（`KotlinDouble?` を `String(format:)` に直渡し）→ `.doubleValue` 8 箇所補完 ②Q&A が tool を呼ばない（instructions の逃げ道 / digest 非網羅性の誤認）→ instructions 強化 ③フィールド誤分類（カフェ名を origin へ）→ KMP テキスト検索を横断寛容化。詳細は lessons.md / implementation_note 2026-06-21 |
 
-| [ ] | B-4: 好みのカフェをマップ連携 | 将来。分析結果とマップの連携 |
+### Phase B-4: 味覚プロファイル一致カフェのマップ連携（要件 9-5 / コンテンツベース v1）
+
+> 2026-06-22 着手。`FavoriteSignals` のカテゴリ好みに一致する高評価記録（rating ≥ 4.0）があるカフェを「あなた好みの一杯があった店」としてマップで強調＋理由表示する。**推薦は `CafeRecommendationProvider`（interface）の裏に置き、将来の協調フィルタリング（9-6）はリモート実装の差し替えで追加**できる設計。確定仕様は [`requirements.md`](./requirements.md) 9-5、モデル・一致ルール・境界設計は [`data-model.md`](./data-model.md) §1.7、設計ログ・将来方向は [`implementation_note.md`](./implementation_note.md) 2026-06-22 B-4 / Future Direction エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: 一致ルール・新規モデル・プロバイダ境界・将来方向を docs に固定 | 2026-06-22 / requirements 9-5/9-6・data-model §1.7・implementation_note |
+| [x] | KMP（kmp-engineer）: `RecommendedCafe`/`RecommendationReason`(sealed)/`PreferenceMatchAxis`/`CafeRecommendationProvider` + `ObserveTasteMatchedCafesUseCase`（ローカル実装）+ 単体テスト | 2026-06-22 / `:shared:domain` 129 件 green（新規 16）。`dominantTastingAxis` 不使用 |
+| [x] | KMP（kmp-engineer）: `MapViewModel.UIState` に `recommendedCafes` + 一致 placeId 集合を追加（購読）+ `AppContainer`/`framework` 配線 | 2026-06-22 / map 7 件 green・XCFramework OK・加算的 |
+| [x] | 親: kmp-engineer レポートの公開 API 差分を `kmp-bridge.md` に固定（SKIE 越えの新型） | 2026-06-22 / `onEnum(of:)`・case 全小文字・UIState 追加を記載 |
+| [x] | iOS（ios-engineer）: `MapViewModelBridge` 追随 + `MapTabView` に区別ピン（アクセント色＋`heart.fill`）+ タップで理由シート + 凡例バッジ | 2026-06-22 / `RecommendationMatchSheet`。通常ピン不変。`xcodebuild` BUILD SUCCEEDED・warning ゼロ |
+| [~] | 検証: KMP テスト green + `xcodebuild` 成功。シミュレータ目視（一致ピン強調 / 理由シート / データ不足時は強調なし / VoiceOver）はユーザー作業 | 2026-06-22 / KMP 129+7 green・`xcodebuild` BUILD SUCCEEDED。**目視はユーザー作業** |
+| [ ] | （将来 9-6）協調フィルタリング: `CafeRecommendationProvider` のサーバ（GCP）リモート実装。横断データ基盤＋同意フローが本体 | Future Direction。未着手 |
 
 ---
 
@@ -596,3 +644,53 @@
 - 残課題 / フォローアップ:
   - 🟠整合パック（A-4〜A-7）→ 2026-06-16 完了（コミット `7c86ab5`）
   - 🟠設計判断パック（B 系）/ C-1 / D-1 → 後回し可。本ファイル上部の「docs / 設計判断バックログ（後回し可）」節に移管
+
+### 2026-06-23 - マップ「周辺」フィルタチップ撤去（周辺ピン常時表示）
+- 背景: 現在地 FAB（カメラを現在地へ recenter）があるため、周辺ピンの表示/非表示トグル（`showNearby`）は冗長というユーザー判断。周辺ピンは常時表示に統一。`訪問済み` チップは維持。
+- タスク:
+  - [x] KMP: `MapViewModel.UIState.showNearby` と `onShowNearbyToggled` を撤去（`nearbyPlaces` は常時公開のまま）。KDoc 追随
+  - [x] iOS: `MapViewModelBridge` の `showNearby` プロパティ / `onShowNearbyToggled` / state 同期を撤去
+  - [x] iOS: `MapTabView` の「周辺」`FilterChip` を撤去、`if bridge.showNearby` ゲートを常時表示化
+- 動作確認:
+  - [x] KMP `:shared:feature:map:compileKotlinIosSimulatorArm64` / `testAndroidHostTest` BUILD SUCCESSFUL、iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）
+  - [ ] シミュレータ目視（周辺ピン常時表示 / 訪問済みチップは機能 / 現在地 FAB）はユーザー作業
+- 所見: FilterChip 行は「訪問済み」+（好み一致カフェ時のみ）`RecommendedLegendBadge` が残る。`HStack(spacing: 8)` 先頭詰めでレイアウト崩れなし
+
+### 2026-06-23 - カフェ検索の入力ラグ修正（検索欄テキストをローカル @State 化）
+- 背景: 実機 debug で検索タブの入力が重い。`.searchable` の text バインディングが Kotlin `StateFlow`（`bridge.query`）を真実の源にしており、1 文字ごとに onQueryChanged → StateFlow emit → SKIE AsyncSequence → apply の非同期ラウンドトリップを経てから表示が追随するため echo が遅延する。OS のサジェスト候補集約ログ（`Result accumulator timeout` 等）は OS 由来の無害ノイズで別問題。
+- タスク:
+  - [x] iOS: `CafeSearchView` の検索欄テキストをローカル `@State queryText` で即時 echo し、Kotlin へは `.onChange` で一方向転送。`bridge.query.isEmpty` 参照（表示分岐 ×2 / 検索ボタン disabled / `ContentUnavailableView.search`）を `queryText` に寄せた
+  - [x] iOS: Kotlin 側から query を外部変更するルートは現行 ViewModel に無く整合問題なしを確認（将来クリア導入時は逆方向バインディングが必要）
+- 動作確認:
+  - [x] `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ。`No such module 'SharedLogic'` は SourceKit 偽陽性）
+  - [ ] 実機での入力体感（ラグ解消）はユーザー作業
+
+### 2026-06-23 - カフェ検索「該当なし」を検索確定後のみ表示（入力中は出さない）
+- 背景: 入力中（検索未確定）でも `results` 空 + クエリ非空だと `ContentUnavailableView.search` が「該当なし "○○"」を逐次更新表示し、逐次検索しているように見える。Places は確定実行方式（入力中は API を叩かない）なので、表示も確定後のみにする。
+- 仕様: `CafeSearchViewModel.UIState` に `hasSearched: Boolean = false` を追加。`onQueryChanged` で false、`onSearchTapped` / `onNearbySearchRequested` の成功完了で true、失敗時は据え置き。iOS 表示分岐: 「results 空 && !hasSearched → 初期プロンプト」「results 空 && hasSearched && !isLoading → 該当なし」「それ以外 → 結果リスト」。
+- タスク:
+  - [x] KMP: `CafeSearchViewModel.UIState.hasSearched` 追加 + 3 メソッドの遷移更新 + commonTest 追随（11 ケース green）
+  - [x] iOS: `CafeSearchViewModelBridge.hasSearched` 公開 + `CafeSearchView` 表示分岐を `queryText.isEmpty` ベースから `hasSearched` ベースに置換
+- 動作確認:
+  - [x] KMP test green（11 ケース）/ iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ。`No such module 'SharedLogic'` は SourceKit 偽陽性）
+  - [ ] 実機/シミュレータ目視（入力中は初期プロンプト、確定後 0 件で該当なし）はユーザー作業
+
+### 2026-06-23 - カフェ検索: 地名クエリで0件になる問題（textQuery にカフェ語を補完）
+- 原因（実測確定）: `PlacesClientImpl.searchText` は `includedType="cafe"` で結果をカフェ型に絞る。地名「渋谷」「池袋」は Text Search が locality 型の「渋谷区」等に一致させ、cafe フィルタで弾かれ 0 件になる。「コーヒー」「珈琲」はカフェ名/型に直接マッチするので返る。curl 検証: `渋谷`+cafe→0件 / `渋谷`型なし→「渋谷区」1件 / `渋谷 カフェ`+cafe→20件 / `コーヒー`+cafe→20件。
+- 仕様: バイアスなしの `searchText(query)`（ユーザーのテキスト検索）に限り、query がカフェ語（カフェ/cafe/café/コーヒー/珈琲/coffee、大小無視）を含まなければ末尾に ` カフェ` を補完。含む場合・blank は無補完。`searchText(query, locationBias)`（地図 POI 解決、bakery 含むため）と `searchNearby` は対象外。公開 API 変更なし・iOS 変更不要。
+- タスク:
+  - [x] KMP: `PlacesClientImpl.ensureCafeKeyword` を実装（バイアスなし `searchText(query)` 経路のみ）+ commonTest 6 ケース
+- 動作確認:
+  - [x] KMP test green（新規 6/6 + 既存 `CafeRepositoryImplSearchTextTest` 4/4、iOS 向け compile も成功）
+  - [ ] 実機/シミュレータ目視（「渋谷」「池袋」でカフェが返る、「コーヒー」維持）はユーザー作業
+
+### 2026-06-23 - マップ Legal 表記が TabBar に隠れる問題（下端セーフエリア復元）
+- 原因: `MapTabView` の `Map` に `.ignoresSafeArea()` を付けてフルブリード表示しているため、MapKit が自動配置する Legal/帰属表記（左下）の基準下端セーフエリアが 0 になり、TabBar の裏に潜って見切れる。
+- 仕様: 上辺・左右はフルブリード維持、下辺のセーフエリアだけ TabBar 上端で残し Legal を TabBar の上に出す。
+- 経緯: 当初 `.safeAreaPadding(.bottom, mapLegalInset)` を試したが **SwiftUI `Map` の Legal オーナメント（内部 MKMapView 管理）は `safeAreaPadding` に追随せず無効**（固定大値 200 でも動かないことをシミュレータで確認）。
+- タスク:
+  - [x] iOS: `MapTabView` の `Map` を `.ignoresSafeArea(.container, edges: [.top, .horizontal])` に変更（下辺セーフエリアを TabBar 上端で残す）。前回の `safeAreaPadding` / `mapLegalInset` / 不要 `import UIKit` を撤去
+- 動作確認:
+  - [x] iOS `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ。`No such module` は SourceKit 偽陽性）
+  - [x] シミュレータ目視（iPhone 17 / OS 26.1、`simctl io screenshot`）で Legal が TabBar 上端の上に表示・チップ/歯車/FAB 崩れなしを ios-engineer が確認
+  - [ ] トレードオフ: 地図下辺が TabBar 上端で止まるため TabBar 裏のフルブリード感は喪失。実機での見た目はユーザー確認

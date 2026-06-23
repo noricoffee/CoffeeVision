@@ -17,6 +17,7 @@ import kotlinx.coroutines.launch
  * - [onQueryChanged] はクエリ文字列を更新するのみで検索は実行しない（API 消費を最小化する）
  * - 検索結果は [UIState.results] に反映され、ローディング中は [UIState.isLoading] が true になる
  * - エラーは [UIState.error] に詰め、[onErrorDismissed] で null に戻す
+ * - [UIState.hasSearched] により「まだ検索していない」と「検索したが 0 件だった」を区別する
  *
  * ## CoroutineScope の注意
  *
@@ -38,12 +39,19 @@ class CafeSearchViewModel(
      * @property results 検索結果のカフェ一覧。初期値は空リスト
      * @property isLoading 検索実行中かどうか
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
+     * @property hasSearched 検索が少なくとも 1 回成功完了したかどうか。
+     *   - `false`（初期値）: まだ検索を実行していない。UI は「該当なし」を出さず初期プロンプトを表示する
+     *   - `true`: [onSearchTapped] または [onNearbySearchRequested] が成功完了した。
+     *     [results] が空でも「該当なし」を表示してよい
+     *   [onQueryChanged] が呼ばれると false に戻り、前回の検索結果表示を無効化する。
+     *   失敗時（onFailure）は false のまま据え置く。[onErrorDismissed] では変更しない
      */
     data class UIState(
         val query: String = "",
         val results: List<Cafe> = emptyList(),
         val isLoading: Boolean = false,
         val error: String? = null,
+        val hasSearched: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -56,11 +64,12 @@ class CafeSearchViewModel(
      * 検索クエリを更新する。検索は実行しない。
      *
      * 入力フィールドの変更に連動して呼ぶ。[onSearchTapped] が呼ばれるまで検索は走らない。
+     * 呼び出すたびに [UIState.hasSearched] を false にリセットし、前回の検索結果表示を無効化する。
      *
      * @param query 入力中のクエリ文字列
      */
     fun onQueryChanged(query: String) {
-        _state.update { it.copy(query = query) }
+        _state.update { it.copy(query = query, hasSearched = false) }
     }
 
     /**
@@ -68,7 +77,8 @@ class CafeSearchViewModel(
      *
      * 前回の検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
      * 検索中は [UIState.isLoading] が true になり、完了後 false に戻る。
-     * エラーが発生した場合は [UIState.error] にメッセージを詰める。
+     * 検索が成功完了したとき（結果が 0 件でも）[UIState.hasSearched] を true にする。
+     * エラーが発生した場合は [UIState.error] にメッセージを詰め、[UIState.hasSearched] は変更しない。
      */
     fun onSearchTapped() {
         val query = _state.value.query
@@ -77,7 +87,7 @@ class CafeSearchViewModel(
             _state.update { it.copy(isLoading = true, error = null) }
             runCatching { cafeRepository.searchText(query) }
                 .onSuccess { cafes ->
-                    _state.update { it.copy(results = cafes, isLoading = false) }
+                    _state.update { it.copy(results = cafes, isLoading = false, hasSearched = true) }
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message ?: "検索に失敗しました") }
@@ -94,7 +104,8 @@ class CafeSearchViewModel(
      *
      * 前回の検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
      * 検索中は [UIState.isLoading] が true になり、完了後 false に戻る。
-     * エラーが発生した場合は [UIState.error] にメッセージを詰める。
+     * 検索が成功完了したとき（結果が 0 件でも）[UIState.hasSearched] を true にする。
+     * エラーが発生した場合は [UIState.error] にメッセージを詰め、[UIState.hasSearched] は変更しない。
      *
      * @param latitude 現在地の緯度
      * @param longitude 現在地の経度
@@ -105,7 +116,7 @@ class CafeSearchViewModel(
             _state.update { it.copy(isLoading = true, error = null) }
             runCatching { cafeRepository.searchNearby(latitude, longitude) }
                 .onSuccess { results ->
-                    _state.update { it.copy(results = results, isLoading = false) }
+                    _state.update { it.copy(results = results, isLoading = false, hasSearched = true) }
                 }
                 .onFailure { e ->
                     _state.update { it.copy(isLoading = false, error = e.message ?: "近隣検索に失敗しました") }

@@ -212,6 +212,38 @@ enum PreviewSamples {
         sampleCoffeeRecordSelfBrew,
     ]
 
+    // MARK: - RecommendedCafe（マップ Preview 用）
+
+    /// 好み一致カフェのサンプル（マップ強調ピン Preview 用）。
+    static let sampleRecommendedCafes: [RecommendedCafe] = [
+        RecommendedCafe(
+            cafe: Cafe(
+                placeId: "ChIJsampleBluBottle",
+                name: "Blue Bottle 三軒茶屋",
+                address: "東京都世田谷区太子堂4-1-22",
+                latitude: KotlinDouble(value: 35.6448),
+                longitude: KotlinDouble(value: 139.6694),
+                photoReferences: [],
+                websiteUrl: "https://bluebottlecoffee.jp/",
+                mapsUrl: "https://maps.google.com/?cid=sample1"
+            ),
+            matches: [
+                RecommendationReasonTasteProfileMatch(
+                    axis: .origin,
+                    matchedLabel: "エチオピア",
+                    exampleRecordName: "本日のコーヒー（エチオピア イルガチェフェ）",
+                    exampleRating: 4.5
+                ),
+                RecommendationReasonTasteProfileMatch(
+                    axis: .roastLevel,
+                    matchedLabel: "Light",
+                    exampleRecordName: "シングルオリジン",
+                    exampleRating: 4.0
+                ),
+            ]
+        ),
+    ]
+
     // MARK: - CoffeeStats（分析 Preview 用）
 
     /// 分析ビュー Preview 用のサンプル統計データ。
@@ -269,9 +301,14 @@ enum PreviewSamples {
             ),
         ],
         favoriteSignals: FavoriteSignals(
-            bestBrewMethod: nil,
-            bestOrigin: nil,
-            bestRoastLevel: nil,
+            bestBrewMethod: CategoryStat(label: "HandDrip", count: 7, averageRating: KotlinDouble(value: 4.3)),
+            bestOrigin: CategoryStat(label: "エチオピア", count: 5, averageRating: KotlinDouble(value: 4.4)),
+            bestRoastLevel: CategoryStat(label: "Light", count: 5, averageRating: KotlinDouble(value: 4.4)),
+            dominantTastingAxis: TastingAxisCorrelation(
+                axis: TastingAxis.acidity,
+                correlation: 0.62,
+                sampleSize: 8
+            ),
             minSampleSize: 3
         ),
         tastingAverages: TastingAverages(

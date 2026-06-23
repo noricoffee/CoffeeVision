@@ -2,8 +2,10 @@ package com.noricoffee.framework
 
 import com.noricoffee.AppContainer
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.usecase.BuildCoffeeStatsUseCase
 import com.noricoffee.domain.usecase.DeleteAccountUseCase
 import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
+import com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.feature.account.AccountViewModel
 import com.noricoffee.feature.analysis.AnalysisViewModel
@@ -89,6 +91,10 @@ fun AppContainer.makeCafeSearchViewModel(): CafeSearchViewModel =
 fun AppContainer.makeMapViewModel(userId: String): MapViewModel =
     MapViewModel(
         observeVisitedCafesUseCase = ObserveVisitedCafesUseCase(coffeeRepository),
+        cafeRecommendationProvider = ObserveTasteMatchedCafesUseCase(
+            coffeeRepository = coffeeRepository,
+            buildCoffeeStatsUseCase = BuildCoffeeStatsUseCase(),
+        ),
         cafeRepository = cafeRepository,
         userId = userId,
         scope = scope,

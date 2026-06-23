@@ -353,3 +353,68 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **改善パターン**: ①個別データの問いには「**必ず**ツールを呼ぶ／ツールを呼ばずに分からないとは言わない」と命令形で書く ②「分かりません」は「**ツールを呼んだ結果が 0 件のときだけ**」に限定して早期 escape を塞ぐ ③tool description も指示的にする
 - **切り分けの仕込み**: tool の `call` 冒頭/末尾と、セッション選択経路に診断 `print` を入れ、「tool が呼ばれていない」のか「呼ばれたが 0 件（filter マッチ漏れ）」なのかを実機ログで判別できるようにする。instructions 強化だけで不足なら、質問をプロンプト側で「個別 / 全体傾向」に事前分類してセッション分岐する案が次の手
 - 発生源: 9-4b 対話 Q&A v2（個別記録の質問に「不明」を返す → instructions の逃げ道が原因）
+
+## 2026-06-22
+
+### `commonMain` で `Map.mapNotNull` + ローカル `data class` + `maxWith(compareByDescending)` が実行時に全 null を返した（原因未確定）
+
+- `map.mapNotNull { (k, v) -> ローカル data class Candidate(...) }` のリストに対し `.maxWith(compareByDescending<Candidate> { ... }.thenBy { ... })` をチェーンしたところ、**コンパイルは通るが実行時に常に null / 期待外れの結果**になる現象が Phase B-1（`BuildCoffeeStatsUseCase` の好み判定）で発生
+- 疑い: `compareByDescending<Candidate>` の型推論が `Candidate?` 側に解釈され比較が壊れた可能性（**根本原因は未確定**）。これは仮説なので鵜呑みにしない
+- **対処**: 明示的な `for ((label, group) in map)` ループ＋並列 `MutableList`＋手動比較に書き直して解消。ユニットテストで挙動を担保（収縮逆転・タイ時のラベル順など境界ケース）
+- **教訓**: 集計の選定ロジックは「コンパイルが通る＝正しい」ではない。`mapNotNull`＋ローカル data class＋`maxWith(comparator)` の合わせ技は避けるか、**必ず境界ケースのユニットテストで実挙動を確認**する
+
+### 統計的な「好み判定」は単体テストでなく無相関ペルソナで偽陽性率を測ってから閾値を決める
+
+- 「収縮＋件数ガード」のような統計ヒューリスティックは、機構ごとの単体テスト（収縮が効くか・タイ処理）が全部通っても**特異度（好みが無いときに黙れるか）は別問題**。無相関ノイズデータを多シード生成して**偽陽性率を実測**して初めて見える
+- 実例: `FavoriteSignals` のカテゴリ好みは「最大群が globalMean を超えたら信号化」だが、これは「複数群の最良が平均を超えるか」＝**ほぼ恒真**で偽陽性率 100%。tasting 軸の「5 軸 max|r|≥0.3」も多重比較で 40%。どちらも単体テストでは検出不能だった
+- **教訓**: ①「最大値が全体平均を超えたら採用」は閾値ガードにならない（最良は大抵平均を超える）。effect-size 閾値（差 > δ）や信頼区間下限など「ゼロからの距離」で見る ②複数候補から max を拾う設計は多重比較で偽陽性が乗る ③assert 閾値は**測定してから**決める（理論値を仮置きで hard-fail させると、偶然 pass か設計欠陥かを取り違える）。null ペルソナで「全フィールド null」を期待する固定シード assert を書く前に、本当に null になるシードが存在するかスキャンで確認する
+
+### SKIE enum の Swift case 名は `.swiftinterface` を真とする（Obj-C ヘッダと異なる）
+
+- Kotlin `enum class` を SKIE が Swift `@frozen enum` に変換する際の case 名は、**Obj-C ヘッダ（`.h`）と Swift の `.swiftinterface` で表記が異なる**ことがある。h では全小文字に見えても、Swift 実コードは camelCase（`RoastLevel`→`roastLevel`）が正しい
+- 2026-06-22 B-4 で kmp-engineer が「`.roastlevel`（全小文字）」と報告したが、ios-engineer が `.swiftinterface` を確認し `.roastLevel`（camelCase）が正と判明（ビルド成功が裏付け）
+- **教訓**: enum の Swift case 名を docs に固定する前に `*.swiftinterface` を確認する。`strings <...>.swiftinterface | grep "case "` で実体を見る。Obj-C ヘッダの表記を鵜呑みにしない
+
+### `maxWith(compareByDescending { ... })` は意図と逆の要素を返す
+
+- `maxWith(Comparator)` は **Comparator 上で「最大」** の要素を返す。`compareByDescending { it.rating }` は「rating が大きいほど Comparator では小さい（前に来る）」順序なので、`maxWith` と組み合わせると **最低 rating の要素が選ばれる**（意図と逆）。コンパイルは通るので気づきにくい
+- **正しいパターン**: 単一キーなら `maxByOrNull { it.rating }`。複合キー（rating 降順→日付降順→名前昇順 等）なら `sortedWith(compareByDescending<T>{ it.rating }.thenByDescending{...}.thenBy{...}).firstOrNull()`
+- 2026-06-22 B-4（`ObserveTasteMatchedCafesUseCase` の代表記録選定）で発生。これは [[同日の mapNotNull+maxWith で全 null]] の「原因未確定」だった件の有力な真因でもある（`maxWith`+`compareByDescending` の取り違え）。**選定ロジックは必ず境界ケースのユニットテストで実挙動を確認する**（B-4 はテストで検出・修正済）
+
+### winner's curse には「固定オフセット閾値」でなく「ばらつき連動（n 連動）閾値」で対処する
+
+- 複数候補から最良を選ぶと、最良の推定値は偶然ぶん上振れする（winner's curse）。この上振れ幅は**サンプリングのばらつき σ/√n に比例して膨らむ**ので、`値 − 基準 > 固定δ` のような固定オフセット足切りでは止まらない（B-1c 実測: カテゴリ偽陽性は δ を 0.10→0.30 に上げても 100%→87% しか下がらない）
+- 一方、テイスティング軸の |r| 下限を `max(0.3, c/√n)` と**n 連動**にしたら偽陽性 40%→22%（c 上げで 8.7%）に下がった。閾値を不確実性に合わせてスケールさせるのが効く
+- **教訓**: 「最良候補が基準を有意に超えるか」を問うガードは、固定オフセットでなく `差 > z · SE`（SE ≈ stdev/√n）のような n 連動の信頼区間ゲートにする。固定 δ は対症療法に留まると疑う
+- **親の運用**: サブエージェントの「これはテストの人工物で実データなら問題ない」という説明は、数理 or 実測で裏が取れるまで**留保**する。鵜呑みにせず「現実的な分布で測り直す」一手を挟む（CLAUDE.md No Laziness / Verification Before Done）
+
+### xcconfig はフォールバック宣言を `#include?` より「前」に置く（後ろだと実値を空で上書き）
+
+- xcconfig は**同一キーの最後の代入が勝つ**。`#include? "Secrets.xcconfig"`（実キーを設定）の**後ろ**に `PLACES_API_KEY =`（空フォールバック）を書くと、Secrets の実キーが空文字で上書きされ、ビルドは通るが実行時に空キーになる
+- 2026-06-23 の Places 疎通確認で、検索が常に「結果0件」になる真因がこれだった。フォールバックは必ず include の**前**に宣言する（`PLACES_API_KEY =` → `#include? "Secrets.xcconfig"` の順）
+- **教訓**: 「Secrets があれば上書きする」系の xcconfig は、フォールバック→include の順序が絶対。検証は**ビルド成果物の `.app/Info.plist` を PlistBuddy で実読み**する（`$(VAR)` 置換の最終結果はソースを見ても分からない）
+
+### Places/REST クライアントの DTO に `= emptyList()` デフォルト＋Ktor `expectSuccess=false` はエラーを握り潰す
+
+- Ktor は既定（`expectSuccess=false`）で非2xxを例外化しない。レスポンス DTO の必須フィールドに `= emptyList()` 等のデフォルトがあると、403/400 のエラー JSON（`{"error":{...}}`）が `ignoreUnknownKeys=true` で**空の正常レスポンスにデコードされ**、例外もエラー表示も出ず「0件」に見える。**API 障害が常に『該当なし』に化ける**最悪のサイレント失敗
+- 2026-06-23 Places 疎通確認で、空キー由来の 403 がこの経路で隠れ、真因特定が遅れた
+- **教訓**: 外部 API クライアントの Ktor は `expectSuccess=true` を基本にし、必要なら `HttpResponseValidator` で**本文を含む**例外メッセージにする（デフォルトの `ResponseException.message` は本文を含まない）。「結果が空」を見たら、まず「本当に空 200 か / 握り潰した非2xx か」を疑う
+
+### 実機バイナリに修正が入っているかは `grep -a` で文字列を直接確認できる
+
+- 「ソース修正したのに挙動が変わらない」とき、ビルド/インストールが古い可能性を**バイナリ実読み**で切り分けられる。Kotlin/Native の静的フレームワークは Debug ビルドだと `<app>/coffeevision.debug.dylib` 側に入る（メイン実行ファイルは数十KBのスタブ）
+- ヘッダ名やクラス名（例 `X-Ios-Bundle-Identifier` / `PlacesApiException`）を `LC_ALL=C grep -a -c "文字列" <dylib>` で検索し、在れば反映済・無ければ stale。`xcrun simctl get_app_container <udid> <bundleId>` で .app パスを取得
+
+### kotlinx.serialization の `encodeDefaults=false`（既定）はリクエストのデフォルト値フィールドを丸ごと落とす
+
+- kotlinx.serialization は既定で `encodeDefaults=false`。Ktor の ContentNegotiation で `Json{}` を構成する際に明示しないと、`data class` の**デフォルト値を持つフィールドがリクエスト JSON に含まれない**
+- 2026-06-23 の Places で、`SearchNearbyRequest.includedTypes=listOf("cafe")` がデフォルト値ゆえに送信されず、型フィルタ無しの searchNearby になり駅・観光地が周辺ピンに並んだ。UI 上はエラーも出ず「それっぽい結果」が返るため気づきにくく、curl でリクエストボディを実送信比較して初めて発覚
+- **教訓**: 外部 API クライアントの `Json{}` には `encodeDefaults=true` を明示する。`explicitNulls=false` と併用すれば null デフォルトは省略されるので「必須は送る・null は省く」が両立する。「サーバが期待するフィールドを送っているはず」を疑い、ビルドした実体の送信ボディを curl と突き合わせる
+- 関連: Places searchNearby は `includedTypes`（副次タイプ含む・prominence 順）より `includedPrimaryTypes`（主タイプ）+ `rankPreference="DISTANCE"` の方が「実カフェを近い順」に絞れる
+
+### 「実機 debug でのみ重い」UI ジャンクは debug ビルド/デバッガアタッチのアーティファクトを最初に疑う
+
+- 2026-06-23 カフェ検索タブで「キーボードを開くと重い」+ `Gesture: System gesture gate timed out.` / `Received external candidate resultset` / `containerToPush is nil` のログ。当初は MapKit 常駐や `.searchable` バインディングを疑ったが、ユーザー確認で **debug 状態以外では重くない**ことが判明し、実在の性能バグではなかった
+- 原因の構造: (1) Kotlin/Native debug ビルドは非最適化で SKIE 往復・SwiftUI 再評価が桁違いに遅い、(2) Xcode デバッガアタッチ中は GeoServices 等がメインスレッドから吐く大量の os_log をコンソールへ転送するオーバーヘッドだけでメインスレッドが詰まり、キーボード提示のジェスチャが gate timeout する。Release（デバッガ非アタッチ）では消える
+- **教訓**: 「重い」報告は最初に **(a) Release/Profile ビルドで再現するか (b) デバッガをデタッチして再現するか** を切り分ける。debug 限定なら追わない（MapKit ライフサイクル制御や Tab 構成の作り変えは実在しない問題への過剰設計になる）。`candidate resultset` / `containerToPush` / `gesture gate timed out` は OS フレームワーク由来のログでアプリからは抑制できない無害ノイズ
+- 補足: このとき検索欄テキストを Kotlin StateFlow 直結から View ローカル `@State` + `.onChange` 一方向転送に変えた変更は、debug 問題とは独立に「表示を非同期ラウンドトリップに依存させない」定石として正しいので残した（[`implementation_note.md`](../implementation_note.md) 2026-06-23 エントリ参照）

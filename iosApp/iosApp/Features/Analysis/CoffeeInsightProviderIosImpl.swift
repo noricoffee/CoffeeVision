@@ -187,6 +187,12 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             headline は 15〜25 文字程度の端的なタイトル、
             body は 50〜100 文字程度の読みやすい日本語の文章にしてください。
             数値の再列挙はせず、傾向・個性・楽しみ方に焦点を当ててください。
+
+            【好み信号を扱う際の必須ルール】
+            ・好みの傾向セクションが含まれる場合、その内容は「やや」「傾向がある」等の弱い表現にとどめる。
+            ・「好きだ」「間違いない」等の断定表現は使わない。
+            ・サンプルが少ない旨の注記がある場合は、その旨を添えるか、その信号に言及しない。
+            ・「その産地が好き」か「その産地を出す店が好き」かは判別できないため、断定しない。
             """
         )
 
@@ -205,6 +211,14 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
     ///
     /// LLM への入力として「集計済み事実」だけを渡す。
     /// 計算は KMP 側で完了しているため LLM に計算させない設計。
+    ///
+    /// ## 好み信号（`favoriteSignals`）の整形ルール
+    ///
+    /// - 非 null のシグナルだけを出力（null = 信号なし）
+    /// - `CategoryStat.averageRating` は `KotlinDouble?` のため、必ず `.doubleValue` 経由で整形する
+    ///   （直接 `String(format:)` に渡すと 0.0 になる — lessons.md 2026-06-21 参照）
+    /// - `TastingAxisCorrelation.correlation` は native `Double` なので直接渡してよい
+    /// - 件数が少ない場合に「サンプルが少ない」注記をプロンプトに含め、LLM が断定しないよう促す
     private func buildPrompt(from stats: CoffeeStats) -> String {
         var lines: [String] = []
 
@@ -270,13 +284,101 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             }
         }
 
+        // 好み信号（階層2）— 弱い傾向としてプロンプトに含める
+        // 断定させないよう「参考・確定ではない」「交絡の可能性あり」を明示する
+        let signals = stats.favoriteSignals
+        let signalLines = buildFavoriteSignalsPromptLines(signals)
+        if !signalLines.isEmpty {
+            lines.append("")
+            lines.append("【好みの傾向（参考・確定ではない弱い信号）】")
+            lines.append("※ 以下は統計的な傾向の参考値です。件数が少ない場合は信頼性が低く、")
+            lines.append("  「その産地が好き」か「その産地を出す店が好き」かは判別できない交絡があります。")
+            lines.append("  言語化する際は「やや」「傾向がある」等の弱い表現にとどめ、断定しないでください。")
+            lines.append(contentsOf: signalLines)
+        }
+
         lines.append("")
         lines.append("上記の記録を踏まえ、このコーヒー愛好家の傾向を要約してください。")
 
         return lines.joined(separator: "\n")
     }
 
+    /// `FavoriteSignals` の各シグナルをプロンプト行に整形して返す。
+    ///
+    /// null のシグナルは出力しない。
+    /// `CategoryStat.averageRating` は `KotlinDouble?` のため `.doubleValue` 経由で整形する。
+    /// `TastingAxisCorrelation.correlation` は native `Double` のため直接渡す。
+    private func buildFavoriteSignalsPromptLines(_ signals: FavoriteSignals) -> [String] {
+        var lines: [String] = []
+
+        if let origin = signals.bestOrigin {
+            var line = "・産地: \(origin.label)（\(origin.count) 件"
+            if let avg = origin.averageRating {
+                line += String(format: "・平均 %.1f", avg.doubleValue)
+            }
+            line += "）がやや高評価の傾向"
+            if origin.count < 5 {
+                line += "（サンプル少・参考程度）"
+            }
+            lines.append(line)
+        }
+
+        if let roast = signals.bestRoastLevel {
+            var line = "・焙煎度: \(localizedRoastLevel(roast.label))（\(roast.count) 件"
+            if let avg = roast.averageRating {
+                line += String(format: "・平均 %.1f", avg.doubleValue)
+            }
+            line += "）がやや高評価の傾向"
+            if roast.count < 5 {
+                line += "（サンプル少・参考程度）"
+            }
+            lines.append(line)
+        }
+
+        if let brew = signals.bestBrewMethod {
+            var line = "・抽出方法: \(localizedBrewMethod(brew.label))（\(brew.count) 件"
+            if let avg = brew.averageRating {
+                line += String(format: "・平均 %.1f", avg.doubleValue)
+            }
+            line += "）がやや高評価の傾向"
+            if brew.count < 5 {
+                line += "（サンプル少・参考程度）"
+            }
+            lines.append(line)
+        }
+
+        if let axis = signals.dominantTastingAxis {
+            let axisName = localizedTastingAxis(axis.axis)
+            let direction = axis.correlation > 0 ? "高いほど" : "低いほど"
+            // correlation は native Double のため .doubleValue 不要
+            let line = String(
+                format: "・テイスティングでは「%@」が%@高評価の傾向（相関 r=%.2f・%d 件）",
+                axisName,
+                direction,
+                axis.correlation,
+                axis.sampleSize
+            )
+            lines.append(line)
+        }
+
+        return lines
+    }
+
     // MARK: - ローカライズヘルパ（AnalysisView と同等）
+
+    /// `TastingAxis`（SKIE `@frozen enum`）を日本語ラベルに変換する。
+    ///
+    /// Blue Bottle「Elements of Coffee Tasting」の 5 軸に対応。
+    /// SKIE EnumInterop により case 名は camelCase（`.sweetness` / `.body` 等）。
+    private func localizedTastingAxis(_ axis: TastingAxis) -> String {
+        switch axis {
+        case .sweetness:   return "甘味"
+        case .body:        return "ボディ"
+        case .acidity:     return "酸味"
+        case .flavor:      return "風味"
+        case .aftertaste:  return "後味"
+        }
+    }
 
     private func localizedRoastLevel(_ name: String) -> String {
         switch name {

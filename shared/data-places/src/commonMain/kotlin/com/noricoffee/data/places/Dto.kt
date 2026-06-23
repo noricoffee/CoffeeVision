@@ -48,12 +48,23 @@ internal data class PlacesListResponse(
  * ヘッダ:
  *   `X-Goog-Api-Key: <apiKey>`
  *   `X-Goog-FieldMask: places.id,places.displayName,...`（Text Search と同じ定数を再利用）
+ *
+ * ## includedPrimaryTypes vs includedTypes
+ * `includedTypes` は「cafe を含む場所」全般（ホテルのカフェラウンジ等も含む）にマッチするが、
+ * `includedPrimaryTypes` は「主タイプが cafe / coffee_shop の場所」のみに絞る。
+ * 後者のほうが実カフェ精度が高い。
+ *
+ * ## rankPreference = "DISTANCE"
+ * `POPULARITY`（既定）は Prominence 順でホテルや有名ランドマークが上位に来る。
+ * `DISTANCE` にすることで現在地に最も近いカフェが上位になる。
+ * `rankPreference=DISTANCE` 使用時は [locationRestriction]（circle）の指定が必須。
  */
 @Serializable
 internal data class SearchNearbyRequest(
-    val includedTypes: List<String> = listOf("cafe"),
+    val includedPrimaryTypes: List<String> = listOf("cafe", "coffee_shop"),
     val maxResultCount: Int = 20,
     val languageCode: String = "ja",
+    val rankPreference: String = "DISTANCE",
     val locationRestriction: LocationRestrictionDto,
 )
 

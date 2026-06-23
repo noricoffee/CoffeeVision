@@ -70,8 +70,20 @@ class PlacesClientImpl(
         }
     }
 
+    /**
+     * テキストクエリでカフェを検索する（位置バイアスなし）。
+     *
+     * 地名のみのクエリ（例: "渋谷"）を入力すると、Places API が locality 型の場所（渋谷区など）に
+     * 一致させ、`includedType=cafe` フィルタで 0 件になる。
+     * そのため、カフェ語を含まないクエリには末尾に " カフェ" を補完してから API に送る。
+     *
+     * カフェ語を既に含む場合（例: "コーヒー", "渋谷 カフェ"）は補完しない（二重付与・既存挙動を維持）。
+     * `searchText(query, locationBias)` は POI タップ経由のため補完対象外。
+     *
+     * @see ensureCafeKeyword
+     */
     override suspend fun searchText(query: String): List<PlaceSummary> =
-        searchTextInternal(query = query, locationBias = null)
+        searchTextInternal(query = ensureCafeKeyword(query), locationBias = null)
 
     override suspend fun searchText(query: String, locationBias: LocationBias): List<PlaceSummary> =
         searchTextInternal(
@@ -161,6 +173,24 @@ class PlacesClientImpl(
         return response.photoUri
     }
 
+    /**
+     * クエリにカフェ語が含まれていなければ末尾に " カフェ" を補完して返す。
+     *
+     * Places API (New) の `searchText` は `includedType=cafe` を指定しているが、
+     * 地名のみのクエリ（例: "渋谷"）は locality 型の場所に一致してしまい、
+     * cafe フィルタで 0 件になる。そのためカフェ語を補完し、cafe 型の候補を引き出す。
+     *
+     * カフェ語判定（大文字小文字無視）: カフェ / cafe / café / コーヒー / 珈琲 / coffee
+     * - query が blank の場合は no-op（空検索は UI 側で抑止しているが安全側の処理）
+     * - いずれかのカフェ語を含む場合は補完しない（二重付与・既存挙動を維持）
+     */
+    private fun ensureCafeKeyword(query: String): String {
+        if (query.isBlank()) return query
+        val lower = query.lowercase()
+        val hasCafeKeyword = CAFE_KEYWORDS.any { lower.contains(it) }
+        return if (hasCafeKeyword) query else "$query カフェ"
+    }
+
     private fun PlaceDto.toPlaceSummary(): PlaceSummary = PlaceSummary(
         id = id,
         displayName = displayName?.text ?: "",
@@ -173,6 +203,12 @@ class PlacesClientImpl(
     )
 
     private companion object {
+        /**
+         * カフェ語の一覧（小文字で比較する）。
+         * いずれかを含む query には " カフェ" を補完しない。
+         */
+        val CAFE_KEYWORDS = listOf("カフェ", "cafe", "café", "コーヒー", "珈琲", "coffee")
+
         const val PLACES_BASE_URL = "https://places.googleapis.com/v1/places"
         const val SEARCH_TEXT_URL = "$PLACES_BASE_URL:searchText"
         const val SEARCH_NEARBY_URL = "$PLACES_BASE_URL:searchNearby"

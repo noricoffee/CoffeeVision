@@ -1810,3 +1810,9 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 解決: `CafeSearchViewModel.UIState` に `hasSearched: Boolean = false` を追加（単一の真実の源を ViewModel に置く）。`onQueryChanged` で false、`onSearchTapped` / `onNearbySearchRequested` の**成功完了時のみ** true、失敗時・ローディング開始時は据え置き。iOS は `CafeSearchView` の表示分岐を `queryText.isEmpty` ベースから `hasSearched` ベースへ置換（`results 空 && !hasSearched → 初期プロンプト` / `results 空 && hasSearched && !isLoading → 該当なし` / `else → 結果リスト`）。
 - 効果: 入力中は初期プロンプト維持、検索確定して 0 件のときだけ「該当なし」。0 件表示後に 1 文字でも打つと `hasSearched=false` に戻り初期プロンプトへ。ローディング中は `hasSearched=false` のまま第 1 分岐 + ProgressView overlay。
 - 補足: `emptyResultsView` の `ContentUnavailableView.search(text: queryText)` の引数は据え置き。検索確定後はタイプしていないため `queryText` == 検索語として成立する。
+
+## 2026-06-23 - PlacesClientImpl.searchText: 地名クエリへのカフェ語補完
+- 論点: `searchText` は `includedType="cafe"` で結果をカフェ型に絞る。地名のみ（例「渋谷」「池袋」）を渡すと Text Search が locality 型（「渋谷区」等）に一致させ、cafe フィルタで弾かれて 0 件になる。「コーヒー」「珈琲」はカフェ名/型に直接マッチするので返る。curl 実測で確定（`渋谷`+cafe→0件、`渋谷 カフェ`+cafe→20件、`コーヒー`+cafe→20件、ブランド名「スターバックス カフェ」「ブルーボトル カフェ」も正しく返る）。
+- 解決: バイアスなしの `searchText(query: String)`（ユーザーのテキスト検索）経路に限り、private `ensureCafeKeyword(query)` でカフェ語（カフェ/cafe/café/コーヒー/珈琲/coffee、`lowercase()` 比較）を含まないクエリの末尾に `" カフェ"` を補完。含む場合・blank は無補完。
+- 対象外: `searchText(query, locationBias)`（地図 POI タップの placeId 解決。bakery 等も解決するため補完すると歪む）と `searchNearby` は変更なし。`includedType="cafe"` は維持。公開 API 変更なし（iOS 変更不要）。
+- 補足: Places Text Search はカテゴリ+地域を textQuery（「渋谷 カフェ」）で表現するのが Google 推奨の自然言語パターンであり、補完はハックではなく idiomatic。

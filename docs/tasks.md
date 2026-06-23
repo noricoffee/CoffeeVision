@@ -674,3 +674,12 @@
 - 動作確認:
   - [x] KMP test green（11 ケース）/ iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ。`No such module 'SharedLogic'` は SourceKit 偽陽性）
   - [ ] 実機/シミュレータ目視（入力中は初期プロンプト、確定後 0 件で該当なし）はユーザー作業
+
+### 2026-06-23 - カフェ検索: 地名クエリで0件になる問題（textQuery にカフェ語を補完）
+- 原因（実測確定）: `PlacesClientImpl.searchText` は `includedType="cafe"` で結果をカフェ型に絞る。地名「渋谷」「池袋」は Text Search が locality 型の「渋谷区」等に一致させ、cafe フィルタで弾かれ 0 件になる。「コーヒー」「珈琲」はカフェ名/型に直接マッチするので返る。curl 検証: `渋谷`+cafe→0件 / `渋谷`型なし→「渋谷区」1件 / `渋谷 カフェ`+cafe→20件 / `コーヒー`+cafe→20件。
+- 仕様: バイアスなしの `searchText(query)`（ユーザーのテキスト検索）に限り、query がカフェ語（カフェ/cafe/café/コーヒー/珈琲/coffee、大小無視）を含まなければ末尾に ` カフェ` を補完。含む場合・blank は無補完。`searchText(query, locationBias)`（地図 POI 解決、bakery 含むため）と `searchNearby` は対象外。公開 API 変更なし・iOS 変更不要。
+- タスク:
+  - [x] KMP: `PlacesClientImpl.ensureCafeKeyword` を実装（バイアスなし `searchText(query)` 経路のみ）+ commonTest 6 ケース
+- 動作確認:
+  - [x] KMP test green（新規 6/6 + 既存 `CafeRepositoryImplSearchTextTest` 4/4、iOS 向け compile も成功）
+  - [ ] 実機/シミュレータ目視（「渋谷」「池袋」でカフェが返る、「コーヒー」維持）はユーザー作業

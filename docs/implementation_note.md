@@ -1780,3 +1780,12 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
   3. **iOS バンドル ID ヘッダ未付与**: キー注入後に効いてくる制限。GMS SDK 以外（Ktor 生 REST）は `X-Ios-Bundle-Identifier` を自動付与しない。→ `iosMain` の `createPlacesHttpClient()` で `NSBundle.mainBundle.bundleIdentifier` を `defaultRequest` ヘッダに付与（前掲エントリ）。
 - 切り分けの決め手: ①curl はバンドル ID ヘッダ無→403`API_KEY_IOS_APP_BLOCKED`(iosBundleId:empty) / 有→200。②実機 dylib に `X-Ios-Bundle-Identifier`・`PlacesApiException` 文字列が在ることを `grep -a` で確認（修正がバイナリに反映済の裏取り）。③`.app/Info.plist` の `PLACES_API_KEY` 実値を PlistBuddy で確認（空→注入の前後比較）。④「`iosBundleId` フィールドが無い 403」という症状からキー欠落を特定。
 - 検証: `:shared:data-places` compile/test green、xcframework assemble green、iosApp Debug ビルド成功・キー注入確認・上書きインストール起動。**最終の実検索の目視はユーザー作業**。
+
+### 2026-06-23: 周辺カフェ検索の精度修正（encodeDefaults + includedPrimaryTypes）
+
+- 領域: KMP（data-places）+ iOS（map） / 関連: `shared/data-places/.../PlacesClientImpl.kt`・`Dto.kt`・`iosApp/.../Features/Map/MapTabView.swift`
+- 経緯: マップ周辺グレーピンに渋谷駅・ハチ公像など非カフェが並んだ。curl で切り分け、2要因が判明:
+  1. **kotlinx.serialization の `encodeDefaults=false`（既定）**で `SearchNearbyRequest` のデフォルト値フィールド（`includedTypes` 等）が JSON にエンコードされず、型フィルタ無しの searchNearby になっていた → `PlacesClientImpl` の `Json{}` に `encodeDefaults=true` を追加。`explicitNulls=false` 併用のため null デフォルト（`locationBias=null`）は引き続き省略され意図どおり。
+  2. **`includedTypes`（cafe を副次に含む場所）+ prominence 順**だと Tower Records・ホテルが上位に来る → `includedPrimaryTypes=["cafe","coffee_shop"]`（主タイプが cafe）+ `rankPreference="DISTANCE"`（距離順）に変更。curl 実証で OBSCURA COFFEE / スタバ / 星乃珈琲 / PRONTO が近い順に並ぶことを確認。`coffee_shop` を併記するのはチェーン店が `cafe` でなく `coffee_shop` に分類されるケースがあるため。
+- iOS 側: 周辺ピンのアイコンを `mappin` → `cup.and.saucer.fill`（グレー円は維持、茶円＝訪問済みと区別）。
+- 検証: `:shared:data-places` test green（既存 searchText テストは FakePlacesClient のため影響なし）、xcframework assemble green、iosApp Debug ビルド・上書きインストールで実機表示確認（ユーザー目視 OK）。

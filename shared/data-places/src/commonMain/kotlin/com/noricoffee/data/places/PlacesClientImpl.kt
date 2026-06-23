@@ -47,6 +47,12 @@ class PlacesClientImpl(
                 Json {
                     ignoreUnknownKeys = true
                     explicitNulls = false
+                    // encodeDefaults=true により、デフォルト値を持つフィールド（includedPrimaryTypes 等）
+                    // も JSON にシリアライズされる。encodeDefaults=false（kotlinx.serialization の既定）では
+                    // デフォルト値フィールドが省略され、型フィルタなし検索になるバグの根本原因だった。
+                    // explicitNulls=false と併用するため、null デフォルト（locationBias=null 等）は
+                    // 引き続き省略される（encodeDefaults は非 null デフォルトのみ encode する）。
+                    encodeDefaults = true
                 }
             )
         }

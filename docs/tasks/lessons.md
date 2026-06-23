@@ -404,3 +404,10 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 - 「ソース修正したのに挙動が変わらない」とき、ビルド/インストールが古い可能性を**バイナリ実読み**で切り分けられる。Kotlin/Native の静的フレームワークは Debug ビルドだと `<app>/coffeevision.debug.dylib` 側に入る（メイン実行ファイルは数十KBのスタブ）
 - ヘッダ名やクラス名（例 `X-Ios-Bundle-Identifier` / `PlacesApiException`）を `LC_ALL=C grep -a -c "文字列" <dylib>` で検索し、在れば反映済・無ければ stale。`xcrun simctl get_app_container <udid> <bundleId>` で .app パスを取得
+
+### kotlinx.serialization の `encodeDefaults=false`（既定）はリクエストのデフォルト値フィールドを丸ごと落とす
+
+- kotlinx.serialization は既定で `encodeDefaults=false`。Ktor の ContentNegotiation で `Json{}` を構成する際に明示しないと、`data class` の**デフォルト値を持つフィールドがリクエスト JSON に含まれない**
+- 2026-06-23 の Places で、`SearchNearbyRequest.includedTypes=listOf("cafe")` がデフォルト値ゆえに送信されず、型フィルタ無しの searchNearby になり駅・観光地が周辺ピンに並んだ。UI 上はエラーも出ず「それっぽい結果」が返るため気づきにくく、curl でリクエストボディを実送信比較して初めて発覚
+- **教訓**: 外部 API クライアントの `Json{}` には `encodeDefaults=true` を明示する。`explicitNulls=false` と併用すれば null デフォルトは省略されるので「必須は送る・null は省く」が両立する。「サーバが期待するフィールドを送っているはず」を疑い、ビルドした実体の送信ボディを curl と突き合わせる
+- 関連: Places searchNearby は `includedTypes`（副次タイプ含む・prominence 順）より `includedPrimaryTypes`（主タイプ）+ `rankPreference="DISTANCE"` の方が「実カフェを近い順」に絞れる

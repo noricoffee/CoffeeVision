@@ -395,7 +395,10 @@ struct MapTabView: View {
 
             }
             .mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))
-            .ignoresSafeArea()
+            // 上端（ステータスバー）と左右はフルブリードにしつつ、下端のセーフエリアは保持する。
+            // これにより MapKit が Legal/帰属表記を配置する基準が TabBar 上端になり、
+            // Legal が TabBar の裏に隠れなくなる。
+            .ignoresSafeArea(.container, edges: [.top, .horizontal])
 
             // フローティングコントロール（セーフエリア内に自然に収まる）
             HStack(alignment: .center, spacing: 8) {

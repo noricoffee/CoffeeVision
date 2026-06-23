@@ -683,3 +683,14 @@
 - 動作確認:
   - [x] KMP test green（新規 6/6 + 既存 `CafeRepositoryImplSearchTextTest` 4/4、iOS 向け compile も成功）
   - [ ] 実機/シミュレータ目視（「渋谷」「池袋」でカフェが返る、「コーヒー」維持）はユーザー作業
+
+### 2026-06-23 - マップ Legal 表記が TabBar に隠れる問題（下端セーフエリア復元）
+- 原因: `MapTabView` の `Map` に `.ignoresSafeArea()` を付けてフルブリード表示しているため、MapKit が自動配置する Legal/帰属表記（左下）の基準下端セーフエリアが 0 になり、TabBar の裏に潜って見切れる。
+- 仕様: 上辺・左右はフルブリード維持、下辺のセーフエリアだけ TabBar 上端で残し Legal を TabBar の上に出す。
+- 経緯: 当初 `.safeAreaPadding(.bottom, mapLegalInset)` を試したが **SwiftUI `Map` の Legal オーナメント（内部 MKMapView 管理）は `safeAreaPadding` に追随せず無効**（固定大値 200 でも動かないことをシミュレータで確認）。
+- タスク:
+  - [x] iOS: `MapTabView` の `Map` を `.ignoresSafeArea(.container, edges: [.top, .horizontal])` に変更（下辺セーフエリアを TabBar 上端で残す）。前回の `safeAreaPadding` / `mapLegalInset` / 不要 `import UIKit` を撤去
+- 動作確認:
+  - [x] iOS `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ。`No such module` は SourceKit 偽陽性）
+  - [x] シミュレータ目視（iPhone 17 / OS 26.1、`simctl io screenshot`）で Legal が TabBar 上端の上に表示・チップ/歯車/FAB 崩れなしを ios-engineer が確認
+  - [ ] トレードオフ: 地図下辺が TabBar 上端で止まるため TabBar 裏のフルブリード感は喪失。実機での見た目はユーザー確認

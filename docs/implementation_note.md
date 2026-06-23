@@ -1816,3 +1816,9 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 解決: バイアスなしの `searchText(query: String)`（ユーザーのテキスト検索）経路に限り、private `ensureCafeKeyword(query)` でカフェ語（カフェ/cafe/café/コーヒー/珈琲/coffee、`lowercase()` 比較）を含まないクエリの末尾に `" カフェ"` を補完。含む場合・blank は無補完。
 - 対象外: `searchText(query, locationBias)`（地図 POI タップの placeId 解決。bakery 等も解決するため補完すると歪む）と `searchNearby` は変更なし。`includedType="cafe"` は維持。公開 API 変更なし（iOS 変更不要）。
 - 補足: Places Text Search はカテゴリ+地域を textQuery（「渋谷 カフェ」）で表現するのが Google 推奨の自然言語パターンであり、補完はハックではなく idiomatic。
+
+## 2026-06-23 - SwiftUI Map の Legal オーナメントは `safeAreaPadding` に追随しない
+- 事象: マップ左下の Legal/帰属表記が TabBar 裏に隠れて見切れる。`MapTabView` の `Map` に `.ignoresSafeArea()`（全辺）を付けてフルブリード化しているため、内部 `MKMapView` がオーナメントを置く基準下端セーフエリアが 0 になり画面最下端＝TabBar 裏に来るのが原因。
+- 不採用: `.safeAreaPadding(.bottom, X)` で下端を復元する案。SwiftUI の `safeAreaPadding` は `Map` 内部の `MKMapView` オーナメント配置レイヤーに伝播せず、固定大値 200 でもシミュレータで Legal が一切動かないことを確認（= 機構が別レイヤー）。
+- 採用: `.ignoresSafeArea(.container, edges: [.top, .horizontal])` に変更。上辺（ステータスバー裏）・左右はフルブリード維持、下辺だけデフォルトのセーフエリア（TabBar 上端）を残すことで `MKMapView` が Legal を TabBar 上端のすぐ上に配置する。シミュレータ（iPhone 17 / OS 26.1）目視で確認済み。
+- トレードオフ: 地図下辺が TabBar 上端で止まるため、TabBar 裏まで地図が描画されるフルブリード感（下辺のみ）は喪失。Legal 表示の法的要件を優先。実機での見た目差は要確認。

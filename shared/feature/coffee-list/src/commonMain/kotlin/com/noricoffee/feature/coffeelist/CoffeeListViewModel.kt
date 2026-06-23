@@ -2,6 +2,7 @@ package com.noricoffee.feature.coffeelist
 
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.repository.CoffeeRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -77,10 +78,13 @@ class CoffeeListViewModel(
     fun onCoffeeDeleted(id: String) {
         val userId = currentUserId ?: return
         scope.launch {
-            runCatching { coffeeRepository.delete(userId, id) }
-                .onFailure { e ->
-                    _state.update { it.copy(error = e.message ?: "delete failed") }
-                }
+            try {
+                coffeeRepository.delete(userId, id)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "delete failed") }
+            }
         }
     }
 
@@ -88,6 +92,6 @@ class CoffeeListViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 }

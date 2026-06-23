@@ -8,6 +8,7 @@ import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
 import com.noricoffee.repository.CoffeeRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -438,13 +439,15 @@ class CoffeeEditorViewModel(
         saveJob = scope.launch {
             _state.update { it.copy(isSaving = true) }
             val record = buildRecord(draft, userId)
-            runCatching { coffeeRepository.save(record) }
-                .onSuccess {
-                    _state.update { it.copy(isSaving = false, savedCoffeeId = record.id, error = null) }
-                }
-                .onFailure { e ->
-                    _state.update { it.copy(isSaving = false, error = e.message ?: "保存に失敗しました") }
-                }
+            try {
+                coffeeRepository.save(record)
+                _state.update { it.copy(isSaving = false, savedCoffeeId = record.id, error = null) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isSaving = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(isSaving = false, error = e.message ?: "保存に失敗しました") }
+            }
         }
     }
 
@@ -452,7 +455,7 @@ class CoffeeEditorViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 
     // --- プライベートヘルパ ---

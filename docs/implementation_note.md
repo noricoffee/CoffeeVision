@@ -1822,3 +1822,32 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 不採用: `.safeAreaPadding(.bottom, X)` で下端を復元する案。SwiftUI の `safeAreaPadding` は `Map` 内部の `MKMapView` オーナメント配置レイヤーに伝播せず、固定大値 200 でもシミュレータで Legal が一切動かないことを確認（= 機構が別レイヤー）。
 - 採用: `.ignoresSafeArea(.container, edges: [.top, .horizontal])` に変更。上辺（ステータスバー裏）・左右はフルブリード維持、下辺だけデフォルトのセーフエリア（TabBar 上端）を残すことで `MKMapView` が Legal を TabBar 上端のすぐ上に配置する。シミュレータ（iPhone 17 / OS 26.1）目視で確認済み。
 - トレードオフ: 地図下辺が TabBar 上端で止まるため、TabBar 裏まで地図が描画されるフルブリード感（下辺のみ）は喪失。Legal 表示の法的要件を優先。実機での見た目差は要確認。
+
+## 2026-06-24 - KMP 共通層で `runCatching` を使わない方針確定（Skill 観点レビュー）
+
+- 領域: KMP（feature/* ViewModel + core） / 関連: 各 `*ViewModel.kt`・`CoffeeRepositoryImpl.kt`
+- 経緯: `kotlin-coroutines-flows` Skill の観点で全 feature をレビューしたところ、`launch { runCatching { ... }.onFailure { _state.update { error } } }` が横断的に存在。`runCatching` は `CancellationException` も握りつぶすため、画面破棄・サインアウト等のキャンセルがエラー扱いになり、ローディングフラグ書き込み競合と協調キャンセルの遮断を起こす。
+- 方針: コルーチン内は以下パターンを使う。`CancellationException` を先行 catch でフラグリセット＋再スロー、`Exception` でユーザー向けエラーを表示。
+  ```kotlin
+  try { /* 処理 */ }
+  catch (e: CancellationException) { _state.update { it.copy(isLoading = false) }; throw e }
+  catch (e: Exception) { _state.update { it.copy(error = e.message ?: "…") } }
+  ```
+  `WritePolicy.IgnoreRemoteFailure`（Firestore リトライ委譲で非2xx を意図的に無視）も、`CancellationException` 先行 catch を入れることで `runCatching` を避けられる。公開 API 変更なし（iOS 追随不要）。
+- 検証: 全 feature `compileCommonMainKotlinMetadata` / `:shared:framework:compileKotlinIosSimulatorArm64` / 各 `testAndroid` / `:androidApp:assembleDebug` green。
+- 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md)「`runCatching` はコルーチン内で使ってはいけない」。
+
+## 2026-06-24 - `LocalCoffeeRepository` のクエリ context は `Dispatchers.Default`（旧名 `ioContext` を `queryContext` に改名）
+
+- 領域: KMP（data-local） / 関連: `LocalCoffeeRepository.kt`
+- 経緯: SQLDelight の `asFlow().mapToList(context)` に渡す context パラメータ名が `ioContext` だったが、実体は `Dispatchers.Default`（`Dispatchers.IO` は JVM/Android 専用で `commonMain` 不可）。名称と実態が乖離して誤読を招くため `queryContext` に改名。`data-firebase/androidMain` の `callbackFlow` 内 JSON デコード（CPU バウンド）も `Dispatchers.IO` → `Dispatchers.Default` に揃えた。公開 API 変更なし。
+
+## 2026-06-24 - 既知の未解決事項（Skill 観点レビューで surfacing、本レビューでは未修正）
+
+レビューで検出したが、設計変更・要件確認を伴うため修正を見送り、申し送りとして記録する。
+
+- **`CoffeeDetailViewModel` / `MapViewModel` のスコープ共有**: 両者は `init` で `scope.launch`（`AppContainer.MainScope` 共有・Job 非保持）しており、画面破棄時の明示キャンセル経路がない。画面ごとの独立 `CoroutineScope(... + Job())` 注入で改善できるが、`AppContainerViewModelFactory` のファクトリ設計変更＋iOS Bridge の `onDisappear` ライフサイクル見直しが連動するため、別タスクで設計判断する。現状は `AppState` 側のスコープ破棄で機能しているが潜在的リーク経路。
+- **`AccountView.observeProcessingCompletion` / `MapTabView.locationStream` のポーリング**: `@Observable` の変化を `withObservationTracking` / `.task(id:)` ではなく 0.1s ポーリングで待っている。コメントに「`@Observable` は Task 内の非同期変化検知が遅れることがある」とある（実測由来の判断と思われる）。`AnalysisViewModelBridge.onAppear` と同じ `.task(id:)` パターンへの置換が将来の候補。
+- **`AnalysisView` の `InsightStatus` / `QaStatus` 分岐**: iOS 側は `status is …Unsupported` の型チェック連鎖。Kotlin の `sealed interface` に SKIE SealedInterop が効いていれば `switch onEnum(of:)` で網羅性チェックを得られる。SKIE 適用状況の確認が前提（未確認）。
+- **`CoffeeEditorView` の `Photo_` 直接組み立て**: `handlePickerSelection` 内で `Kotlinx_datetimeInstant` を直接構築しており、View に軽微なドメイン組み立てロジックが混入。Bridge に `createPhoto(from:)` ファクトリを足せば解消できる軽微な規約逸脱。
+- **`ContentView.swift`**: アプリのルートに表示されていない未使用のデモ残骸ファイル。削除候補（要ユーザー確認）。

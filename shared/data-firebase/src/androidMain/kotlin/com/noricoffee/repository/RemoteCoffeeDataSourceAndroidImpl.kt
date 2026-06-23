@@ -59,7 +59,7 @@ class RemoteCoffeeDataSourceAndroidImpl : RemoteCoffeeDataSource {
             }
             if (snapshot == null) return@addSnapshotListener
 
-            flowScope.launch(Dispatchers.IO) {
+            flowScope.launch(Dispatchers.Default) {
                 val records = snapshot.documents.mapNotNull { doc ->
                     doc.data?.let { CoffeeFirestoreMapper.fromDocument(it) }
                 }

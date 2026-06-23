@@ -1,6 +1,7 @@
 package com.noricoffee.repository
 
 import com.noricoffee.domain.CoffeeRecord
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -90,7 +91,13 @@ class CoffeeRepositoryImpl(
     private suspend fun runRemote(block: suspend () -> Unit) {
         when (writePolicy) {
             WritePolicy.PropagateRemoteFailure -> block()
-            WritePolicy.IgnoreRemoteFailure -> runCatching { block() }
+            WritePolicy.IgnoreRemoteFailure -> try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Firestore のオフライン永続化による再送に委ねる
+            }
         }
     }
 }

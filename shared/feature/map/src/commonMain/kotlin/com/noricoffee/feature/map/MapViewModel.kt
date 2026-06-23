@@ -7,6 +7,7 @@ import com.noricoffee.domain.model.RecommendedCafe
 import com.noricoffee.domain.model.VisitedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -112,7 +113,7 @@ class MapViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 
     /**
@@ -136,9 +137,9 @@ class MapViewModel(
     fun onPoiTapped(name: String, latitude: Double, longitude: Double) {
         poiLookupJob?.cancel()
         poiLookupJob = scope.launch {
-            _state.update { it.copy(isLookingUpPoi = true, poiLookupError = null as String?) }
-            runCatching {
-                cafeRepository.searchText(
+            _state.update { it.copy(isLookingUpPoi = true, poiLookupError = null) }
+            try {
+                val results = cafeRepository.searchText(
                     query = name,
                     locationBias = LocationBias(
                         latitude = latitude,
@@ -146,32 +147,32 @@ class MapViewModel(
                         radiusMeters = 500.0,
                     ),
                 )
-            }
-                .onSuccess { results ->
-                    if (results.isEmpty()) {
-                        _state.update {
-                            it.copy(
-                                isLookingUpPoi = false,
-                                poiLookupError = "該当するカフェが見つかりませんでした",
-                            )
-                        }
-                    } else {
-                        _state.update {
-                            it.copy(
-                                isLookingUpPoi = false,
-                                poiLookupResult = results.first(),
-                            )
-                        }
-                    }
-                }
-                .onFailure { e ->
+                if (results.isEmpty()) {
                     _state.update {
                         it.copy(
                             isLookingUpPoi = false,
-                            poiLookupError = e.message ?: "カフェ情報の取得に失敗しました",
+                            poiLookupError = "該当するカフェが見つかりませんでした",
+                        )
+                    }
+                } else {
+                    _state.update {
+                        it.copy(
+                            isLookingUpPoi = false,
+                            poiLookupResult = results.first(),
                         )
                     }
                 }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isLookingUpPoi = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isLookingUpPoi = false,
+                        poiLookupError = e.message ?: "カフェ情報の取得に失敗しました",
+                    )
+                }
+            }
         }
     }
 
@@ -183,13 +184,13 @@ class MapViewModel(
      * 次のタップまで古い結果が残って誤作動するのを防ぐため、必ず呼ぶこと。
      */
     fun onPoiLookupConsumed() {
-        _state.update { it.copy(poiLookupResult = null as Cafe?) }
+        _state.update { it.copy(poiLookupResult = null) }
     }
 
     /**
      * POI ルックアップエラーの alert を閉じた際に呼ぶ。[UIState.poiLookupError] を null に戻す。
      */
     fun onPoiLookupErrorDismissed() {
-        _state.update { it.copy(poiLookupError = null as String?) }
+        _state.update { it.copy(poiLookupError = null) }
     }
 }

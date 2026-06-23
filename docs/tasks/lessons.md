@@ -418,3 +418,15 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 原因の構造: (1) Kotlin/Native debug ビルドは非最適化で SKIE 往復・SwiftUI 再評価が桁違いに遅い、(2) Xcode デバッガアタッチ中は GeoServices 等がメインスレッドから吐く大量の os_log をコンソールへ転送するオーバーヘッドだけでメインスレッドが詰まり、キーボード提示のジェスチャが gate timeout する。Release（デバッガ非アタッチ）では消える
 - **教訓**: 「重い」報告は最初に **(a) Release/Profile ビルドで再現するか (b) デバッガをデタッチして再現するか** を切り分ける。debug 限定なら追わない（MapKit ライフサイクル制御や Tab 構成の作り変えは実在しない問題への過剰設計になる）。`candidate resultset` / `containerToPush` / `gesture gate timed out` は OS フレームワーク由来のログでアプリからは抑制できない無害ノイズ
 - 補足: このとき検索欄テキストを Kotlin StateFlow 直結から View ローカル `@State` + `.onChange` 一方向転送に変えた変更は、debug 問題とは独立に「表示を非同期ラウンドトリップに依存させない」定石として正しいので残した（[`implementation_note.md`](../implementation_note.md) 2026-06-23 エントリ参照）
+
+### `runCatching` はコルーチン内（ViewModel / Repository）で使ってはいけない
+
+- Kotlin の `runCatching` は `Throwable` 全体をキャッチするため、コルーチンキャンセル時の `CancellationException` も `onFailure` に落ちる。これにより (a) ローディングフラグをエラー扱いで上書きする競合、(b) スコープ上位へのキャンセル伝播の遮断（構造化並行性の協調キャンセルが弱まる）が起きる
+- 2026-06-24 の Skill 観点レビュー（`kotlin-coroutines-flows`）で、各 feature の ViewModel と `CoffeeRepositoryImpl` に `launch { runCatching { ... }.onFailure { ... } }` パターンが横断的に存在していたのを発見・是正
+- **教訓**: コルーチン内は `try/catch` を使い、`catch (e: CancellationException) { /* フラグをリセットして */ throw e }` を `catch (e: Exception)` より**前**に置いて明示再スローする。`IgnoreRemoteFailure`（Firestore リトライ委譲）のように `CancellationException` 以外を意図的に握りつぶすケースも、この `CancellationException` 先行 catch を入れれば `runCatching` を避けられる（[`implementation_note.md`](../implementation_note.md) 2026-06-24 エントリ参照）
+
+### iOS 26 以降 `UIWindow()`（ゼロ引数 init）は deprecated
+
+- `ASAuthorizationControllerPresentationContextProviding` のフォールバック等で `UIWindow()` を作ると iOS 26 でビルド警告が出る。`foregroundActive` な `UIWindowScene` を取得して `UIWindow(windowScene:)` を使う
+- 2026-06-24 の Skill 観点レビュー（`ios-developer`）で `AppleSignInCoordinator` の `presentationAnchor(for:)` フォールバックを是正
+- **教訓**: UIWindow を直接構築する箇所は到達しないフォールバックパスでも `UIWindowScene` 経由にする（警告ゼロを維持）

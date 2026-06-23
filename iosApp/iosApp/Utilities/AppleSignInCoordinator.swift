@@ -126,7 +126,27 @@ extension AppleSignInCoordinator: ASAuthorizationControllerPresentationContextPr
         // Xcode が「nonisolated から MainActor プロパティへのアクセス」を警告する場合は
         // MainActor.assumeIsolated を用いる。
         MainActor.assumeIsolated {
-            self.presentationAnchor ?? UIWindow()
+            if let anchor = self.presentationAnchor {
+                return anchor
+            }
+            // フォールバック: foregroundActive な WindowScene の key window を使う。
+            // UIWindow() のゼロ引数 init は iOS 26 以降で deprecated のため使わない。
+            // presentationAnchor は signIn(anchor:) の呼び出し元が必ず設定するため、
+            // このフォールバックパスに到達することは通常ない。
+            let scenes = UIApplication.shared.connectedScenes
+                .compactMap { $0 as? UIWindowScene }
+            let activeScene = scenes.first { $0.activationState == .foregroundActive }
+                ?? scenes.first
+            if let scene = activeScene,
+               let keyWindow = scene.windows.first(where: { $0.isKeyWindow }) {
+                return keyWindow
+            }
+            // 最終フォールバック: windowScene を持つ UIWindow を生成する
+            if let scene = activeScene {
+                return UIWindow(windowScene: scene)
+            }
+            // ここには到達しない（サインインフロー中は必ず foregroundActive scene が存在する）
+            return UIWindow()
         }
     }
 }

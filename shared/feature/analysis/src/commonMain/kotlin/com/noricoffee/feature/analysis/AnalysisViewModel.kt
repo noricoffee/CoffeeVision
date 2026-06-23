@@ -4,6 +4,7 @@ import com.noricoffee.domain.model.CoffeeInsight
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeStats
 import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -205,26 +206,28 @@ class AnalysisViewModel(
                 it.copy(
                     qaQuestion = trimmed,
                     qaStatus = QaStatus.Asking,
-                    error = null as String?,
+                    error = null,
                 )
             }
-            runCatching { provider.answer(trimmed, stats) }
-                .onSuccess { answer ->
-                    _state.update {
-                        it.copy(
-                            qaAnswer = answer,
-                            qaStatus = QaStatus.Answered,
-                        )
-                    }
+            try {
+                val answer = provider.answer(trimmed, stats)
+                _state.update {
+                    it.copy(
+                        qaAnswer = answer,
+                        qaStatus = QaStatus.Answered,
+                    )
                 }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            qaStatus = QaStatus.Failed,
-                            error = e.message ?: "回答の生成に失敗しました",
-                        )
-                    }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(qaStatus = QaStatus.Idle) }
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        qaStatus = QaStatus.Failed,
+                        error = e.message ?: "回答の生成に失敗しました",
+                    )
                 }
+            }
         }
     }
 
@@ -240,8 +243,8 @@ class AnalysisViewModel(
         if (_state.value.qaStatus is QaStatus.Unsupported) return
         _state.update {
             it.copy(
-                qaQuestion = null as String?,
-                qaAnswer = null as String?,
+                qaQuestion = null,
+                qaAnswer = null,
                 qaStatus = QaStatus.Idle,
             )
         }
@@ -251,7 +254,7 @@ class AnalysisViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 
     /**
@@ -267,26 +270,28 @@ class AnalysisViewModel(
             _state.update {
                 it.copy(
                     insightStatus = InsightStatus.Loading,
-                    error = null as String?,
+                    error = null,
                 )
             }
-            runCatching { provider.summarize(stats) }
-                .onSuccess { insight ->
-                    _state.update {
-                        it.copy(
-                            insight = insight,
-                            insightStatus = InsightStatus.Loaded,
-                        )
-                    }
+            try {
+                val insight = provider.summarize(stats)
+                _state.update {
+                    it.copy(
+                        insight = insight,
+                        insightStatus = InsightStatus.Loaded,
+                    )
                 }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            insightStatus = InsightStatus.Failed,
-                            error = e.message ?: "要約の生成に失敗しました",
-                        )
-                    }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(insightStatus = InsightStatus.Idle) }
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        insightStatus = InsightStatus.Failed,
+                        error = e.message ?: "要約の生成に失敗しました",
+                    )
                 }
+            }
         }
     }
 }

@@ -70,6 +70,6 @@ class CoffeeDetailViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 }

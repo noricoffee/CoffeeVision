@@ -2,6 +2,7 @@ package com.noricoffee.feature.cafesearch
 
 import com.noricoffee.domain.Cafe
 import com.noricoffee.repository.CafeRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -85,13 +86,15 @@ class CafeSearchViewModel(
         searchJob?.cancel()
         searchJob = scope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            runCatching { cafeRepository.searchText(query) }
-                .onSuccess { cafes ->
-                    _state.update { it.copy(results = cafes, isLoading = false, hasSearched = true) }
-                }
-                .onFailure { e ->
-                    _state.update { it.copy(isLoading = false, error = e.message ?: "検索に失敗しました") }
-                }
+            try {
+                val cafes = cafeRepository.searchText(query)
+                _state.update { it.copy(results = cafes, isLoading = false, hasSearched = true) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isLoading = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = e.message ?: "検索に失敗しました") }
+            }
         }
     }
 
@@ -114,13 +117,15 @@ class CafeSearchViewModel(
         searchJob?.cancel()
         searchJob = scope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
-            runCatching { cafeRepository.searchNearby(latitude, longitude) }
-                .onSuccess { results ->
-                    _state.update { it.copy(results = results, isLoading = false, hasSearched = true) }
-                }
-                .onFailure { e ->
-                    _state.update { it.copy(isLoading = false, error = e.message ?: "近隣検索に失敗しました") }
-                }
+            try {
+                val results = cafeRepository.searchNearby(latitude, longitude)
+                _state.update { it.copy(results = results, isLoading = false, hasSearched = true) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isLoading = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(isLoading = false, error = e.message ?: "近隣検索に失敗しました") }
+            }
         }
     }
 
@@ -128,6 +133,6 @@ class CafeSearchViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 }

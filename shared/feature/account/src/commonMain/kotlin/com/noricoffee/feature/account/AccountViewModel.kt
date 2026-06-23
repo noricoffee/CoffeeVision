@@ -3,6 +3,7 @@ package com.noricoffee.feature.account
 import com.noricoffee.domain.model.AuthAccount
 import com.noricoffee.domain.usecase.DeleteAccountUseCase
 import com.noricoffee.repository.AuthRepository
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -80,19 +81,21 @@ class AccountViewModel(
     fun onAppleCredentialReceived(idToken: String, rawNonce: String) {
         actionJob?.cancel()
         actionJob = scope.launch {
-            _state.update { it.copy(isProcessing = true, error = null as String?) }
-            runCatching { authRepository.linkWithApple(idToken, rawNonce) }
-                .onSuccess { account ->
-                    _state.update { it.copy(account = account, isProcessing = false) }
+            _state.update { it.copy(isProcessing = true, error = null) }
+            try {
+                val account = authRepository.linkWithApple(idToken, rawNonce)
+                _state.update { it.copy(account = account, isProcessing = false) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isProcessing = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isProcessing = false,
+                        error = e.message ?: "アップグレードに失敗しました",
+                    )
                 }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            isProcessing = false,
-                            error = e.message ?: "アップグレードに失敗しました",
-                        )
-                    }
-                }
+            }
         }
     }
 
@@ -105,19 +108,21 @@ class AccountViewModel(
     fun onSignOutTapped() {
         actionJob?.cancel()
         actionJob = scope.launch {
-            _state.update { it.copy(isProcessing = true, error = null as String?) }
-            runCatching { authRepository.signOut() }
-                .onSuccess {
-                    _state.update { it.copy(isProcessing = false) }
+            _state.update { it.copy(isProcessing = true, error = null) }
+            try {
+                authRepository.signOut()
+                _state.update { it.copy(isProcessing = false) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isProcessing = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isProcessing = false,
+                        error = e.message ?: "サインアウトに失敗しました",
+                    )
                 }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            isProcessing = false,
-                            error = e.message ?: "サインアウトに失敗しました",
-                        )
-                    }
-                }
+            }
         }
     }
 
@@ -137,19 +142,21 @@ class AccountViewModel(
     fun onDeleteAccountTapped(userId: String) {
         actionJob?.cancel()
         actionJob = scope.launch {
-            _state.update { it.copy(isProcessing = true, error = null as String?) }
-            runCatching { deleteAccountUseCase(userId) }
-                .onSuccess {
-                    _state.update { it.copy(isProcessing = false) }
+            _state.update { it.copy(isProcessing = true, error = null) }
+            try {
+                deleteAccountUseCase(userId)
+                _state.update { it.copy(isProcessing = false) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isProcessing = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update {
+                    it.copy(
+                        isProcessing = false,
+                        error = e.message ?: "アカウントの削除に失敗しました",
+                    )
                 }
-                .onFailure { e ->
-                    _state.update {
-                        it.copy(
-                            isProcessing = false,
-                            error = e.message ?: "アカウントの削除に失敗しました",
-                        )
-                    }
-                }
+            }
         }
     }
 
@@ -157,6 +164,6 @@ class AccountViewModel(
      * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
      */
     fun onErrorDismissed() {
-        _state.update { it.copy(error = null as String?) }
+        _state.update { it.copy(error = null) }
     }
 }

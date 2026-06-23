@@ -26,25 +26,25 @@ import kotlin.coroutines.CoroutineContext
  */
 class LocalCoffeeRepository(
     private val db: AppDatabase,
-    private val ioContext: CoroutineContext = Dispatchers.Default,
+    private val queryContext: CoroutineContext = Dispatchers.Default,
 ) : CoffeeRepository {
 
     override fun observeAll(userId: String): Flow<List<CoffeeRecord>> =
         db.coffeeRecordQueries.selectAll(userId)
             .asFlow()
-            .mapToList(ioContext)
+            .mapToList(queryContext)
             .map { rows -> rows.map { assembleRecord(it) } }
 
     override fun observeById(id: String): Flow<CoffeeRecord?> =
         db.coffeeRecordQueries.selectById(id)
             .asFlow()
-            .mapToOneOrNull(ioContext)
+            .mapToOneOrNull(queryContext)
             .map { row -> row?.let { assembleRecord(it) } }
 
     override fun observeByCafe(userId: String, placeId: String): Flow<List<CoffeeRecord>> =
         db.coffeeRecordQueries.selectByCafe(userId, placeId)
             .asFlow()
-            .mapToList(ioContext)
+            .mapToList(queryContext)
             .map { rows -> rows.map { assembleRecord(it) } }
 
     override suspend fun save(record: CoffeeRecord) {

@@ -38,6 +38,10 @@ final class MapViewModelBridge {
         startObservation()
     }
 
+    deinit {
+        kotlin.clear()
+    }
+
     // MARK: - ライフサイクル
 
     /// 観測タスクを明示的にキャンセルする。AppState が破棄されるときに呼ぶ。

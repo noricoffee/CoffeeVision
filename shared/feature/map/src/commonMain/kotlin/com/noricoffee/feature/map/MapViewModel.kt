@@ -10,6 +10,8 @@ import com.noricoffee.repository.CafeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -40,8 +42,12 @@ class MapViewModel(
     private val cafeRecommendationProvider: CafeRecommendationProvider,
     private val cafeRepository: CafeRepository,
     private val userId: String,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * マップ画面の UI 状態。
@@ -80,7 +86,7 @@ class MapViewModel(
     init {
         // ViewModel 生成時に訪問済みカフェの購読を開始する。
         // scope がキャンセルされるまで継続購読する。
-        scope.launch {
+        viewModelScope.launch {
             observeVisitedCafesUseCase(userId).collect { visitedCafes ->
                 _state.update { it.copy(visitedCafes = visitedCafes) }
             }
@@ -88,7 +94,7 @@ class MapViewModel(
 
         // 好み一致カフェ推薦の購読を開始する。
         // FavoriteSignals が算出されるたびに自動更新する（ObserveVisitedCafesUseCase と同じパターン）。
-        scope.launch {
+        viewModelScope.launch {
             cafeRecommendationProvider.observeRecommendedCafes(userId).collect { recommended ->
                 _state.update {
                     it.copy(
@@ -136,7 +142,7 @@ class MapViewModel(
      */
     fun onPoiTapped(name: String, latitude: Double, longitude: Double) {
         poiLookupJob?.cancel()
-        poiLookupJob = scope.launch {
+        poiLookupJob = viewModelScope.launch {
             _state.update { it.copy(isLookingUpPoi = true, poiLookupError = null) }
             try {
                 val results = cafeRepository.searchText(
@@ -192,5 +198,15 @@ class MapViewModel(
      */
     fun onPoiLookupErrorDismissed() {
         _state.update { it.copy(poiLookupError = null) }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit で呼ぶこと（タブ常駐 VM のため onDisappear では不要）。
+     * キャンセル後に各メソッドが呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
     }
 }

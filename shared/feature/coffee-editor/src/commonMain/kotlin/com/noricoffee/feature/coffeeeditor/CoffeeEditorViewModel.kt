@@ -11,6 +11,8 @@ import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -51,8 +53,12 @@ import kotlinx.datetime.todayIn
 @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
 class CoffeeEditorViewModel(
     private val coffeeRepository: CoffeeRepository,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * 画面の動作モードを表す sealed interface。
@@ -169,7 +175,7 @@ class CoffeeEditorViewModel(
             }
             is Mode.Edit -> {
                 _state.update { it.copy(mode = mode, isLoading = true) }
-                loadJob = scope.launch {
+                loadJob = viewModelScope.launch {
                     val record = coffeeRepository.observeById(mode.coffeeId).first()
                     if (record == null) {
                         _state.update {
@@ -436,7 +442,7 @@ class CoffeeEditorViewModel(
         }
 
         saveJob?.cancel()
-        saveJob = scope.launch {
+        saveJob = viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
             val record = buildRecord(draft, userId)
             try {
@@ -456,6 +462,18 @@ class CoffeeEditorViewModel(
      */
     fun onErrorDismissed() {
         _state.update { it.copy(error = null) }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit または onDisappear で呼ぶこと。
+     * [onDisappear] は個別 Job（load / save）のキャンセルのみを行うのに対し、
+     * [clear] はスコープ全体を畳む。[clear] 後は [onDisappear] を呼んでも安全（no-op）。
+     * キャンセル後に [onAppear] が呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
     }
 
     // --- プライベートヘルパ ---

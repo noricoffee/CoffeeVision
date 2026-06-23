@@ -28,6 +28,10 @@ final class CoffeeEditorViewModelBridge {
         self.kotlin = kotlin
     }
 
+    deinit {
+        kotlin.clear()
+    }
+
     // MARK: - ライフサイクル
 
     /// 画面表示時に呼ぶ。`mode` と `userId` を受け取り初期 draft を設定する。

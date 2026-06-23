@@ -5,6 +5,8 @@ import com.noricoffee.repository.CafeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -30,8 +32,12 @@ import kotlinx.coroutines.launch
  */
 class CafeSearchViewModel(
     private val cafeRepository: CafeRepository,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * カフェ検索画面の UI 状態。
@@ -84,7 +90,7 @@ class CafeSearchViewModel(
     fun onSearchTapped() {
         val query = _state.value.query
         searchJob?.cancel()
-        searchJob = scope.launch {
+        searchJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
                 val cafes = cafeRepository.searchText(query)
@@ -115,7 +121,7 @@ class CafeSearchViewModel(
      */
     fun onNearbySearchRequested(latitude: Double, longitude: Double) {
         searchJob?.cancel()
-        searchJob = scope.launch {
+        searchJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
                 val results = cafeRepository.searchNearby(latitude, longitude)
@@ -134,5 +140,15 @@ class CafeSearchViewModel(
      */
     fun onErrorDismissed() {
         _state.update { it.copy(error = null) }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit で呼ぶこと（タブ常駐 VM のため画面遷移時は不要）。
+     * キャンセル後に [onSearchTapped] が呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
     }
 }

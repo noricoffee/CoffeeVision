@@ -28,6 +28,10 @@ final class CafeDetailViewModelBridge {
         startObservation()
     }
 
+    deinit {
+        kotlin.clear()
+    }
+
     // MARK: - ライフサイクル
 
     /// 観測タスクをキャンセルする。`onDisappear` から呼ぶ。

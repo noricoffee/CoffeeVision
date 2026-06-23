@@ -430,3 +430,9 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - `ASAuthorizationControllerPresentationContextProviding` のフォールバック等で `UIWindow()` を作ると iOS 26 でビルド警告が出る。`foregroundActive` な `UIWindowScene` を取得して `UIWindow(windowScene:)` を使う
 - 2026-06-24 の Skill 観点レビュー（`ios-developer`）で `AppleSignInCoordinator` の `presentationAnchor(for:)` フォールバックを是正
 - **教訓**: UIWindow を直接構築する箇所は到達しないフォールバックパスでも `UIWindowScene` 経由にする（警告ゼロを維持）
+
+### 画面ごとの ViewModel に app-wide scope を共有させない（所有 scope + clear() で畳む）
+
+- KMP の ViewModel に注入する `CoroutineScope` をアプリ全体で 1 本の `MainScope` のまま `launch` に使うと、push/pop 画面（NavigationStack push / sheet）の collector が画面破棄後も app-wide scope に残り**増殖リーク**になる。`onAppear` で per-job cancel していても、最後に開いた画面の collector は生き続ける
+- 2026-06-24、`CafeDetailViewModel`（init collector）/ `CoffeeDetailViewModel`（onAppear collector）で顕在化。tab 常駐 VM は単一インスタンスゆえ増殖はしないが同根
+- **教訓**: 各 ViewModel は注入 scope を親として `CoroutineScope(parent.coroutineContext + SupervisorJob(parentJob))` で**自分の子スコープを所有**し、`fun clear() { viewModelScope.cancel() }` を公開する。iOS Bridge は **`deinit`** で `kotlin.clear()` を呼ぶ（`onDisappear` は遷移アニメ中に発火するので push/pop 画面では不可）。`SupervisorJob(parentJob)` で親 Job に連結すれば app teardown 時の連鎖キャンセルも両立。`clear()` はスコープ畳みのみに留める（`Job.cancel()` はスレッドセーフ＝K/N の deinit スレッドから安全。`@MainActor` 前提の処理を足すと壊れる）（[`implementation_note.md`](../implementation_note.md) 2026-06-24「所有 viewModelScope + clear()」エントリ参照）

@@ -27,6 +27,10 @@ final class CoffeeDetailViewModelBridge {
         self.kotlin = kotlin
     }
 
+    deinit {
+        kotlin.clear()
+    }
+
     // MARK: - ライフサイクル
 
     /// 画面表示時に呼ぶ。`coffeeId` に対応するコーヒー記録の購読を開始する。

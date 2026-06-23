@@ -7,6 +7,8 @@ import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -46,8 +48,12 @@ class AnalysisViewModel(
     private val observeCoffeeStatsUseCase: ObserveCoffeeStatsUseCase,
     private val insightProvider: CoffeeInsightProvider?,
     private val userId: String,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * 分析タブの UI 状態。
@@ -159,7 +165,7 @@ class AnalysisViewModel(
      */
     fun onAppear() {
         observeJob?.cancel()
-        observeJob = scope.launch {
+        observeJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             observeCoffeeStatsUseCase(userId).collect { stats ->
                 latestStats = stats
@@ -201,7 +207,7 @@ class AnalysisViewModel(
         val stats = latestStats ?: return
 
         qaJob?.cancel()
-        qaJob = scope.launch {
+        qaJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     qaQuestion = trimmed,
@@ -258,6 +264,16 @@ class AnalysisViewModel(
     }
 
     /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit で呼ぶこと（タブ常駐 VM のため onDisappear では不要）。
+     * キャンセル後に各メソッドが呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
+    }
+
+    /**
      * 要約生成 Job を起動する（内部ヘルパ）。
      *
      * [insightProvider] が null の場合は何もしない（[InsightStatus.Unsupported] のまま）。
@@ -266,7 +282,7 @@ class AnalysisViewModel(
     private fun launchInsightGeneration(stats: CoffeeStats) {
         val provider = insightProvider ?: return
         insightJob?.cancel()
-        insightJob = scope.launch {
+        insightJob = viewModelScope.launch {
             _state.update {
                 it.copy(
                     insightStatus = InsightStatus.Loading,

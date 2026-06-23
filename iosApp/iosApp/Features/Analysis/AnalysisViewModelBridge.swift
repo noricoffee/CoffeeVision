@@ -56,6 +56,10 @@ final class AnalysisViewModelBridge {
         self.kotlin = viewModel
     }
 
+    deinit {
+        kotlin.clear()
+    }
+
     // MARK: - ライフサイクル
 
     /// 画面表示時に呼ぶ。統計購読を開始する。

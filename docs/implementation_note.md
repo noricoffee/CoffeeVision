@@ -1846,8 +1846,28 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 
 レビューで検出したが、設計変更・要件確認を伴うため修正を見送り、申し送りとして記録する。
 
-- **`CoffeeDetailViewModel` / `MapViewModel` のスコープ共有**: 両者は `init` で `scope.launch`（`AppContainer.MainScope` 共有・Job 非保持）しており、画面破棄時の明示キャンセル経路がない。画面ごとの独立 `CoroutineScope(... + Job())` 注入で改善できるが、`AppContainerViewModelFactory` のファクトリ設計変更＋iOS Bridge の `onDisappear` ライフサイクル見直しが連動するため、別タスクで設計判断する。現状は `AppState` 側のスコープ破棄で機能しているが潜在的リーク経路。
+- ~~**`CoffeeDetailViewModel` / `MapViewModel` のスコープ共有**~~ → **解決済み（後述「ViewModel に所有 viewModelScope + clear() を導入」エントリ参照）**。
 - **`AccountView.observeProcessingCompletion` / `MapTabView.locationStream` のポーリング**: `@Observable` の変化を `withObservationTracking` / `.task(id:)` ではなく 0.1s ポーリングで待っている。コメントに「`@Observable` は Task 内の非同期変化検知が遅れることがある」とある（実測由来の判断と思われる）。`AnalysisViewModelBridge.onAppear` と同じ `.task(id:)` パターンへの置換が将来の候補。
 - **`AnalysisView` の `InsightStatus` / `QaStatus` 分岐**: iOS 側は `status is …Unsupported` の型チェック連鎖。Kotlin の `sealed interface` に SKIE SealedInterop が効いていれば `switch onEnum(of:)` で網羅性チェックを得られる。SKIE 適用状況の確認が前提（未確認）。
 - **`CoffeeEditorView` の `Photo_` 直接組み立て**: `handlePickerSelection` 内で `Kotlinx_datetimeInstant` を直接構築しており、View に軽微なドメイン組み立てロジックが混入。Bridge に `createPhoto(from:)` ファクトリを足せば解消できる軽微な規約逸脱。
 - **`ContentView.swift`**: アプリのルートに表示されていない未使用のデモ残骸ファイル。削除候補（要ユーザー確認）。
+
+## 2026-06-24 - ViewModel に「所有 viewModelScope + clear()」を導入（スコープ共有リーク解消）
+
+- 領域: KMP（feature/* 全 ViewModel）+ iOS（全 ViewModelBridge） / 関連: 各 `*ViewModel.kt`・各 `*ViewModelBridge.swift`
+- 問題: 全 ViewModel が `AppContainer.scope`（アプリ全体で 1 本の `MainScope`）を共有し、内部の `launch` もそこで実行していた。push/pop 画面（`CafeDetailViewModel` の init collector / `CoffeeDetailViewModel` の onAppear collector）は画面破棄後も app-wide scope に collector が残り**増殖リーク**になっていた（tab 常駐の map/analysis 等は単一インスタンスのため増殖はしないが同根の構造）。
+- 確定設計（全 8 feature VM に統一適用）: 注入された `scope` を親として、各 VM が所有スコープを生成する。
+  ```kotlin
+  private val viewModelScope = CoroutineScope(
+      scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+  )
+  fun clear() { viewModelScope.cancel() }
+  ```
+  - `SupervisorJob(parentJob)` で app-wide scope の Job を親に連結 → app teardown 時は子も連鎖キャンセル（構造化並行性を維持）。Dispatcher（Main）は coroutineContext から継承。
+  - 内部の `scope.launch` はすべて `viewModelScope.launch` に置換。既存の個別 `observeJob`/`searchJob` 等の管理は温存。
+  - **`AppContainerViewModelFactory` のシグネチャは不変**（`scope` を渡す口は同じ。子スコープ生成は VM 内部で完結）。
+- iOS 追随: 各 `*ViewModelBridge` の **`deinit` で `kotlin.clear()`** を呼ぶ。push/pop 画面（CoffeeDetail / CafeDetail / CoffeeEditor）は遷移アニメ中にも発火する `onDisappear` ではなく必ず `deinit` で呼ぶ。Bridge は View の `@State` / `AppState` の Optional で保持され、破棄時に `deinit` が走る（`observationTask` は `[weak self]` で循環なし）。Swift 側 `Task.cancel()`（onDisappear）と Kotlin 側 `viewModelScope.cancel()`（deinit）の 2 層構造になる。
+- スレッド安全性: `clear()` は `Job.cancel()` のみで kotlinx.coroutines のキャンセルはスレッドセーフ。Kotlin/Native の `deinit`（必ずしも Main ではない）スレッドから呼んでも安全。**ただし将来 `clear()` 内で `@MainActor` 前提の処理を増やすとこの前提が崩れる**ため、`clear()` はスコープ畳みのみに留めること。
+- 挙動上の注意: `clear()` 後に `onAppear`/`launch` を呼んでも新規 Job は起動されず no-op。tab 常駐 VM（map/analysis/coffee-list/cafe-search/account）はアプリ teardown（サインアウト時の `AppState.resetAndRebootstrap`）まで `clear()` を呼ばない前提。
+- 検証: 全 feature `compileCommonMainKotlinMetadata` / `:shared:framework:compileKotlinIosSimulatorArm64` / `:androidApp:assembleDebug` green、iosApp `xcodebuild` green（新規警告なし）。**実機での push/pop リーク解消（Instruments の Leaks/Allocations で Bridge 解放確認）はユーザー作業として未実施**。
+- 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md)「画面ごとの ViewModel に app-wide scope を共有させない」。

@@ -6,6 +6,8 @@ import com.noricoffee.repository.AuthRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,8 +39,12 @@ import kotlinx.coroutines.launch
 class AccountViewModel(
     private val authRepository: AuthRepository,
     private val deleteAccountUseCase: DeleteAccountUseCase,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * アカウント管理画面の UI 状態。
@@ -61,7 +67,7 @@ class AccountViewModel(
 
     init {
         // ViewModel 生成時にアカウント情報の購読を開始する
-        scope.launch {
+        viewModelScope.launch {
             authRepository.observeAccount().collect { account ->
                 _state.update { it.copy(account = account) }
             }
@@ -80,7 +86,7 @@ class AccountViewModel(
      */
     fun onAppleCredentialReceived(idToken: String, rawNonce: String) {
         actionJob?.cancel()
-        actionJob = scope.launch {
+        actionJob = viewModelScope.launch {
             _state.update { it.copy(isProcessing = true, error = null) }
             try {
                 val account = authRepository.linkWithApple(idToken, rawNonce)
@@ -107,7 +113,7 @@ class AccountViewModel(
      */
     fun onSignOutTapped() {
         actionJob?.cancel()
-        actionJob = scope.launch {
+        actionJob = viewModelScope.launch {
             _state.update { it.copy(isProcessing = true, error = null) }
             try {
                 authRepository.signOut()
@@ -141,7 +147,7 @@ class AccountViewModel(
      */
     fun onDeleteAccountTapped(userId: String) {
         actionJob?.cancel()
-        actionJob = scope.launch {
+        actionJob = viewModelScope.launch {
             _state.update { it.copy(isProcessing = true, error = null) }
             try {
                 deleteAccountUseCase(userId)
@@ -165,5 +171,15 @@ class AccountViewModel(
      */
     fun onErrorDismissed() {
         _state.update { it.copy(error = null) }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit で呼ぶこと（タブ常駐 VM のため onDisappear では不要）。
+     * キャンセル後に各メソッドが呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
     }
 }

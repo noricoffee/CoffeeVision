@@ -4,6 +4,9 @@ import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -37,8 +40,12 @@ class CafeDetailViewModel(
     private val placeId: String,
     private val initialCafe: Cafe?,
     private val userId: String,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * カフェ詳細画面の UI 状態。
@@ -59,7 +66,7 @@ class CafeDetailViewModel(
     val state: StateFlow<UIState> = _state.asStateFlow()
 
     init {
-        scope.launch {
+        viewModelScope.launch {
             coffeeRepository.observeAll(userId)
                 .map { records ->
                     records
@@ -77,5 +84,15 @@ class CafeDetailViewModel(
                     }
                 }
         }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit または onDisappear で呼ぶこと（push/pop 画面のため必須）。
+     * キャンセル後に各メソッドが呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
     }
 }

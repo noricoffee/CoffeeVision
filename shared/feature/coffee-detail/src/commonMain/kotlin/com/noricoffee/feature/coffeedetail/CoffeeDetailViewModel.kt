@@ -4,6 +4,8 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -20,14 +22,18 @@ import kotlinx.coroutines.launch
  *
  * ## CoroutineScope の注意
  *
- * スコープは呼び出し元が管理し、画面破棄時にキャンセルすること。iOS 側では
- * `AppContainer.makeCoffeeDetailViewModel()` 経由で取得した ViewModel のスコープは
- * `AppContainer` が保持する `MainScope` と生存期間を共にする。
+ * 内部で [scope] を親とする子スコープ（viewModelScope）を保持する。
+ * 画面破棄時に [clear] を呼ぶことで子スコープをキャンセルする。
+ * [scope]（app-wide MainScope）がキャンセルされると子も連鎖キャンセルされる（構造化並行性）。
  */
 class CoffeeDetailViewModel(
     private val coffeeRepository: CoffeeRepository,
-    private val scope: CoroutineScope,
+    scope: CoroutineScope,
 ) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
 
     /**
      * コーヒー記録詳細画面の UI 状態。
@@ -58,7 +64,7 @@ class CoffeeDetailViewModel(
      */
     fun onAppear(coffeeId: String) {
         observeJob?.cancel()
-        observeJob = scope.launch {
+        observeJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             coffeeRepository.observeById(coffeeId).collect { coffee ->
                 _state.update { it.copy(coffee = coffee, isLoading = false) }
@@ -71,5 +77,15 @@ class CoffeeDetailViewModel(
      */
     fun onErrorDismissed() {
         _state.update { it.copy(error = null) }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit または onDisappear で呼ぶこと（push/pop 画面のため必須）。
+     * キャンセル後に [onAppear] が呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
     }
 }

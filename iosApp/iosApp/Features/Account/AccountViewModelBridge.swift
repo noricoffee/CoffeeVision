@@ -25,6 +25,10 @@ final class AccountViewModelBridge {
         self.kotlin = viewModel
     }
 
+    deinit {
+        kotlin.clear()
+    }
+
     // MARK: - ライフサイクル
 
     func onAppear() {

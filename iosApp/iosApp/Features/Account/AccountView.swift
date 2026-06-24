@@ -21,6 +21,7 @@ struct AccountView: View {
     var onResetRequested: () -> Void
 
     @Environment(\.dismiss) private var dismiss
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var showSignOutConfirm = false
     @State private var showDeleteConfirm = false
@@ -146,8 +147,15 @@ struct AccountView: View {
                 }
                 .frame(maxWidth: .infinity)
                 .frame(height: 50)
-                .foregroundStyle(.white)
-                .background(Color.primary.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+                .foregroundStyle(colorScheme == .dark ? .black : .white)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(colorScheme == .dark ? Color.white : Color.black)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 8)
+                                .strokeBorder(Color(.separator), lineWidth: colorScheme == .dark ? 1 : 0)
+                        )
+                )
             }
             .buttonStyle(.plain)
             .accessibilityLabel(String(localized: "Apple でサインイン"))
@@ -365,6 +373,7 @@ private struct AccountViewDemo: View {
 
     let isAnonymous: Bool
 
+    @Environment(\.colorScheme) private var colorScheme
     @State private var showDeleteConfirm = false
     @State private var showSignOutConfirm = false
 
@@ -392,8 +401,15 @@ private struct AccountViewDemo: View {
                             }
                             .frame(maxWidth: .infinity)
                             .frame(height: 50)
-                            .foregroundStyle(.white)
-                            .background(Color.primary.opacity(0.9), in: RoundedRectangle(cornerRadius: 8))
+                            .foregroundStyle(colorScheme == .dark ? .black : .white)
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(colorScheme == .dark ? Color.white : Color.black)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 8)
+                                            .strokeBorder(Color(.separator), lineWidth: colorScheme == .dark ? 1 : 0)
+                                    )
+                            )
                         }
                         .buttonStyle(.plain)
                     }

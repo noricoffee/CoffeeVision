@@ -1889,4 +1889,13 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
   - `AuthRepositoryIosImpl` は AccountView 内で `private let authHelper = AuthRepositoryIosImpl()` として new。当該メソッドは `Auth.auth()` グローバル経由でステートレスのため AppState/AppContainer 配線追加は不要。将来テスト可能性が欲しければ専用 protocol + DI に切り出す余地あり。
 - **前提（ユーザー作業・revoke 機能成立の必須条件）**: `revokeToken` は Firebase が Apple の revoke エンドポイント（`appleid.apple.com/auth/revoke`）をサーバサイドで叩くため、Firebase Console → Authentication → Apple プロバイダの **OAuth コードフロー設定**の登録が必要。手順: ① Apple Developer で Sign in with Apple 用 Key（.p8）作成 → Key ID / Team ID 控え、② Apple Developer で **Services ID** 作成（Identifier は bundle ID と別の逆ドメイン例 `com.noricoffee.coffeevision.signin`、Configure で Primary App ID = bundle ID / Return URL = `https://coffeevision-a54aa.firebaseapp.com/__/auth/handler`）、③ Firebase Console に **Services ID / Apple Team ID / Key ID / 秘密鍵** の 4 つを入力。**未設定だと `revokeToken` は常にサーバエラー → 実装上は「revoke 失敗 → 削除中断」**になる。App Store 審査前に必須。これは 2026-06-17 エントリ（ネイティブ用途では Apple プロバイダの「有効化」のみで足りる）の例外で、revoke を使うなら鍵 + Services ID 登録まで必要になる点に注意。
   - **Services ID 欄について**: Apple のプロトコル上はネイティブ iOS の authorization code の client_id は bundle ID で、Services ID（Web / Android フロー用 client_id）は本来 revoke に不要。ただし **Firebase Console の OAuth コードフロー設定は 4 項目を 1 セットで検証**し、Team ID を入れると Services ID も必須入力になる（空のままでは保存不可）。よって実運用上は Services ID を作成して入力する必要がある（Console の UI 要件が Apple プロトコルの最小要件に勝る）。
+
+## 2026-06-25 - Sign in with Apple ボタンのダークモード視認性修正
+
+- 領域: iOS / 関連: `AccountView.swift`（`anonymousSection` + Preview 用 `AccountViewDemo`）
+- 問題: 「Apple でサインイン」ボタンが背景 `Color.primary.opacity(0.9)` + 前景 `.white` だったため、ダークモードで `Color.primary` が白になり「白背景 + 白文字」で不可視（ユーザー報告で発覚）。
+- 修正: 公式 `SignInWithAppleButton` は nonce 管理の都合で使わずカスタム `Button` のままにし、視覚スタイルのみ `@Environment(\.colorScheme)` で明示分岐。ライト = 黒背景 + 白文字、ダーク = 白背景 + 黒文字 + `Color(.separator)` 1pt ボーダー（Apple HIG 慣習）。`startAppleSignIn()` フロー・`.buttonStyle(.plain)`・44pt 以上タップ領域・`accessibilityLabel` は不変。Preview ダミー `AccountViewDemo` にも同スタイルを適用。
+- 検証: `xcodebuild -sdk iphonesimulator` BUILD SUCCEEDED・新規 warning ゼロ。ライト/ダーク両モードの目視はユーザー作業。
+- 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md)「ボタン背景に `Color.primary` を使うとダークモードで不可視になる」。
+- 余談（別タスク）: `AppleSignInCoordinator` の `presentationAnchor(for:)` 最終フォールバックに残る到達不能な `UIWindow()`（ゼロ引数 init）が iOS 26 deprecated warning を出している。2026-06-24 に主経路は `UIWindow(windowScene:)` 化済だが最終 return が未修正。視認性修正のスコープ外、警告 1 件として残置。
 - 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。**シミュレータでは Apple サインイン UI が制限されるため、E-1 フロー全体（再サインイン → reauth → revoke → 削除 → リブート、キャンセル中断、Console 未設定時の revoke 失敗エラー）の動作確認は実機が必須**。

@@ -437,3 +437,9 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-24、`CafeDetailViewModel`（init collector）/ `CoffeeDetailViewModel`（onAppear collector）で顕在化。tab 常駐 VM は単一インスタンスゆえ増殖はしないが同根
 - **教訓**: 各 ViewModel は注入 scope を親として `CoroutineScope(parent.coroutineContext + SupervisorJob(parentJob))` で**自分の子スコープを所有**し、`fun clear() { viewModelScope.cancel() }` を公開する。iOS Bridge は **`deinit`** で `kotlin.clear()` を呼ぶ（`onDisappear` は遷移アニメ中に発火するので push/pop 画面では不可）。`SupervisorJob(parentJob)` で親 Job に連結すれば app teardown 時の連鎖キャンセルも両立。`clear()` はスコープ畳みのみに留める（`Job.cancel()` はスレッドセーフ＝K/N の deinit スレッドから安全。`@MainActor` 前提の処理を足すと壊れる）（[`implementation_note.md`](../implementation_note.md) 2026-06-24「所有 viewModelScope + clear()」エントリ参照）
 - **検証の落とし穴**: このリークは **Swift の Bridge を Instruments Allocations で見ても検出できない**。Bridge は `[weak self]` で循環がなく修正前から正しく deinit するため、Swift クラスでフィルタした Persistent は修正前後とも「表示中=1 / pop 後=0」で**変わらない**。実際に漏れるのは **app-wide scope で走り続ける Kotlin の collector と、それに掴まれて解放されない Kotlin VM**（Swift 名では出ず、K/N オブジェクトの解放追跡も Instruments では不安定）。→ 検証は**コルーチンの寿命**で見る: collector に `.onCompletion { println(...) }` を一時的に仕込み、push→pop で完了ログが出れば畳めている。修正前は出ない（孤児コルーチン継続）。「Swift 側の解放＝リーク解消」ではない点に注意
+
+### ボタン背景に `Color.primary` を使うとダークモードで不可視になる
+
+- 2026-06-25、`AccountView` の「Apple でサインイン」ボタンが背景 `Color.primary.opacity(0.9)` + 前景 `.white` だった。`Color.primary` はライトで黒・**ダークで白**になるため、ダークモードで「白背景 + 白文字」となりボタンがほぼ見えなかった（ユーザー報告で発覚。ビルドは通るので静的には気づけない）
+- 原因の構造: `Color.primary` / `Color(.label)` は前景テキスト用のセマンティックカラーで colorScheme に応じて反転する。これを**ボタンの背景**に使い、前景を固定色（`.white`）にすると、片方のモードで前景と背景が同色化する
+- **教訓**: Sign in with Apple のような**固定配色が要るボタン**は `@Environment(\.colorScheme)` で背景・前景を明示分岐する（ライト: 黒背景+白文字 / ダーク: 白背景+黒文字+`Color(.separator)` ボーダー、が Apple HIG 慣習）。反転するセマンティックカラーを背景に使うときは前景も必ず連動させる。Preview 用ダミー View に同スタイルを複製している場合はそちらも同時修正（[`implementation_note.md`](../implementation_note.md) 2026-06-25 エントリ参照）

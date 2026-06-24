@@ -222,6 +222,39 @@ final class AuthRepositoryIosImpl: NSObject, AuthRepository {
         }
     }
 
+    // MARK: - Apple 再認証 + トークン失効
+
+    /// Apple 再認証（`reauthenticate`）と Apple トークン失効（`revokeToken`）を順次実行する。
+    ///
+    /// App Store ガイドライン 5.1.1(v) に準拠するため、アカウント削除フローの前段で呼ぶ。
+    /// - Parameters:
+    ///   - idToken: `AppleSignInCoordinator.signIn(anchor:)` で取得した Apple ID トークン。
+    ///   - rawNonce: 同上で取得した rawNonce（平文）。
+    ///   - authorizationCode: 同上で取得した Apple 認証コード（使い捨て・保存禁止）。
+    /// - Throws: `reauthenticate` または `revokeToken` が失敗した場合にエラーを throw する。
+    func reauthenticateAndRevokeAppleToken(
+        idToken: String,
+        rawNonce: String,
+        authorizationCode: String
+    ) async throws {
+        let credential = OAuthProvider.appleCredential(
+            withIDToken: idToken,
+            rawNonce: rawNonce,
+            fullName: nil
+        )
+        guard let currentUser = Auth.auth().currentUser else {
+            throw NSError(
+                domain: "AuthRepositoryIosImpl",
+                code: -1,
+                userInfo: [NSLocalizedDescriptionKey: "サインインセッションが見つかりません。アプリを再起動してください。"]
+            )
+        }
+        // 再認証（requiresRecentLogin を解消する）
+        try await currentUser.reauthenticate(with: credential)
+        // Apple トークンの失効（App Store 5.1.1(v) 要件）
+        try await Auth.auth().revokeToken(withAuthorizationCode: authorizationCode)
+    }
+
     // MARK: - Private helpers
 
     /// Firebase `User` を `AuthAccount` ドメインモデルに変換する。

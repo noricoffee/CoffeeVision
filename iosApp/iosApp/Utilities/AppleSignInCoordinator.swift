@@ -9,7 +9,7 @@ import UIKit
 ///
 /// ```swift
 /// let coordinator = AppleSignInCoordinator()
-/// let (idToken, rawNonce) = try await coordinator.signIn(anchor: window)
+/// let (idToken, rawNonce, authorizationCode) = try await coordinator.signIn(anchor: window)
 /// ```
 ///
 /// ## nonce の役割
@@ -26,9 +26,11 @@ final class AppleSignInCoordinator: NSObject {
     /// nonce 生成からサインイン UI 表示・完了まで非同期で処理する。
     ///
     /// - Parameter anchor: `ASAuthorizationControllerPresentationContextProviding` に渡す `UIWindow`。
-    /// - Returns: `(idToken: String, rawNonce: String)` のタプル。
+    /// - Returns: `(idToken: String, rawNonce: String, authorizationCode: String)` のタプル。
+    ///   `authorizationCode` は Apple が発行する使い捨てコード（約 5 分有効）で、
+    ///   `Auth.auth().revokeToken(withAuthorizationCode:)` に渡す用途に使う。保存禁止。
     /// - Throws: Apple サインイン失敗 / ユーザーキャンセル時にエラーを throw。
-    func signIn(anchor: ASPresentationAnchor) async throws -> (idToken: String, rawNonce: String) {
+    func signIn(anchor: ASPresentationAnchor) async throws -> (idToken: String, rawNonce: String, authorizationCode: String) {
         try await withCheckedThrowingContinuation { continuation in
             self.continuation = continuation
             let rawNonce = generateRandomNonce()
@@ -50,7 +52,7 @@ final class AppleSignInCoordinator: NSObject {
 
     // MARK: - Private
 
-    private var continuation: CheckedContinuation<(idToken: String, rawNonce: String), Error>?
+    private var continuation: CheckedContinuation<(idToken: String, rawNonce: String, authorizationCode: String), Error>?
     private var currentNonce: String?
     private var presentationAnchor: ASPresentationAnchor?
 
@@ -97,7 +99,24 @@ extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
                 self.continuation = nil
                 return
             }
-            self.continuation?.resume(returning: (idToken: idToken, rawNonce: rawNonce))
+
+            // authorizationCode は Apple が発行する使い捨てコード（約 5 分有効・保存禁止）。
+            // revokeToken(withAuthorizationCode:) に渡すために取り出す。
+            guard
+                let authCodeData = appleIDCredential.authorizationCode,
+                let authorizationCode = String(data: authCodeData, encoding: .utf8)
+            else {
+                let error = NSError(
+                    domain: "AppleSignInCoordinator",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Apple の認証コードを取得できませんでした。しばらく待ってから再試行してください。"]
+                )
+                self.continuation?.resume(throwing: error)
+                self.continuation = nil
+                return
+            }
+
+            self.continuation?.resume(returning: (idToken: idToken, rawNonce: rawNonce, authorizationCode: authorizationCode))
             self.continuation = nil
         }
     }

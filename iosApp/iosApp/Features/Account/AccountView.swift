@@ -29,6 +29,13 @@ struct AccountView: View {
     /// nonce 生成と ASAuthorization ラッピングを担当する。
     @State private var coordinator = AppleSignInCoordinator()
 
+    /// Firebase Auth ヘルパ（reauthenticate + revokeToken）。
+    ///
+    /// `AuthRepositoryIosImpl` はステートレス（全操作が `Auth.auth()` グローバル経由）なため、
+    /// `AccountView` 内でインスタンスを保持しても問題ない。
+    /// `AppState` / `AppContainer` への配線は不要。
+    private let authHelper = AuthRepositoryIosImpl()
+
     // MARK: - Body
 
     var body: some View {
@@ -221,11 +228,12 @@ struct AccountView: View {
     /// `AppleSignInCoordinator` 経由で `ASAuthorizationController` を起動し、
     /// 得られた `idToken` / `rawNonce` を ViewModel に渡す。
     /// nonce は coordinator が生成・管理し、Firebase の nonce 検証に使う。
+    /// `authorizationCode` はアップグレードフローでは不要なため無視する。
     private func startAppleSignIn() {
         Task { @MainActor in
             guard let anchor = currentPresentationAnchor() else { return }
             do {
-                let (idToken, rawNonce) = try await coordinator.signIn(anchor: anchor)
+                let (idToken, rawNonce, _) = try await coordinator.signIn(anchor: anchor)
                 viewModel.onAppleCredentialReceived(idToken: idToken, rawNonce: rawNonce)
             } catch {
                 let nsError = error as NSError
@@ -256,14 +264,63 @@ struct AccountView: View {
         }
     }
 
-    /// アカウント削除確認後の処理。ViewModel を通じて削除し、完了後に写真全消去 + reset。
+    /// アカウント削除確認後の処理。
+    ///
+    /// Apple 連携アカウント（`!isAnonymous && providerLabel == "apple.com"`）の場合は
+    /// KMP 削除 UseCase の前段で以下を実行する（App Store ガイドライン 5.1.1(v) 対応）:
+    ///   1. Apple 再サインイン → `(idToken, rawNonce, authorizationCode)` 取得
+    ///   2. `reauthenticate(with:)` で再認証
+    ///   3. `revokeToken(withAuthorizationCode:)` で Apple トークン失効
+    ///
+    /// ユーザーがキャンセルした場合は無音で中断（削除しない）。
+    /// reauth / revoke が失敗した場合はエラーを表示して削除を中断する
+    /// （コンプライアンス上 revoke 必須のため）。
+    ///
+    /// 匿名アカウントは従来フロー（revoke なし）のまま。
     private func handleDeleteAccount() {
-        guard let userId = viewModel.account?.uid else { return }
-        viewModel.onDeleteAccountTapped(userId: userId)
-        observeProcessingCompletion { [self] in
-            // 端末ローカルの写真ディレクトリを全消去（iOS 責務）
-            try? PhotoFileStore.deleteAllPhotos()
-            onResetRequested()
+        guard let account = viewModel.account else { return }
+        let isAppleAccount = !account.isAnonymous && account.providerLabel == "apple.com"
+
+        if isAppleAccount {
+            Task { @MainActor in
+                guard let anchor = currentPresentationAnchor() else { return }
+                // isProcessing を立てる（処理中オーバーレイを出す）
+                viewModel.onDeletePreflightStarted()
+                do {
+                    let (idToken, rawNonce, authorizationCode) = try await coordinator.signIn(anchor: anchor)
+                    try await authHelper.reauthenticateAndRevokeAppleToken(
+                        idToken: idToken,
+                        rawNonce: rawNonce,
+                        authorizationCode: authorizationCode
+                    )
+                } catch {
+                    let nsError = error as NSError
+                    // ユーザーキャンセルは無音中断（isProcessing を戻して終了）
+                    if nsError.domain == ASAuthorizationError.errorDomain,
+                       nsError.code == ASAuthorizationError.canceled.rawValue {
+                        viewModel.onDeletePreflightCancelled()
+                        return
+                    }
+                    // reauth / revoke 失敗 → エラー表示して削除中断（コンプライアンス上 revoke 必須）
+                    viewModel.onDeletePreflightFailed(message: error.localizedDescription)
+                    return
+                }
+                // revoke 成功 → preflight フラグを落として KMP 削除 UseCase 呼び出しへ
+                viewModel.onDeletePreflightSucceeded()
+                viewModel.onDeleteAccountTapped(userId: account.uid)
+                observeProcessingCompletion { [self] in
+                    try? PhotoFileStore.deleteAllPhotos()
+                    onResetRequested()
+                }
+            }
+        } else {
+            // 匿名アカウントは従来フロー（revoke なし）
+            viewModel.onDeleteAccountTapped(userId: account.uid)
+            observeProcessingCompletion { [self] in
+                // 端末ローカルの写真ディレクトリを全消去（iOS 責務）
+                try? PhotoFileStore.deleteAllPhotos()
+                onResetRequested()
+            }
         }
     }
 

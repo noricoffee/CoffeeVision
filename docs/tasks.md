@@ -540,6 +540,30 @@
 
 ---
 
+## フェーズ 5.2: アカウント削除時の Apple トークン失効（E-1）
+
+> 2026-06-24 着手。App Store ガイドライン 5.1.1(v)「Sign in with Apple を使い、かつアカウント削除を提供するアプリは、削除時に Apple トークンの失効も行う」対応。**iOS 単独タスク（KMP / commonMain 変更なし）**。`Auth.auth().revokeToken(withAuthorizationCode:)` には Apple の authorization code（一度きり・約 5 分有効・保存不可）が必要なため、削除時に Apple サインインをやり直して取得する。この再サインインは既存 `deleteAuthUser` の `requiresRecentLogin`（再認証要求）課題も同時に解決する。設計判断は [`implementation_note.md`](./implementation_note.md) 2026-06-24 エントリ。
+
+### 確定フロー（Apple 連携アカウントのみ。匿名アカウントは従来通り revoke なし）
+
+1. Apple 再サインイン → `(idToken, rawNonce, authorizationCode)` 取得
+2. `currentUser.reauthenticate(with:)` で再認証（`requiresRecentLogin` 解消）
+3. `Auth.auth().revokeToken(withAuthorizationCode:)` で Apple トークン失効
+4. 既存 KMP `DeleteAccountUseCase`（記録削除 → `currentUser.delete()`）を従来通り実行
+5. `PhotoFileStore.deleteAllPhotos()` + `AppState.resetAndRebootstrap()`
+
+### iOS（ios-engineer）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `AppleSignInCoordinator.signIn(anchor:)` の戻り値を `(idToken, rawNonce, authorizationCode)` に拡張。`didCompleteWithAuthorization` で `ASAuthorizationAppleIDCredential.authorizationCode`（Data → UTF-8 String）を取り出す | 2026-06-24 / 既存アップグレード経路（`startAppleSignIn`）はタプル分解を `(_,_,_)` 化のみで挙動不変。code 取得失敗時は error throw |
+| [x] | reauthenticate + revoke を行う Swift ヘルパ（ステートレス推奨。`Auth.auth().currentUser?.reauthenticate(with:)` → `Auth.auth().revokeToken(withAuthorizationCode:)`）を追加 | 2026-06-24 / `AuthRepositoryIosImpl.reauthenticateAndRevokeAppleToken(idToken:rawNonce:authorizationCode:)` 非 protocol メソッド。配線追加なし |
+| [x] | `AccountView.handleDeleteAccount`: Apple 連携（`!isAnonymous && providerLabel == "apple.com"`）のときのみ「再サインイン → reauth → revoke」を KMP 削除 UseCase 呼び出しの前段に実行。匿名は従来フロー。ユーザーキャンセルは無音中断、reauth/revoke 失敗はエラー表示して削除中断（コンプライアンス上 revoke 必須） | 2026-06-24 / `AccountViewModelBridge.isProcessing` を computed 化（`isKmpProcessing \|\| isPreflighting`）+ preflight 4 メソッドで状態制御 |
+| [x] | 検証: `xcodebuild -sdk iphonesimulator` 成功（新規 warning ゼロ） | 2026-06-24 / BUILD SUCCEEDED・新規 warning ゼロ。KMP 変更なし。**E-1 フロー全体の動作確認はシミュレータ不可（Apple サインイン制限）→ 実機が必須** |
+| [ ] | **（ユーザー作業・revoke 機能の前提）** Apple Developer で ① Sign in with Apple 用 Key（.p8）作成（Key ID / Team ID 控え）② Services ID 作成（Return URL = `https://coffeevision-a54aa.firebaseapp.com/__/auth/handler`）→ Firebase Console の Apple プロバイダ（OAuth コードフロー設定）に **Services ID / Apple Team ID / Key ID / 秘密鍵**の 4 つを登録。Console は 4 項目を 1 セットで検証するため Services ID も必須。**これが無いと `revokeToken` はサーバ側で失敗する** | E-1 の機能成立に必須。シミュレータでは Apple サインイン自体が制限されるため実機確認推奨 |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。
@@ -553,7 +577,7 @@
 | [ ] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 最初の PR を出すタイミングで自然解消 |
 | [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
-| [ ] | E-1 | アカウント削除時の Apple トークン失効（revoke）。App Store ガイドライン 5.1.1(v) 対応。削除時に Sign in with Apple の authorization code を取得 → `Auth.auth().revokeToken(withAuthorizationCode:)`、Firebase Console で Apple プロバイダの OAuth 鍵（Services ID / Team ID / Key ID / 秘密鍵）登録が必要。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-17 コールバック URL エントリ | App Store 申請前。現状の `deleteAuthUser` は Firebase ユーザー + Firestore データのみ削除 |
+| [~] | E-1 | アカウント削除時の Apple トークン失効（revoke）。App Store ガイドライン 5.1.1(v) 対応。**2026-06-24 着手 → 専用セクション「フェーズ 5.2」に移管**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-17 コールバック URL エントリ | App Store 申請前。現状の `deleteAuthUser` は Firebase ユーザー + Firestore データのみ削除 |
 
 ---
 

@@ -1871,3 +1871,22 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 挙動上の注意: `clear()` 後に `onAppear`/`launch` を呼んでも新規 Job は起動されず no-op。tab 常駐 VM（map/analysis/coffee-list/cafe-search/account）はアプリ teardown（サインアウト時の `AppState.resetAndRebootstrap`）まで `clear()` を呼ばない前提。
 - 検証: 全 feature `compileCommonMainKotlinMetadata` / `:shared:framework:compileKotlinIosSimulatorArm64` / `:androidApp:assembleDebug` green、iosApp `xcodebuild` green（新規警告なし）。**実機での push/pop リーク解消（Instruments の Leaks/Allocations で Bridge 解放確認）はユーザー作業として未実施**。
 - 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md)「画面ごとの ViewModel に app-wide scope を共有させない」。
+
+## 2026-06-24 - E-1 アカウント削除時の Apple トークン失効（revoke）実装
+
+- 領域: iOS 単独（KMP / commonMain 変更なし）/ 関連: `AppleSignInCoordinator.swift`・`AuthRepositoryIosImpl.swift`・`AccountView.swift`・`AccountViewModelBridge.swift`
+- 背景: App Store ガイドライン 5.1.1(v)「Sign in with Apple を使い、かつアカウント削除を提供するアプリは削除時に Apple トークンも失効する」。`tasks.md` バックログ E-1 → フェーズ 5.2 に移管して実装。
+- 確定したアーキテクチャ判断: **iOS 単独タスク**。`revokeToken` / `reauthenticate` / Apple 再サインイン UI はすべて FirebaseAuth iOS SDK + Apple UI の責務であり、KMP の `DeleteAccountUseCase`（記録削除 → `currentUser.delete()`）はプラットフォーム非依存のまま据え置く。Swift 側が「Apple 再サインイン → reauth → revoke」を **KMP 削除 UseCase 呼び出しの前段**でオーケストレーションする。`AuthRepository` interface は無変更。
+- なぜ削除時に再サインインするか: `Auth.auth().revokeToken(withAuthorizationCode:)` には Apple の **authorization code（一度きり・約 5 分有効・保存禁止）**が必要。保存できないため削除時に Apple サインインをやり直して取得する。この再サインインで得た credential での `reauthenticate` は、旧 `deleteAuthUser` が将来課題として残していた `requiresRecentLogin` も同時に解消する。
+- フロー（Apple 連携 `!isAnonymous && providerLabel == "apple.com"` のときのみ。匿名は従来通り revoke なし）:
+  1. `AppleSignInCoordinator.signIn(anchor:)` → `(idToken, rawNonce, authorizationCode)`（戻り値を 3-タプルに拡張。`ASAuthorizationAppleIDCredential.authorizationCode` を `Data → UTF-8 String`）
+  2. `AuthRepositoryIosImpl.reauthenticateAndRevokeAppleToken(...)`（非 protocol メソッド）で `currentUser.reauthenticate(with:)` → `Auth.auth().revokeToken(withAuthorizationCode:)`
+  3. 既存 `viewModel.onDeleteAccountTapped(userId:)`（KMP 削除）
+  4. `PhotoFileStore.deleteAllPhotos()` + `onResetRequested()`
+- エラー方針: ユーザーが再サインインをキャンセル（`ASAuthorizationError.canceled`）→ **無音中断**（削除しない）。reauth / revoke 失敗 → **エラー表示して削除中断**（コンプライアンス上 revoke 必須のため、revoke できないなら削除しない）。
+- 実装メモ:
+  - `AccountViewModelBridge.isProcessing` を stored → computed（`isKmpProcessing || isPreflighting`）に変更。Swift 側 preflight（Apple UI〜revoke）中も同じ処理中オーバーレイを出す。`@Observable` は computed getter 経由の stored 参照を追跡するため再描画は正しく走る。preflight 制御は `onDeletePreflightStarted/Cancelled/Succeeded/Failed` の 4 メソッド。
+  - `AuthRepositoryIosImpl` は AccountView 内で `private let authHelper = AuthRepositoryIosImpl()` として new。当該メソッドは `Auth.auth()` グローバル経由でステートレスのため AppState/AppContainer 配線追加は不要。将来テスト可能性が欲しければ専用 protocol + DI に切り出す余地あり。
+- **前提（ユーザー作業・revoke 機能成立の必須条件）**: `revokeToken` は Firebase が Apple の revoke エンドポイント（`appleid.apple.com/auth/revoke`）をサーバサイドで叩くため、Firebase Console → Authentication → Apple プロバイダの **OAuth コードフロー設定**の登録が必要。手順: ① Apple Developer で Sign in with Apple 用 Key（.p8）作成 → Key ID / Team ID 控え、② Apple Developer で **Services ID** 作成（Identifier は bundle ID と別の逆ドメイン例 `com.noricoffee.coffeevision.signin`、Configure で Primary App ID = bundle ID / Return URL = `https://coffeevision-a54aa.firebaseapp.com/__/auth/handler`）、③ Firebase Console に **Services ID / Apple Team ID / Key ID / 秘密鍵** の 4 つを入力。**未設定だと `revokeToken` は常にサーバエラー → 実装上は「revoke 失敗 → 削除中断」**になる。App Store 審査前に必須。これは 2026-06-17 エントリ（ネイティブ用途では Apple プロバイダの「有効化」のみで足りる）の例外で、revoke を使うなら鍵 + Services ID 登録まで必要になる点に注意。
+  - **Services ID 欄について**: Apple のプロトコル上はネイティブ iOS の authorization code の client_id は bundle ID で、Services ID（Web / Android フロー用 client_id）は本来 revoke に不要。ただし **Firebase Console の OAuth コードフロー設定は 4 項目を 1 セットで検証**し、Team ID を入れると Services ID も必須入力になる（空のままでは保存不可）。よって実運用上は Services ID を作成して入力する必要がある（Console の UI 要件が Apple プロトコルの最小要件に勝る）。
+- 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ）。KMP 変更なし。**シミュレータでは Apple サインイン UI が制限されるため、E-1 フロー全体（再サインイン → reauth → revoke → 削除 → リブート、キャンセル中断、Console 未設定時の revoke 失敗エラー）の動作確認は実機が必須**。

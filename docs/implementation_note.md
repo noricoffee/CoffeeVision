@@ -1924,3 +1924,16 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 残置（別タスク）: `CafeSearchViewModelBridge.onNearbySearchRequested` と Kotlin `CafeSearchViewModel.onNearbySearchRequested` は未使用になったが今回は残置。API 削除は別タスクで kmp-engineer dispatch が必要。
 - 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ。`AppIntents` warning は既存）。**実機/シミュレータ確認はユーザー作業**: (a) 検索 → 詳細 push → 戻る → 再検索が反映される（バグ修正の主眼）/ (b) 他タブ往復後も再検索が反映される / (c) 初期は「カフェ名で検索してください」プロンプトのみ / (d) return で検索発火 / (e) CoffeeEditor sheet 経由のカフェ選択が壊れていない。
 - 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md)「タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない」。
+
+## 2026-06-26 - iOSDC LT: 逆方向変換 PoC（言葉→数値）を Foundation Models で実装
+
+- 領域: iOS（iosApp 内で自己完結・KMP/domain 変更なし）/ 関連: `TastePreferenceExtractor.swift`（新規）・`TastePreferenceConversionView.swift`（新規）・`AnalysisView.swift`（DEBUG 導線追加）
+- 背景: iOSDC LT のテーマを「好みの言語化（片方向）」から「数値⇄言葉の双方向変換」に拡張（仕様は `docs/talks/iosdc-2026-foundation-models.md` §5）。順方向（`CoffeeInsightOutput`: データ→言葉）は実装済みのため、逆方向（自由文→構造化データ）を登壇デモ用に新規 PoC 実装。
+- 設計: 順方向 `CoffeeInsightProviderIosImpl` と同じ availability ガード（`SystemLanguageModel.default.availability == .available` の `makeIfAvailable()`）・`@available(iOS 26.0, *)`・ステートレス `LanguageModelSession` を踏襲。`@Generable struct TastePreference`（5軸 Int 1〜10 + roast String + summary）を `respond(to:generating:)` で抽出。**順は出力に5軸を持たず（語り口に型）、逆は出力に5軸を持つ（抽出スキーマ）= `@Generable` に5軸が「ある/ない」が変換の向きを表す**（LT S7 の対比ネタの実体）。
+- トレードオフ / 論点:
+  - **`TastePreference` の `Equatable` 手書き**: `@Generable` マクロは現時点で `Equatable` を自動合成しない。`ExtractionState.done(TastePreference)` を `Equatable` enum の case にするため `==` を手書き（全フィールド比較・`TastePreferenceConversionView.swift`）。将来 `@Generable` が `Equatable` 合成をサポートしたら削除可。
+  - **言及のない軸は 5（中庸）** とする instructions 設計。数値は推測可だが大げさにしない方針。実機での抽出品質（数値が収まるか・summary が 20〜40字か）は要実機確認（シミュレータは `availability` が `.available` にならず推論不可）。
+  - **導線は `#if DEBUG` + `if #available(iOS 26)` の二重ガード**で分析タブ末尾に配置。本番ナビゲーションへの恒久配線はせず、登壇デモ/スクショ取得用の最小構成（PoC のため）。抽出結果を検索につなぐ処理は未実装（概念で口頭説明）。
+- 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build`（iPhone 17 Pro / iOS 26.1）BUILD SUCCEEDED・新規 warning ゼロ。SourceKit が `No such module SharedLogic`・型チェックタイムアウト等を出すが、既存ファイルにも出る**インデクサ起因の偽陽性**（実 xcodebuild は成功）。**実機での推論動作・抽出品質確認はユーザー作業**。
+- 既知の軽微点: `arrow.trianglehead.2.clockwise` の SF Symbol が iOS 26 で表示されるか未確認（SF Symbol 名は文字列のためコンパイルは通る）。表示されなければ `arrow.2.circlepath` 等に差し替え。
+- 親メモ: 同種の「@Generable は出力整形にも自然文抽出にも同じ API で使える双方向の道具」という気づきが溜まったら `coding-conventions.md` か `kmp-bridge.md`（FM 節）への昇格を検討。

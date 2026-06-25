@@ -90,11 +90,86 @@ struct AnalysisView: View {
                 brewMethodSection(stats: stats)
                 monthlyTrendSection(stats: stats)
                 topCafesSection(stats: stats)
+                #if DEBUG
+                reverseConversionDemoSection
+                #endif
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }
     }
+
+    // MARK: - [DEBUG] 逆変換 PoC 導線（iOSDC LT デモ用）
+
+    #if DEBUG
+    /// iOSDC LT デモ用の逆変換 PoC 画面へのナビゲーション導線。
+    ///
+    /// DEBUG ビルドのみ表示。分析タブの最下部に配置。
+    /// `SEED_DUMMY_DATA=1` の dev Scheme でシミュレータ起動後、
+    /// 分析タブ → 最下部「逆変換 PoC（LT デモ）」から到達できる。
+    ///
+    /// iOS 26 未満では iOS 26 が必要である旨を表示する（availability ガード）。
+    @ViewBuilder
+    private var reverseConversionDemoSection: some View {
+        if #available(iOS 26, *) {
+            NavigationLink {
+                TastePreferenceConversionView()
+            } label: {
+                demoEntryLabel
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "逆変換 PoC デモ画面を開く"))
+            .accessibilityHint(String(localized: "感想テキストから5軸好みベクトルを抽出するデモです"))
+        } else {
+            HStack(spacing: 12) {
+                Image(systemName: "arrow.trianglehead.2.clockwise")
+                    .font(.title3)
+                    .foregroundStyle(Color(.systemGray4))
+                    .frame(width: 36, height: 36)
+                    .background(Color(.systemGray6), in: Circle())
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(String(localized: "逆変換 PoC（LT デモ）"))
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                    Text(String(localized: "iOS 26 以降が必要"))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                Spacer()
+            }
+            .padding(16)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityLabel(String(localized: "逆変換 PoC: iOS 26 以降が必要"))
+        }
+    }
+
+    private var demoEntryLabel: some View {
+        HStack(spacing: 12) {
+            Image(systemName: "arrow.trianglehead.2.clockwise")
+                .font(.title3)
+                .foregroundStyle(Color.accentColor)
+                .frame(width: 36, height: 36)
+                .background(Color.accentColor.opacity(0.12), in: Circle())
+                .accessibilityHidden(true)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(String(localized: "逆変換 PoC（LT デモ）"))
+                    .font(.body)
+                    .foregroundStyle(.primary)
+                Text(String(localized: "感想 → 5軸ベクトル・Foundation Models"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            Spacer()
+            Image(systemName: "chevron.right")
+                .font(.caption)
+                .foregroundStyle(.tertiary)
+                .accessibilityHidden(true)
+        }
+        .padding(16)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+    #endif
 
     // MARK: - 傾向要約カード（階層3）
 

@@ -2,6 +2,17 @@ import Foundation
 import Observation
 import SharedLogic
 
+/// マップタブのカメラ中心を検索タブへ共有するための値型。
+///
+/// `MapTabView` の `.onMapCameraChange` で生成し `AppState.mapSearchCenter` に代入する。
+/// `CafeSearchView` はこれを位置バイアスとして `onSearchTapped(latitude:longitude:radiusMeters:)` に渡す。
+struct MapSearchCenter {
+    let latitude: Double
+    let longitude: Double
+    /// Places API の locationBias circle 半径（メートル）。`1...50_000` にクランプ済み。
+    let radiusMeters: Double
+}
+
 /// アプリ全体の状態ホルダ。
 ///
 /// - 起動時に Swift 側で `AuthRepositoryIosImpl` / `RemoteCoffeeDataSourceIosImpl` を組み立て、
@@ -46,6 +57,13 @@ final class AppState {
     ///
     /// uid 不要なので `init` で即座に生成する（`bootstrap()` 前から利用可能）。
     private(set) var placePhotoLoader: PlacePhotoLoader
+
+    /// マップタブのカメラ中心（検索タブへの位置バイアス共有用）。
+    ///
+    /// `MapTabView` の `.onMapCameraChange(frequency: .onEnd)` が更新し、
+    /// `CafeSearchView` がテキスト検索時の位置バイアスとして参照する。
+    /// カメラが未移動の場合は nil（バイアスなし検索にフォールバック）。
+    var mapSearchCenter: MapSearchCenter?
 
     enum Status: Equatable {
         case idle

@@ -20,12 +20,18 @@ import kotlin.test.assertTrue
  * - `onSearchTapped` 成功後（結果あり / 0 件いずれも）`hasSearched == true`
  * - `onSearchTapped` 失敗後 `hasSearched == false`
  * - `onSearchTapped` 成功後に `onQueryChanged` を呼ぶと `hasSearched` が false に戻る
+ * - `onSearchTapped(lat, lng, radius)` が正しい [LocationBias] を渡すこと
  * - `onNearbySearchRequested` 成功後 `hasSearched == true`
  * - `onNearbySearchRequested` 失敗後 `hasSearched == false`
  * - `onErrorDismissed` は `hasSearched` を変更しない
  * - `onSearchTapped` 成功時に `results` が反映される
  * - `onSearchTapped` 失敗時に `error` がセットされる
  * - `onErrorDismissed` で `error` が null に戻る
+ *
+ * ## スコープ管理
+ * `CafeSearchViewModel` は `runTest` の `TestScope` を親にした独自 `viewModelScope` を作るため、
+ * 各テストの最後に `vm.clear()` を呼ばないと `runTest` が `UncompletedCoroutinesError` を報告する。
+ * テンプレート: `try { ... } finally { vm.clear() }` を各テストで使用する。
  */
 class CafeSearchViewModelTest {
 
@@ -41,12 +47,16 @@ class CafeSearchViewModelTest {
         var searchNearbyResult: List<Cafe> = emptyList()
         var searchNearbyError: Exception? = null
 
+        /** バイアスあり版 searchText が最後に受け取った LocationBias を記録する。 */
+        var lastLocationBias: LocationBias? = null
+
         override suspend fun searchText(query: String): List<Cafe> {
             searchTextError?.let { throw it }
             return searchTextResult
         }
 
         override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> {
+            lastLocationBias = locationBias
             searchTextError?.let { throw it }
             return searchTextResult
         }
@@ -99,12 +109,15 @@ class CafeSearchViewModelTest {
             cafeRepository = FakeCafeRepository(),
             scope = this,
         )
-
-        assertFalse(vm.state.value.hasSearched)
-        assertEquals("", vm.state.value.query)
-        assertTrue(vm.state.value.results.isEmpty())
-        assertFalse(vm.state.value.isLoading)
-        assertNull(vm.state.value.error)
+        try {
+            assertFalse(vm.state.value.hasSearched)
+            assertEquals("", vm.state.value.query)
+            assertTrue(vm.state.value.results.isEmpty())
+            assertFalse(vm.state.value.isLoading)
+            assertNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
     }
 
     // ─────────────────────────────────────────────────
@@ -117,11 +130,14 @@ class CafeSearchViewModelTest {
             cafeRepository = FakeCafeRepository(),
             scope = this,
         )
+        try {
+            vm.onQueryChanged("渋谷 コーヒー")
 
-        vm.onQueryChanged("渋谷 コーヒー")
-
-        assertEquals("渋谷 コーヒー", vm.state.value.query)
-        assertFalse(vm.state.value.hasSearched)
+            assertEquals("渋谷 コーヒー", vm.state.value.query)
+            assertFalse(vm.state.value.hasSearched)
+        } finally {
+            vm.clear()
+        }
     }
 
     @Test
@@ -133,17 +149,20 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onQueryChanged("初回クエリ")
+            vm.onSearchTapped()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQueryChanged("初回クエリ")
-        vm.onSearchTapped()
-        testScheduler.advanceUntilIdle()
+            assertTrue(vm.state.value.hasSearched, "前提: 検索成功後は hasSearched == true")
 
-        assertTrue(vm.state.value.hasSearched, "前提: 検索成功後は hasSearched == true")
+            vm.onQueryChanged("新しいクエリ")
 
-        vm.onQueryChanged("新しいクエリ")
-
-        assertFalse(vm.state.value.hasSearched, "onQueryChanged 後は hasSearched == false に戻る")
-        assertEquals("新しいクエリ", vm.state.value.query)
+            assertFalse(vm.state.value.hasSearched, "onQueryChanged 後は hasSearched == false に戻る")
+            assertEquals("新しいクエリ", vm.state.value.query)
+        } finally {
+            vm.clear()
+        }
     }
 
     // ─────────────────────────────────────────────────
@@ -160,16 +179,19 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onQueryChanged("渋谷")
+            vm.onSearchTapped()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQueryChanged("渋谷")
-        vm.onSearchTapped()
-        testScheduler.advanceUntilIdle()
-
-        val state = vm.state.value
-        assertTrue(state.hasSearched)
-        assertEquals(listOf(cafe), state.results)
-        assertFalse(state.isLoading)
-        assertNull(state.error)
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertEquals(listOf(cafe), state.results)
+            assertFalse(state.isLoading)
+            assertNull(state.error)
+        } finally {
+            vm.clear()
+        }
     }
 
     @Test
@@ -181,15 +203,18 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onQueryChanged("存在しないカフェ")
+            vm.onSearchTapped()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQueryChanged("存在しないカフェ")
-        vm.onSearchTapped()
-        testScheduler.advanceUntilIdle()
-
-        val state = vm.state.value
-        assertTrue(state.hasSearched)
-        assertTrue(state.results.isEmpty())
-        assertFalse(state.isLoading)
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertTrue(state.results.isEmpty())
+            assertFalse(state.isLoading)
+        } finally {
+            vm.clear()
+        }
     }
 
     @Test
@@ -201,15 +226,77 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onQueryChanged("エラーになるクエリ")
+            vm.onSearchTapped()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQueryChanged("エラーになるクエリ")
-        vm.onSearchTapped()
-        testScheduler.advanceUntilIdle()
+            val state = vm.state.value
+            assertFalse(state.hasSearched)
+            assertFalse(state.isLoading)
+            assertEquals("Network error", state.error)
+        } finally {
+            vm.clear()
+        }
+    }
 
-        val state = vm.state.value
-        assertFalse(state.hasSearched)
-        assertFalse(state.isLoading)
-        assertEquals("Network error", state.error)
+    // ─────────────────────────────────────────────────
+    // Tests — onSearchTapped(latitude, longitude, radiusMeters)
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onSearchTappedWithBias_success_passesCorrectLocationBiasAndReflectsResults() = runTest {
+        val cafe = makeCafe()
+        val fake = FakeCafeRepository()
+        fake.searchTextResult = listOf(cafe)
+
+        val vm = CafeSearchViewModel(
+            cafeRepository = fake,
+            scope = this,
+        )
+        try {
+            vm.onQueryChanged("渋谷 コーヒー")
+            vm.onSearchTapped(latitude = 35.658, longitude = 139.701, radiusMeters = 500.0)
+            testScheduler.advanceUntilIdle()
+
+            // 正しい LocationBias が渡されていること
+            val bias = fake.lastLocationBias
+            assertNotNull(bias, "locationBias が searchText に渡されていること")
+            assertEquals(35.658, bias.latitude)
+            assertEquals(139.701, bias.longitude)
+            assertEquals(500.0, bias.radiusMeters)
+
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertEquals(listOf(cafe), state.results)
+            assertFalse(state.isLoading)
+            assertNull(state.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onSearchTappedWithBias_failure_hasSearchedRemainsfalse_andErrorIsSet() = runTest {
+        val fake = FakeCafeRepository()
+        fake.searchTextError = Exception("API error")
+
+        val vm = CafeSearchViewModel(
+            cafeRepository = fake,
+            scope = this,
+        )
+        try {
+            vm.onQueryChanged("エラーになるクエリ")
+            vm.onSearchTapped(latitude = 35.658, longitude = 139.701, radiusMeters = 500.0)
+            testScheduler.advanceUntilIdle()
+
+            val state = vm.state.value
+            assertFalse(state.hasSearched)
+            assertFalse(state.isLoading)
+            assertEquals("API error", state.error)
+        } finally {
+            vm.clear()
+        }
     }
 
     // ─────────────────────────────────────────────────
@@ -226,15 +313,18 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
+            testScheduler.advanceUntilIdle()
 
-        vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
-        testScheduler.advanceUntilIdle()
-
-        val state = vm.state.value
-        assertTrue(state.hasSearched)
-        assertEquals(listOf(cafe), state.results)
-        assertFalse(state.isLoading)
-        assertNull(state.error)
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertEquals(listOf(cafe), state.results)
+            assertFalse(state.isLoading)
+            assertNull(state.error)
+        } finally {
+            vm.clear()
+        }
     }
 
     @Test
@@ -246,13 +336,16 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
+            testScheduler.advanceUntilIdle()
 
-        vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
-        testScheduler.advanceUntilIdle()
-
-        val state = vm.state.value
-        assertTrue(state.hasSearched)
-        assertTrue(state.results.isEmpty())
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertTrue(state.results.isEmpty())
+        } finally {
+            vm.clear()
+        }
     }
 
     @Test
@@ -264,14 +357,17 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
+            testScheduler.advanceUntilIdle()
 
-        vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
-        testScheduler.advanceUntilIdle()
-
-        val state = vm.state.value
-        assertFalse(state.hasSearched)
-        assertFalse(state.isLoading)
-        assertEquals("Location error", state.error)
+            val state = vm.state.value
+            assertFalse(state.hasSearched)
+            assertFalse(state.isLoading)
+            assertEquals("Location error", state.error)
+        } finally {
+            vm.clear()
+        }
     }
 
     // ─────────────────────────────────────────────────
@@ -287,19 +383,22 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onQueryChanged("クエリ")
+            vm.onSearchTapped()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQueryChanged("クエリ")
-        vm.onSearchTapped()
-        testScheduler.advanceUntilIdle()
+            assertNotNull(vm.state.value.error)
+            assertFalse(vm.state.value.hasSearched, "前提: 失敗後は hasSearched == false")
 
-        assertNotNull(vm.state.value.error)
-        assertFalse(vm.state.value.hasSearched, "前提: 失敗後は hasSearched == false")
+            vm.onErrorDismissed()
 
-        vm.onErrorDismissed()
-
-        assertNull(vm.state.value.error)
-        // hasSearched は onErrorDismissed では変化しない（false のまま）
-        assertFalse(vm.state.value.hasSearched)
+            assertNull(vm.state.value.error)
+            // hasSearched は onErrorDismissed では変化しない（false のまま）
+            assertFalse(vm.state.value.hasSearched)
+        } finally {
+            vm.clear()
+        }
     }
 
     @Test
@@ -312,15 +411,18 @@ class CafeSearchViewModelTest {
             cafeRepository = fake,
             scope = this,
         )
+        try {
+            vm.onQueryChanged("渋谷")
+            vm.onSearchTapped()
+            testScheduler.advanceUntilIdle()
+            assertTrue(vm.state.value.hasSearched, "前提: 検索成功後は hasSearched == true")
 
-        vm.onQueryChanged("渋谷")
-        vm.onSearchTapped()
-        testScheduler.advanceUntilIdle()
-        assertTrue(vm.state.value.hasSearched, "前提: 検索成功後は hasSearched == true")
+            vm.onErrorDismissed()
 
-        vm.onErrorDismissed()
-
-        assertTrue(vm.state.value.hasSearched, "onErrorDismissed は hasSearched を変えない")
-        assertNull(vm.state.value.error)
+            assertTrue(vm.state.value.hasSearched, "onErrorDismissed は hasSearched を変えない")
+            assertNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
     }
 }

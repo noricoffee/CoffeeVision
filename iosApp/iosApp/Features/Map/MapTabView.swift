@@ -399,6 +399,27 @@ struct MapTabView: View {
             // これにより MapKit が Legal/帰属表記を配置する基準が TabBar 上端になり、
             // Legal が TabBar の裏に隠れなくなる。
             .ignoresSafeArea(.container, edges: [.top, .horizontal])
+            // カメラ移動完了時にマップ中心を AppState へ書き込む（検索タブの位置バイアスに使う）。
+            // frequency: .onEnd で頻繁な中間値更新を抑制する。
+            .onMapCameraChange(frequency: .onEnd) { context in
+                let region = context.region
+                // 可視領域の半径相当をメートルで算出する。
+                // latitudinalMeters: 緯度 1 度 ≈ 111_000 m、span の半分が半径
+                // longitudinalMeters: 緯度に応じた経度 1 度あたりのメートル数で補正
+                let latMeters = region.span.latitudeDelta * 111_000 / 2
+                let lngMeters = region.span.longitudeDelta
+                    * 111_000
+                    * cos(region.center.latitude * .pi / 180)
+                    / 2
+                let rawRadius = max(latMeters, lngMeters)
+                // Places API locationBias circle の制約 1...50_000 m にクランプ
+                let radius = min(max(rawRadius, 1), 50_000)
+                appState.mapSearchCenter = MapSearchCenter(
+                    latitude: region.center.latitude,
+                    longitude: region.center.longitude,
+                    radiusMeters: radius
+                )
+            }
 
             // フローティングコントロール（セーフエリア内に自然に収まる）
             HStack(alignment: .center, spacing: 8) {

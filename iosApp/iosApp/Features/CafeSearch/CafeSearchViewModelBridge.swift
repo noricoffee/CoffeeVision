@@ -51,9 +51,22 @@ final class CafeSearchViewModelBridge {
         kotlin.onQueryChanged(query: query)
     }
 
-    /// 検索を実行する。現在の `query` で Places API を叩く。
+    /// 検索を実行する。現在の `query` で Places API を叩く（位置バイアスなし）。
     func onSearchTapped() {
         kotlin.onSearchTapped()
+    }
+
+    /// 位置バイアス付きで検索を実行する。
+    ///
+    /// マップタブのカメラ中心を位置バイアスとして渡し、指定エリア寄りの結果を返させる。
+    /// Kotlin 側の `onSearchTapped(latitude:longitude:radiusMeters:)` に転送する。
+    ///
+    /// - Parameters:
+    ///   - latitude: 位置バイアスの緯度（`MapSearchCenter.latitude`）
+    ///   - longitude: 位置バイアスの経度（`MapSearchCenter.longitude`）
+    ///   - radiusMeters: 位置バイアスの半径（メートル、1...50_000）
+    func onSearchTapped(latitude: Double, longitude: Double, radiusMeters: Double) {
+        kotlin.onSearchTapped(latitude: latitude, longitude: longitude, radiusMeters: radiusMeters)
     }
 
     /// エラーアラートを閉じる。

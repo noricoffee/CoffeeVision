@@ -1,6 +1,7 @@
 package com.noricoffee.feature.cafesearch
 
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.LocationBias
 import com.noricoffee.repository.CafeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -17,6 +18,8 @@ import kotlinx.coroutines.launch
  * カフェ検索画面の ViewModel。
  *
  * - ユーザーがクエリを入力し [onSearchTapped] を呼ぶことで [CafeRepository.searchText] を実行する
+ * - マップ中心座標が既知の場合は [onSearchTapped(latitude, longitude, radiusMeters)][onSearchTapped] を呼ぶと
+ *   位置バイアス付きで検索される
  * - [onQueryChanged] はクエリ文字列を更新するのみで検索は実行しない（API 消費を最小化する）
  * - 検索結果は [UIState.results] に反映され、ローディング中は [UIState.isLoading] が true になる
  * - エラーは [UIState.error] に詰め、[onErrorDismissed] で null に戻す
@@ -80,7 +83,10 @@ class CafeSearchViewModel(
     }
 
     /**
-     * 検索ボタンタップ時に呼ぶ。現在の [UIState.query] で [CafeRepository.searchText] を実行する。
+     * 検索ボタンタップ時に呼ぶ（位置バイアスなし）。現在の [UIState.query] で [CafeRepository.searchText] を実行する。
+     *
+     * マップ中心座標が不明な場合（検索タブ単体起動など）のフォールバック用。
+     * 座標が既知の場合は [onSearchTapped(latitude, longitude, radiusMeters)] を優先して呼ぶこと。
      *
      * 前回の検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
      * 検索中は [UIState.isLoading] が true になり、完了後 false に戻る。
@@ -89,18 +95,29 @@ class CafeSearchViewModel(
      */
     fun onSearchTapped() {
         val query = _state.value.query
-        searchJob?.cancel()
-        searchJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true, error = null) }
-            try {
-                val cafes = cafeRepository.searchText(query)
-                _state.update { it.copy(results = cafes, isLoading = false, hasSearched = true) }
-            } catch (e: CancellationException) {
-                _state.update { it.copy(isLoading = false) }
-                throw e
-            } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message ?: "検索に失敗しました") }
-            }
+        launchSearch(errorMessage = "検索に失敗しました") {
+            cafeRepository.searchText(query)
+        }
+    }
+
+    /**
+     * 検索ボタンタップ時に呼ぶ（位置バイアスあり）。現在の [UIState.query] を
+     * [LocationBias] とともに [CafeRepository.searchText] に渡す。
+     *
+     * iOS のマップタブがカメラ中心座標を把握しているケースで呼ぶ。
+     * バイアスなし版（引数なしの [onSearchTapped]）との 2 本立ては、SKIE がデフォルト引数を
+     * Swift に引き出せないため既存の [CafeRepository] インターフェースと同様のオーバーロード戦略を踏襲している。
+     *
+     * 状態遷移（isLoading / error / results / hasSearched の更新）はバイアスなし版と完全に同一。
+     *
+     * @param latitude マップ中心の緯度
+     * @param longitude マップ中心の経度
+     * @param radiusMeters 位置バイアスの半径（メートル）。通常は 500.0 を渡す
+     */
+    fun onSearchTapped(latitude: Double, longitude: Double, radiusMeters: Double) {
+        val query = _state.value.query
+        launchSearch(errorMessage = "検索に失敗しました") {
+            cafeRepository.searchText(query, LocationBias(latitude, longitude, radiusMeters))
         }
     }
 
@@ -120,17 +137,30 @@ class CafeSearchViewModel(
      * @param longitude 現在地の経度
      */
     fun onNearbySearchRequested(latitude: Double, longitude: Double) {
+        launchSearch(errorMessage = "近隣検索に失敗しました") {
+            cafeRepository.searchNearby(latitude, longitude)
+        }
+    }
+
+    /**
+     * 検索処理の共通実装。前回 Job のキャンセル・isLoading / error / results / hasSearched の
+     * 状態遷移・CancellationException の再スローをまとめる。
+     *
+     * @param errorMessage エラー時に [UIState.error] へセットするデフォルトメッセージ
+     * @param producer 実際の検索処理。成功時に [Cafe] リストを返す
+     */
+    private fun launchSearch(errorMessage: String, producer: suspend () -> List<Cafe>) {
         searchJob?.cancel()
         searchJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true, error = null) }
             try {
-                val results = cafeRepository.searchNearby(latitude, longitude)
+                val results = producer()
                 _state.update { it.copy(results = results, isLoading = false, hasSearched = true) }
             } catch (e: CancellationException) {
                 _state.update { it.copy(isLoading = false) }
                 throw e
             } catch (e: Exception) {
-                _state.update { it.copy(isLoading = false, error = e.message ?: "近隣検索に失敗しました") }
+                _state.update { it.copy(isLoading = false, error = e.message ?: errorMessage) }
             }
         }
     }

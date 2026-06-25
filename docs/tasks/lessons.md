@@ -443,3 +443,15 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-25、`AccountView` の「Apple でサインイン」ボタンが背景 `Color.primary.opacity(0.9)` + 前景 `.white` だった。`Color.primary` はライトで黒・**ダークで白**になるため、ダークモードで「白背景 + 白文字」となりボタンがほぼ見えなかった（ユーザー報告で発覚。ビルドは通るので静的には気づけない）
 - 原因の構造: `Color.primary` / `Color(.label)` は前景テキスト用のセマンティックカラーで colorScheme に応じて反転する。これを**ボタンの背景**に使い、前景を固定色（`.white`）にすると、片方のモードで前景と背景が同色化する
 - **教訓**: Sign in with Apple のような**固定配色が要るボタン**は `@Environment(\.colorScheme)` で背景・前景を明示分岐する（ライト: 黒背景+白文字 / ダーク: 白背景+黒文字+`Color(.separator)` ボーダー、が Apple HIG 慣習）。反転するセマンティックカラーを背景に使うときは前景も必ず連動させる。Preview 用ダミー View に同スタイルを複製している場合はそちらも同時修正（[`implementation_note.md`](../implementation_note.md) 2026-06-25 エントリ参照）
+
+### 所有 viewModelScope（SupervisorJob 子スコープ）を持つ ViewModel のテストは `finally { vm.clear() }` が必須
+
+- 「所有 viewModelScope + clear()」パターン（`CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentJob))` を VM 内で生成）の ViewModel を `runTest { ... }` でテストする際、親に `this`（TestScope）を渡すと VM の `viewModelScope` が `TestScope` の子 Job として登録される。テスト終了時にこの子スコープが生きていると `runTest` が `UncompletedCoroutinesError` を報告してテストが**失敗**する。`advanceUntilIdle()` だけでは collector 等が残るため不十分
+- 2026-06-25、`CafeSearchViewModel` にバイアス版 `onSearchTapped` を追加してテストを通そうとした際に発覚。git stash で確認したところ**変更前から cafe-search の全テストが同エラーで落ちていた**（新メソッド追加で初めて実行され顕在化）
+- **教訓**: 各テストの `runTest` ブロックを `try { ... } finally { vm.clear() }` で囲み、テスト終了前に必ず scope を畳む。**横展開注意**: 同じ「所有 viewModelScope + clear()」パターン（本ファイル「画面ごとの ViewModel に app-wide scope を共有させない」エントリ）を持つ他 feature の既存テストも同様に落ちている可能性が高い。cafe-search は修正済。他モジュールは別タスクで横断点検が必要（[`implementation_note.md`](../implementation_note.md) 2026-06-25「テキスト検索にマップ中心の位置バイアス」エントリ参照）
+
+### タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない
+
+- `Tab(role:) { CafeSearchView(...) }` のようにタブのルートに直接置かれた View は、タブ切替や子画面 push（`CafeDetailView` への `NavigationLink`）で `onDisappear` が発火するが、**View インスタンス自体は破棄されず `@State` も保持される**。ここで `.onDisappear { bridge.cancel() }` のように Kotlin `StateFlow` の `observationTask` を止めると、`startObservation()` は init でしか呼ばれないため、戻ってきても観測が再開されず、以降 Kotlin 側の状態更新が Swift に一切反映されなくなる
+- 2026-06-25、`CafeSearchView` でこれが顕在化（検索 → カフェ詳細 push → 戻る、で検索が効かなくなる「1,2 回はできたが止まる」バグ）。`.onDisappear { bridge.cancel() }` を削除して解消
+- **教訓**: タブ常駐 View（`@State` でブリッジを自前生成し、push/タブ切替で破棄されないもの）の observation は `onDisappear` でキャンセルしない。observation は**ブリッジの `deinit`（`kotlin.clear()`）まで生かす**。sheet/push で都度生成・破棄される使い方（同 View を sheet 起動するモード等）では、View 破棄 → `deinit` が自然に observation と Kotlin scope を片付ける。`onDisappear` は「遷移アニメ中にも発火する」「常駐 View では再 init されない」の二点で破棄フックとして不適。所有 viewModelScope の `clear()` を呼ぶのも同じ理由で `deinit` 起点にする（本ファイル「画面ごとの ViewModel に app-wide scope を共有させない」エントリと同根）（[`implementation_note.md`](../implementation_note.md) 2026-06-25「現在地系を撤去しテキスト検索のみに整理」エントリ参照）

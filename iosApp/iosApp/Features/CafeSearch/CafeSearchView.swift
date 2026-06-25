@@ -16,8 +16,6 @@ struct CafeSearchView: View {
     // MARK: - Properties
 
     @State private var bridge: CafeSearchViewModelBridge
-    @State private var locationManager = LocationManager()
-    @State private var showingLocationDeniedAlert: Bool = false
     /// 検索欄の表示テキスト。ローカル状態で即時 echo し、Kotlin StateFlow への非同期ラウンドトリップに依存しない。
     @State private var queryText: String = ""
     @Environment(\.dismiss) private var dismiss
@@ -27,6 +25,9 @@ struct CafeSearchView: View {
 
     /// 写真サムネ表示に使うローダー。`AppState` から取得する。
     let photoLoader: PlacePhotoLoader
+
+    /// アプリ全体の状態（マップカメラ中心の位置バイアス取得に使う）。
+    let appState: AppState
 
     // MARK: - Init
 
@@ -38,6 +39,7 @@ struct CafeSearchView: View {
             )
         )
         self.photoLoader = appState.placePhotoLoader
+        self.appState = appState
         self.onCafeSelected = onCafeSelected
     }
 
@@ -49,6 +51,7 @@ struct CafeSearchView: View {
             )
         )
         self.photoLoader = appState.placePhotoLoader
+        self.appState = appState
         self.onCafeSelected = nil
     }
 
@@ -78,7 +81,7 @@ struct CafeSearchView: View {
             bridge.onQueryChanged(new)
         }
         .onSubmit(of: .search) {
-            bridge.onSearchTapped()
+            runSearch()
         }
         .toolbar {
             // コールバックモードのみキャンセルボタンを表示（sheet 閉じるため）
@@ -87,23 +90,6 @@ struct CafeSearchView: View {
                     Button(String(localized: "キャンセル")) {
                         dismiss()
                     }
-                }
-            }
-            ToolbarItem(placement: .navigationBarTrailing) {
-                HStack(spacing: 8) {
-                    Button {
-                        handleNearbyTapped()
-                    } label: {
-                        Image(systemName: "location.fill")
-                    }
-                    .accessibilityLabel(String(localized: "現在地で検索"))
-                    .disabled(bridge.isLoading)
-
-                    Button(String(localized: "検索")) {
-                        bridge.onSearchTapped()
-                    }
-                    .disabled(queryText.isEmpty || bridge.isLoading)
-                    .accessibilityLabel(String(localized: "検索"))
                 }
             }
         }
@@ -115,61 +101,28 @@ struct CafeSearchView: View {
                     .accessibilityLabel(String(localized: "検索中"))
             }
         }
-        .onChange(of: locationManager.lastLocation?.latitude) { _, _ in
-            if let loc = locationManager.lastLocation {
-                bridge.onNearbySearchRequested(
-                    latitude: loc.latitude,
-                    longitude: loc.longitude
-                )
-            }
+        // 非致命エラー（検索失敗）はトーストで表示
+        .errorToast(message: bridge.error) {
+            bridge.onErrorDismissed()
         }
-        // 非致命エラー（検索失敗 / 位置取得失敗）はトーストで表示
-        .errorToast(message: activeToast?.message) {
-            activeToast?.dismiss()
-        }
-        // アクション付き alert（設定アプリへ誘導）は alert のまま維持
-        .alert(
-            String(localized: "位置情報が利用できません"),
-            isPresented: $showingLocationDeniedAlert
-        ) {
-            Button(String(localized: "設定を開く")) {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
-            }
-            Button(String(localized: "キャンセル"), role: .cancel) {}
-        } message: {
-            Text(String(localized: "位置情報の利用を許可するには、設定アプリで CoffeeVision の位置情報サービスを有効にしてください。"))
-        }
-        .onDisappear {
-            bridge.cancel()
-        }
-    }
-
-    // MARK: - エラートースト集約
-
-    /// 複数のエラー源を優先順位付きで単一トーストに集約する。
-    ///
-    /// `bridge.error`（検索失敗）を `locationManager.error`（位置取得失敗）より優先する。
-    private var activeToast: (message: String, dismiss: () -> Void)? {
-        if let e = bridge.error {
-            return (e, { bridge.onErrorDismissed() })
-        }
-        if let e = locationManager.error {
-            return (e.localizedDescription, { locationManager.clearError() })
-        }
-        return nil
     }
 
     // MARK: - Actions
 
-    private func handleNearbyTapped() {
-        switch locationManager.authorizationStatus {
-        case .denied, .restricted:
-            showingLocationDeniedAlert = true
-        default:
-            locationManager.resetLastLocation()
-            locationManager.requestLocation()
+    /// テキスト検索を発火する統一エントリポイント。
+    ///
+    /// `appState.mapSearchCenter` があれば位置バイアス付き検索を行い、
+    /// なければバイアスなし検索（既存動作）にフォールバックする。
+    /// `.onSubmit(of: .search)` から呼ぶ。
+    private func runSearch() {
+        if let center = appState.mapSearchCenter {
+            bridge.onSearchTapped(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                radiusMeters: center.radiusMeters
+            )
+        } else {
+            bridge.onSearchTapped()
         }
     }
 

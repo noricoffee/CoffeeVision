@@ -718,3 +718,30 @@
   - [x] iOS `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ。`No such module` は SourceKit 偽陽性）
   - [x] シミュレータ目視（iPhone 17 / OS 26.1、`simctl io screenshot`）で Legal が TabBar 上端の上に表示・チップ/歯車/FAB 崩れなしを ios-engineer が確認
   - [ ] トレードオフ: 地図下辺が TabBar 上端で止まるため TabBar 裏のフルブリード感は喪失。実機での見た目はユーザー確認
+
+### 2026-06-25 - カフェ検索: テキスト検索にマップ中心の位置バイアスを適用
+- 背景: 検索タブのテキスト検索（`searchText(query)`）は位置バイアスなしで、結果が現在地寄り（端末 IP/GPS 推測）になりやすい。ユーザーは「マップで見ているエリア寄り」の結果を得たい。検索タブに地図は無いため、マップタブのカメラ中心をタブ間で共有してバイアスに使う。
+- 仕様（インターフェース契約）:
+  - ドメイン層変更なし（`CafeRepository.searchText(query, LocationBias)` を既存利用）
+  - KMP `CafeSearchViewModel`: 既存 `onSearchTapped()`（バイアスなし・フォールバック用）は維持。新規オーバーロード `onSearchTapped(latitude: Double, longitude: Double, radiusMeters: Double)` を追加し、`searchText(query, LocationBias(lat,lng,radius))` を呼ぶ。検索本体（Job 起動・state 遷移・hasSearched）は private helper に共通化
+  - iOS 中心共有: `AppState` に `var mapSearchCenter: MapSearchCenter?`（observable, settable）。`struct MapSearchCenter { latitude; longitude; radiusMeters }`。`MapTabView` の `.onMapCameraChange(frequency: .onEnd)` で region から算出して更新（radius = 可視 region の半径相当、`1...50000`m にクランプ）
+  - iOS 呼び出し: `CafeSearchViewModelBridge` に `onSearchTapped(latitude:longitude:radiusMeters:)` を追加。`CafeSearchView` の検索発火（onSubmit / toolbar 検索ボタン）で `appState.mapSearchCenter` があればバイアス版、無ければ既存 `onSearchTapped()` にフォールバック
+  - 「現在地で検索」ボタン（`searchNearby`）は今回対象外（別アクションとして維持）
+- タスク:
+  - [x] KMP: `CafeSearchViewModel` にバイアス版 `onSearchTapped(latitude, longitude, radiusMeters)` 追加（検索本体を `launchSearch` helper に共通化）+ commonTest 2 ケース追随
+  - [x] iOS: `AppState.mapSearchCenter` / `MapSearchCenter` 追加、`MapTabView` で `.onMapCameraChange(.onEnd)` 更新、`CafeSearchViewModelBridge` + `CafeSearchView.runSearch()` でバイアス発火（中心無ければ既存版フォールバック）
+- 動作確認:
+  - [x] KMP `:shared:feature:cafe-search:allTests` green（android/iosSimulatorArm64 各 13）/ iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）
+  - [ ] 実機/シミュレータ目視（地図を別エリアにパン → 検索タブでテキスト検索 → そのエリア寄りの結果 / マップ未表示時はバイアスなし / CoffeeEditor sheet 経由の不変）はユーザー作業
+- 副産物（要追跡）: cafe-search の既存 commonTest が `UncompletedCoroutinesError` で実は落ちていたのを発見・修正（`finally { vm.clear() }`）。同パターンの他 feature テストも要横断点検（別タスク）。lessons.md 参照
+
+### 2026-06-25 - カフェ検索: 現在地系を撤去 + observation 停止バグ修正（ユーザーフィードバック対応）
+- 背景: マップ中心バイアス導入後、検索タブの現在地系が役割重複。ユーザー報告 3 件: ①検索が 1,2 回後に効かない ②開いた時点で現在地周辺が出る ③右上ボタン 2 つが冗長・意図不明。
+- 確定方針（ユーザー選択）: 現在地系を全撤去し、テキスト検索（マップ中心バイアス）のみに。
+- タスク（iOS のみ・Kotlin 変更なし）:
+  - [x] バグ修正: `CafeSearchView` の `.onDisappear { bridge.cancel() }` を削除（タブ常駐 View で push/タブ切替後に StateFlow 観測が永久停止していた）。observation は bridge の deinit まで生かす
+  - [x] 右上 toolbar trailing（現在地アイコン + 検索ボタン）撤去、`.onChange(location)` 自動検索撤去、`LocationManager` / 位置拒否 alert / `handleNearbyTapped` 撤去、`activeToast` を `bridge.error` 直書きに簡略化。検索発火は `.onSubmit(of: .search)` のみ
+- 動作確認:
+  - [x] iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）
+  - [ ] 実機/シミュレータ目視（検索→詳細→戻る→再検索が反映 / 他タブ往復後も反映 / 初期はプロンプトのみ / return で検索 / CoffeeEditor sheet 経由不変）はユーザー作業
+- 残置（別タスク）: 未使用になった `onNearbySearchRequested`（Swift Bridge + Kotlin VM）は残置。API 削除は別途 kmp-engineer dispatch

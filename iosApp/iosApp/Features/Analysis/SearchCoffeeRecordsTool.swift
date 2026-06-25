@@ -25,7 +25,6 @@ import Foundation
 /// `CoffeeRecordFilter` の `minRating` / `maxRating` は Kotlin の `Double?` だが、
 /// SKIE 後の Swift シグネチャでは `KotlinDouble?` になる。
 /// LLM が生成する Swift の `Double` を `KotlinDouble(value:)` でラップして渡す。
-@available(iOS 26.0, *)
 struct SearchCoffeeRecordsTool: Tool {
 
     let name = "searchCoffeeRecords"

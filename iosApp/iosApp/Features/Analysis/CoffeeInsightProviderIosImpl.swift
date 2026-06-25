@@ -24,7 +24,6 @@ import SharedLogic
 /// - Foundation Models は iOS 26.0 以降が必要。`@available` ガードで全メソッドを保護する
 /// - `summarize` は呼ばれるたびに新しい `LanguageModelSession` を作る（ステートレス）
 ///
-@available(iOS 26.0, *)
 final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
     // MARK: - State
@@ -415,7 +414,6 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 ///
 /// `@Generable` マクロにより LLM への schema が自動生成される。
 /// `@Guide` でフィールドごとの説明と長さ制約をモデルに伝える。
-@available(iOS 26.0, *)
 @Generable
 private struct CoffeeInsightOutput {
     /// 要約のタイトル（15〜25 文字程度）。コーヒーへの向き合い方を端的に表す。

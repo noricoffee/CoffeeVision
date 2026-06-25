@@ -5,7 +5,16 @@
 
 ---
 
-## 2026-06-17
+## 2026-06-26
+
+### `IPHONEOS_DEPLOYMENT_TARGET` を上げたら冗長な `@available` / `#if available` を即 sweep する
+
+- デプロイターゲットが iOS 26.0 なのに `@available(iOS 26.0, *)` 属性や `if #available(iOS 26, *)` 分岐が各所に残っていた（Foundation Models 導入時に「26 専用 API だから」と機械的に付けた名残）。ターゲット = 対象 OS 下限なので、下限と同じバージョンの可用性ガードは**全て冗長**。
+- 対処: ターゲットを上げた直後に `grep -rn "@available(iOS <target>" iosApp --include="*.swift"` と `if #available(iOS <target>` を sweep して除去する。型宣言に付いた `@available` が残ると、その型を参照する `#Preview` 内にも `@available` が連鎖して残り見落としやすい。
+- `if #available { A } else { B }`（B = 下限未満フォールバック）は then 節 A を素のコードに開いて else を削る。
+- 注意: ターゲット**より上**の OS を対象にした `@available`（例: ターゲット 26 で `@available(iOS 27, *)`）は当然残す。sweep 対象は「ターゲットと同一バージョン」のものだけ。
+- 別件で混同しないこと: `#if DEBUG` には2用途がある。①機能ゲート（未リリースなら不要 → 除去）②Xcode Preview 補助（`#Preview` / preview 専用サンプル、リリースバイナリ除外目的 → 残す）。dev 専用ツール（ダミーデータ投入/削除など破壊的副作用を持つもの）の DEBUG ゲートも残す。
+- 発生源: iOSDC LT 逆変換 PoC 追加後のクリーンアップ（`implementation_note.md` 2026-06-26）。
 
 ### `runTest` で Flow を永続購読する ViewModel をテストするとき `MutableStateFlow` Fake は `UncompletedCoroutinesError` を起こす
 

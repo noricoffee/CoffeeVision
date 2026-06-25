@@ -1937,3 +1937,13 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build`（iPhone 17 Pro / iOS 26.1）BUILD SUCCEEDED・新規 warning ゼロ。SourceKit が `No such module SharedLogic`・型チェックタイムアウト等を出すが、既存ファイルにも出る**インデクサ起因の偽陽性**（実 xcodebuild は成功）。**実機での推論動作・抽出品質確認はユーザー作業**。
 - 既知の軽微点: `arrow.trianglehead.2.clockwise` の SF Symbol が iOS 26 で表示されるか未確認（SF Symbol 名は文字列のためコンパイルは通る）。表示されなければ `arrow.2.circlepath` 等に差し替え。
 - 親メモ: 同種の「@Generable は出力整形にも自然文抽出にも同じ API で使える双方向の道具」という気づきが溜まったら `coding-conventions.md` か `kmp-bridge.md`（FM 節）への昇格を検討。
+
+## 2026-06-26 - 冗長な可用性ガード除去 + 逆変換 PoC 導線の表示方針
+
+- 領域: iOS / 関連: `TastePreferenceExtractor.swift`・`TastePreferenceConversionView.swift`・`CoffeeInsightProviderIosImpl.swift`・`SearchCoffeeRecordsTool.swift`・`AnalysisView.swift`・`AppState.swift`
+- 背景: アプリは `IPHONEOS_DEPLOYMENT_TARGET = 26.0`（iOS 26 専用）かつ未リリース。Foundation Models 導入時に付けた `@available(iOS 26.0, *)` / `if #available(iOS 26, *)` は全て冗長、PoC を「本番で隠す」目的の `#if DEBUG` も未リリースなら不要、というユーザー方針で sweep。
+- 除去: 全ファイルの `@available(iOS 26.0, *)`（型宣言・Preview 連鎖含む）と `if #available(iOS 26, *)` 分岐を除去。`AnalysisView` の逆変換 PoC デモ導線は `#if DEBUG` + iOS 26 else の二重ガードを外し、常時表示の `private var` に統一。`AppState.init` の `#available` ラップクロージャも直接呼び出しに簡略化。
+- 残した `#if DEBUG`（意図的）: ①`#Preview` / `PreviewSamples` 等の Xcode Preview 補助（リリースバイナリ除外目的・未リリースでも本来必要）②`AppState` の `seedOrClearDummyData`（`SEED_DUMMY_DATA` dev ツール。RELEASE で毎起動すると `dummy-0001`〜`0030` を削除する破壊的副作用があるため dev 専用に留める）。
+- **要追跡（リリース前の意思決定）**: 逆変換 PoC 導線（`TastePreferenceConversionView` への NavLink）は現在 DEBUG ゲートを外し分析タブ最下部に**全ユーザー常時表示**。iOSDC LT デモ用の画面なので、App Store リリース前に「本番に含める / 設定>開発者向けに移動 / 削除」のいずれかを決めること。
+- 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ）。SourceKit の `No such module SharedLogic` 等はインデクサ偽陽性（実ビルド成功）。**分析タブ最下部に PoC 導線が常時表示されることの目視はユーザー作業**。
+- 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-26「ターゲットを上げたら冗長な @available を即 sweep」。

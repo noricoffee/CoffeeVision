@@ -19,7 +19,6 @@ import FoundationModels
 ///
 /// Swift の `View.body` と同名になるが、構造体プロパティとしては問題ない。
 /// ただし `View` を直接実装する型の中でこの構造体を参照する場合は注意（LT S9 ネタ）。
-@available(iOS 26.0, *)
 @Generable
 struct TastePreference {
     /// 甘味の好みの強さ 1〜10。言及がなければ 5
@@ -65,7 +64,6 @@ struct TastePreference {
 /// - `extract(from:)` は呼ぶたびに新規 `LanguageModelSession` を作る（ステートレス）
 /// - 非対応端末では `makeIfAvailable()` が nil を返すため、呼び出し元は nil チェックで
 ///   デモ UI 自体を表示しない（graceful degradation）
-@available(iOS 26.0, *)
 final class TastePreferenceExtractor {
 
     // MARK: - Factory

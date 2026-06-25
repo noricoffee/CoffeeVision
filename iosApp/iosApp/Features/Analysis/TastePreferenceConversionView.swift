@@ -19,7 +19,6 @@ import SwiftUI
 /// - S3 デモ②（逆）: このデモ画面で感想文を入力 → 5軸カード をスクショ
 /// - S6: `TastePreference` の `@Generable` 定義をスライドに掲載
 /// - S7 対比: 順（`CoffeeInsightOutput`・5軸なし）vs 逆（`TastePreference`・5軸あり）
-@available(iOS 26.0, *)
 @MainActor
 struct TastePreferenceConversionView: View {
 
@@ -253,7 +252,6 @@ struct TastePreferenceConversionView: View {
 
 // MARK: - ExtractionState
 
-@available(iOS 26.0, *)
 private enum ExtractionState: Equatable {
     case idle
     case extracting
@@ -285,7 +283,6 @@ private enum ExtractionState: Equatable {
 /// iOSDC LT S3 でスクショする主役カード。
 /// `CoffeeInsightOutput`（順方向・5軸なし）との対比として、
 /// このカードでは5軸を明示的に表示する。
-@available(iOS 26.0, *)
 struct TastePreferenceResultCard: View {
 
     let preference: TastePreference
@@ -429,7 +426,6 @@ struct TastePreferenceResultCard: View {
 
 #if DEBUG
 
-@available(iOS 26.0, *)
 #Preview("逆変換 PoC - 結果あり") {
     // iOS 26 シミュレータでは Foundation Models が利用できないため、
     // Preview は固定値で結果カードを直接描画する。
@@ -444,7 +440,6 @@ struct TastePreferenceResultCard: View {
     }
 }
 
-@available(iOS 26.0, *)
 private let previewTastePreference = TastePreference(
     sweetness: 4,
     body: 3,

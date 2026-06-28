@@ -25,3 +25,6 @@ google-services.json
 
 # Places API キー（ローカル開発用。コミット禁止）
 iosApp/Configuration/Secrets.xcconfig
+
+# Claude Code ローカル設定（個人環境依存）
+.claude/settings.local.json

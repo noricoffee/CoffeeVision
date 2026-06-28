@@ -564,6 +564,18 @@
 
 ---
 
+## iOSDC 2026 LT: 逆方向 PoC
+
+> 2026-06-26 実装済み（BUILD SUCCEEDED・未コミット）。スライド S3/S6/S7 のデモ素材。
+> 実装ファイル: `iosApp/.../Analysis/TastePreferenceExtractor.swift` / `TastePreferenceConversionView.swift` / `AnalysisView.swift`（`#if DEBUG` 導線）。
+> スライド・デモ素材・リハーサル等のコード以外の準備は `docs/talks/iosdc-2026-foundation-models.md` §9 で管理。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 逆方向 PoC を commit → `docs/talks/iosdc-2026-foundation-models.md` §6 にハッシュ追記 | `ios-engineer` 実装済み・親が commit |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。
@@ -745,3 +757,113 @@
   - [x] iOS `xcodebuild` BUILD SUCCEEDED（新規 warning ゼロ）
   - [ ] 実機/シミュレータ目視（検索→詳細→戻る→再検索が反映 / 他タブ往復後も反映 / 初期はプロンプトのみ / return で検索 / CoffeeEditor sheet 経由不変）はユーザー作業
 - 残置（別タスク）: 未使用になった `onNearbySearchRequested`（Swift Bridge + Kotlin VM）は残置。API 削除は別途 kmp-engineer dispatch
+
+---
+
+## フェーズ 10: マップ拡充
+
+> 起票 2026-06-29。マップの視認性・情報密度・フィルタリングを強化する。
+
+### 10-A: ピンデザイン改善
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 訪問済みピンのサイズ・カラー・アイコンを再設計（視認性向上。ズームレベルに応じたクラスタリング検討） | MapKit Annotation / MKMarkerAnnotation の customization |
+| [ ] | 好み一致ピン（B-4 `heart.fill`）との差別化を確認し、3 種（訪問済み / 周辺 / 好み一致）のビジュアル体系を整理 | |
+
+### 10-B: カフェ詳細画面の情報拡充
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | Places API New v1 の追加フィールド取得: 営業時間 (`currentOpeningHours`)・電話番号 (`nationalPhoneNumber`)・Google Maps URL (`googleMapsUri`)・価格帯 (`priceLevel`)・評価 (`rating`) | `getDetails` の `DETAILS_FIELD_MASK` に追加 |
+| [ ] | Places API「メニュー」: `websiteUri` + 関連 url をカフェ詳細に表示（Places API はメニューを直接返さないため、公式 URL をリンクとして掲載） | `websiteUri` フィールドを活用 |
+| [ ] | `CafeDetailView` に営業時間・電話番号・価格帯・外部リンク（Google Maps / Website）のセクションを追加 | |
+| [ ] | `PlaceSummary` / `Cafe` ドメインモデルに上記フィールドを追加（optional）。`data-model.md` 更新 | |
+
+### 10-C: 検索結果カフェをマップにオーバーレイ表示
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 検索タブで検索実行後、結果カフェをマップタブのピンとして表示できる仕組みを設計（AppState 経由 or MapViewModel に検索結果フィード） | 設計をdocs で確定してから実装 |
+| [ ] | `MapViewModel.UIState` に `searchResultPlaces: List<Cafe>` を追加し、検索結果ピン（別色 / 別アイコン）として描画 | |
+| [ ] | `CafeSearchView` で「マップに表示」アクションを追加（検索結果をマップタブへ転送）またはマップタブで自動反映 | UX はユーザー判断待ちで設計 |
+
+### 10-D: お気に入りタグフィルター
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `CoffeeRecord` / `VisitedCafe` にユーザー定義タグ（`List<String>`）を追加。`data-model.md` 更新 | ドメインモデル変更・クリーンブレイクの可否を確認 |
+| [ ] | KMP: タグの CRUD（`CoffeeEditorViewModel` でタグ追加・削除）+ SQLDelight スキーマ更新 | |
+| [ ] | `MapViewModel` にタグフィルター状態を追加（選択タグにマッチする訪問済みカフェのみ表示） | |
+| [ ] | `MapTabView` のフィルタ行にタグ選択 UI（チップ or ドロップダウン）を追加 | |
+| [ ] | `CoffeeEditorView` にタグ入力 UI を追加 | |
+
+---
+
+## フェーズ 11: コーヒー記録テンプレート / カスタムフィールド
+
+> 起票 2026-06-29。「記録のしやすさ」と「個人の記録スタイル」への対応。テンプレートで素早く入力でき、カスタムフィールドで独自の観点を追記できるようにする。
+
+### 11-A: 記録テンプレート
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | テンプレートのデータモデルを設計（`RecordTemplate`: name / defaultBeans / defaultBrewMethod / defaultTastingEnabled / customFields 等）。`data-model.md` に追記 | |
+| [ ] | KMP: `RecordTemplate` ドメインモデル + `TemplateRepository` + SQLDelight スキーマ | |
+| [ ] | `CoffeeEditorViewModel` にテンプレートから draft を初期化するフロー追加（`onTemplateSelected(template)`） | |
+| [ ] | iOS: テンプレート選択 UI（`CoffeeEditorView` 上部のシート、またはコーヒー記録追加 FAB タップ時に選択） | |
+| [ ] | iOS: テンプレート管理画面（作成・編集・削除・並び替え） | 設定タブまたは独立タブ |
+
+### 11-B: カスタムフィールド
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | カスタムフィールドのデータモデルを設計（`CustomField`: id / title / type(text/number/select) / value）。`data-model.md` に追記 | |
+| [ ] | KMP: `CustomField` ドメインモデル + `CoffeeRecord.customFields: List<CustomField>` 追加 + SQLDelight（JSON 列 or 別テーブル）+ Firestore スキーマ更新 | |
+| [ ] | `CoffeeEditorViewModel` にカスタムフィールド CRUD メソッドを追加 | |
+| [ ] | iOS: `CoffeeEditorView` にカスタムフィールドセクション（フィールドタイトル・値を動的に追加/削除） | |
+| [ ] | iOS: `CoffeeDetailView` にカスタムフィールドの表示 | |
+| [ ] | カスタムフィールドの定義を「ユーザー定義フィールドマスタ」として保存し、次回以降の記録でも再利用できる設計にするか検討 | ユーザー判断待ち |
+
+---
+
+## フェーズ 12: コミュニティ / データ共有基盤
+
+> 起票 2026-06-29。個人の記録を（同意を得た上で）集合知として活用し、①全ユーザーの好み傾向分析、②コーヒー豆ナレッジベースとの突合、③協調フィルタリングによるカフェ推薦、を実現する。B-4（好み一致カフェ・ローカル実装）の将来版（9-6 協調フィルタリング）と連動する。**サーバー側インフラが必要なため、設計・同意フロー・プライバシー申告の確定が着手の前提。**
+
+### 12-A: データ共有同意フロー（前提）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須 |
+| [ ] | アプリ内同意 UI 設計・実装（初回起動時またはアカウントアップグレード時に同意取得） | |
+| [ ] | `AuthRepository` / `AppContainer` に `analyticsConsent: Boolean` フラグを追加 | |
+| [ ] | Firestore Security Rules 更新（同意フラグに基づく集計用コレクションへの書き込み可否） | |
+
+### 12-B: コーヒー豆ナレッジベース（サーバー管理データ）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 豆ナレッジベースのデータモデル設計（`BeanProfile`: origin / variety / process / flavorNotes / referenceRating 等）。`data-model.md` に追記 | |
+| [ ] | Firestore（または別 DB）に豆ナレッジコレクション設計・初期データ投入 | 管理 UI は別途（Admin SDK or Google Sheets 連携を検討） |
+| [ ] | KMP: `BeanProfileRepository`（read-only）+ `BeanProfile` ドメインモデル + キャッシュ戦略 | |
+| [ ] | `CoffeeRecord.beanProfileId` で紐付ける設計にするか、`origin`+`process` のファジーマッチにするか方針確定 | ユーザー判断待ち |
+| [ ] | iOS: コーヒー記録入力時に豆ナレッジから候補をサジェスト（産地 / 品種の補完） | |
+
+### 12-C: 個人好みと豆ナレッジの突合・言語化
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `FavoriteSignals` と `BeanProfile.flavorNotes` を突合し「あなたが好みやすい豆の特徴」を導出するロジック設計 | |
+| [ ] | KMP: 突合ロジック実装（`MatchBeanProfileUseCase` 等）+ `CoffeeStats` への追加 | |
+| [ ] | iOS: 分析タブに「好みの豆の傾向」セクションを追加（Foundation Models で言語化） | |
+
+### 12-D: 協調フィルタリング（B-4 将来版 / 9-6）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | サーバーサイド基盤設計（GCP Cloud Run / Cloud Functions + Firestore 集計パイプライン） | インフラ選定・コスト見積もりが前提 |
+| [ ] | ユーザー間好み類似度計算ロジック設計（コサイン類似度 / ピアソン相関 on `FavoriteSignals` ベクトル） | |
+| [ ] | `CafeRecommendationProvider` のサーバーリモート実装（既存ローカル実装と差し替え可能な設計は B-4 で済み）| B-4 の将来 9-6 エントリと連動 |
+| [ ] | iOS: マップ上の好み一致ピン（B-4）を協調フィルタリング結果に差し替え（フラグ制御で A/B 切替可能な設計） | |
+| [ ] | 全体データを使った「このカフェを好む人は○○傾向」などのコミュニティ統計を分析タブに追加 | |

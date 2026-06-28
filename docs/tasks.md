@@ -572,7 +572,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 逆方向 PoC を commit → `docs/talks/iosdc-2026-foundation-models.md` §6 にハッシュ追記 | `ios-engineer` 実装済み・親が commit |
+| [x] | 逆方向 PoC を commit → `docs/talks/iosdc-2026-foundation-models.md` §6 にハッシュ追記 | `e80b689` / `2d3218a`（2026-06-29） |
 
 ---
 

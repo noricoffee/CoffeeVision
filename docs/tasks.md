@@ -760,6 +760,42 @@
 
 ---
 
+## フェーズ 13: 自然言語好み検索（逆方向変換応用）
+
+> 起票 2026-06-29。iOSDC LT 逆方向 PoC（`TastePreferenceExtractor`）を実用機能として昇格させる。「こんなコーヒーが飲みたい」という自然言語を 5 軸スコア（甘味/ボディ/酸味/風味/後味）+ 属性（焙煎度/抽出法等）に変換し、**記録検索・カフェ推薦・カフェ検索**に活用する。Foundation Models を使う部分は iOS 限定。KMP 側は変換後の数値プロファイルで動作するため非 AI 端末でも機能する。実装の前提として `TastePreferenceExtractor` を `#if DEBUG` から本番昇格する。
+
+### 13-A: 基盤（`TastePreferenceExtractor` 本番昇格 + フィルタ拡張）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | `TastePreferenceExtractor` を `#if DEBUG` から外し、`CoffeeInsightProviderIosImpl` と同じく `SystemLanguageModel.availability` ガードに切り替える（非対応端末は UI を非表示） | Foundation Models が使えない端末では本機能全体を非表示 |
+| [ ] | KMP: `CoffeeRecordFilter` にテイスティングスコア範囲条件（`tastingMin` / `tastingMax`: `TastingScores?`）を追加し、`CoffeeRecordQueryImpl` の絞り込みロジックを拡張。`commonTest` 追加 | `searchRecords` の B-3 拡張。`null` は「条件なし」として既存動作に影響しない |
+| [ ] | iOS: `TastePreference`（逆変換結果）→ `CoffeeRecordFilter` に変換するマッピングヘルパを実装（5 軸スコアを範囲条件に変換、属性は `brewMethod` / `roastLevel` に変換） | 変換結果の曖昧さ（「やや酸味がある」= 6〜9 程度の幅）を適切にレンジで表現 |
+
+### 13-B: コーヒー記録の自然言語検索（Q&A との統合）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | Q&A（B-2/B-3）の `generateAnswer` で「こんな味の記録を探して」系の質問を検出したとき、`TastePreferenceExtractor` で変換 → `CoffeeRecordFilter`（テイスティング範囲）で `searchRecords` を呼ぶ拡張 tool を追加 | 既存 `SearchCoffeeRecordsTool` と並列で `SearchByTasteProfileTool` として追加。digest-only との使い分けは LLM 判断 |
+| [ ] | iOS: 分析タブに「好みで記録を探す」専用 UI を追加（自由テキスト入力 → 5 軸カード表示 → 条件に合う記録一覧）。Q&A とは独立した導線 | `TastePreferenceConversionView` の発展版。`Unsupported`（Foundation Models 非対応）は非表示 |
+
+### 13-C: マップ上のカフェ推薦への応用
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 設計: 変換後プロファイルと `RecommendedCafe`（B-4）の一致判定を「今飲みたい味」でフィルタする仕組みを設計。`CafeRecommendationProvider` に `filterByTasteProfile(profile: TastePreference)` を追加するか、ViewModel レベルで絞り込むか方針確定 | ユーザー判断待ち |
+| [ ] | KMP: 方針確定後に `ObserveTasteMatchedCafesUseCase` or `MapViewModel` に「今飲みたい味」フィルタを追加 | |
+| [ ] | iOS: マップタブに「今日飲みたい一杯を入力」ボタン → 自然言語入力 → 変換 → マップの推薦ピンを動的に絞り込む。入力中は `ProgressView` オーバーレイ | `MapTabView` のフィルタ行に追加。Foundation Models 非対応端末は非表示 |
+
+### 13-D: カフェ検索タブへの統合
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 設計: 自然言語で「こんな味のコーヒー」→ Places API `searchText` の補完クエリ（例: 「浅煎り フルーティー カフェ」に変換して `ensureCafeKeyword` 後に渡す）か、検索結果を変換プロファイルで後フィルタするか方針確定 | 前者はシンプルだが Places API の限界あり。後者は Places + 記録突合が必要 |
+| [ ] | KMP / iOS: 方針確定後に検索タブに「どんな味が飲みたいか」入力欄を追加（既存のテキスト検索と並列 or タブ切り替え） | |
+
+---
+
 ## フェーズ 10: マップ拡充
 
 > 起票 2026-06-29。マップの視認性・情報密度・フィルタリングを強化する。

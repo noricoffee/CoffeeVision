@@ -21,6 +21,7 @@ final class CoffeeEditorViewModelBridge {
     private(set) var isSaving: Bool = false
     private(set) var error: String?
     private(set) var savedCoffeeId: String?
+    private(set) var tags: [String] = []
 
     // MARK: - Init
 
@@ -180,6 +181,16 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onErrorDismissed()
     }
 
+    // MARK: - タグ操作転送
+
+    func onTagAdded(_ tag: String) {
+        kotlin.onTagAdded(tag: tag)
+    }
+
+    func onTagRemoved(_ tag: String) {
+        kotlin.onTagRemoved(tag: tag)
+    }
+
     // MARK: - Private
 
     private func apply(_ state: CoffeeEditorViewModel.UIState) {
@@ -188,5 +199,6 @@ final class CoffeeEditorViewModelBridge {
         self.isSaving = state.isSaving
         self.error = state.error
         self.savedCoffeeId = state.savedCoffeeId
+        self.tags = state.draft.tags
     }
 }

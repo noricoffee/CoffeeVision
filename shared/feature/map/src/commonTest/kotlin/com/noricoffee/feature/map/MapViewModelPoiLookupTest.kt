@@ -28,6 +28,14 @@ import kotlin.test.assertTrue
  * - `onPoiLookupConsumed` → `poiLookupResult` が null に戻る
  * - `onPoiLookupErrorDismissed` → `poiLookupError` が null に戻る
  * - `locationBias` の引数が CafeRepository に正しく渡されている
+ *
+ * ## scope と vm.clear() の注意
+ *
+ * MapViewModel は `scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])` で
+ * 内部 viewModelScope を作る。`scope = this`（TestScope）とするとその SupervisorJob が
+ * TestScope の子 Job になり、runTest が「Active child job」として検出し
+ * UncompletedCoroutinesError を投げる。
+ * これを避けるため、各テスト末尾で `vm.clear()` を呼び viewModelScope をキャンセルする。
  */
 class MapViewModelPoiLookupTest {
 
@@ -123,6 +131,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -134,6 +143,8 @@ class MapViewModelPoiLookupTest {
         assertFalse(state.isLookingUpPoi)
         assertEquals(cafe, state.poiLookupResult)
         assertNull(state.poiLookupError)
+
+        vm.clear()
     }
 
     @Test
@@ -144,6 +155,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -157,6 +169,8 @@ class MapViewModelPoiLookupTest {
         assertEquals(35.658, bias.latitude)
         assertEquals(139.701, bias.longitude)
         assertEquals(500.0, bias.radiusMeters)
+
+        vm.clear()
     }
 
     @Test
@@ -167,6 +181,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -178,6 +193,8 @@ class MapViewModelPoiLookupTest {
         assertFalse(state.isLookingUpPoi)
         assertNull(state.poiLookupResult)
         assertEquals("該当するカフェが見つかりませんでした", state.poiLookupError)
+
+        vm.clear()
     }
 
     @Test
@@ -188,6 +205,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -199,6 +217,8 @@ class MapViewModelPoiLookupTest {
         assertFalse(state.isLookingUpPoi)
         assertNull(state.poiLookupResult)
         assertEquals("Network timeout", state.poiLookupError)
+
+        vm.clear()
     }
 
     @Test
@@ -209,6 +229,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -220,6 +241,8 @@ class MapViewModelPoiLookupTest {
         vm.onPoiLookupConsumed()
 
         assertNull(vm.state.value.poiLookupResult)
+
+        vm.clear()
     }
 
     @Test
@@ -230,6 +253,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -241,6 +265,8 @@ class MapViewModelPoiLookupTest {
         vm.onPoiLookupErrorDismissed()
 
         assertNull(vm.state.value.poiLookupError)
+
+        vm.clear()
     }
 
     @Test
@@ -251,6 +277,7 @@ class MapViewModelPoiLookupTest {
             observeVisitedCafesUseCase = useCase,
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -263,5 +290,7 @@ class MapViewModelPoiLookupTest {
         assertNotNull(state.poiLookupResult)
         // visitedCafes は変化していない
         assertTrue(state.visitedCafes.isEmpty())
+
+        vm.clear()
     }
 }

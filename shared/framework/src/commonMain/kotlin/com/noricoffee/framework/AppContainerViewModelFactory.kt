@@ -96,6 +96,7 @@ fun AppContainer.makeMapViewModel(userId: String): MapViewModel =
             buildCoffeeStatsUseCase = BuildCoffeeStatsUseCase(),
         ),
         cafeRepository = cafeRepository,
+        coffeeRepository = coffeeRepository,
         userId = userId,
         scope = scope,
     )

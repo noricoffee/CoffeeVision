@@ -23,6 +23,7 @@ struct CoffeeEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State private var isCafeSearchPresented: Bool = false
+    @State private var newTagText: String = ""
 
     /// 新規追加分の写真データ（photoId → JPEG Data）。保存ボタン押下時に Documents に書き出す。
     @State private var pendingImageData: [String: Data] = [:]
@@ -55,6 +56,7 @@ struct CoffeeEditorView: View {
                 cafeSection
                 coffeeSection
                 tastingSection
+                tagsSection
                 visitSection
                 photosSection
             }
@@ -354,6 +356,48 @@ struct CoffeeEditorView: View {
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(localized: "\(label) \(value)/10"))
+    }
+
+    // MARK: - タグ Section
+
+    private var tagsSection: some View {
+        Section(String(localized: "タグ")) {
+            ForEach(viewModel.tags, id: \.self) { tag in
+                HStack {
+                    Text(tag)
+                        .font(.subheadline)
+                    Spacer()
+                    Button {
+                        viewModel.onTagRemoved(tag)
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundStyle(.secondary)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(String(localized: "タグ「\(tag)」を削除"))
+                }
+            }
+
+            HStack {
+                TextField(String(localized: "タグを追加..."), text: $newTagText)
+                    .font(.subheadline)
+                    .onSubmit {
+                        addTag()
+                    }
+                Button(String(localized: "追加")) {
+                    addTag()
+                }
+                .disabled(newTagText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .font(.subheadline)
+            }
+        }
+    }
+
+    private func addTag() {
+        let trimmed = newTagText.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        viewModel.onTagAdded(trimmed)
+        newTagText = ""
     }
 
     // MARK: - 記録 Section

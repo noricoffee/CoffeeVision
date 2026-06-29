@@ -28,6 +28,8 @@ CREATE TABLE coffee_record (
     acidity INTEGER,
     flavor INTEGER,
     aftertaste INTEGER,
+    -- ユーザー定義タグ（JSON 配列文字列。空リストは "[]"、マイグレーション前の行は ""）
+    tags TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,           -- epoch millis
     updated_at INTEGER NOT NULL
 );
@@ -52,8 +54,9 @@ INSERT OR REPLACE INTO coffee_record (
     visited_on, rating, notes,
     name, brew_method, origin, variety, processing, roast_level, cup,
     sweetness, body, acidity, flavor, aftertaste,
+    tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;

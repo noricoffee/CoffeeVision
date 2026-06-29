@@ -164,6 +164,7 @@ enum PreviewSamples {
             flavor: 7,
             aftertaste: 6
         ),
+        tags: ["浅煎り", "フルーティー"],
         createdAt: instant(year: 2026, month: 6, day: 2),
         updatedAt: instant(year: 2026, month: 6, day: 2)
     )
@@ -199,6 +200,7 @@ enum PreviewSamples {
         roastLevel: .fullCity,
         cup: nil,
         tasting: nil,
+        tags: [],
         createdAt: instant(year: 2026, month: 5, day: 28),
         updatedAt: instant(year: 2026, month: 5, day: 28)
     )
@@ -226,6 +228,7 @@ enum PreviewSamples {
             flavor: 9,
             aftertaste: 6
         ),
+        tags: ["セルフ抽出"],
         createdAt: instant(year: 2026, month: 6, day: 19),
         updatedAt: instant(year: 2026, month: 6, day: 19)
     )

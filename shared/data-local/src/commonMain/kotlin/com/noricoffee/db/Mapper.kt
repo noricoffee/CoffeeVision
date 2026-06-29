@@ -23,6 +23,25 @@ internal fun String.decodeStringList(): List<String> =
     json.decodeFromString(photoRefsSerializer, this)
 
 /**
+ * [List<String>] を `tags` カラム用の JSON 配列文字列に変換する。
+ * 空リストは `"[]"` になる。
+ */
+internal fun List<String>.toTagsJson(): String =
+    json.encodeToString(photoRefsSerializer, this)
+
+/**
+ * `tags` カラムの JSON 配列文字列を [List<String>] に変換する。
+ *
+ * - 空文字（`DEFAULT ''` の行）→ `emptyList()`
+ * - `"[]"` → `emptyList()`
+ * - パース失敗（不正 JSON）→ `emptyList()`（防御的処理）
+ */
+internal fun String.toTagList(): List<String> {
+    if (isBlank()) return emptyList()
+    return runCatching { json.decodeFromString(photoRefsSerializer, this) }.getOrDefault(emptyList())
+}
+
+/**
  * [CoffeeRecord] を SQLDelight の [Coffee_record] 行に変換する。
  * cafe が null（セルフ抽出）の場合は全 cafe_* カラムを null にする。
  */
@@ -53,6 +72,7 @@ internal fun CoffeeRecord.toRow(): Coffee_record = Coffee_record(
     acidity = tasting?.acidity?.toLong(),
     flavor = tasting?.flavor?.toLong(),
     aftertaste = tasting?.aftertaste?.toLong(),
+    tags = tags.toTagsJson(),
     created_at = createdAt.toEpochMilliseconds(),
     updated_at = updatedAt.toEpochMilliseconds(),
 )
@@ -110,6 +130,7 @@ internal fun Coffee_record.toDomain(photos: List<DomainPhoto>): CoffeeRecord {
         roastLevel = roast_level?.let { RoastLevel.valueOf(it) },
         cup = cup,
         tasting = tastingScores,
+        tags = tags.toTagList(),
         createdAt = Instant.fromEpochMilliseconds(created_at),
         updatedAt = Instant.fromEpochMilliseconds(updated_at),
     )

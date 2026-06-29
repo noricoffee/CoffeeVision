@@ -222,6 +222,33 @@ class LocalCoffeeRepositoryTest {
         assertNull(loaded?.tasting, "tasting = null のレコードは null として往復するべき")
     }
 
+    // --- tags 往復テスト ---
+
+    @Test
+    fun tags_empty_list_round_trips_correctly() = runTest {
+        // tags = emptyList()（タグなし）が保存・読み取りで正確に往復することを確認する
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord().copy(tags = emptyList())
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertEquals(emptyList<String>(), loaded?.tags, "tags = emptyList() は空リストとして往復するべき")
+    }
+
+    @Test
+    fun tags_non_empty_round_trips_correctly() = runTest {
+        // tags に複数タグを設定した場合の往復確認（日本語・英数字・クォートを含む値）
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val tags = listOf("ラテアート", "浅煎り", "single-origin")
+        val record = sampleRecord().copy(tags = tags)
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertEquals(tags, loaded?.tags, "非空 tags はそのまま往復するべき")
+    }
+
     private companion object {
         const val USER_ID = "test-user"
 

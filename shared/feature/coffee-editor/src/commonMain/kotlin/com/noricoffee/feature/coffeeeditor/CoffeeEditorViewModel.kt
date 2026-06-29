@@ -99,6 +99,7 @@ class CoffeeEditorViewModel(
      * @property roastLevel 焙煎度（任意）
      * @property cup カップ（任意）
      * @property tasting テイスティング 5 要素（null = 未記入。非 null = 5 要素すべてセット済み）
+     * @property tags ユーザー定義タグ（任意。空リスト = タグなし）
      */
     data class CoffeeDraft(
         val cafeName: String,
@@ -117,6 +118,7 @@ class CoffeeEditorViewModel(
         val roastLevel: RoastLevel?,
         val cup: String,
         val tasting: TastingScores? = null,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット
+        val tags: List<String> = emptyList(), // ユーザー定義タグ
     )
 
     /**
@@ -373,6 +375,32 @@ class CoffeeEditorViewModel(
         }
     }
 
+    // --- タグ操作 ---
+
+    /**
+     * タグを追加する。
+     *
+     * [tag] を trim した結果が空または既に存在する場合は no-op。
+     *
+     * @param tag 追加するタグ文字列（前後の空白は自動 trim される）
+     */
+    fun onTagAdded(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isBlank() || _state.value.draft.tags.contains(trimmed)) return
+        _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags + trimmed)) }
+    }
+
+    /**
+     * タグを削除する。
+     *
+     * [tag] が存在しない場合は no-op。
+     *
+     * @param tag 削除するタグ文字列
+     */
+    fun onTagRemoved(tag: String) {
+        _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags - tag)) }
+    }
+
     /**
      * Places API 検索結果からカフェを選択した際に呼ぶ。
      *
@@ -599,6 +627,7 @@ class CoffeeEditorViewModel(
             roastLevel = draft.roastLevel,
             cup = draft.cup.takeIf { it.isNotBlank() },
             tasting = draft.tasting?.clamped(),
+            tags = draft.tags,
             createdAt = createdAt,
             updatedAt = now,
         )
@@ -626,6 +655,7 @@ class CoffeeEditorViewModel(
             roastLevel = null,
             cup = "",
             tasting = null,  // all-or-nothing: 初期状態は tasting なし
+            tags = emptyList(),
         )
     }
 }
@@ -654,6 +684,7 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
         roastLevel = roastLevel,
         cup = cup ?: "",
         tasting = tasting,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット（edit モードで既存 tasting を反映）
+        tags = tags,
     )
 
 /**

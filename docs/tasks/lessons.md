@@ -459,6 +459,20 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-25、`CafeSearchViewModel` にバイアス版 `onSearchTapped` を追加してテストを通そうとした際に発覚。git stash で確認したところ**変更前から cafe-search の全テストが同エラーで落ちていた**（新メソッド追加で初めて実行され顕在化）
 - **教訓**: 各テストの `runTest` ブロックを `try { ... } finally { vm.clear() }` で囲み、テスト終了前に必ず scope を畳む。**横展開注意**: 同じ「所有 viewModelScope + clear()」パターン（本ファイル「画面ごとの ViewModel に app-wide scope を共有させない」エントリ）を持つ他 feature の既存テストも同様に落ちている可能性が高い。cafe-search は修正済。他モジュールは別タスクで横断点検が必要（[`implementation_note.md`](../implementation_note.md) 2026-06-25「テキスト検索にマップ中心の位置バイアス」エントリ参照）
 
+## 2026-06-29
+
+### `combine` のアップストリームに `MutableStateFlow` を含めると `runTest` が 60 秒タイムアウトする
+
+- `combine(flowA, flowB, mutableFlow)` の形で `MutableStateFlow`（完了しない Flow）を含めた `collect` を `scope = this`（TestScope）の viewModelScope で実行すると、コルーチンが終了しないため `runTest` が `UncompletedCoroutinesError` を出す
+- **教訓**: `combine` に入れてよいのは「完了する Flow」（`flowOf` / DB ワンショット / `take(1)` 等）のみ。「選択状態」等の変化ストリームは `combine` から外し、変化イベントごとに副作用メソッドで即時再計算するキャッシュ変数パターンにする
+- 2026-06-29、`MapViewModel` タグフィルタ実装で `_selectedTagsFlow` を `combine` に含めようとして顕在化
+
+### 所有 viewModelScope（SupervisorJob 子スコープ）を持つ ViewModel のテストは末尾で `vm.clear()` を呼ぶ
+
+- `scope = this`（TestScope）を ViewModel に渡すと内部 `SupervisorJob` が TestScope 子になる。テスト終了時に `SupervisorJob` が生きていると `runTest` が `UncompletedCoroutinesError` で失敗する（`advanceUntilIdle()` だけでは不十分）
+- **教訓**: 各テストの `runTest` ブロック末尾で `vm.clear()` を呼び viewModelScope を畳む。`finally { vm.clear() }` でも可
+- 注意: `scope = backgroundScope` は `advanceUntilIdle()` の到達範囲外になるケースがある（Job がルートになる実装）。`poiLookupJob` 等「テスト中に完了を待つコルーチン」には使わない
+
 ### タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない
 
 - `Tab(role:) { CafeSearchView(...) }` のようにタブのルートに直接置かれた View は、タブ切替や子画面 push（`CafeDetailView` への `NavigationLink`）で `onDisappear` が発火するが、**View インスタンス自体は破棄されず `@State` も保持される**。ここで `.onDisappear { bridge.cancel() }` のように Kotlin `StateFlow` の `observationTask` を止めると、`startObservation()` は init でしか呼ばれないため、戻ってきても観測が再開されず、以降 Kotlin 側の状態更新が Swift に一切反映されなくなる

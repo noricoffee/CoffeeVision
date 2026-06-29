@@ -26,6 +26,10 @@ final class MapViewModelBridge {
     /// 検索タブからのオーバーレイ表示用。空 = 表示なし。
     private(set) var searchResultPlaces: [Cafe] = []
     private(set) var error: String?
+    /// 選択中のタグフィルター。
+    private(set) var selectedTags: [String] = []
+    /// 利用可能なタグの distinct ソート済みリスト。
+    private(set) var availableTags: [String] = []
 
     // MARK: - POI ルックアップ状態
 
@@ -93,6 +97,18 @@ final class MapViewModelBridge {
         kotlin.onSearchResultsCleared()
     }
 
+    // MARK: - タグフィルターアクション
+
+    /// タグフィルターのオン / オフを切り替える。
+    func onTagFilterToggled(_ tag: String) {
+        kotlin.onTagFilterToggled(tag: tag)
+    }
+
+    /// タグフィルターをすべてクリアする。
+    func onTagFilterCleared() {
+        kotlin.onTagFilterCleared()
+    }
+
     // MARK: - Private
 
     private func startObservation() {
@@ -116,5 +132,7 @@ final class MapViewModelBridge {
         self.poiLookupResult = state.poiLookupResult
         self.poiLookupError = state.poiLookupError
         self.searchResultPlaces = state.searchResultPlaces
+        self.selectedTags = Array(state.selectedTags)
+        self.availableTags = state.availableTags
     }
 }

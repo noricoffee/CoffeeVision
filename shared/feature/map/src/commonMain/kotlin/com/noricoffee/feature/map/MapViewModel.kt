@@ -7,6 +7,7 @@ import com.noricoffee.domain.model.RecommendedCafe
 import com.noricoffee.domain.model.VisitedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
+import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -15,6 +16,7 @@ import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 
@@ -34,6 +36,7 @@ import kotlinx.coroutines.launch
  * @param observeVisitedCafesUseCase 訪問済みカフェ集計の UseCase
  * @param cafeRecommendationProvider 好み一致カフェの推薦プロバイダ（v1 = [com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase]）
  * @param cafeRepository POI タップ時の Places テキスト検索を担うリポジトリ
+ * @param coffeeRepository タグフィルタ用のコーヒー記録リポジトリ
  * @param userId 現在サインイン中のユーザー ID
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
  */
@@ -41,6 +44,7 @@ class MapViewModel(
     private val observeVisitedCafesUseCase: ObserveVisitedCafesUseCase,
     private val cafeRecommendationProvider: CafeRecommendationProvider,
     private val cafeRepository: CafeRepository,
+    private val coffeeRepository: CoffeeRepository,
     private val userId: String,
     scope: CoroutineScope,
 ) {
@@ -68,6 +72,10 @@ class MapViewModel(
      *   したあと [onPoiLookupConsumed] を呼んで null に戻すこと
      * @property poiLookupError POI ルックアップで発生したエラーメッセージ。
      *   alert を閉じたあと [onPoiLookupErrorDismissed] を呼んで null に戻すこと
+     * @property selectedTags 現在選択中のタグフィルタ集合。空のとき全カフェを表示。
+     *   [onTagFilterToggled] で on/off を切り替え、[onTagFilterCleared] で全解除する
+     * @property availableTags すべてのコーヒー記録から収集した重複なし・昇順ソート済みタグ一覧。
+     *   フィルタ UI のチップ表示に使う
      */
     data class UIState(
         val visitedCafes: List<VisitedCafe> = emptyList(),
@@ -79,6 +87,8 @@ class MapViewModel(
         val isLookingUpPoi: Boolean = false,
         val poiLookupResult: Cafe? = null,
         val poiLookupError: String? = null,
+        val selectedTags: Set<String> = emptySet(),
+        val availableTags: List<String> = emptyList(),
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -87,12 +97,40 @@ class MapViewModel(
     // POI ルックアップ Job。POI タップのたびにキャンセルして再起動する（連打耐性）。
     private var poiLookupJob: Job? = null
 
+    // visitedCafes/coffeeRecords の最新値をキャッシュする。
+    // タグ選択が変化した際に collect を待たずに即時フィルタを再適用するために保持する。
+    private var latestVisitedCafes: List<VisitedCafe> = emptyList()
+    private var latestCafeTagsMap: Map<String, Set<String>> = emptyMap()
+    private var latestAvailableTags: List<String> = emptyList()
+
     init {
-        // ViewModel 生成時に訪問済みカフェの購読を開始する。
-        // scope がキャンセルされるまで継続購読する。
+        // visitedCafes と全コーヒー記録を combine して、タグフィルタ済みカフェと
+        // availableTags を算出し UIState に反映する。
+        // _selectedTagsFlow を combine に含めると MutableStateFlow が終了せず runTest がタイムアウトするため、
+        // 選択タグの変化は onTagFilterToggled / onTagFilterCleared → applyTagFilter() で即時反映する設計にする。
         viewModelScope.launch {
-            observeVisitedCafesUseCase(userId).collect { visitedCafes ->
-                _state.update { it.copy(visitedCafes = visitedCafes) }
+            combine(
+                observeVisitedCafesUseCase(userId),
+                coffeeRepository.observeAll(userId),
+            ) { visitedCafes, allRecords ->
+                // placeId -> そのカフェの全記録に含まれるタグの集合
+                val cafeTagsMap = allRecords
+                    .filter { it.cafe != null && it.tags.isNotEmpty() }
+                    .groupBy { it.cafe!!.placeId }
+                    .mapValues { (_, records) -> records.flatMap { it.tags }.toSet() }
+
+                // 全記録のタグを重複排除・昇順ソート
+                val availableTags = allRecords
+                    .flatMap { it.tags }
+                    .distinct()
+                    .sorted()
+
+                Triple(visitedCafes, cafeTagsMap, availableTags)
+            }.collect { result ->
+                latestVisitedCafes = result.first
+                latestCafeTagsMap = result.second
+                latestAvailableTags = result.third
+                applyTagFilter()
             }
         }
 
@@ -108,6 +146,57 @@ class MapViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * 現在のキャッシュデータと [UIState.selectedTags] を使ってフィルタを適用し、
+     * [UIState.visitedCafes] と [UIState.availableTags] を更新する。
+     *
+     * - [observeVisitedCafesUseCase] または [coffeeRepository] の新データ到着時
+     * - [onTagFilterToggled] / [onTagFilterCleared] でタグ選択が変化した時
+     * の両方で呼ばれる。
+     */
+    private fun applyTagFilter() {
+        val selectedTags = _state.value.selectedTags
+        val filteredCafes = if (selectedTags.isEmpty()) {
+            latestVisitedCafes
+        } else {
+            latestVisitedCafes.filter { vc ->
+                val cafeTags = latestCafeTagsMap[vc.cafe.placeId] ?: emptySet()
+                cafeTags.containsAll(selectedTags)
+            }
+        }
+        _state.update {
+            it.copy(
+                visitedCafes = filteredCafes,
+                availableTags = latestAvailableTags,
+            )
+        }
+    }
+
+    /**
+     * タグフィルタを on/off する。
+     *
+     * [tag] が現在の [UIState.selectedTags] に含まれている場合は除外し、含まれていない場合は追加する。
+     * フィルタは即時再適用される（[applyTagFilter] を呼ぶ）。
+     *
+     * @param tag トグルするタグ文字列
+     */
+    fun onTagFilterToggled(tag: String) {
+        val current = _state.value.selectedTags
+        val newTags = if (current.contains(tag)) current - tag else current + tag
+        _state.update { it.copy(selectedTags = newTags) }
+        applyTagFilter()
+    }
+
+    /**
+     * すべてのタグフィルタを解除する。
+     *
+     * [UIState.visitedCafes] がフィルタなしの全カフェ一覧に戻る。
+     */
+    fun onTagFilterCleared() {
+        _state.update { it.copy(selectedTags = emptySet()) }
+        applyTagFilter()
     }
 
     /**

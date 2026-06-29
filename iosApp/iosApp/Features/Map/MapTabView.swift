@@ -455,19 +455,51 @@ struct MapTabView: View {
     // MARK: - フィルタチップ行
 
     private func filterChipRow(bridge: MapViewModelBridge) -> some View {
-        HStack(spacing: 8) {
-            FilterChip(
-                label: String(localized: "訪問済み"),
-                systemImage: "cup.and.saucer.fill",
-                isOn: bridge.showVisited
-            ) {
-                bridge.onShowVisitedToggled(!bridge.showVisited)
-            }
+        ScrollView(.horizontal, showsIndicators: false) {
+            HStack(spacing: 8) {
+                FilterChip(
+                    label: String(localized: "訪問済み"),
+                    systemImage: "cup.and.saucer.fill",
+                    isOn: bridge.showVisited
+                ) {
+                    bridge.onShowVisitedToggled(!bridge.showVisited)
+                }
 
-            // 好み一致カフェが 1 件以上あるときのみ凡例バッジを表示（インタラクションなし）
-            if !bridge.recommendedCafes.isEmpty {
-                RecommendedLegendBadge()
+                // 好み一致カフェが 1 件以上あるときのみ凡例バッジを表示（インタラクションなし）
+                if !bridge.recommendedCafes.isEmpty {
+                    RecommendedLegendBadge()
+                }
+
+                // タグフィルタチップ（availableTags が空でないとき）
+                if !bridge.availableTags.isEmpty {
+                    Divider()
+                        .frame(height: 24)
+
+                    ForEach(bridge.availableTags, id: \.self) { tag in
+                        FilterChip(
+                            label: tag,
+                            systemImage: "tag",
+                            isOn: bridge.selectedTags.contains(tag)
+                        ) {
+                            bridge.onTagFilterToggled(tag)
+                        }
+                    }
+
+                    if !bridge.selectedTags.isEmpty {
+                        Button {
+                            bridge.onTagFilterCleared()
+                        } label: {
+                            Image(systemName: "xmark.circle")
+                                .font(.subheadline)
+                                .foregroundStyle(.secondary)
+                                .frame(minWidth: 44, minHeight: 44)
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(String(localized: "タグフィルターをクリア"))
+                    }
+                }
             }
+            .padding(.horizontal, 2)
         }
     }
 

@@ -596,11 +596,11 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `CoffeeRecord` / `VisitedCafe` にユーザー定義タグ（`List<String>`）を追加。`data-model.md` 更新 | ドメインモデル変更・クリーンブレイクの可否を確認 |
-| [ ] | KMP: タグの CRUD（`CoffeeEditorViewModel` でタグ追加・削除）+ SQLDelight スキーマ更新 | |
-| [ ] | `MapViewModel` にタグフィルター状態を追加（選択タグにマッチする訪問済みカフェのみ表示） | |
-| [ ] | `MapTabView` のフィルタ行にタグ選択 UI（チップ or ドロップダウン）を追加 | |
-| [ ] | `CoffeeEditorView` にタグ入力 UI を追加 | |
+| [x] | `CoffeeRecord` / `VisitedCafe` にユーザー定義タグ（`List<String>`）を追加。`data-model.md` 更新 | 2026-06-29 / `CoffeeRecord.tags: List<String> = emptyList()`。クリーンブレイク（DB 削除→再インストール必須） |
+| [x] | KMP: タグの CRUD（`CoffeeEditorViewModel` でタグ追加・削除）+ SQLDelight スキーマ更新 | 2026-06-29 / `onTagAdded/onTagRemoved`。JSON 文字列で保存（`photoRefsSerializer` 流用） |
+| [x] | `MapViewModel` にタグフィルター状態を追加（選択タグにマッチする訪問済みカフェのみ表示） | 2026-06-29 / `UIState.selectedTags/availableTags`。`onTagFilterToggled/Cleared()`。`coffeeRepository` を DI |
+| [x] | `MapTabView` のフィルタ行にタグ選択 UI（チップ or ドロップダウン）を追加 | 2026-06-30 / フィルタ行を `ScrollView(.horizontal)` でラップ。タグチップ + クリアボタン |
+| [x] | `CoffeeEditorView` にタグ入力 UI を追加 | 2026-06-30 / テイスティングセクション後に「タグ」セクション。入力 TextField + 追加ボタン + 削除 xmark |
 
 ---
 

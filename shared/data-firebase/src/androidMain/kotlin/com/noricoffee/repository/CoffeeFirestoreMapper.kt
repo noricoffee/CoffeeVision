@@ -48,6 +48,7 @@ object CoffeeFirestoreMapper {
             "notes" to record.notes,
             "name" to record.name,
             "brewMethod" to record.brewMethod.name,
+            "tags" to record.tags,
             "photos" to record.photos.mapIndexed { index, photo -> photoToMap(photo, index) },
             "createdAt" to Timestamp(
                 record.createdAt.epochSeconds,
@@ -176,6 +177,9 @@ object CoffeeFirestoreMapper {
         // tasting: all-or-nothing。マップがあり 5 要素揃えば TastingScores、欠如（またはいずれかキー不足）なら null
         val tasting = (data["tasting"] as? Map<String, Any>)?.let { tastingFromMap(it) }
 
+        // tags: Firestore Array → List<String>。キーが存在しない古いドキュメントは空リスト
+        val tags = (data["tags"] as? List<*>)?.filterIsInstance<String>() ?: emptyList()
+
         return CoffeeRecord(
             id = id,
             userId = userId,
@@ -192,6 +196,7 @@ object CoffeeFirestoreMapper {
             roastLevel = roastLevel,
             cup = cup,
             tasting = tasting,
+            tags = tags,
             createdAt = Instant.fromEpochSeconds(
                 epochSeconds = createdAtTs.seconds,
                 nanosecondAdjustment = createdAtTs.nanoseconds.toLong(),

@@ -163,6 +163,7 @@ enum CoffeeFirestoreMapper {
             roastLevel: roastLevel,
             cup: data["cup"] as? String,
             tasting: tasting,
+            tags: (data["tags"] as? [String]) ?? [],
             createdAt: createdAt,
             updatedAt: updatedAt
         )

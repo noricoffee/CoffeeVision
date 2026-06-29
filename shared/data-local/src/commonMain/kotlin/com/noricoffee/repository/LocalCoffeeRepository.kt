@@ -76,6 +76,7 @@ class LocalCoffeeRepository(
                 acidity = row.acidity,
                 flavor = row.flavor,
                 aftertaste = row.aftertaste,
+                tags = row.tags,
                 created_at = row.created_at,
                 updated_at = row.updated_at,
             )

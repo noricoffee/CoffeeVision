@@ -1946,6 +1946,20 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - **ピン**: 青 Circle（32pt）+ `mappin.and.ellipse`（shadow あり）。4 種体系: 訪問済み（36pt 茶）/ 好み一致（38pt アクセント）/ 検索結果（32pt 青）/ Apple Maps 標準 POI。重複除去なし（同 placeId のピンは重なる）。
 - **クリアタイミングの判断**: `onChange(of: bridge.query)` = Kotlin 側の state 反映後にクリア。`queryText`（ローカル即時）ではなく Kotlin 側を監視することで、入力中の文字ごとにクリアが走らない。
 
+## 2026-06-30 - フェーズ 10-D: タグフィルター（ドメインモデル変更 + UI）
+
+- 領域: KMP（domain / data-local / data-firebase / feature-editor / feature-map）+ iOS
+- **`CoffeeRecord.tags: List<String>`**: デフォルト値 `emptyList()` 付きで追加。SQLDelight スキーマに `tags TEXT NOT NULL DEFAULT ''` を追加（JSON 配列文字列として保存。`photoRefsSerializer` 流用）。Android Firestore Mapper にも `tags` 追加（read/write）。クリーンブレイク対応（アプリ削除→再インストール必須）。`VisitedCafe` にタグを持たせるのではなく `CoffeeRecord` 側に持たせることで、カフェ粒度でなくコーヒー記録粒度でタグ付けする設計を採用。
+- **KMP `CoffeeEditorViewModel`**: `CoffeeDraft.tags: List<String>` 追加。`onTagAdded(tag)` / `onTagRemoved(tag)` 追加。`buildRecord/toDraft/defaultDraft` を更新。
+- **KMP `MapViewModel`**: Constructor に `coffeeRepository: CoffeeRepository` を追加し DI。`UIState.selectedTags: Set<String>` / `UIState.availableTags: List<String>` 追加。`coffeeRecords` Flow を `visitedCafes` と別途収集し、`applyTagFilter()` を直接呼ぶキャッシュ変数パターンを採用（`combine` に `MutableStateFlow` を含めると `runTest` タイムアウトするため）。`onTagFilterToggled/Cleared()` 追加。
+- **iOS `MapViewModelBridge`**: `selectedTags: [String]` / `availableTags: [String]` + `onTagFilterToggled/Cleared()` 追加。Kotlin `Set<String>` は SKIE により Swift `Set<String>` として公開され `Array(state.selectedTags)` で変換。
+- **iOS `CoffeeEditorViewModelBridge`**: `tags: [String]` + `onTagAdded/Removed()` 追加。`apply(_:)` に `state.draft.tags` 反映。
+- **iOS `CoffeeEditorView`**: テイスティングセクション後に「タグ」セクション追加。既存タグ削除行 + `TextField` + 追加ボタン。`@State private var newTagText` で入力管理。`onSubmit` とボタン両経路で `addTag()` 呼び出し。
+- **iOS `MapTabView`**: フィルタ行を `ScrollView(.horizontal)` でラップ。`availableTags` が空でないとき Divider + タグチップ群 + クリアボタン（`xmark.circle`）を追加。
+- Swift 側 `CoffeeRecord` コンストラクタ追随: SKIE の制約（Kotlin デフォルト引数は Swift に引き継がれない）で `CoffeeFirestoreMapper.swift` (line 165) と `PreviewSamples.swift` (3 箇所) に `tags: []` / `tags: (data["tags"] as? [String]) ?? []` を明示追加。
+- **`MapViewModelPoiLookupTest` 修正**: `combine` + `MutableStateFlow` タイムアウト対策で選択タグ管理をリファクタ後、テスト全 7 件に `coffeeRepository = fakeCoffeeRepo` と `vm.clear()` を追加して `UncompletedCoroutinesError` を解消。
+- 検証: `:androidApp:assembleDebug` BUILD SUCCESSFUL、`mapViewModel` / `data-local` テスト PASS、`xcodebuild iphonesimulator` BUILD SUCCEEDED。**シミュレータ目視（タグ入力 / マップフィルタ）はユーザー作業。クリーンブレイクのためアプリ削除→再インストール必須**。
+
 ## 2026-06-29 - フェーズ 10-A/B: マップピン再設計 + Places API 追加フィールド
 
 - 領域: iOS（10-A）/ KMP + iOS（10-B）

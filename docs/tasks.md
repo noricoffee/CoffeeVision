@@ -572,17 +572,17 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 訪問済みピンのサイズ・カラー・アイコンを再設計（視認性向上。ズームレベルに応じたクラスタリング検討） | MapKit Annotation / MKMarkerAnnotation の customization |
-| [ ] | 好み一致ピン（B-4 `heart.fill`）との差別化を確認し、3 種（訪問済み / 周辺 / 好み一致）のビジュアル体系を整理 | |
+| [x] | 訪問済みピンのサイズ・カラー・アイコンを再設計（視認性向上。ズームレベルに応じたクラスタリング検討） | 2026-06-29 / 32pt→36pt 拡大・shadow 追加・訪問回数バッジ（2回以上で右上バッジ・9+上限）。クラスタリングは MapKit SwiftUI API 未対応のため将来課題。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-29 エントリ |
+| [x] | 好み一致ピン（B-4 `heart.fill`）との差別化を確認し、3 種（訪問済み / 周辺 / 好み一致）のビジュアル体系を整理 | 2026-06-29 / 3 種: 訪問済み（36pt 茶 + カップ + 回数バッジ）/ 好み一致（38pt アクセント + ハート・既存）/ Apple Maps 標準 POI（変更なし） |
 
 ### 10-B: カフェ詳細画面の情報拡充
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | Places API New v1 の追加フィールド取得: 営業時間 (`currentOpeningHours`)・電話番号 (`nationalPhoneNumber`)・Google Maps URL (`googleMapsUri`)・価格帯 (`priceLevel`)・評価 (`rating`) | `getDetails` の `DETAILS_FIELD_MASK` に追加 |
-| [ ] | Places API「メニュー」: `websiteUri` + 関連 url をカフェ詳細に表示（Places API はメニューを直接返さないため、公式 URL をリンクとして掲載） | `websiteUri` フィールドを活用 |
-| [ ] | `CafeDetailView` に営業時間・電話番号・価格帯・外部リンク（Google Maps / Website）のセクションを追加 | |
-| [ ] | `PlaceSummary` / `Cafe` ドメインモデルに上記フィールドを追加（optional）。`data-model.md` 更新 | |
+| [x] | Places API New v1 の追加フィールド取得: 営業時間 (`currentOpeningHours`)・電話番号 (`nationalPhoneNumber`)・Google Maps URL (`googleMapsUri`)・価格帯 (`priceLevel`)・評価 (`rating`) | 2026-06-29 / `FIELD_MASK` / `DETAILS_FIELD_MASK` に追加。`Dto.kt`・`PlaceSummary.kt` を更新 |
+| [x] | Places API「メニュー」: `websiteUri` + 関連 url をカフェ詳細に表示（Places API はメニューを直接返さないため、公式 URL をリンクとして掲載） | 2026-06-29 / `CafeDetailView` に「外部リンク」セクション追加（公式サイト / Google Maps）|
+| [x] | `CafeDetailView` に営業時間・電話番号・価格帯・外部リンク（Google Maps / Website）のセクションを追加 | 2026-06-29 / 営業状態（緑/赤 dot）・Google 評価・価格帯（¥〜¥¥¥¥）・電話（`tel:` Link）・外部リンクセクション・営業時間セクション。**シミュレータ目視はユーザー作業** |
+| [x] | `PlaceSummary` / `Cafe` ドメインモデルに上記フィールドを追加（optional）。`data-model.md` 更新 | 2026-06-29 / `Cafe` に 5 フィールド追加（デフォルト値付き）。SQLDelight スキーマは変更なし（Places API 結果のみで利用）|
 
 ### 10-C: 検索結果カフェをマップにオーバーレイ表示
 

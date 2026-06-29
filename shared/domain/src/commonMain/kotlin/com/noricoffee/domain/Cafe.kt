@@ -9,4 +9,9 @@ data class Cafe(
     val photoReferences: List<String>,
     val websiteUrl: String?,
     val mapsUrl: String?,
+    val openNow: Boolean? = null,
+    val weekdayDescriptions: List<String> = emptyList(),
+    val phoneNumber: String? = null,
+    val priceLevel: String? = null,
+    val googleRating: Double? = null,
 )

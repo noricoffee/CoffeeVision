@@ -51,5 +51,10 @@ class CafeRepositoryImpl(
         photoReferences = photoNames,
         websiteUrl = websiteUri,
         mapsUrl = googleMapsUri,
+        openNow = openNow,
+        weekdayDescriptions = weekdayDescriptions,
+        phoneNumber = phoneNumber,
+        priceLevel = priceLevel,
+        googleRating = googleRating,
     )
 }

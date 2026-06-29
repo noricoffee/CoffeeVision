@@ -206,7 +206,12 @@ enum CoffeeFirestoreMapper {
             longitude: longitude,
             photoReferences: photoReferences,
             websiteUrl: dict["websiteUrl"] as? String,
-            mapsUrl: dict["mapsUrl"] as? String
+            mapsUrl: dict["mapsUrl"] as? String,
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil
         )
     }
 

@@ -454,14 +454,34 @@ struct MapTabView: View {
     // MARK: - ピン UI
 
     /// 訪問済みカフェピン（茶色 / 訪問回数バッジ付き）。
+    ///
+    /// - 2 回以上訪問した場合は右上コーナーに訪問回数バッジを表示する
+    /// - 10 回以上は "9+" と表示して 1 桁に収める
     private func visitedCafePin(visitedCafe: VisitedCafe) -> some View {
-        ZStack {
+        let count = Int(visitedCafe.visitCount)
+        let badgeText = count >= 10 ? "9+" : "\(count)"
+
+        return ZStack {
             Circle()
                 .fill(Color.brown)
-                .frame(width: 32, height: 32)
+                .frame(width: 36, height: 36)
+                .shadow(color: Color.brown.opacity(0.4), radius: 4, x: 0, y: 2)
             Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)
                 .foregroundStyle(.white)
+        }
+        .overlay(alignment: .topTrailing) {
+            if count >= 2 {
+                ZStack {
+                    Circle()
+                        .fill(Color.white)
+                        .frame(width: 18, height: 18)
+                    Text(badgeText)
+                        .font(.caption2.bold())
+                        .foregroundStyle(Color.brown)
+                }
+                .offset(x: 4, y: -4)
+            }
         }
         .accessibilityLabel(
             String(localized: "\(visitedCafe.cafe.name) 訪問済み \(visitedCafe.visitCount)回")

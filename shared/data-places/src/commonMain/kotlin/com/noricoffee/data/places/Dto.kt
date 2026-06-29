@@ -88,6 +88,17 @@ internal data class LatLngDto(
     val longitude: Double,
 )
 
+/**
+ * `currentOpeningHours` オブジェクト。
+ *
+ * [openNow] は現在営業中か否かを示す。[weekdayDescriptions] は曜日ごとの営業時間テキスト（日本語）。
+ */
+@Serializable
+internal data class OpeningHoursDto(
+    val openNow: Boolean? = null,
+    val weekdayDescriptions: List<String> = emptyList(),
+)
+
 /** 1 件の Place エントリ。 */
 @Serializable
 internal data class PlaceDto(
@@ -98,6 +109,10 @@ internal data class PlaceDto(
     val websiteUri: String? = null,
     val googleMapsUri: String? = null,
     val photos: List<PhotoDto> = emptyList(),
+    val currentOpeningHours: OpeningHoursDto? = null,
+    val nationalPhoneNumber: String? = null,
+    val priceLevel: String? = null,   // "PRICE_LEVEL_INEXPENSIVE" 等
+    val rating: Double? = null,        // Google Maps 評価 (1.0–5.0)
 )
 
 /** `displayName` オブジェクト。API は `{"text": "...", "languageCode": "ja"}` 形式。 */

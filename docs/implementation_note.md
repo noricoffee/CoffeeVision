@@ -1938,6 +1938,16 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 既知の軽微点: `arrow.trianglehead.2.clockwise` の SF Symbol が iOS 26 で表示されるか未確認（SF Symbol 名は文字列のためコンパイルは通る）。表示されなければ `arrow.2.circlepath` 等に差し替え。
 - 親メモ: 同種の「@Generable は出力整形にも自然文抽出にも同じ API で使える双方向の道具」という気づきが溜まったら `coding-conventions.md` か `kmp-bridge.md`（FM 節）への昇格を検討。
 
+## 2026-06-29 - フェーズ 10-A/B: マップピン再設計 + Places API 追加フィールド
+
+- 領域: iOS（10-A）/ KMP + iOS（10-B）
+- **10-A マップピン再設計**: `visitedCafePin` を 32pt→36pt に拡大し、`shadow(color: .brown.opacity(0.4), radius: 4, x: 0, y: 2)` を追加（`recommendedCafePin` と対称）。訪問回数 2 回以上で右上に白背景 + 茶テキストのバッジを `.overlay(alignment: .topTrailing)` で表示（9+ 上限）。3 種ビジュアル体系: 訪問済み（36pt 茶 + カップ + 回数バッジ）/ 好み一致（38pt アクセント + ハート）/ Apple Maps 標準 POI（変更なし）。
+- **10-B KMP**: `Cafe` ドメインモデルに `openNow: Boolean?` / `weekdayDescriptions: List<String>` / `phoneNumber: String?` / `priceLevel: String?` / `googleRating: Double?` を **デフォルト値付き** で追加。Places API `FIELD_MASK` / `DETAILS_FIELD_MASK` を拡張（`currentOpeningHours`, `nationalPhoneNumber`, `priceLevel`, `rating`）。SQLDelight スキーマは変更なし（`CoffeeRecord.cafe` スナップショットには新フィールドは含まれず、Places API 結果のみで利用可能）。
+- **10-B iOS `CafeDetailView`**: `cafeInfoSection` に営業状態（緑/赤 dot）・Google 評価・価格帯（¥〜¥¥¥¥ 変換）・電話番号（`tel:` Link）を追加。「外部リンク」セクション（公式サイト / Google Maps）・「営業時間」セクション（`weekdayDescriptions` が空でないとき）を追加。セクション順: カフェ情報 → 外部リンク → 営業時間 → コーヒー記録。
+- 注意: `foregroundStyle(.accentColor)` は `ShapeStyle` に `.accentColor` メンバが存在しないためコンパイルエラー。`Color.accentColor` を明示する必要がある（プロジェクト全体で統一済み）。
+- **クラスタリング（将来課題）**: MapKit SwiftUI の `Map` + `Annotation` は `MKClusterAnnotation` 相当の SwiftUI ネイティブ API を持たない。実装するには `UIViewRepresentable` 経由の `MKMapView` ラッパが必要で、現状の SwiftUI ファースト方針と相反する。ピン密集が実際の問題になった時点で再検討。
+- Swift 側 `Cafe` コンストラクタ呼び出し: Kotlin のデフォルト引数は SKIE 越えで Swift デフォルト引数に変換されない。`Cafe` 構築側（`CoffeeFirestoreMapper.swift` / `PreviewSamples.swift`）すべてに `openNow: nil, weekdayDescriptions: [], phoneNumber: nil, priceLevel: nil, googleRating: nil` を明示追加した。
+
 ## 2026-06-26 - 冗長な可用性ガード除去 + 逆変換 PoC 導線の表示方針
 
 - 領域: iOS / 関連: `TastePreferenceExtractor.swift`・`TastePreferenceConversionView.swift`・`CoffeeInsightProviderIosImpl.swift`・`SearchCoffeeRecordsTool.swift`・`AnalysisView.swift`・`AppState.swift`

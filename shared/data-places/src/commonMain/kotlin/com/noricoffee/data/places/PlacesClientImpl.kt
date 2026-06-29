@@ -200,6 +200,11 @@ class PlacesClientImpl(
         websiteUri = websiteUri,
         googleMapsUri = googleMapsUri,
         photoNames = photos.map { it.name },
+        openNow = currentOpeningHours?.openNow,
+        weekdayDescriptions = currentOpeningHours?.weekdayDescriptions ?: emptyList(),
+        phoneNumber = nationalPhoneNumber,
+        priceLevel = priceLevel,
+        googleRating = rating,
     )
 
     private companion object {
@@ -227,7 +232,8 @@ class PlacesClientImpl(
         /** Text Search / Nearby Search 共通 FieldMask（接頭辞 `places.` あり）。 */
         const val FIELD_MASK =
             "places.id,places.displayName,places.formattedAddress," +
-                "places.location,places.websiteUri,places.googleMapsUri,places.photos"
+                "places.location,places.websiteUri,places.googleMapsUri,places.photos," +
+                "places.currentOpeningHours,places.nationalPhoneNumber,places.priceLevel,places.rating"
 
         /**
          * Place Details 用 FieldMask（接頭辞 `places.` なし）。
@@ -236,7 +242,8 @@ class PlacesClientImpl(
          * リスト取得系（searchText / searchNearby）と接頭辞ルールが異なるため別定数にする。
          */
         const val DETAILS_FIELD_MASK =
-            "id,displayName,formattedAddress,location,websiteUri,googleMapsUri,photos"
+            "id,displayName,formattedAddress,location,websiteUri,googleMapsUri,photos," +
+                "currentOpeningHours,nationalPhoneNumber,priceLevel,rating"
     }
 }
 

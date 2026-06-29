@@ -18,4 +18,9 @@ data class PlaceSummary(
     val websiteUri: String?,
     val googleMapsUri: String?,
     val photoNames: List<String>,
+    val openNow: Boolean?,
+    val weekdayDescriptions: List<String>,
+    val phoneNumber: String?,
+    val priceLevel: String?,
+    val googleRating: Double?,
 )

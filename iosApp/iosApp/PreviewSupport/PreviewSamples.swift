@@ -54,7 +54,12 @@ enum PreviewSamples {
             longitude: KotlinDouble(value: 139.6694),
             photoReferences: [],
             websiteUrl: "https://bluebottlecoffee.jp/",
-            mapsUrl: "https://maps.google.com/?cid=sample1"
+            mapsUrl: "https://maps.google.com/?cid=sample1",
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil
         ),
         Cafe(
             placeId: "ChIJsampleSteamers",
@@ -64,7 +69,12 @@ enum PreviewSamples {
             longitude: KotlinDouble(value: 139.7072),
             photoReferences: [],
             websiteUrl: nil,
-            mapsUrl: "https://maps.google.com/?cid=sample2"
+            mapsUrl: "https://maps.google.com/?cid=sample2",
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil
         ),
         Cafe(
             placeId: "ChIJsampleFuglen",
@@ -74,7 +84,12 @@ enum PreviewSamples {
             longitude: nil,
             photoReferences: [],
             websiteUrl: "https://fuglencoffee.jp/",
-            mapsUrl: nil
+            mapsUrl: nil,
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil
         ),
     ]
 
@@ -124,7 +139,12 @@ enum PreviewSamples {
             longitude: KotlinDouble(value: 139.6694),
             photoReferences: [],
             websiteUrl: "https://bluebottlecoffee.jp/",
-            mapsUrl: "https://maps.google.com/?cid=sample"
+            mapsUrl: "https://maps.google.com/?cid=sample",
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil
         ),
         visitedOn: localDate(year: 2026, month: 6, day: 2),
         rating: 4.5,
@@ -160,7 +180,12 @@ enum PreviewSamples {
             longitude: KotlinDouble(value: 139.7072),
             photoReferences: [],
             websiteUrl: nil,
-            mapsUrl: nil
+            mapsUrl: nil,
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil
         ),
         visitedOn: localDate(year: 2026, month: 5, day: 28),
         rating: 3.0,
@@ -225,7 +250,12 @@ enum PreviewSamples {
                 longitude: KotlinDouble(value: 139.6694),
                 photoReferences: [],
                 websiteUrl: "https://bluebottlecoffee.jp/",
-                mapsUrl: "https://maps.google.com/?cid=sample1"
+                mapsUrl: "https://maps.google.com/?cid=sample1",
+                openNow: nil,
+                weekdayDescriptions: [],
+                phoneNumber: nil,
+                priceLevel: nil,
+                googleRating: nil
             ),
             matches: [
                 RecommendationReasonTasteProfileMatch(

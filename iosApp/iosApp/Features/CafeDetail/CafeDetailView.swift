@@ -65,6 +65,10 @@ struct CafeDetailView: View {
     private func cafeDetailList(bridge: CafeDetailViewModelBridge) -> some View {
         List {
             cafeInfoSection(bridge: bridge)
+            if let cafe = bridge.cafe ?? initialCafe {
+                cafeLinksSection(cafe: cafe)
+                cafeHoursSection(cafe: cafe)
+            }
             coffeesSection(bridge: bridge)
         }
         .listStyle(.insetGrouped)
@@ -90,6 +94,53 @@ struct CafeDetailView: View {
                     .accessibilityLabel(String(localized: "住所 \(address)"))
                 }
 
+                if let openNow = cafe.openNow?.boolValue {
+                    LabeledContent(String(localized: "営業状態")) {
+                        HStack(spacing: 4) {
+                            Circle()
+                                .fill(openNow ? Color.green : Color.red)
+                                .frame(width: 8, height: 8)
+                            Text(openNow ? String(localized: "営業中") : String(localized: "営業時間外"))
+                                .foregroundStyle(openNow ? .green : .red)
+                        }
+                    }
+                    .accessibilityLabel(
+                        String(localized: "営業状態: \(openNow ? "営業中" : "営業時間外")")
+                    )
+                }
+
+                if let rating = cafe.googleRating?.doubleValue {
+                    LabeledContent(String(localized: "Google 評価")) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "star.fill")
+                                .foregroundStyle(.yellow)
+                                .font(.caption)
+                            Text(String(format: "%.1f", rating))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    .accessibilityLabel(
+                        String(localized: "Google 評価 \(String(format: "%.1f", rating))")
+                    )
+                }
+
+                if let level = cafe.priceLevel, let text = priceLevelText(for: level) {
+                    LabeledContent(String(localized: "価格帯")) {
+                        Text(text)
+                            .foregroundStyle(.secondary)
+                    }
+                    .accessibilityLabel(String(localized: "価格帯 \(text)"))
+                }
+
+                if let phone = cafe.phoneNumber,
+                   let url = URL(string: "tel:\(phone)") {
+                    Link(destination: url) {
+                        Label(phone, systemImage: "phone")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityLabel(String(localized: "電話する \(phone)"))
+                }
+
                 LabeledContent(String(localized: "記録 \(bridge.coffees.count) 杯")) {
                     EmptyView()
                 }
@@ -98,6 +149,62 @@ struct CafeDetailView: View {
                 Text(String(localized: "カフェ情報を読み込み中..."))
                     .foregroundStyle(.secondary)
             }
+        }
+    }
+
+    // MARK: - 外部リンクセクション
+
+    /// `websiteUrl` / `mapsUrl` が 1 つ以上 non-nil のときだけ Section を表示する。
+    @ViewBuilder
+    private func cafeLinksSection(cafe: Cafe) -> some View {
+        if cafe.websiteUrl != nil || cafe.mapsUrl != nil {
+            Section(String(localized: "外部リンク")) {
+                if let urlStr = cafe.websiteUrl, let url = URL(string: urlStr) {
+                    Link(destination: url) {
+                        Label(String(localized: "公式サイト"), systemImage: "globe")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityLabel(String(localized: "公式サイトを開く"))
+                }
+                if let urlStr = cafe.mapsUrl, let url = URL(string: urlStr) {
+                    Link(destination: url) {
+                        Label(String(localized: "Google Maps で開く"), systemImage: "map")
+                            .foregroundStyle(Color.accentColor)
+                    }
+                    .accessibilityLabel(String(localized: "Google Maps で開く"))
+                }
+            }
+        }
+    }
+
+    // MARK: - 営業時間セクション
+
+    /// `weekdayDescriptions` が空でないときだけ Section を表示する。
+    @ViewBuilder
+    private func cafeHoursSection(cafe: Cafe) -> some View {
+        if !cafe.weekdayDescriptions.isEmpty {
+            Section(String(localized: "営業時間")) {
+                ForEach(cafe.weekdayDescriptions, id: \.self) { line in
+                    Text(line)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+        }
+    }
+
+    // MARK: - ヘルパ
+
+    /// Kotlin の `priceLevel` 文字列を表示用テキスト（`¥` 記号または `"無料"`）に変換する。
+    /// 不明な値は `nil` を返し、呼び出し側で非表示にする。
+    private func priceLevelText(for level: String) -> String? {
+        switch level {
+        case "PRICE_LEVEL_FREE":          return String(localized: "無料")
+        case "PRICE_LEVEL_INEXPENSIVE":   return "¥"
+        case "PRICE_LEVEL_MODERATE":      return "¥¥"
+        case "PRICE_LEVEL_EXPENSIVE":     return "¥¥¥"
+        case "PRICE_LEVEL_VERY_EXPENSIVE": return "¥¥¥¥"
+        default:                          return nil
         }
     }
 

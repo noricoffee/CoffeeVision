@@ -604,23 +604,21 @@
 
 ---
 
-## フェーズ 11: コーヒー記録テンプレート / カスタムフィールド
+## フェーズ 11: コーヒー記録テンプレート / カスタムフィールド ※保留
 
-> 起票 2026-06-29。「記録のしやすさ」と「個人の記録スタイル」への対応。テンプレートで素早く入力でき、カスタムフィールドで独自の観点を追記できるようにする。
+> 起票 2026-06-29。2026-06-29 全保留。優先度が上がった時点で再検討。
 
 ### 11-A: 記録テンプレート
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | テンプレートのデータモデルを設計（`RecordTemplate`: name / defaultBeans / defaultBrewMethod / defaultTastingEnabled / customFields 等）。`data-model.md` に追記 | |
-| [ ] | KMP: `RecordTemplate` ドメインモデル + `TemplateRepository` + SQLDelight スキーマ | |
-| [ ] | `CoffeeEditorViewModel` にテンプレートから draft を初期化するフロー追加（`onTemplateSelected(template)`） | |
-| [ ] | iOS: テンプレート選択 UI（`CoffeeEditorView` 上部のシート、またはコーヒー記録追加 FAB タップ時に選択） | |
-| [ ] | iOS: テンプレート管理画面（作成・編集・削除・並び替え） | 設定タブまたは独立タブ |
+| [-] | テンプレートのデータモデルを設計（`RecordTemplate`: name / defaultBeans / defaultBrewMethod / defaultTastingEnabled / customFields 等）。`data-model.md` に追記 | |
+| [-] | KMP: `RecordTemplate` ドメインモデル + `TemplateRepository` + SQLDelight スキーマ | |
+| [-] | `CoffeeEditorViewModel` にテンプレートから draft を初期化するフロー追加（`onTemplateSelected(template)`） | |
+| [-] | iOS: テンプレート選択 UI（`CoffeeEditorView` 上部のシート、またはコーヒー記録追加 FAB タップ時に選択） | |
+| [-] | iOS: テンプレート管理画面（作成・編集・削除・並び替え） | 設定タブまたは独立タブ |
 
-### 11-B: カスタムフィールド ※保留
-
-> 2026-06-29 保留。優先度が上がった時点で再検討。
+### 11-B: カスタムフィールド
 
 | 状態 | タスク | 備考 |
 |------|------|------|

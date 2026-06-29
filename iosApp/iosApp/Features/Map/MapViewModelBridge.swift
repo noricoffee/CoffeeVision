@@ -23,6 +23,8 @@ final class MapViewModelBridge {
     /// 好み一致カフェの placeId 集合（ピン強調判定を O(1) にする）。
     private(set) var recommendedPlaceIds: Set<String> = []
     private(set) var showVisited: Bool = true
+    /// 検索タブからのオーバーレイ表示用。空 = 表示なし。
+    private(set) var searchResultPlaces: [Cafe] = []
     private(set) var error: String?
 
     // MARK: - POI ルックアップ状態
@@ -81,6 +83,16 @@ final class MapViewModelBridge {
         kotlin.onPoiLookupErrorDismissed()
     }
 
+    /// 検索タブから検索結果カフェを受け取り、マップオーバーレイに反映する。
+    func onSearchResultsUpdated(_ cafes: [Cafe]) {
+        kotlin.onSearchResultsUpdated(cafes: cafes)
+    }
+
+    /// 検索タブの結果クリア時にマップオーバーレイをリセットする。
+    func onSearchResultsCleared() {
+        kotlin.onSearchResultsCleared()
+    }
+
     // MARK: - Private
 
     private func startObservation() {
@@ -103,5 +115,6 @@ final class MapViewModelBridge {
         self.isLookingUpPoi = state.isLookingUpPoi
         self.poiLookupResult = state.poiLookupResult
         self.poiLookupError = state.poiLookupError
+        self.searchResultPlaces = state.searchResultPlaces
     }
 }

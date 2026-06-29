@@ -1938,6 +1938,14 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 既知の軽微点: `arrow.trianglehead.2.clockwise` の SF Symbol が iOS 26 で表示されるか未確認（SF Symbol 名は文字列のためコンパイルは通る）。表示されなければ `arrow.2.circlepath` 等に差し替え。
 - 親メモ: 同種の「@Generable は出力整形にも自然文抽出にも同じ API で使える双方向の道具」という気づきが溜まったら `coding-conventions.md` か `kmp-bridge.md`（FM 節）への昇格を検討。
 
+## 2026-06-29 - フェーズ 10-C: 検索結果マップオーバーレイ
+
+- 領域: KMP（MapViewModel）+ iOS（MapViewModelBridge / AppState / CafeSearchView / MapTabView）
+- **設計**: AppState 経由。`AppState.updateMapSearchResults([Cafe])` / `clearMapSearchResults()` → `MapViewModelBridge.onSearchResultsUpdated/Cleared()` → KMP `MapViewModel.onSearchResultsUpdated/Cleared()` → `UIState.searchResultPlaces`。共有リポジトリや ViewModel 間直結は避け、既存の `mapSearchCenter` と同じ AppState 経由パターンを踏襲。
+- **UX 方針**: 「マップに表示」明示ボタン方式（自動反映なし）。ルートモード（`onCafeSelected == nil`）かつ検索結果 > 0 のとき toolbar left に表示。コールバックモード（VisitEditor sheet）では表示なし。クエリ変化時（`onChange(of: bridge.query)`）に前の検索結果を自動クリア。タブ離脱時はクリアしない（意図的にマップに表示させた結果を保持）。
+- **ピン**: 青 Circle（32pt）+ `mappin.and.ellipse`（shadow あり）。4 種体系: 訪問済み（36pt 茶）/ 好み一致（38pt アクセント）/ 検索結果（32pt 青）/ Apple Maps 標準 POI。重複除去なし（同 placeId のピンは重なる）。
+- **クリアタイミングの判断**: `onChange(of: bridge.query)` = Kotlin 側の state 反映後にクリア。`queryText`（ローカル即時）ではなく Kotlin 側を監視することで、入力中の文字ごとにクリアが走らない。
+
 ## 2026-06-29 - フェーズ 10-A/B: マップピン再設計 + Places API 追加フィールド
 
 - 領域: iOS（10-A）/ KMP + iOS（10-B）

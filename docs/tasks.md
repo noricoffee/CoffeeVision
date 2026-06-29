@@ -588,9 +588,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 検索タブで検索実行後、結果カフェをマップタブのピンとして表示できる仕組みを設計（AppState 経由 or MapViewModel に検索結果フィード） | 設計をdocs で確定してから実装 |
-| [ ] | `MapViewModel.UIState` に `searchResultPlaces: List<Cafe>` を追加し、検索結果ピン（別色 / 別アイコン）として描画 | |
-| [ ] | `CafeSearchView` で「マップに表示」アクションを追加（検索結果をマップタブへ転送）またはマップタブで自動反映 | UX はユーザー判断待ちで設計 |
+| [x] | 検索タブで検索実行後、結果カフェをマップタブのピンとして表示できる仕組みを設計（AppState 経由 or MapViewModel に検索結果フィード） | 2026-06-29 / AppState 経由（`updateMapSearchResults`/`clearMapSearchResults`）で MapViewModelBridge に委譲。明示ボタン方式（自動反映なし） |
+| [x] | `MapViewModel.UIState` に `searchResultPlaces: List<Cafe>` を追加し、検索結果ピン（別色 / 別アイコン）として描画 | 2026-06-29 / 青 32pt Circle + `mappin.and.ellipse`。タップで CafeDetailView へ push |
+| [x] | `CafeSearchView` で「マップに表示」アクションを追加（検索結果をマップタブへ転送）またはマップタブで自動反映 | 2026-06-29 / ルートモードかつ結果あり時のみ toolbar left に「マップに表示」ボタン表示。クエリ変化時に自動クリア。**シミュレータ目視はユーザー作業** |
 
 ### 10-D: お気に入りタグフィルター
 

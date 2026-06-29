@@ -59,6 +59,9 @@ class MapViewModel(
      * @property recommendedPlaceIds [recommendedCafes] から導出した placeId の集合。
      *   iOS 側のマップピン強調（区別ピン判定）に使う
      * @property showVisited 訪問済みカフェのピンを表示するか
+     * @property searchResultPlaces 検索タブの検索結果カフェ一覧（マップ上の第 4 種ピン）。
+     *   空リストのとき非表示。[onSearchResultsUpdated] で更新し [onSearchResultsCleared] でクリアする。
+     *   永続化しない一時データ（タブ切り替えや別カフェ選択まで保持する）
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      * @property isLookingUpPoi Apple Maps POI タップ後の Places ルックアップ中かどうか
      * @property poiLookupResult POI ルックアップで取得した [Cafe]。View が消費（NavigationPath への append 等）
@@ -71,6 +74,7 @@ class MapViewModel(
         val recommendedCafes: List<RecommendedCafe> = emptyList(),
         val recommendedPlaceIds: Set<String> = emptySet(),
         val showVisited: Boolean = true,
+        val searchResultPlaces: List<Cafe> = emptyList(),
         val error: String? = null,
         val isLookingUpPoi: Boolean = false,
         val poiLookupResult: Cafe? = null,
@@ -198,6 +202,29 @@ class MapViewModel(
      */
     fun onPoiLookupErrorDismissed() {
         _state.update { it.copy(poiLookupError = null) }
+    }
+
+    /**
+     * 検索タブで取得した検索結果カフェ一覧をマップにオーバーレイ表示する際に呼ぶ。
+     *
+     * [UIState.searchResultPlaces] を [cafes] で上書きする。
+     * 空リストを渡した場合はピンが非表示になる（[onSearchResultsCleared] と等価）。
+     * iOS の AppState が検索タブ → マップタブの連携として呼び出す想定。
+     *
+     * @param cafes 検索結果の [Cafe] リスト。空リストでも可
+     */
+    fun onSearchResultsUpdated(cafes: List<Cafe>) {
+        _state.update { it.copy(searchResultPlaces = cafes) }
+    }
+
+    /**
+     * マップ上の検索結果オーバーレイピンをクリアする。
+     *
+     * [UIState.searchResultPlaces] を空リストに戻す。
+     * 検索タブの検索内容がリセットされた際や、別の操作でオーバーレイが不要になった際に呼ぶ。
+     */
+    fun onSearchResultsCleared() {
+        _state.update { it.copy(searchResultPlaces = emptyList()) }
     }
 
     /**

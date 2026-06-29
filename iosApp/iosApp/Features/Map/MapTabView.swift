@@ -393,6 +393,26 @@ struct MapTabView: View {
                     }
                 }
 
+                // 検索結果ピン（青 / mappin.and.ellipse）
+                if !bridge.searchResultPlaces.isEmpty {
+                    ForEach(bridge.searchResultPlaces, id: \.placeId) { cafe in
+                        if let lat = cafe.latitude?.doubleValue,
+                           let lng = cafe.longitude?.doubleValue {
+                            Annotation(
+                                cafe.name,
+                                coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng)
+                            ) {
+                                NavigationLink(
+                                    value: CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
+                                ) {
+                                    searchResultPin(cafe: cafe)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
             }
             .mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))
             // 上端（ステータスバー）と左右はフルブリードにしつつ、下端のセーフエリアは保持する。
@@ -486,6 +506,20 @@ struct MapTabView: View {
         .accessibilityLabel(
             String(localized: "\(visitedCafe.cafe.name) 訪問済み \(visitedCafe.visitCount)回")
         )
+    }
+
+    /// 検索結果オーバーレイピン（青 / `mappin.and.ellipse`）。
+    private func searchResultPin(cafe: Cafe) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.blue)
+                .frame(width: 32, height: 32)
+                .shadow(color: Color.blue.opacity(0.4), radius: 4, x: 0, y: 2)
+            Image(systemName: "mappin.and.ellipse")
+                .font(.caption2)
+                .foregroundStyle(.white)
+        }
+        .accessibilityLabel(String(localized: "\(cafe.name) 検索結果"))
     }
 
     /// 好み一致カフェピン（アクセントカラー + ハート）。

@@ -80,6 +80,12 @@ struct CafeSearchView: View {
         .onChange(of: queryText) { _, new in
             bridge.onQueryChanged(new)
         }
+        // クエリが変わったら前回の検索結果をマップからクリアする（ルートモードのみ）
+        .onChange(of: bridge.query) { _, _ in
+            if onCafeSelected == nil {
+                appState.clearMapSearchResults()
+            }
+        }
         .onSubmit(of: .search) {
             runSearch()
         }
@@ -90,6 +96,17 @@ struct CafeSearchView: View {
                     Button(String(localized: "キャンセル")) {
                         dismiss()
                     }
+                }
+            }
+            // ルートモードかつ検索結果がある場合のみ「マップに表示」ボタンを表示
+            if onCafeSelected == nil, !bridge.results.isEmpty {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button {
+                        appState.updateMapSearchResults(bridge.results)
+                    } label: {
+                        Label(String(localized: "マップに表示"), systemImage: "map")
+                    }
+                    .accessibilityLabel(String(localized: "検索結果をマップに表示"))
                 }
             }
         }

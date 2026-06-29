@@ -6,10 +6,7 @@ import SharedLogic
 /// コーヒー記録一覧画面。
 ///
 /// - RootTabView の NavigationStack 内に配置されるため、自身では NavigationStack を持たない
-/// - 検索タブボタンの上に浮かべた FAB（`addCoffeeFAB`）から `CoffeeEditorView(mode: .Create)` を sheet 表示する
-/// - FAB 配置は `TabBarFrameReader` + `.overlay` + `GeometryReader` + `fabPosition(geo:)` で実現
-///   （`MapTabView.currentLocationFAB` と同じパターン）
-/// - `tabBarSearchFrame == .zero`（フレーム取得失敗）時は FAB を非表示に縮退（クラッシュしない）
+/// - bottom-trailing 固定の FAB（`addCoffeeFAB`）から `CoffeeEditorView(mode: .Create)` を sheet 表示する
 /// - 既存記録の詳細は NavigationLink で CoffeeDetailView に push する
 struct CoffeeListView: View {
 
@@ -18,9 +15,6 @@ struct CoffeeListView: View {
 
     /// FAB タップで開くエディタの表示状態。
     @State private var isPresentingEditor = false
-
-    /// `TabBarFrameReader` が報告する検索タブの global フレーム。`.zero` は未取得。
-    @State private var tabBarSearchFrame: CGRect = .zero
 
     var body: some View {
         content
@@ -43,25 +37,17 @@ struct CoffeeListView: View {
                     initialCafe: nil
                 )
             }
-            // 追加 FAB: 検索タブボタンの真上に浮かべる
-            .overlay {
-                if tabBarSearchFrame != .zero {
-                    GeometryReader { geo in
-                        addCoffeeFAB
-                            .position(fabPosition(geo: geo))
-                    }
-                }
+            // 追加 FAB: bottom-trailing 固定配置
+            .overlay(alignment: .bottomTrailing) {
+                addCoffeeFAB
+                    .padding(.trailing, 16)
+                    .padding(.bottom, 16)
             }
-            .background(
-                TabBarFrameReader { frame in
-                    tabBarSearchFrame = frame
-                }
-            )
     }
 
     // MARK: - 追加 FAB
 
-    /// 検索タブボタン上に浮かべる「コーヒーを記録」FAB。
+    /// bottom-trailing 固定の「コーヒーを記録」FAB。
     private var addCoffeeFAB: some View {
         Button {
             isPresentingEditor = true
@@ -73,17 +59,6 @@ struct CoffeeListView: View {
                 .background(Circle().fill(.regularMaterial))
         }
         .accessibilityLabel(String(localized: "コーヒーを記録"))
-    }
-
-    /// `tabBarSearchFrame`（global）と `GeometryReader` の global フレームから
-    /// FAB の local position を計算する。
-    private func fabPosition(geo: GeometryProxy) -> CGPoint {
-        let geoFrame = geo.frame(in: .global)
-        let tabFrame = tabBarSearchFrame
-        let size = min(max(tabFrame.height, 44), 64)
-        let x = tabFrame.midX - geoFrame.minX
-        let y = tabFrame.minY - geoFrame.minY - 8 - size / 2
-        return CGPoint(x: x, y: y)
     }
 
     // MARK: - コンテンツ
@@ -104,7 +79,7 @@ struct CoffeeListView: View {
             String(localized: "まだコーヒー記録がありません"),
             systemImage: "cup.and.saucer",
             description: Text(
-                String(localized: "下の + ボタンか、マップ・検索タブからカフェを選んで記録しましょう")
+                String(localized: "右下の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
             )
         )
     }
@@ -209,7 +184,7 @@ struct CoffeeRow: View {
             String(localized: "まだコーヒー記録がありません"),
             systemImage: "cup.and.saucer",
             description: Text(
-                String(localized: "下の + ボタンか、マップ・検索タブからカフェを選んで記録しましょう")
+                String(localized: "右下の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
             )
         )
         .navigationTitle(String(localized: "コーヒー記録"))

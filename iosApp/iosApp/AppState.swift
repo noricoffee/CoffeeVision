@@ -181,16 +181,6 @@ final class AppState {
         }
     }
 
-    /// 検索タブの結果をマップオーバーレイに反映する。
-    func updateMapSearchResults(_ cafes: [Cafe]) {
-        mapBridge?.onSearchResultsUpdated(cafes)
-    }
-
-    /// 検索タブの結果クリア時にマップオーバーレイをリセットする。
-    func clearMapSearchResults() {
-        mapBridge?.onSearchResultsCleared()
-    }
-
     /// サインアウト / アカウント削除後に全ブリッジをリセットして再起動する。
     ///
     /// - `coffeeListBridge` / `mapBridge` / `accountBridge` / `uid` を nil に戻す

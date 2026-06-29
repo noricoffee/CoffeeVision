@@ -191,12 +191,14 @@ struct CafeDetailRoute: Hashable {
 /// マップタブのルート画面。
 ///
 /// - MapKit の `Map` に訪問済みカフェ（brown）と周辺カフェ（gray）の Annotation を表示する
+/// - 上部の Google Maps スタイル検索バーからカフェ名検索を行い、結果ピンをマップに表示する
+/// - 検索結果タップで下部カードを表示し、「詳細を見る」で `CafeDetailView` へ push する
 /// - フィルタトグルで各種ピンの表示 / 非表示を切り替える
 /// - カスタムピンタップで `CafeDetailView` へ push する（`NavigationLink(value:)` 経由）
 /// - Apple Maps 標準 POI タップ → Places ルックアップ → `CafeDetailView` プログラマティック push
 /// - 自身が `NavigationStack(path: $navigationPath)` を保持するため RootTabView 側の NavigationStack は不要
 /// - 現在地取得は `LocationManager` 経由
-/// - 検索タブ上に「現在地 FAB」を浮かべ、タップで地図中心を現在地・ズーム 1000m にリセットする
+/// - 現在地 FAB は bottom-trailing 固定配置でタップで地図中心を現在地・ズーム 1000m にリセットする
 struct MapTabView: View {
 
     var appState: AppState
@@ -214,15 +216,26 @@ struct MapTabView: View {
     /// 設定画面の表示状態。
     @State private var isPresentingSettings = false
 
-    /// `TabBarFrameReader` が報告する検索タブの global フレーム。`.zero` は未取得。
-    @State private var tabBarSearchFrame: CGRect = .zero
-
     /// FAB タップ後、次の location 更新で 1 回だけ recenter する。
     /// `lastLocation` を nil にしないため、`setupLocation` の周辺カフェ検索に副作用を与えない。
     @State private var pendingRecenter = false
 
     /// 好み一致ピンタップ時に推薦理由シートで表示する対象。nil = シート非表示。
     @State private var selectedRecommendedCafe: RecommendedCafe? = nil
+
+    // MARK: - 検索関連 State
+
+    /// 検索バーのテキスト入力。
+    @State private var searchQuery: String = ""
+
+    /// マップ上部検索バー用の CafeSearch ブリッジ。`.task` で 1 度だけ生成する。
+    @State private var searchBridge: CafeSearchViewModelBridge? = nil
+
+    /// 検索結果ドロップダウンの表示フラグ。
+    @State private var showingSearchResults: Bool = false
+
+    /// 検索結果から選択されたカフェ（下部カード表示用）。nil = カード非表示。
+    @State private var selectedSearchCafe: Cafe? = nil
 
 
     // MARK: - Body
@@ -250,20 +263,12 @@ struct MapTabView: View {
                                     .background(.ultraThinMaterial)
                             }
                         }
-                        // 現在地 FAB: 検索タブボタンの真上に浮かべる
-                        .overlay {
-                            if tabBarSearchFrame != .zero {
-                                GeometryReader { geo in
-                                    currentLocationFAB
-                                        .position(fabPosition(geo: geo))
-                                }
-                            }
+                        // 現在地 FAB: bottom-trailing 固定配置
+                        .overlay(alignment: .bottomTrailing) {
+                            currentLocationFAB
+                                .padding(.trailing, 16)
+                                .padding(.bottom, 16)
                         }
-                        .background(
-                            TabBarFrameReader { frame in
-                                tabBarSearchFrame = frame
-                            }
-                        )
                         .errorToast(message: activeToast(bridge: bridge)?.message) {
                             activeToast(bridge: bridge)?.dismiss()
                         }
@@ -319,6 +324,12 @@ struct MapTabView: View {
                             }
                         }
                         .task {
+                            // 検索ブリッジを 1 度だけ生成する
+                            if searchBridge == nil {
+                                searchBridge = CafeSearchViewModelBridge(
+                                    kotlin: appState.container.makeCafeSearchViewModel()
+                                )
+                            }
                             await setupLocation(bridge: bridge)
                         }
                 } else {
@@ -394,6 +405,7 @@ struct MapTabView: View {
                 }
 
                 // 検索結果ピン（青 / mappin.and.ellipse）
+                // タップで下部カードを表示し、NavigationLink ではなく selectSearchResult を呼ぶ
                 if !bridge.searchResultPlaces.isEmpty {
                     ForEach(bridge.searchResultPlaces, id: \.placeId) { cafe in
                         if let lat = cafe.latitude?.doubleValue,
@@ -402,9 +414,9 @@ struct MapTabView: View {
                                 cafe.name,
                                 coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng)
                             ) {
-                                NavigationLink(
-                                    value: CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
-                                ) {
+                                Button {
+                                    selectSearchResult(cafe)
+                                } label: {
                                     searchResultPin(cafe: cafe)
                                 }
                                 .buttonStyle(.plain)
@@ -419,7 +431,7 @@ struct MapTabView: View {
             // これにより MapKit が Legal/帰属表記を配置する基準が TabBar 上端になり、
             // Legal が TabBar の裏に隠れなくなる。
             .ignoresSafeArea(.container, edges: [.top, .horizontal])
-            // カメラ移動完了時にマップ中心を AppState へ書き込む（検索タブの位置バイアスに使う）。
+            // カメラ移動完了時にマップ中心を AppState へ書き込む（検索時の位置バイアスに使う）。
             // frequency: .onEnd で頻繁な中間値更新を抑制する。
             .onMapCameraChange(frequency: .onEnd) { context in
                 let region = context.region
@@ -440,15 +452,252 @@ struct MapTabView: View {
                     radiusMeters: radius
                 )
             }
+            .safeAreaInset(edge: .bottom) {
+                if let cafe = selectedSearchCafe {
+                    cafeSelectionCard(cafe)
+                }
+            }
 
-            // フローティングコントロール（セーフエリア内に自然に収まる）
-            HStack(alignment: .center, spacing: 8) {
+            // 上部コントロール（検索バー行 + フィルタチップ行）
+            VStack(spacing: 8) {
+                HStack(spacing: 8) {
+                    searchBarView
+                    settingsFloatingButton
+                }
                 filterChipRow(bridge: bridge)
-                Spacer()
-                settingsFloatingButton
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+
+            // 検索結果ドロップダウン（条件付き表示）
+            if showingSearchResults, let sb = searchBridge {
+                VStack {
+                    // 上部コントロール（検索バー + フィルタ行）分のスペース
+                    Spacer().frame(height: 120)
+
+                    ZStack {
+                        if sb.isLoading {
+                            ProgressView()
+                                .frame(maxWidth: .infinity)
+                                .padding()
+                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                                .padding(.horizontal, 16)
+                        } else if !sb.results.isEmpty {
+                            ScrollView {
+                                LazyVStack(spacing: 0) {
+                                    ForEach(sb.results, id: \.placeId) { cafe in
+                                        Button {
+                                            selectSearchResult(cafe)
+                                        } label: {
+                                            HStack(spacing: 12) {
+                                                Image(systemName: "mappin.circle.fill")
+                                                    .font(.title2)
+                                                    .foregroundStyle(.blue)
+                                                VStack(alignment: .leading, spacing: 2) {
+                                                    Text(cafe.name)
+                                                        .font(.subheadline.weight(.medium))
+                                                        .foregroundStyle(.primary)
+                                                        .multilineTextAlignment(.leading)
+                                                    if let address = cafe.address {
+                                                        Text(address)
+                                                            .font(.caption)
+                                                            .foregroundStyle(.secondary)
+                                                            .lineLimit(1)
+                                                            .multilineTextAlignment(.leading)
+                                                    }
+                                                }
+                                                Spacer()
+                                            }
+                                            .padding(.horizontal, 16)
+                                            .padding(.vertical, 12)
+                                            .frame(maxWidth: .infinity)
+                                            .contentShape(Rectangle())
+                                        }
+                                        .buttonStyle(.plain)
+                                        if cafe.placeId != sb.results.last?.placeId {
+                                            Divider().padding(.leading, 52)
+                                        }
+                                    }
+                                }
+                            }
+                            .frame(maxHeight: 300)
+                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                            .padding(.horizontal, 16)
+                        }
+                    }
+
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    // MARK: - 検索バー
+
+    private var searchBarView: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "magnifyingglass")
+                .foregroundStyle(.secondary)
+                .font(.body)
+            TextField(String(localized: "カフェ名で検索"), text: $searchQuery)
+                .submitLabel(.search)
+                .onSubmit { performMapSearch() }
+                .onChange(of: searchQuery) { _, newValue in
+                    if newValue.isEmpty {
+                        clearSearchSelection()
+                    }
+                }
+            if !searchQuery.isEmpty {
+                Button {
+                    searchQuery = ""
+                    clearSearchSelection()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "検索をクリア"))
+            }
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+        .frame(maxWidth: .infinity)
+    }
+
+    // MARK: - 検索アクション
+
+    /// 検索バーの送信時に呼ばれる。位置バイアスがあれば付与する。
+    private func performMapSearch() {
+        guard let sb = searchBridge, !searchQuery.isEmpty else { return }
+        sb.onQueryChanged(searchQuery)
+        if let center = appState.mapSearchCenter {
+            sb.onSearchTapped(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                radiusMeters: center.radiusMeters
+            )
+        } else {
+            sb.onSearchTapped()
+        }
+        showingSearchResults = true
+    }
+
+    /// 検索選択状態をクリアし、マップオーバーレイもリセットする。
+    private func clearSearchSelection() {
+        selectedSearchCafe = nil
+        showingSearchResults = false
+        appState.mapBridge?.onSearchResultsCleared()
+    }
+
+    /// 検索結果（ドロップダウンまたはピン）からカフェを選択する。
+    ///
+    /// 下部カードを表示し、マップをそのカフェに中心移動する。
+    private func selectSearchResult(_ cafe: Cafe) {
+        selectedSearchCafe = cafe
+        showingSearchResults = false
+        appState.mapBridge?.onSearchResultsUpdated([cafe])
+        guard let lat = cafe.latitude?.doubleValue,
+              let lng = cafe.longitude?.doubleValue else { return }
+        withAnimation {
+            cameraPosition = .region(
+                MKCoordinateRegion(
+                    center: CLLocationCoordinate2D(latitude: lat, longitude: lng),
+                    latitudinalMeters: 800,
+                    longitudinalMeters: 800
+                )
+            )
+        }
+    }
+
+    // MARK: - 選択カフェ 下部カード
+
+    private func cafeSelectionCard(_ cafe: Cafe) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(cafe.name)
+                        .font(.headline)
+                        .lineLimit(2)
+                    if let address = cafe.address {
+                        Text(address)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
+                    cafeCardInfoRow(cafe)
+                }
+                Spacer()
+                Button {
+                    selectedSearchCafe = nil
+                    appState.mapBridge?.onSearchResultsCleared()
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(.title2)
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "閉じる"))
+            }
+            Button {
+                navigationPath.append(
+                    CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
+                )
+                selectedSearchCafe = nil
+                appState.mapBridge?.onSearchResultsCleared()
+            } label: {
+                Text(String(localized: "詳細を見る"))
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.large)
+            .accessibilityLabel(String(localized: "\(cafe.name) の詳細を見る"))
+        }
+        .padding(16)
+        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
+        .padding(.horizontal, 16)
+        .padding(.bottom, 8)
+        .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: -4)
+    }
+
+    private func cafeCardInfoRow(_ cafe: Cafe) -> some View {
+        HStack(spacing: 8) {
+            if let openNow = cafe.openNow?.boolValue {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(openNow ? Color.green : Color.red)
+                        .frame(width: 6, height: 6)
+                    Text(openNow ? String(localized: "営業中") : String(localized: "終了"))
+                        .font(.caption)
+                        .foregroundStyle(openNow ? .green : .red)
+                }
+            }
+            if let rating = cafe.googleRating?.doubleValue {
+                HStack(spacing: 2) {
+                    Image(systemName: "star.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                    Text(String(format: "%.1f", rating))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            if let level = cafe.priceLevel {
+                Text(mapPriceLevelText(level))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+        }
+    }
+
+    private func mapPriceLevelText(_ level: String) -> String {
+        switch level {
+        case "PRICE_LEVEL_FREE": return String(localized: "無料")
+        case "PRICE_LEVEL_INEXPENSIVE": return "¥"
+        case "PRICE_LEVEL_MODERATE": return "¥¥"
+        case "PRICE_LEVEL_EXPENSIVE": return "¥¥¥"
+        case "PRICE_LEVEL_VERY_EXPENSIVE": return "¥¥¥¥"
+        default: return ""
         }
     }
 
@@ -591,7 +840,7 @@ struct MapTabView: View {
 
     // MARK: - 現在地 FAB
 
-    /// 検索タブボタン上に浮かべる「現在地に戻る」FAB。
+    /// bottom-trailing 固定の「現在地に戻る」FAB。
     ///
     /// - `.denied` / `.restricted` 時は淡色 + 無効化
     /// - それ以外は押下で `recenterToCurrentLocation()` を呼ぶ
@@ -610,17 +859,6 @@ struct MapTabView: View {
         .accessibilityLabel(String(localized: "現在地に戻る"))
         .disabled(isDenied)
         .opacity(isDenied ? 0.4 : 1.0)
-    }
-
-    /// `tabBarSearchFrame`（global）と `GeometryReader` の global フレームから
-    /// FAB の local position を計算する。
-    private func fabPosition(geo: GeometryProxy) -> CGPoint {
-        let geoFrame = geo.frame(in: .global)
-        let tabFrame = tabBarSearchFrame
-        let size = min(max(tabFrame.height, 44), 64)
-        let x = tabFrame.midX - geoFrame.minX
-        let y = tabFrame.minY - geoFrame.minY - 8 - size / 2
-        return CGPoint(x: x, y: y)
     }
 
     // MARK: - 現在地センタリング

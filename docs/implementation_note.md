@@ -1946,6 +1946,18 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - **ピン**: 青 Circle（32pt）+ `mappin.and.ellipse`（shadow あり）。4 種体系: 訪問済み（36pt 茶）/ 好み一致（38pt アクセント）/ 検索結果（32pt 青）/ Apple Maps 標準 POI。重複除去なし（同 placeId のピンは重なる）。
 - **クリアタイミングの判断**: `onChange(of: bridge.query)` = Kotlin 側の state 反映後にクリア。`queryText`（ローカル即時）ではなく Kotlin 側を監視することで、入力中の文字ごとにクリアが走らない。
 
+## 2026-06-30 - マップ内検索バー（検索タブ廃止・Google Maps スタイル）
+
+- 領域: iOS
+- **背景**: iOS 27 で `Tab(role: .search)` の右端固定動作が廃止され、通常タブと地続きになったため、検索を マップタブ内に移設して Google Maps スタイルの UX に作り替えた。
+- **変更概要**: 検索タブ削除 → 3 タブ（マップ・コーヒー・分析）。マップ上部に常時表示の検索バー（TextField + regularMaterial 背景）。検索実行 → 結果リストがマップ上にドロップダウン表示 → 結果タップ → 当該地点へカメラ移動 + 青ピン + 下部カード（`safeAreaInset`）→「詳細を見る」で CafeDetail push。
+- **`CafeSearchViewModelBridge` の再利用**: 新たな KMP 変更なし。MapTabView 内で `.task` 初期化時に `appState.container.makeCafeSearchViewModel()` を生成し `@State private var searchBridge` として保持。検索実行は `performMapSearch()` → `appState.mapSearchCenter`（カメラ位置バイアス）を流用。
+- **`TabBarFrameReader` 削除**: 検索タブフレームを読み取る `UIViewRepresentable` ハックが不要になったため削除。MapTabView と CoffeeListView の FAB を `overlay(alignment: .bottomTrailing)` + padding 固定に変更。
+- **上部コントロール高さ 120pt の固定 Spacer**: 検索バー + フィルタ行高さ合計を 120pt で見込む。Dynamic Type 最大サイズでは不足する可能性あり。実機確認後 `GeometryReader` 動的計測に差し替えを検討。
+- **`CafeSearchView` のコールバックモード維持**: エディタ内「カフェを選択」sheet は `init(appState:onCafeSelected:)` を引き続き使用。ルートモード `init(appState:)` は削除。`onCafeSelected` は optional のまま（将来的に非 optional 化余地あり）。
+- **削除した AppState API**: `updateMapSearchResults(_:)` / `clearMapSearchResults()`。MapTabView が `appState.mapBridge` を直接呼ぶ。`mapSearchCenter` は MapTabView の `.onMapCameraChange` が引き続き更新。
+- 検証: `xcodebuild iphonesimulator` BUILD SUCCEEDED。**シミュレータでの目視確認（検索バー→ドロップダウン→下部カード→詳細遷移）はユーザー作業**。
+
 ## 2026-06-30 - フェーズ 10-D: タグフィルター（ドメインモデル変更 + UI）
 
 - 領域: KMP（domain / data-local / data-firebase / feature-editor / feature-map）+ iOS

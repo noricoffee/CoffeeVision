@@ -1,16 +1,12 @@
 import SwiftUI
 import SharedLogic
 
-/// カフェ検索画面。
+/// カフェ検索画面（コールバックモード専用）。
 ///
-/// 2 つの起動モードをサポートする:
+/// `CoffeeEditorView` などの `.sheet` から起動される。
+/// 検索結果タップで `onCafeSelected` を呼び出してカフェを呼び出し元に返す。
 ///
-/// 1. **コールバックモード**（`onCafeSelected` あり）: `VisitEditorView` の `.sheet` で起動される。
-///    検索結果タップで `onCafeSelected` を呼び出す。既存の挙動を維持する。
-///
-/// 2. **ルートモード**（`onCafeSelected` なし）: Search タブのルート画面として起動される。
-///    `NavigationStack` 内で `CafeDetailView` に push する。
-///    RootTabView の NavigationStack が push の親になる。
+/// マップ上のカフェ検索は `MapTabView` 内蔵の検索バーが担う。
 struct CafeSearchView: View {
 
     // MARK: - Properties
@@ -31,7 +27,7 @@ struct CafeSearchView: View {
 
     // MARK: - Init
 
-    /// コールバックモード（VisitEditorView の sheet 経由）。
+    /// コールバックモード（CoffeeEditorView などの sheet 経由）。
     init(appState: AppState, onCafeSelected: @escaping (Cafe) -> Void) {
         _bridge = State(
             initialValue: CafeSearchViewModelBridge(
@@ -41,18 +37,6 @@ struct CafeSearchView: View {
         self.photoLoader = appState.placePhotoLoader
         self.appState = appState
         self.onCafeSelected = onCafeSelected
-    }
-
-    /// ルートモード（Search タブのルート画面として直接起動）。
-    init(appState: AppState) {
-        _bridge = State(
-            initialValue: CafeSearchViewModelBridge(
-                kotlin: appState.container.makeCafeSearchViewModel()
-            )
-        )
-        self.photoLoader = appState.placePhotoLoader
-        self.appState = appState
-        self.onCafeSelected = nil
     }
 
     // MARK: - Body
@@ -80,33 +64,14 @@ struct CafeSearchView: View {
         .onChange(of: queryText) { _, new in
             bridge.onQueryChanged(new)
         }
-        // クエリが変わったら前回の検索結果をマップからクリアする（ルートモードのみ）
-        .onChange(of: bridge.query) { _, _ in
-            if onCafeSelected == nil {
-                appState.clearMapSearchResults()
-            }
-        }
         .onSubmit(of: .search) {
             runSearch()
         }
         .toolbar {
-            // コールバックモードのみキャンセルボタンを表示（sheet 閉じるため）
-            if onCafeSelected != nil {
-                ToolbarItem(placement: .navigationBarLeading) {
-                    Button(String(localized: "キャンセル")) {
-                        dismiss()
-                    }
-                }
-            }
-            // ルートモードかつ検索結果がある場合のみ「マップに表示」ボタンを表示
-            if onCafeSelected == nil, !bridge.results.isEmpty {
-                ToolbarItem(placement: .topBarLeading) {
-                    Button {
-                        appState.updateMapSearchResults(bridge.results)
-                    } label: {
-                        Label(String(localized: "マップに表示"), systemImage: "map")
-                    }
-                    .accessibilityLabel(String(localized: "検索結果をマップに表示"))
+            // キャンセルボタン（sheet 閉じるため）
+            ToolbarItem(placement: .navigationBarLeading) {
+                Button(String(localized: "キャンセル")) {
+                    dismiss()
                 }
             }
         }
@@ -162,26 +127,14 @@ struct CafeSearchView: View {
 
     @ViewBuilder
     private var resultsList: some View {
-        if let callback = onCafeSelected {
-            // コールバックモード: タップでコールバックを呼ぶ
-            List(bridge.results, id: \.placeId) { cafe in
-                Button {
-                    callback(cafe)
-                } label: {
-                    CafeRow(cafe: cafe, loader: photoLoader)
-                }
-                .accessibilityLabel(cafe.name)
+        // タップでコールバックを呼ぶ（コールバックモード専用）
+        List(bridge.results, id: \.placeId) { cafe in
+            Button {
+                onCafeSelected?(cafe)
+            } label: {
+                CafeRow(cafe: cafe, loader: photoLoader)
             }
-        } else {
-            // ルートモード: タップで CafeDetailView に push
-            List(bridge.results, id: \.placeId) { cafe in
-                NavigationLink(
-                    value: CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
-                ) {
-                    CafeRow(cafe: cafe, loader: photoLoader)
-                }
-                .accessibilityLabel(cafe.name)
-            }
+            .accessibilityLabel(cafe.name)
         }
     }
 }

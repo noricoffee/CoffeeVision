@@ -850,16 +850,18 @@
 | [ ] | iOS: テンプレート選択 UI（`CoffeeEditorView` 上部のシート、またはコーヒー記録追加 FAB タップ時に選択） | |
 | [ ] | iOS: テンプレート管理画面（作成・編集・削除・並び替え） | 設定タブまたは独立タブ |
 
-### 11-B: カスタムフィールド
+### 11-B: カスタムフィールド ※保留
+
+> 2026-06-29 保留。優先度が上がった時点で再検討。
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | カスタムフィールドのデータモデルを設計（`CustomField`: id / title / type(text/number/select) / value）。`data-model.md` に追記 | |
-| [ ] | KMP: `CustomField` ドメインモデル + `CoffeeRecord.customFields: List<CustomField>` 追加 + SQLDelight（JSON 列 or 別テーブル）+ Firestore スキーマ更新 | |
-| [ ] | `CoffeeEditorViewModel` にカスタムフィールド CRUD メソッドを追加 | |
-| [ ] | iOS: `CoffeeEditorView` にカスタムフィールドセクション（フィールドタイトル・値を動的に追加/削除） | |
-| [ ] | iOS: `CoffeeDetailView` にカスタムフィールドの表示 | |
-| [ ] | カスタムフィールドの定義を「ユーザー定義フィールドマスタ」として保存し、次回以降の記録でも再利用できる設計にするか検討 | ユーザー判断待ち |
+| [-] | カスタムフィールドのデータモデルを設計（`CustomField`: id / title / type(text/number/select) / value）。`data-model.md` に追記 | |
+| [-] | KMP: `CustomField` ドメインモデル + `CoffeeRecord.customFields: List<CustomField>` 追加 + SQLDelight（JSON 列 or 別テーブル）+ Firestore スキーマ更新 | |
+| [-] | `CoffeeEditorViewModel` にカスタムフィールド CRUD メソッドを追加 | |
+| [-] | iOS: `CoffeeEditorView` にカスタムフィールドセクション（フィールドタイトル・値を動的に追加/削除） | |
+| [-] | iOS: `CoffeeDetailView` にカスタムフィールドの表示 | |
+| [-] | カスタムフィールドの定義を「ユーザー定義フィールドマスタ」として保存し、次回以降の記録でも再利用できる設計にするか検討 | ユーザー判断待ち |
 
 ---
 

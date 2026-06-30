@@ -2034,3 +2034,18 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 領域: KMP/iOS ブリッジ
 - Kotlin data class に nullable フィールドをデフォルト値付きで追加した場合でも、Kotlin/Native が生成する Obj-C initializer は全パラメーター必須になる（Kotlin のデフォルト引数は Swift に伝播しない）。SKIE 0.10.12 では DefaultArgumentInterop を有効化していないため、`CoffeeRecordFilter(...)` を呼ぶ既存 Swift コード（`SearchCoffeeRecordsTool` 等）に `tastingMin: nil, tastingMax: nil` の追記が必要だった。
 - 今後 `CoffeeRecordFilter` に新フィールドを追加する場合、Swift 呼び出し側を網羅的に更新する必要がある。SKIE の DefaultArgumentInterop 有効化（`defaultArgumentInterop { enabled = true }` in `build.gradle.kts`）を検討すると、この問題が自動解消される。
+
+---
+
+### 2026-06-30: MapViewModel テイストプロファイルフィルタの設計（Phase 13-C）
+
+- 領域: KMP / アーキテクチャ
+- `tasteMatchedPlaceIds`（マッチカフェ placeId 集合）は `visitedCafes` の表示フィルタ（`selectedTags` によるピン絞り込み）とは独立して管理する。iOS 側でマップピンの表示スタイル変更（フィルタ active 時に非マッチのピンを半透明化する想定）に使うため、訪問済みカフェリストを絞り込む `selectedTags` とは別軸として設計した。両フィルタを AND 条件で組み合わせる要件が出た場合は再検討が必要。
+- `latestAllRecords` キャッシュを `combine` 収集時に更新し、`onTasteProfileChanged` 呼び出し時にも即時 `applyTasteFilter()` を呼ぶ設計にした。タグフィルタ（`onTagFilterToggled` / `onTagFilterCleared`）と同じパターンを採用。`combine` ブロックの変換式は `Triple(...) to allRecords`（`Pair<Triple, List>`）で返す方式にしたが、将来の複雑化時は `data class` への変更を検討する。
+
+---
+
+### 2026-06-30: MapTabView フィルタチップ内の Foundation Models 可否チェック（Phase 13-C）
+
+- 領域: iOS / パフォーマンス
+- `filterChipRow` 内で `TastePreferenceExtractor.makeIfAvailable() != nil` を呼んでいるが、これは View body の再描画ごとに評価される（内部は `SystemLanguageModel.default.availability` 確認のみで軽量）。現状は実害なし。将来パフォーマンス問題が生じた場合は `MapViewModelBridge` 側に `isFoundationModelsAvailable: Bool` フラグを持たせるか、`MapTabView` 本体の `@State` でキャッシュする設計に移行する。

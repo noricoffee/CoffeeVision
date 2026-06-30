@@ -697,9 +697,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 設計: 変換後プロファイルと `RecommendedCafe`（B-4）の一致判定を「今飲みたい味」でフィルタする仕組みを設計。`CafeRecommendationProvider` に `filterByTasteProfile(profile: TastePreference)` を追加するか、ViewModel レベルで絞り込むか方針確定 | ユーザー判断待ち |
-| [ ] | KMP: 方針確定後に `ObserveTasteMatchedCafesUseCase` or `MapViewModel` に「今飲みたい味」フィルタを追加 | |
-| [ ] | iOS: マップタブに「今日飲みたい一杯を入力」ボタン → 自然言語入力 → 変換 → マップの推薦ピンを動的に絞り込む。入力中は `ProgressView` オーバーレイ | `MapTabView` のフィルタ行に追加。Foundation Models 非対応端末は非表示 |
+| [x] | 設計: ViewModel レベルで絞り込む方針を確定。`MapViewModel.UIState` に `tasteMatchedPlaceIds`・`activeTastingMin/Max` を追加 | 2026-06-30 / `CafeRecommendationProvider` は変更せず、`MapViewModel` 側でテイストフィルタを管理する設計を採用 |
+| [x] | KMP: `MapViewModel` に `onTasteProfileChanged(TastingScores?, TastingScores?)` + `applyTasteFilter()` を追加。`UIState.tasteMatchedPlaceIds` でマッチカフェ集合を公開 | 2026-06-30 / `testAndroidHostTest` 全件 green |
+| [x] | iOS: マップタブフィルタ行に「好みで絞り込む」チップ追加（Foundation Models 非対応端末は非表示）→ `TasteMapFilterSheet` でテキスト入力 → 変換 → フィルタ適用。非マッチピンを opacity 0.25 に半透明化 | 2026-06-30 / BUILD SUCCEEDED。**実機確認はユーザー作業（Apple Intelligence 対応端末が必要）** |
 
 ### 13-D: カフェ検索タブへの統合
 

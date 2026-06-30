@@ -30,6 +30,12 @@ final class MapViewModelBridge {
     private(set) var selectedTags: [String] = []
     /// 利用可能なタグの distinct ソート済みリスト。
     private(set) var availableTags: [String] = []
+    /// テイストフィルタが active なときのマッチカフェ placeId 集合。空 = フィルタ未設定。
+    private(set) var tasteMatchedPlaceIds: Set<String> = []
+    /// アクティブなテイストフィルタ下限（nil = 未設定）。
+    private(set) var activeTastingMin: TastingScores? = nil
+    /// アクティブなテイストフィルタ上限（nil = 未設定）。
+    private(set) var activeTastingMax: TastingScores? = nil
 
     // MARK: - POI ルックアップ状態
 
@@ -97,6 +103,14 @@ final class MapViewModelBridge {
         kotlin.onSearchResultsCleared()
     }
 
+    // MARK: - テイストフィルターアクション
+
+    /// 「今飲みたい味」テイストプロファイルフィルタを更新する。
+    /// 両方 nil でフィルタ解除。
+    func onTasteProfileChanged(tastingMin: TastingScores?, tastingMax: TastingScores?) {
+        kotlin.onTasteProfileChanged(tastingMin: tastingMin, tastingMax: tastingMax)
+    }
+
     // MARK: - タグフィルターアクション
 
     /// タグフィルターのオン / オフを切り替える。
@@ -134,5 +148,11 @@ final class MapViewModelBridge {
         self.searchResultPlaces = state.searchResultPlaces
         self.selectedTags = Array(state.selectedTags)
         self.availableTags = state.availableTags
+        // state.tasteMatchedPlaceIds は SKIE が Set<String> に変換済み（recommendedPlaceIds と同等）。
+        // KotlinMutableSet<NSString> として現れる場合は
+        // Set(state.tasteMatchedPlaceIds.compactMap { $0 as? String }) に変更する。
+        self.tasteMatchedPlaceIds = state.tasteMatchedPlaceIds
+        self.activeTastingMin = state.activeTastingMin
+        self.activeTastingMax = state.activeTastingMax
     }
 }

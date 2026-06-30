@@ -216,6 +216,9 @@ struct MapTabView: View {
     /// 設定画面の表示状態。
     @State private var isPresentingSettings = false
 
+    /// テイストフィルタシートの表示状態。
+    @State private var isPresentingTasteFilter = false
+
     /// FAB タップ後、次の location 更新で 1 回だけ recenter する。
     /// `lastLocation` を nil にしないため、`setupLocation` の周辺カフェ検索に副作用を与えない。
     @State private var pendingRecenter = false
@@ -248,6 +251,9 @@ struct MapTabView: View {
                         .toolbar(.hidden, for: .navigationBar)
                         .sheet(isPresented: $isPresentingSettings) {
                             SettingsView(appState: appState)
+                        }
+                        .sheet(isPresented: $isPresentingTasteFilter) {
+                            TasteMapFilterSheet(bridge: bridge)
                         }
                         .navigationDestination(for: CafeDetailRoute.self) { route in
                             CafeDetailView(
@@ -376,29 +382,38 @@ struct MapTabView: View {
                                     longitude: lng
                                 )
                             ) {
-                                if isRecommended,
-                                   let recommended = bridge.recommendedCafes.first(
-                                    where: { $0.cafe.placeId == visitedCafe.cafe.placeId }
-                                   ) {
-                                    // 好み一致ピン: タップで推薦理由シートを表示
-                                    Button {
-                                        selectedRecommendedCafe = recommended
-                                    } label: {
-                                        recommendedCafePin(visitedCafe: visitedCafe)
+                                let isTasteActive = !bridge.tasteMatchedPlaceIds.isEmpty
+                                let isTasteMatch = bridge.tasteMatchedPlaceIds.contains(
+                                    visitedCafe.cafe.placeId
+                                )
+                                let pinOpacity = isTasteActive && !isTasteMatch ? 0.25 : 1.0
+
+                                Group {
+                                    if isRecommended,
+                                       let recommended = bridge.recommendedCafes.first(
+                                        where: { $0.cafe.placeId == visitedCafe.cafe.placeId }
+                                       ) {
+                                        // 好み一致ピン: タップで推薦理由シートを表示
+                                        Button {
+                                            selectedRecommendedCafe = recommended
+                                        } label: {
+                                            recommendedCafePin(visitedCafe: visitedCafe)
+                                        }
+                                        .buttonStyle(.plain)
+                                    } else {
+                                        // 通常訪問済みピン: タップでカフェ詳細へ push
+                                        NavigationLink(
+                                            value: CafeDetailRoute(
+                                                placeId: visitedCafe.cafe.placeId,
+                                                initialCafe: visitedCafe.cafe
+                                            )
+                                        ) {
+                                            visitedCafePin(visitedCafe: visitedCafe)
+                                        }
+                                        .buttonStyle(.plain)
                                     }
-                                    .buttonStyle(.plain)
-                                } else {
-                                    // 通常訪問済みピン: タップでカフェ詳細へ push
-                                    NavigationLink(
-                                        value: CafeDetailRoute(
-                                            placeId: visitedCafe.cafe.placeId,
-                                            initialCafe: visitedCafe.cafe
-                                        )
-                                    ) {
-                                        visitedCafePin(visitedCafe: visitedCafe)
-                                    }
-                                    .buttonStyle(.plain)
                                 }
+                                .opacity(pinOpacity)
                             }
                         }
                     }
@@ -717,6 +732,20 @@ struct MapTabView: View {
                 // 好み一致カフェが 1 件以上あるときのみ凡例バッジを表示（インタラクションなし）
                 if !bridge.recommendedCafes.isEmpty {
                     RecommendedLegendBadge()
+                }
+
+                // Foundation Models 利用可能なとき「好みで絞り込む」チップを表示
+                if TastePreferenceExtractor.makeIfAvailable() != nil {
+                    let isTasteFilterActive = bridge.activeTastingMin != nil
+                    FilterChip(
+                        label: isTasteFilterActive
+                            ? String(localized: "好み絞り込み中")
+                            : String(localized: "好みで絞り込む"),
+                        systemImage: "sparkles",
+                        isOn: isTasteFilterActive
+                    ) {
+                        isPresentingTasteFilter = true
+                    }
                 }
 
                 // タグフィルタチップ（availableTags が空でないとき）

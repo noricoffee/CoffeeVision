@@ -82,6 +82,7 @@ struct AnalysisView: View {
                 insightCardSection
                 qaSection
                 favoriteSignalsSection(stats: stats)
+                preferredBeanTraitsSection(stats: stats)
                 summarySection(stats: stats)
                 ratingHistogramSection(stats: stats)
                 tastingAveragesSection(stats: stats)
@@ -204,6 +205,30 @@ struct AnalysisView: View {
 
         if hasAnySignal {
             FavoriteSignalsCard(signals: signals)
+        }
+    }
+
+    // MARK: - 好みの豆の傾向セクション（Phase 12-C）
+
+    /// `CoffeeStats.preferredBeanTraits` を表示するセクション。
+    ///
+    /// 表示条件:
+    /// - `stats.preferredBeanTraits` が non-nil
+    /// - `dominantFlavorNotes` が非空 または `originHint` が non-nil
+    ///
+    /// `beanTraitsInsightStatus` に応じて表示を切り替える:
+    /// - `Loaded` + insight non-nil: LLM インサイト（headline + body）を表示
+    /// - `Loading`: ProgressView
+    /// - `Idle` / `Failed` / `Unsupported`: フレーバータグ + サブラベルをフォールバック表示
+    @ViewBuilder
+    private func preferredBeanTraitsSection(stats: CoffeeStats) -> some View {
+        if let traits = stats.preferredBeanTraits,
+           !traits.dominantFlavorNotes.isEmpty || traits.originHint != nil {
+            PreferredBeanTraitsCard(
+                traits: traits,
+                insightStatus: viewModel.beanTraitsInsightStatus,
+                insight: viewModel.beanTraitsInsight
+            )
         }
     }
 
@@ -1171,6 +1196,157 @@ private struct TastingAxisSignalRow: View {
             format: "テイスティング %@: %@高評価の傾向、相関 r=%.2f、%d 件（参考）",
             axisName, direction, axis.correlation, axis.sampleSize
         )
+    }
+}
+
+// MARK: - PreferredBeanTraitsCard
+
+/// 好みの豆の傾向を表示するカード（Phase 12-C）。
+///
+/// `beanTraitsInsightStatus` に応じて 3 パターンを表示する:
+/// 1. `Loaded` + insight non-nil: LLM 生成テキストを表示
+/// 2. `Loading`: ProgressView
+/// 3. `Idle` / `Failed` / `Unsupported`: フレーバーノートのタグ + originHint / roastLevelHint を表示
+///
+/// ## 断定 UI にしない設計
+/// フレーバーノートは過去の記録から機械的に集計した傾向値のため、
+/// ヘッダや本文で「好き」と断定する表現は使わない。
+private struct PreferredBeanTraitsCard: View {
+
+    let traits: PreferredBeanTraits
+    let insightStatus: any AnalysisViewModelInsightStatus
+    let insight: CoffeeInsight?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            // ヘッダ
+            HStack(spacing: 6) {
+                Image(systemName: "leaf")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(String(localized: "好みの豆の傾向"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            // ステータス別コンテンツ
+            if insightStatus is AnalysisViewModelInsightStatusLoaded,
+               let insight {
+                // LLM 生成インサイト
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(insight.headline)
+                        .font(.headline)
+                        .foregroundStyle(.primary)
+                    Text(insight.body)
+                        .font(.body)
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(
+                    String(localized: "好みの豆の傾向: \(insight.headline)。\(insight.body)")
+                )
+            } else if insightStatus is AnalysisViewModelInsightStatusLoading {
+                // 生成中
+                HStack(spacing: 8) {
+                    ProgressView()
+                        .scaleEffect(0.8)
+                    Text(String(localized: "豆の傾向を分析中…"))
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                }
+                .accessibilityLabel(String(localized: "豆の傾向を分析中"))
+            } else {
+                // Idle / Failed / Unsupported: フレーバータグ + サブラベルをフォールバック表示
+                beanTraitsFallbackContent
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+    }
+
+    /// フレーバーノートのタグ + サブラベル（産地・焙煎度）のフォールバック表示。
+    @ViewBuilder
+    private var beanTraitsFallbackContent: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            // フレーバーノートを Capsule タグで横スクロール表示
+            let notes = traits.dominantFlavorNotes
+            if !notes.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(notes, id: \.self) { note in
+                            Text(note)
+                                .font(.caption)
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 6)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    String(localized: "フレーバーノート: \(notes.joined(separator: "、"))")
+                )
+            }
+
+            // 産地・焙煎度・テイスティング軸のサブラベル
+            let hasSubLabel = traits.originHint != nil
+                || traits.roastLevelHint != nil
+                || traits.dominantTastingAxis != nil
+            if hasSubLabel {
+                HStack(spacing: 16) {
+                    if let origin = traits.originHint {
+                        Label(origin, systemImage: "globe")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(String(localized: "産地の傾向: \(origin)"))
+                    }
+                    if let roast = traits.roastLevelHint {
+                        Label(localizedRoastLevel(roast), systemImage: "flame")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(String(localized: "焙煎度の傾向: \(localizedRoastLevel(roast))"))
+                    }
+                    if let axis = traits.dominantTastingAxis {
+                        Label(localizedTastingAxis(axis), systemImage: "waveform.path")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .accessibilityLabel(String(localized: "重視する軸: \(localizedTastingAxis(axis))"))
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - ローカライズヘルパ（struct コンテキスト用）
+
+    private func localizedRoastLevel(_ name: String) -> String {
+        switch name {
+        case "Light":     return String(localized: "ライト")
+        case "Cinnamon":  return String(localized: "シナモン")
+        case "Medium":    return String(localized: "ミディアム")
+        case "High":      return String(localized: "ハイ")
+        case "City":      return String(localized: "シティ")
+        case "FullCity":  return String(localized: "フルシティ")
+        case "French":    return String(localized: "フレンチ")
+        case "Italian":   return String(localized: "イタリアン")
+        default:          return name
+        }
+    }
+
+    private func localizedTastingAxis(_ axis: TastingAxis) -> String {
+        switch axis {
+        case .sweetness:   return String(localized: "甘味")
+        case .body:        return String(localized: "ボディ")
+        case .acidity:     return String(localized: "酸味")
+        case .flavor:      return String(localized: "風味")
+        case .aftertaste:  return String(localized: "後味")
+        }
     }
 }
 

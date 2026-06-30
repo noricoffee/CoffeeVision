@@ -30,6 +30,20 @@ final class AnalysisViewModelBridge {
     /// - その他の状態（`Idle` / `Loading` / `Loaded` / `Failed`）は Foundation Models 使用時
     private(set) var insightStatus: any AnalysisViewModelInsightStatus = AnalysisViewModelInsightStatusUnsupported()
 
+    // MARK: - 好みの豆の傾向インサイト系（Phase 12-C）
+
+    /// 豆の傾向要約コンテンツ。`beanTraitsInsightStatus` が `Loaded` のときに非 nil になる。
+    private(set) var beanTraitsInsight: CoffeeInsight? = nil
+
+    /// 豆の傾向インサイトのロード状態。
+    ///
+    /// - `Unsupported`: insightProvider が null（Apple Intelligence 非対応 / 無効）
+    /// - `Idle`: データあり・生成待ち（フレーバータグをフォールバック表示）
+    /// - `Loading`: Foundation Models 生成中
+    /// - `Loaded`: 生成完了（`beanTraitsInsight` に値あり）
+    /// - `Failed`: 生成失敗（フレーバータグをフォールバック表示）
+    private(set) var beanTraitsInsightStatus: any AnalysisViewModelInsightStatus = AnalysisViewModelInsightStatusIdle()
+
     // MARK: - 対話 Q&A 系（Phase B-2）
 
     /// Q&A のロード状態。
@@ -126,6 +140,8 @@ final class AnalysisViewModelBridge {
         self.isLoading = state.isLoading
         self.insight = state.insight
         self.insightStatus = state.insightStatus
+        self.beanTraitsInsight = state.beanTraitsInsight
+        self.beanTraitsInsightStatus = state.beanTraitsInsightStatus
         self.qaStatus = state.qaStatus
         self.qaQuestion = state.qaQuestion
         self.qaAnswer = state.qaAnswer

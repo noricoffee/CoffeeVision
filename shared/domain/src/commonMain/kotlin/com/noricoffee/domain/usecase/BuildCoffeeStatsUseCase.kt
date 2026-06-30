@@ -1,5 +1,6 @@
 package com.noricoffee.domain.usecase
 
+import com.noricoffee.domain.BeanProfile
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.model.CafeStat
 import com.noricoffee.domain.model.CategoryStat
@@ -118,10 +119,21 @@ class BuildCoffeeStatsUseCase {
      * [records] から [CoffeeStats] を算出する。
      *
      * @param records 集計対象のコーヒー記録一覧
+     * @param beanProfiles 突合に使う [BeanProfile] リスト。空リストの場合は [CoffeeStats.preferredBeanTraits] を null にする
      * @return 集計結果
      */
-    operator fun invoke(records: List<CoffeeRecord>): CoffeeStats {
+    operator fun invoke(
+        records: List<CoffeeRecord>,
+        beanProfiles: List<BeanProfile> = emptyList(),
+    ): CoffeeStats {
         val ratedRecords = records.filter { it.rating > 0.0 }
+        val favoriteSignals = buildFavoriteSignals(records)
+
+        val preferredBeanTraits = if (beanProfiles.isNotEmpty()) {
+            PreferredBeanTraitsUseCase()(beanProfiles, favoriteSignals)
+        } else {
+            null
+        }
 
         return CoffeeStats(
             totalCount = records.size,
@@ -135,8 +147,9 @@ class BuildCoffeeStatsUseCase {
             monthlyTrend = buildMonthlyTrend(records),
             topCafes = buildTopCafes(records),
             recentHighlights = buildRecentHighlights(records),
-            favoriteSignals = buildFavoriteSignals(records),
+            favoriteSignals = favoriteSignals,
             tastingAverages = buildTastingAverages(records),
+            preferredBeanTraits = preferredBeanTraits,
         )
     }
 

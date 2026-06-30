@@ -658,9 +658,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `FavoriteSignals` と `BeanProfile.flavorNotes` を突合し「あなたが好みやすい豆の特徴」を導出するロジック設計 | |
-| [ ] | KMP: 突合ロジック実装（`MatchBeanProfileUseCase` 等）+ `CoffeeStats` への追加 | |
-| [ ] | iOS: 分析タブに「好みの豆の傾向」セクションを追加（Foundation Models で言語化） | |
+| [x] | `FavoriteSignals` と `BeanProfile.flavorNotes` を突合し「あなたが好みやすい豆の特徴」を導出するロジック設計 | 2026-07-01 / `PreferredBeanTraitsUseCase`（origin ファジーマッチ + flavorNotes 頻度集計 top-5）。`ObserveCoffeeStatsUseCase` に `BeanProfileRepository?` 注入で統計 Flow に突合結果を付加 |
+| [x] | KMP: 突合ロジック実装（`PreferredBeanTraitsUseCase`）+ `CoffeeStats` への追加 | 2026-07-01 / `domain:testAndroidHostTest` 全件 green（+5件）。`CoffeeInsightProvider` に `summarizeBeanTraits` 追加。`AnalysisViewModel.UIState` に `beanTraitsInsight` / `beanTraitsInsightStatus` 追加。詳細は [`implementation_note.md`](./implementation_note.md) 2026-07-01 エントリ |
+| [x] | iOS: 分析タブに「好みの豆の傾向」セクションを追加（Foundation Models で言語化） | 2026-07-01 / `CoffeeInsightProviderIosImpl` に `__summarizeBeanTraits` 追加。`AnalysisView` に `preferredBeanTraitsSection` 追加（FM 可用時: 言語化テキスト / 不可時: フレーバータグ表示）。BUILD SUCCEEDED（新規 warning ゼロ）。**実機確認はユーザー作業（Apple Intelligence 対応端末 + Firestore beanProfiles データ投入後）** |
 
 ### 12-D: 協調フィルタリング（B-4 将来版 / 9-6）
 

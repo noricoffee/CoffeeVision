@@ -1,6 +1,7 @@
 package com.noricoffee.domain.usecase
 
 import com.noricoffee.domain.model.CoffeeStats
+import com.noricoffee.repository.BeanProfileRepository
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -12,10 +13,12 @@ import kotlinx.coroutines.flow.map
  * コーヒー記録の変化をリアルタイムに分析 UI へ反映できる。
  *
  * @param coffeeRepository コーヒー記録の観測に使うリポジトリ
+ * @param beanProfileRepository 豆ナレッジ突合に使うリポジトリ（null の場合は [CoffeeStats.preferredBeanTraits] を null にする）
  * @param buildCoffeeStatsUseCase 集計 UseCase。テストで差し替えられるよう外部注入
  */
 class ObserveCoffeeStatsUseCase(
     private val coffeeRepository: CoffeeRepository,
+    private val beanProfileRepository: BeanProfileRepository? = null,
     private val buildCoffeeStatsUseCase: BuildCoffeeStatsUseCase = BuildCoffeeStatsUseCase(),
 ) {
 
@@ -23,12 +26,19 @@ class ObserveCoffeeStatsUseCase(
      * 指定ユーザーのコーヒー記録を集計した [CoffeeStats] の Flow を返す。
      *
      * レコードが変化するたびに新しい [CoffeeStats] が emit される。
+     * [beanProfileRepository] が注入されている場合は [CoffeeStats.preferredBeanTraits] を付加する。
+     * Firestore アクセスが失敗しても統計 Flow は止めない（空リストでフォールバック）。
      *
      * @param userId 対象ユーザーの ID
      * @return 最新の集計結果を持つ Flow
      */
     operator fun invoke(userId: String): Flow<CoffeeStats> =
         coffeeRepository.observeAll(userId).map { records ->
-            buildCoffeeStatsUseCase(records)
+            val beanProfiles = try {
+                beanProfileRepository?.getAll() ?: emptyList()
+            } catch (_: Exception) {
+                emptyList()
+            }
+            buildCoffeeStatsUseCase(records, beanProfiles)
         }
 }

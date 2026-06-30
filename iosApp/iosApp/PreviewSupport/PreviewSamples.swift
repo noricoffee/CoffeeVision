@@ -351,6 +351,13 @@ enum PreviewSamples {
             flavor: KotlinDouble(value: 7.5),
             aftertaste: KotlinDouble(value: 6.3),
             ratedCount: 8
+        ),
+        preferredBeanTraits: PreferredBeanTraits(
+            matchedProfiles: [],
+            dominantFlavorNotes: ["ベリー系", "フルーティー", "シトラス"],
+            originHint: "エチオピア",
+            roastLevelHint: "Light",
+            dominantTastingAxis: TastingAxis.acidity
         )
     )
 }

@@ -99,6 +99,35 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         }
     }
 
+    /// `PreferredBeanTraits` を受け取り、Foundation Models で豆の傾向要約を生成して completion に返す（Phase 12-C）。
+    ///
+    /// `summarize` と同じ `__` プレフィックス付き protocol witness パターン。
+    /// `dominantFlavorNotes` が空かつ `originHint` が nil の場合は呼び出し不要なため、
+    /// completionHandler(nil, nil) を即時呼び出して終了する。
+    ///
+    /// - Parameter traits: KMP 側で集計済みの `PreferredBeanTraits`
+    /// - Parameter completionHandler: 成功時 `(insight, nil)`、失敗時 `(nil, error)`、データ不足時 `(nil, nil)`
+    func __summarizeBeanTraits(
+        traits: PreferredBeanTraits,
+        completionHandler: @escaping @Sendable (CoffeeInsight?, (any Error)?) -> Void
+    ) {
+        // フレーバーノートも産地ヒントもない場合は生成不要
+        guard !traits.dominantFlavorNotes.isEmpty || traits.originHint != nil else {
+            completionHandler(nil, nil)
+            return
+        }
+
+        Task {
+            do {
+                let insight = try await self.generateBeanTraitsInsight(from: traits)
+                completionHandler(insight, nil)
+            } catch {
+                print("[CoffeeVision] Foundation Models BeanTraits generation failed: \(error)")
+                completionHandler(nil, error)
+            }
+        }
+    }
+
     /// ユーザーの質問に対して Foundation Models で回答を生成して completion に返す（Phase B-2）。
     ///
     /// `summarize` と同じ `__` プレフィックス付き protocol witness パターン。
@@ -181,6 +210,56 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             let response = try await session.respond(to: prompt)
             return response.content
         }
+    }
+
+    /// `PreferredBeanTraits` を基に Foundation Models で豆の傾向要約を生成する（Phase 12-C）。
+    ///
+    /// - 好みの産地・焙煎度・フレーバーノート・テイスティング軸をプロンプトに含める
+    /// - `@Generable` 構造体 `BeanTraitsOutput`（`summary` / `recommendation`）で構造化受け取り
+    /// - 返す `CoffeeInsight` は headline = "好みの豆の傾向" 固定
+    private func generateBeanTraitsInsight(from traits: PreferredBeanTraits) async throws -> CoffeeInsight {
+        var lines: [String] = []
+        lines.append("【好みの豆の傾向データ】")
+
+        let flavorNotes = traits.dominantFlavorNotes
+        if !flavorNotes.isEmpty {
+            lines.append("・フレーバーノート: \(flavorNotes.joined(separator: "、"))")
+        }
+        if let origin = traits.originHint {
+            lines.append("・好みの産地傾向: \(origin)")
+        }
+        if let roast = traits.roastLevelHint {
+            lines.append("・好みの焙煎度傾向: \(localizedRoastLevel(roast))")
+        }
+        if let axis = traits.dominantTastingAxis {
+            lines.append("・重視するテイスティング軸: \(localizedTastingAxis(axis))")
+        }
+
+        let prompt = lines.joined(separator: "\n")
+
+        let session = LanguageModelSession(
+            instructions: """
+            あなたはスペシャルティコーヒーの豆に詳しい専門家です。
+            ユーザーの過去のコーヒー記録から導き出した「好みの豆の傾向データ」を読んで、
+            そのユーザーが好みやすい豆の特徴と豆を探す際のヒントを自然な日本語で説明してください。
+
+            【ルール】
+            ・summary は 1〜2 文で豆の特徴を説明する。
+            ・recommendation は 1 文で豆を探すヒントを書く。
+            ・断定表現（「好きです」「間違いない」等）は使わず、「傾向がある」「ことが多い」等の弱い表現にとどめる。
+            ・フレーバーノートが豊富な場合は 2〜3 個に絞って言及する。
+            """
+        )
+
+        let response = try await session.respond(
+            to: prompt,
+            generating: BeanTraitsOutput.self
+        )
+
+        return CoffeeInsight(
+            headline: "好みの豆の傾向",
+            body: response.content.summary + "\n" + response.content.recommendation
+        )
     }
 
     /// `CoffeeStats` を基に Foundation Models で要約を生成する。
@@ -436,4 +515,18 @@ private struct CoffeeInsightOutput {
     /// 要約の本文（50〜100 文字程度）。傾向や楽しみ方を温かく前向きに描写する。
     @Guide(description: "このユーザーのコーヒーの傾向・楽しみ方を 50〜100 文字程度の日本語で描写した文章")
     var body: String
+}
+
+/// Foundation Models に生成させる豆の傾向要約の構造体（Phase 12-C）。
+///
+/// `PreferredBeanTraits` から導き出した好みの豆の特徴と探し方ヒントを構造化出力する。
+@Generable
+private struct BeanTraitsOutput {
+    /// ユーザーが好みやすい豆の特徴（1〜2 文）。
+    @Guide(description: "ユーザーが好みやすい豆の特徴を1〜2文で自然な日本語で説明")
+    var summary: String
+
+    /// この傾向に合う豆を探す際のヒント（1 文）。
+    @Guide(description: "この傾向に合う豆を探す際のヒントを1文で")
+    var recommendation: String
 }

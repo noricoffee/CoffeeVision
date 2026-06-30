@@ -2067,6 +2067,21 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 領域: Android / KMP
 - Firestore の `get()` Task はキャンセル不可。`suspendCancellableCoroutine` の `invokeOnCancellation` ブロックは空にし、キャンセル後にコールバックが到達した場合は Kotlin coroutines の「キャンセル済みコルーチンへの resume は idempotent」仕様に委ねた。`RemoteCoffeeDataSourceAndroidImpl` の `awaitTask` も同方針（ただし `invokeOnCancellation` を明示していない）。BeanProfile 実装で方針を明文化。
 
+### 2026-07-01: Phase 12-C PreferredBeanTraits — matchedProfiles フィールドと LLM プロンプトの分離
+
+- 領域: KMP / iOS
+- `PreferredBeanTraits` は `matchedProfiles: List<BeanProfile>`（産地マッチした豆プロファイル全件）を保持するが、`CoffeeInsightProviderIosImpl.generateBeanTraitsInsight` では現時点でこのフィールドを LLM プロンプトに含めていない（`dominantFlavorNotes` / `originHint` / `roastLevelHint` / `dominantTastingAxis` のみ使用）。将来的に豆名や詳細フレーバーをプロンプトに追加する場合は `matchedProfiles` を走査して `profile.name` / `profile.flavorNotes` を活用できる。
+
+### 2026-07-01: Phase 12-C beanTraitsInsightStatus の初期値は Idle（Unsupported ではない）
+
+- 領域: iOS / AnalysisViewModelBridge
+- `insightStatus`（AI 要約）の初期値は `Unsupported`（LLM 非対応端末でセクション非表示）だが、`beanTraitsInsightStatus` の初期値は `Idle` にした。LLM 非対応端末でも `PreferredBeanTraitsCard` はフレーバータグのフォールバック表示が機能するため、`Unsupported` にするとフォールバック UI が表示されなくなる。`beanProfiles` が空（Firestore 未投入）の場合は `stats.preferredBeanTraits` が nil になりセクション自体が表示されないため、表示制御の責任分担が明確。
+
+### 2026-07-01: Phase 12-C PreferredBeanTraitsCard — InsightLoadedCard を流用しない理由
+
+- 領域: iOS / SwiftUI
+- 既存の `InsightLoadedCard` は `"sparkles"` SF Symbol を固定で使う。`PreferredBeanTraitsCard` の Loaded 状態には `"leaf"` を使いたいため、流用せず `VStack(headline + body)` を直接実装した。将来 `InsightLoadedCard` にアイコン引数を追加して統一することが可能。
+
 ### 2026-06-30: TastePreference.searchKeywords によるカフェ検索補完（Phase 13-D）
 
 - 領域: iOS / Foundation Models

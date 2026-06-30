@@ -152,7 +152,10 @@ fun AppContainer.makeCafeDetailViewModel(
  */
 fun AppContainer.makeAnalysisViewModel(userId: String): AnalysisViewModel =
     AnalysisViewModel(
-        observeCoffeeStatsUseCase = ObserveCoffeeStatsUseCase(coffeeRepository),
+        observeCoffeeStatsUseCase = ObserveCoffeeStatsUseCase(
+            coffeeRepository = coffeeRepository,
+            beanProfileRepository = beanProfileRepository,
+        ),
         insightProvider = coffeeInsightProvider,
         userId = userId,
         scope = scope,

@@ -3,6 +3,7 @@ package com.noricoffee.feature.analysis
 import com.noricoffee.domain.model.CoffeeInsight
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeStats
+import com.noricoffee.domain.model.PreferredBeanTraits
 import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -62,6 +63,8 @@ class AnalysisViewModel(
      * @property isLoading 統計の初回ロード中かどうか
      * @property insight Foundation Models が生成した要約。非対応 / 未生成 / 失敗時は null
      * @property insightStatus 要約のロード状態。[InsightStatus] を参照
+     * @property beanTraitsInsight 好みの豆の傾向を言語化した [CoffeeInsight]。生成前 / 失敗時は null
+     * @property beanTraitsInsightStatus 好みの豆の傾向の言語化ロード状態。[InsightStatus] を参照
      * @property qaStatus 対話 Q&A の状態。[QaStatus] を参照
      * @property qaQuestion 直近の質問テキスト。[onQaCleared] で null に戻る
      * @property qaAnswer 直近の回答テキスト。[onQaCleared] で null に戻る
@@ -72,6 +75,8 @@ class AnalysisViewModel(
         val isLoading: Boolean = true,
         val insight: CoffeeInsight? = null,
         val insightStatus: InsightStatus = InsightStatus.Idle,
+        val beanTraitsInsight: CoffeeInsight? = null,
+        val beanTraitsInsightStatus: InsightStatus = InsightStatus.Idle,
         val qaStatus: QaStatus = QaStatus.Idle,
         val qaQuestion: String? = null,
         val qaAnswer: String? = null,
@@ -135,6 +140,11 @@ class AnalysisViewModel(
             } else {
                 InsightStatus.Idle
             },
+            beanTraitsInsightStatus = if (insightProvider == null) {
+                InsightStatus.Unsupported
+            } else {
+                InsightStatus.Idle
+            },
             qaStatus = if (insightProvider == null) {
                 QaStatus.Unsupported
             } else {
@@ -149,6 +159,9 @@ class AnalysisViewModel(
 
     // 要約生成 Job。統計が更新されるたびにキャンセルして再起動する（連打耐性 / 重複起動防止）。
     private var insightJob: Job? = null
+
+    // 好みの豆の傾向言語化 Job（Phase 12-C）。
+    private var beanTraitsInsightJob: Job? = null
 
     // Q&A 回答生成 Job。質問が送られるたびにキャンセルして再起動する（連打耐性 / 重複起動防止）。
     private var qaJob: Job? = null
@@ -278,6 +291,7 @@ class AnalysisViewModel(
      *
      * [insightProvider] が null の場合は何もしない（[InsightStatus.Unsupported] のまま）。
      * 既に実行中の [insightJob] をキャンセルして新しい Job を起動する（重複起動防止）。
+     * 統計確定時に [stats.preferredBeanTraits] が存在する場合は好みの豆の傾向の言語化も並列で起動する。
      */
     private fun launchInsightGeneration(stats: CoffeeStats) {
         val provider = insightProvider ?: return
@@ -307,6 +321,39 @@ class AnalysisViewModel(
                         error = e.message ?: "要約の生成に失敗しました",
                     )
                 }
+            }
+        }
+
+        val traits = stats.preferredBeanTraits ?: return
+        launchBeanTraitsInsightGeneration(traits, provider)
+    }
+
+    /**
+     * 好みの豆の傾向言語化 Job を起動する（内部ヘルパ）。
+     *
+     * [PreferredBeanTraits] が null または [dominantFlavorNotes] と [originHint] が両方なければ呼ばれない。
+     * 既に実行中の [beanTraitsInsightJob] をキャンセルして新しい Job を起動する（重複起動防止）。
+     */
+    private fun launchBeanTraitsInsightGeneration(
+        traits: PreferredBeanTraits,
+        provider: CoffeeInsightProvider,
+    ) {
+        beanTraitsInsightJob?.cancel()
+        beanTraitsInsightJob = viewModelScope.launch {
+            _state.update { it.copy(beanTraitsInsightStatus = InsightStatus.Loading) }
+            try {
+                val insight = provider.summarizeBeanTraits(traits)
+                _state.update {
+                    it.copy(
+                        beanTraitsInsight = insight,
+                        beanTraitsInsightStatus = InsightStatus.Loaded,
+                    )
+                }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(beanTraitsInsightStatus = InsightStatus.Idle) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(beanTraitsInsightStatus = InsightStatus.Failed) }
             }
         }
     }

@@ -2,10 +2,11 @@ import SwiftUI
 
 /// アプリのルートタブビュー。iOS 26 の `TabView` 新 API を使用。
 ///
-/// 3 タブ構成:
+/// 4 タブ構成:
 /// - マップタブ: 訪問済みカフェと周辺カフェをマップ上に表示。上部に Google Maps スタイルの検索バーを内蔵
 /// - コーヒータブ: コーヒー記録一覧（CoffeeListView）+ FAB で新規記録作成
 /// - 分析タブ: コーヒー記録の記述統計を可視化（Swift Charts）
+/// - 設定タブ: アカウント管理・テーマ切替・アプリ情報（旧マップ内フローティングボタン）
 ///
 /// 新規 CoffeeRecord 作成の導線:
 /// - コーヒータブの FAB（右下に浮かぶ +）: セルフ抽出または後からカフェ選択
@@ -33,6 +34,10 @@ struct RootTabView: View {
                 if let bridge = appState.analysisBridge {
                     AnalysisView(viewModel: bridge, appState: appState)
                 }
+            }
+
+            Tab(String(localized: "設定"), systemImage: "gearshape") {
+                SettingsView(appState: appState)
             }
         }
     }

@@ -53,10 +53,11 @@ struct CoffeeListView: View {
             isPresentingEditor = true
         } label: {
             Image(systemName: "plus")
-                .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(.regularMaterial))
+                .font(.title3.weight(.semibold))
+                .foregroundStyle(.white)
+                .frame(width: 56, height: 56)
+                .background(Circle().fill(Color.accentColor))
+                .shadow(color: Color.accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
         }
         .accessibilityLabel(String(localized: "コーヒーを記録"))
     }

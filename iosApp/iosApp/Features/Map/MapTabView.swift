@@ -213,9 +213,6 @@ struct MapTabView: View {
     /// POI ルックアップ結果などのプログラマティック push 用 NavigationPath。
     @State private var navigationPath = NavigationPath()
 
-    /// 設定画面の表示状態。
-    @State private var isPresentingSettings = false
-
     /// テイストフィルタシートの表示状態。
     @State private var isPresentingTasteFilter = false
 
@@ -252,9 +249,6 @@ struct MapTabView: View {
                 if let bridge = appState.mapBridge {
                     mapContent(bridge: bridge)
                         .toolbar(.hidden, for: .navigationBar)
-                        .sheet(isPresented: $isPresentingSettings) {
-                            SettingsView(appState: appState)
-                        }
                         .sheet(isPresented: $isPresentingTasteFilter) {
                             TasteMapFilterSheet(bridge: bridge)
                         }
@@ -489,10 +483,7 @@ struct MapTabView: View {
 
             // 上部コントロール（検索バー行 + フィルタチップ行）
             VStack(spacing: 8) {
-                HStack(spacing: 8) {
-                    searchBarView
-                    settingsFloatingButton
-                }
+                searchBarView
                 filterChipRow(bridge: bridge)
             }
             .padding(.horizontal, 16)
@@ -878,21 +869,6 @@ struct MapTabView: View {
                 localized: "好み一致のカフェ、\(visitedCafe.cafe.name)。タップして理由を確認"
             )
         )
-    }
-
-    // MARK: - 設定フローティングボタン
-
-    private var settingsFloatingButton: some View {
-        Button {
-            isPresentingSettings = true
-        } label: {
-            Image(systemName: "gearshape")
-                .font(.body.weight(.medium))
-                .foregroundStyle(.primary)
-                .frame(width: 44, height: 44)
-                .background(Circle().fill(.regularMaterial))
-        }
-        .accessibilityLabel(String(localized: "設定"))
     }
 
     // MARK: - 現在地 FAB

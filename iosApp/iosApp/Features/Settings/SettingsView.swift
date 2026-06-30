@@ -1,6 +1,6 @@
 import SwiftUI
 
-/// アプリ設定画面。sheet で表示する。
+/// アプリ設定画面。TabBar の「設定」タブとして常設表示する。
 ///
 /// - アカウント管理への遷移（`NavigationLink` → `AccountView`）
 /// - 表示テーマ切替（`@AppStorage` 経由でアプリ全体に即時反映）
@@ -41,14 +41,6 @@ struct SettingsView: View {
             }
             .navigationTitle(String(localized: "設定"))
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(String(localized: "完了")) {
-                        dismiss()
-                    }
-                    .accessibilityLabel(String(localized: "設定を閉じる"))
-                }
-            }
         }
     }
 

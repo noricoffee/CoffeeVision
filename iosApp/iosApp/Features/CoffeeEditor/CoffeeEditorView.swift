@@ -34,6 +34,13 @@ struct CoffeeEditorView: View {
     /// 写真保存処理中の error（保存失敗時に alert 表示）。
     @State private var photoSaveError: String?
 
+    // MARK: - 産地サジェスト
+
+    /// 産地 TextField のフォーカス状態。サジェストパネルの表示制御に使う。
+    @FocusState private var originFocused: Bool
+    /// `fetchBeanSuggestions` の結果（最大 5 件）。入力 2 文字以上でポピュレートされる。
+    @State private var originSuggestions: [BeanProfile] = []
+
     // MARK: - Init
 
     /// 通常の CoffeeEditor 起動（カフェ pre-fill なし）。
@@ -99,6 +106,27 @@ struct CoffeeEditorView: View {
                 guard !newItems.isEmpty else { return }
                 Task {
                     await handlePickerSelection(newItems)
+                }
+            }
+            // 産地サジェスト: 入力 2 文字以上で fetchBeanSuggestions を呼ぶ
+            .onChange(of: viewModel.draft.origin) { _, newValue in
+                guard newValue.count >= 2 else {
+                    originSuggestions = []
+                    return
+                }
+                Task {
+                    if let suggestions = try? await appState.container.fetchBeanSuggestions(
+                        origin: newValue,
+                        processing: viewModel.draft.processing
+                    ) {
+                        originSuggestions = Array(suggestions.prefix(5))
+                    }
+                }
+            }
+            // フォーカスアウト時は候補を消去する
+            .onChange(of: originFocused) { _, focused in
+                if !focused {
+                    originSuggestions = []
                 }
             }
             .alert(
@@ -198,14 +226,64 @@ struct CoffeeEditorView: View {
             }
             .accessibilityLabel(String(localized: "抽出方法"))
 
-            TextField(
-                String(localized: "産地（任意）"),
-                text: Binding(
-                    get: { viewModel.draft.origin },
-                    set: { viewModel.onOriginChanged($0) }
+            // 産地入力 + サジェストパネル
+            //
+            // Form の list row 内で VStack を使い、TextField の直下にサジェストを展開する。
+            // フォーカス中 かつ 候補が 1 件以上あるときだけ表示される。
+            // ZStack でのオーバーレイは Form 行のクリッピングで候補が隠れるため VStack を採用。
+            VStack(alignment: .leading, spacing: 0) {
+                TextField(
+                    String(localized: "産地（任意）"),
+                    text: Binding(
+                        get: { viewModel.draft.origin },
+                        set: { viewModel.onOriginChanged($0) }
+                    )
                 )
-            )
-            .accessibilityLabel(String(localized: "産地"))
+                .focused($originFocused)
+                .accessibilityLabel(String(localized: "産地"))
+
+                if originFocused && !originSuggestions.isEmpty {
+                    Divider()
+                        .padding(.top, 8)
+
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(originSuggestions, id: \.beanId) { bean in
+                            Button {
+                                viewModel.onOriginChanged(bean.origin)
+                                if let v = bean.variety {
+                                    viewModel.onVarietyChanged(v)
+                                }
+                                originSuggestions = []
+                                originFocused = false
+                            } label: {
+                                HStack {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(bean.origin)
+                                            .font(.body)
+                                        if let v = bean.variety {
+                                            Text(v)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                        }
+                                    }
+                                    Spacer()
+                                    if !bean.flavorNotes.isEmpty {
+                                        Text(Array(bean.flavorNotes.prefix(2)).joined(separator: " · "))
+                                            .font(.caption2)
+                                            .foregroundStyle(.tertiary)
+                                    }
+                                }
+                                .padding(.horizontal, 12)
+                                .padding(.vertical, 8)
+                                .contentShape(Rectangle())
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(String(localized: "産地候補: \(bean.origin)"))
+                        }
+                    }
+                    .padding(.top, 4)
+                }
+            }
 
             TextField(
                 String(localized: "品種（任意）"),

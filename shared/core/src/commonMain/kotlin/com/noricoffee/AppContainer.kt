@@ -7,7 +7,9 @@ import com.noricoffee.dev.DummyCoffeeData
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeRecordQuery
 import com.noricoffee.domain.model.CoffeeRecordQueryImpl
+import com.noricoffee.domain.usecase.BeanProfileMatchUseCase
 import com.noricoffee.repository.AuthRepository
+import com.noricoffee.repository.BeanProfileRepository
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
 import com.noricoffee.repository.CoffeeRepositoryImpl
@@ -46,6 +48,7 @@ class AppContainer(
     val authRepository: AuthRepository,
     val placesApiKey: String,
     val coffeeInsightProvider: CoffeeInsightProvider?,
+    val beanProfileRepository: BeanProfileRepository,
     val scope: CoroutineScope,
 ) {
 
@@ -77,12 +80,14 @@ class AppContainer(
         authRepository: AuthRepository,
         placesApiKey: String,
         coffeeInsightProvider: CoffeeInsightProvider?,
+        beanProfileRepository: BeanProfileRepository,
     ) : this(
         sqlDriver = sqlDriver,
         remoteCoffeeDataSource = remoteCoffeeDataSource,
         authRepository = authRepository,
         placesApiKey = placesApiKey,
         coffeeInsightProvider = coffeeInsightProvider,
+        beanProfileRepository = beanProfileRepository,
         scope = MainScope(),
     )
 
@@ -103,14 +108,19 @@ class AppContainer(
         remoteCoffeeDataSource: RemoteCoffeeDataSource,
         authRepository: AuthRepository,
         placesApiKey: String,
+        beanProfileRepository: BeanProfileRepository,
     ) : this(
         sqlDriver = sqlDriver,
         remoteCoffeeDataSource = remoteCoffeeDataSource,
         authRepository = authRepository,
         placesApiKey = placesApiKey,
         coffeeInsightProvider = null,
+        beanProfileRepository = beanProfileRepository,
         scope = MainScope(),
     )
+
+    /** [BeanProfileMatchUseCase] は純粋関数なのでインスタンスを内部で生成する。 */
+    val beanProfileMatchUseCase: BeanProfileMatchUseCase = BeanProfileMatchUseCase()
 
     private val db: AppDatabase = AppDatabase(sqlDriver)
 

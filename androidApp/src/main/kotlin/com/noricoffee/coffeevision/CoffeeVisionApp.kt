@@ -8,6 +8,7 @@ import com.google.firebase.firestore.firestoreSettings
 import com.noricoffee.AppContainer
 import com.noricoffee.platform.DatabaseDriverFactory
 import com.noricoffee.repository.AuthRepositoryAndroidImpl
+import com.noricoffee.repository.BeanProfileRepositoryAndroidImpl
 import com.noricoffee.repository.RemoteCoffeeDataSourceAndroidImpl
 import kotlinx.coroutines.launch
 
@@ -54,6 +55,7 @@ class CoffeeVisionApp : Application() {
             remoteCoffeeDataSource = RemoteCoffeeDataSourceAndroidImpl(),
             authRepository = AuthRepositoryAndroidImpl(),
             placesApiKey = BuildConfig.PLACES_API_KEY,
+            beanProfileRepository = BeanProfileRepositoryAndroidImpl(FirebaseFirestore.getInstance()),
         )
 
         // 4. 匿名サインイン + 初期同期開始

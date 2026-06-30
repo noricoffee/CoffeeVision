@@ -2052,6 +2052,21 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 
 ---
 
+### 2026-06-30: Phase 12-B Form 内サジェスト UI — ZStack 非採用の経緯
+
+- 領域: iOS / SwiftUI
+- `CoffeeEditorView` の産地サジェストは ZStack オーバーレイではなく VStack 展開方式を採用。SwiftUI の `Form`（内部は List）は行単位でクリッピングを行うため、ZStack で下へ伸ばしても他行を覆うフローティング表示にならない。VStack 展開方式は「フローティングドロップダウン」ではなく「行内展開」になるが、機能的に正しく動く。将来フローティング表示が必要なら `NavigationStack` の `.overlay` 上にパネルを乗せる方式を検討。
+
+### 2026-06-30: Phase 12-B BeanProfileRepository コンストラクタ設計（AppContainer 引数追加 / SKIE）
+
+- 領域: KMP
+- `coffeeInsightProvider: CoffeeInsightProvider?` と異なり `BeanProfileRepository` は非 null（Firestore は iOS/Android 両方で必ず実装が必要なため）。iOS 用 5引数コンストラクタが 6引数に変わった。SKIE はデフォルト引数を Swift に出さないため、iOS `AppState.swift` の `AppContainer` 生成コードで `beanProfileRepository:` を追加する必要がある。
+
+### 2026-06-30: Phase 12-B BeanProfileRepositoryAndroidImpl の Firestore Task キャンセル処理
+
+- 領域: Android / KMP
+- Firestore の `get()` Task はキャンセル不可。`suspendCancellableCoroutine` の `invokeOnCancellation` ブロックは空にし、キャンセル後にコールバックが到達した場合は Kotlin coroutines の「キャンセル済みコルーチンへの resume は idempotent」仕様に委ねた。`RemoteCoffeeDataSourceAndroidImpl` の `awaitTask` も同方針（ただし `invokeOnCancellation` を明示していない）。BeanProfile 実装で方針を明文化。
+
 ### 2026-06-30: TastePreference.searchKeywords によるカフェ検索補完（Phase 13-D）
 
 - 領域: iOS / Foundation Models

@@ -648,11 +648,11 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 豆ナレッジベースのデータモデル設計（`BeanProfile`: origin / variety / process / flavorNotes / referenceRating 等）。`data-model.md` に追記 | |
-| [ ] | Firestore（または別 DB）に豆ナレッジコレクション設計・初期データ投入 | 管理 UI は別途（Admin SDK or Google Sheets 連携を検討） |
-| [ ] | KMP: `BeanProfileRepository`（read-only）+ `BeanProfile` ドメインモデル + キャッシュ戦略 | |
-| [ ] | `CoffeeRecord.beanProfileId` で紐付ける設計にするか、`origin`+`process` のファジーマッチにするか方針確定 | ユーザー判断待ち |
-| [ ] | iOS: コーヒー記録入力時に豆ナレッジから候補をサジェスト（産地 / 品種の補完） | |
+| [x] | 豆ナレッジベースのデータモデル設計（`BeanProfile`: origin / variety / processings / flavorNotes / description）。`data-model.md` に追記 | 2026-06-30 / `§1.8 BeanProfile` 追記。`beanProfileId` 紐付けなし・ファジーマッチ方式を採用。`referenceRating` は除外（スコアリングに使わないため） |
+| [x] | Firestore `beanProfiles` コレクション設計・Security Rules 更新 | 2026-06-30 / `firestore.rules` + `data-model.md §3.1/3.2/3.3` 更新完了。初期データ投入はユーザー作業（Firebase Console / Admin SDK） |
+| [x] | KMP: `BeanProfile` ドメインモデル + `BeanProfileRepository` インターフェース + `BeanProfileMatchUseCase` + Android Firestore 実装 + `AppContainer` 統合 | 2026-06-30 / `shared/domain:testAndroidHostTest` 7件 green。`androidApp:assembleDebug` / `compileKotlinIosSimulatorArm64` 成功。`fetchBeanSuggestions` 拡張関数を `AppContainerViewModelFactory.kt` に追加 |
+| [x] | `CoffeeRecord.beanProfileId` で紐付ける設計にするか、`origin`+`process` のファジーマッチにするか方針確定 | 2026-06-30 / **ファジーマッチ採用**（origin trim/lowercase + processings enum 名）。`CoffeeRecord` に ID フィールドは追加しない |
+| [x] | iOS: `BeanProfileRepositoryIosImpl` + `CoffeeEditorView` origin/variety サジェスト UI | 2026-06-30 / `BeanProfileRepositoryIosImpl.swift` 新規（Firestore one-shot get + メモリキャッシュ）。`AppState.swift` を 6引数 AppContainer に更新。`CoffeeEditorView` に origin VStack 展開サジェスト追加。**BUILD SUCCEEDED（warning 増加なし）。実機での動作確認はユーザー作業（Firestore beanProfiles データ投入後）** |
 
 ### 12-C: 個人好みと豆ナレッジの突合・言語化
 

@@ -10,5 +10,11 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
     }
+
+    match /beanProfiles/{beanId} {
+      // 豆ナレッジベース：認証済みユーザーは read-only。write は Admin SDK のみ
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }

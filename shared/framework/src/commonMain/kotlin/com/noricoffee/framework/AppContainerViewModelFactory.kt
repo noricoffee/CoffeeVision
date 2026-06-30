@@ -1,7 +1,9 @@
 package com.noricoffee.framework
 
 import com.noricoffee.AppContainer
+import com.noricoffee.domain.BeanProfile
 import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.usecase.BuildCoffeeStatsUseCase
 import com.noricoffee.domain.usecase.DeleteAccountUseCase
 import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
@@ -155,6 +157,32 @@ fun AppContainer.makeAnalysisViewModel(userId: String): AnalysisViewModel =
         userId = userId,
         scope = scope,
     )
+
+/**
+ * 入力中の origin / processing に対してマッチする [BeanProfile] 候補リストを返す。
+ *
+ * [AppContainer.beanProfileRepository] から全件取得し（メモリキャッシュ有）、
+ * [AppContainer.beanProfileMatchUseCase] でスコアリングして score > 0 のものを降順で返す。
+ *
+ * ## Swift / iOS からの使い方（SKIE 適用後）
+ * ```swift
+ * let suggestions = try await appContainer.fetchBeanSuggestions(origin: "Ethiopia", processing: nil)
+ * ```
+ *
+ * 生 SDK（SKIE 非適用）では `__fetchBeanSuggestions(origin:processing:completionHandler:)` として見える。
+ *
+ * @param origin 入力中の産地文字列（null の場合は origin スコアは 0）
+ * @param processing 選択中の精製方法（null の場合は processing スコアは 0）
+ * @return score > 0 のプロファイルを降順で並べたリスト（マッチなしは空リスト）
+ */
+@Throws(Exception::class)
+suspend fun AppContainer.fetchBeanSuggestions(
+    origin: String?,
+    processing: ProcessingMethod?,
+): List<BeanProfile> {
+    val all = beanProfileRepository.getAll()
+    return beanProfileMatchUseCase(all, origin, processing)
+}
 
 /**
  * [AccountViewModel] を生成して返す。

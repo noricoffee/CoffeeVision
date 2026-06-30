@@ -9,6 +9,7 @@ CoffeeVision のドメインモデルを **Kotlin（ドメイン）/ SQLDelight�
 - `CoffeeRecord`（コーヒー記録。集約ルート）
 - `Cafe`（カフェ情報。`CoffeeRecord` に埋め込み、任意）
 - `Photo`（写真。`CoffeeRecord` の子）
+- `BeanProfile`（豆ナレッジ。Firestore グローバルコレクション / サービス管理データ）
 
 ---
 
@@ -413,6 +414,48 @@ interface CafeRecommendationProvider {
 
 ---
 
+## 1.8 BeanProfile（豆ナレッジ / フェーズ 12-B）
+
+> サービス管理のコーヒー豆知識データ。ユーザーの `CoffeeRecord` と `beanProfileId` では**紐付けしない**。`origin`（trim/lowercase）+ `processings`（enum 名）でファジーマッチし、記録入力時のサジェストや将来の分析強化（12-C）に活用する。
+
+**配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/BeanProfile.kt`（パッケージ `com.noricoffee.domain`）
+
+```kotlin
+data class BeanProfile(
+    val beanId: String,                        // Firestore ドキュメント ID
+    val name: String,                          // 豆名（表示用）
+    val origin: String,                        // 産地（"Ethiopia" "Colombia" 等）
+    val variety: String?,                      // 品種（"Geisha" "Bourbon" 等）
+    val processings: List<ProcessingMethod>,   // 精製方法（複数可）
+    val flavorNotes: List<String>,             // フレーバーノート（"Chocolate" "Citrus" 等）
+    val description: String?,                  // 12-C LLM インプット用説明
+)
+```
+
+**ファジーマッチロジック**（`BeanProfileMatchUseCase`）:
+
+| フィールド | マッチ方式 | スコア |
+|---|---|---|
+| `origin` | trim + lowercase 完全一致 | +2 |
+| `origin` | trim + lowercase contains | +1 |
+| `processings` | `ProcessingMethod.name` 完全一致 | +1 |
+
+- score > 0 のもののみ、降順でソートして返す
+- `roastLevel` はロースター次第なので除外
+
+**Repository インターフェース**（`com.noricoffee.repository.BeanProfileRepository`）:
+
+```kotlin
+interface BeanProfileRepository {
+    suspend fun getAll(): List<BeanProfile>
+    suspend fun getByOrigin(origin: String): List<BeanProfile>
+}
+```
+
+`getAll()` はメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要）。
+
+---
+
 # 2. SQLDelight スキーマ
 
 ローカル DB は **検索・オフライン参照の高速化** が目的。Firestore のキャッシュとは別途に持つ。
@@ -535,6 +578,8 @@ DELETE FROM photo WHERE id = ?;
 ```
 users/{uid}                               # ユーザープロフィール（analyticsConsent フラグ等）
   coffees/{coffeeId}                      # CoffeeRecord 本体（Cafe 埋め込み / 評価 / メモ / photos 配列）
+
+beanProfiles/{beanId}                     # 豆ナレッジベース（サービス管理 / 全認証ユーザーが read-only）
 ```
 
 > **2026-06-19 改訂**: 旧 `visits` コレクション + サブコレクション（`coffeeItems` / `foodItems` / `photos`）を廃止。`coffees` コレクションの 1 ドキュメントに `cafe`（任意）と `photos`（埋め込み配列）を含める。子サブコレクションは持たない。
@@ -563,6 +608,24 @@ users/{uid}                               # ユーザープロフィール（ana
 
 - **analyticsConsent**: ユーザーが記録データをサービス改善目的での集計に同意したか否か。初回起動オンボーディングで取得。後から設定画面のトグルで変更可能。ドキュメント自体が存在しない場合（未オンボーディングユーザー）は `false` として扱う。
 - フィールドは今後増える可能性がある（例: フェーズ 12-D の協調フィルタリング opt-in 等）。
+
+### `beanProfiles/{beanId}`（豆ナレッジ）
+
+```json
+{
+  "beanId": "ethiopia-yirgacheffe-geisha-washed",
+  "name": "エチオピア イルガチェフェ ゲイシャ ウォッシュト",
+  "origin": "Ethiopia",
+  "variety": "Geisha",
+  "processings": ["Washed"],
+  "flavorNotes": ["Jasmine", "Bergamot", "Citrus", "BlackTea"],
+  "description": "エチオピア南部イルガチェフェ産のゲイシャ種。ジャスミンや柑橘系の繊細な香りが特徴。"
+}
+```
+
+- `processings` は `ProcessingMethod.name`（`"Washed"` / `"Natural"` 等）の配列
+- サービス管理データのため、ユーザーは read-only。write は Admin SDK または Firebase Console から
+- 初期データ投入はユーザー作業（Firebase Console または Admin SDK スクリプト）
 
 ### `users/{uid}/coffees/{coffeeId}`
 
@@ -635,11 +698,17 @@ service cloud.firestore {
         allow read, write: if request.auth != null && request.auth.uid == uid;
       }
     }
+
+    match /beanProfiles/{beanId} {
+      // 豆ナレッジベース：認証済みユーザーは read-only。write は Admin SDK のみ
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }
 ```
 
-> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加（フラットな `{document=**}` ルールでは `users/{uid}` ルートドキュメント自体への write が許可されなかったため分離）。将来の集計コレクション向けルール（`analyticsConsent == true` 条件付き）はフェーズ 12-B 以降で追加予定。
+> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。`firebase deploy --only firestore:rules` はユーザー作業。
 
 ---
 

@@ -104,7 +104,8 @@ final class AppState {
             remoteCoffeeDataSource: remoteDataSource,
             authRepository: authRepo,
             placesApiKey: placesApiKey,
-            coffeeInsightProvider: providerImpl
+            coffeeInsightProvider: providerImpl,
+            beanProfileRepository: BeanProfileRepositoryIosImpl()
         )
         self.container = container
 

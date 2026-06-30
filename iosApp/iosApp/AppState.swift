@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import FirebaseFirestore
 import SharedLogic
 
 /// マップタブのカメラ中心を検索タブへ共有するための値型。
@@ -65,6 +66,15 @@ final class AppState {
     /// カメラが未移動の場合は nil（バイアスなし検索にフォールバック）。
     var mapSearchCenter: MapSearchCenter?
 
+    /// データ共有同意オンボーディングを表示するか。
+    ///
+    /// `bootstrap()` 後に Firestore `users/{uid}` ドキュメントが存在しない（初回ユーザー）ときに `true` に設定される。
+    /// `onConsentGranted()` / `onConsentDeclined()` で `false` に戻る。
+    var showConsentOnboarding: Bool = false
+
+    /// データ共有への同意状態。Firestore `users/{uid}.analyticsConsent` と同期する。
+    private(set) var analyticsConsent: Bool = false
+
     enum Status: Equatable {
         case idle
         case signingIn
@@ -113,6 +123,31 @@ final class AppState {
         lastError = nil
     }
 
+    // MARK: - データ共有同意
+
+    /// ユーザーがデータ共有に同意したときに呼ぶ。
+    func onConsentGranted() {
+        showConsentOnboarding = false
+        Task { [weak self] in
+            await self?.writeAnalyticsConsent(true)
+        }
+    }
+
+    /// ユーザーがデータ共有を断ったときに呼ぶ。
+    func onConsentDeclined() {
+        showConsentOnboarding = false
+        Task { [weak self] in
+            await self?.writeAnalyticsConsent(false)
+        }
+    }
+
+    /// Settings から同意状態を変更するときに呼ぶ。
+    func updateAnalyticsConsent(_ consent: Bool) {
+        Task { [weak self] in
+            await self?.writeAnalyticsConsent(consent)
+        }
+    }
+
     /// 匿名サインイン + 同期購読を起動する。`AppRootView` の `.task` から呼ぶ。
     ///
     /// 成功時に `coffeeListBridge` / `mapBridge` / `accountBridge` を 1 度だけ生成する。
@@ -145,6 +180,7 @@ final class AppState {
             if analysisBridge == nil {
                 analysisBridge = AnalysisViewModelBridge(viewModel: container.makeAnalysisViewModel(userId: uid))
             }
+            await checkConsentOnboarding(uid: uid)
             print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
         } catch {
             self.lastError = error.localizedDescription
@@ -154,6 +190,34 @@ final class AppState {
     }
 
     // MARK: - Private helpers
+
+    /// Firestore `users/{uid}` の存在確認。
+    ///
+    /// - ドキュメントが存在しない（初回ユーザー）→ オンボーディングを表示
+    /// - ドキュメントが存在する → `analyticsConsent` フィールドを読んで状態を更新
+    private func checkConsentOnboarding(uid: String) async {
+        let docRef = Firestore.firestore().collection("users").document(uid)
+        do {
+            let snapshot = try await docRef.getDocument()
+            if snapshot.exists {
+                analyticsConsent = snapshot.data()?["analyticsConsent"] as? Bool ?? false
+            } else {
+                showConsentOnboarding = true
+            }
+        } catch {
+            print("[CoffeeVision] checkConsentOnboarding failed (ignored): \(error)")
+        }
+    }
+
+    /// Firestore と AppState の両方に analyticsConsent を書き込む。
+    private func writeAnalyticsConsent(_ consent: Bool) async {
+        analyticsConsent = consent
+        do {
+            try await container.authRepository.updateAnalyticsConsent(consent: consent)
+        } catch {
+            print("[CoffeeVision] updateAnalyticsConsent failed: \(error)")
+        }
+    }
 
     /// ダミーデータを seed または clear する（DEBUG ビルド専用）。
     ///

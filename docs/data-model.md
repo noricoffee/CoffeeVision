@@ -531,11 +531,13 @@ DELETE FROM photo WHERE id = ?;
 ## 3.1 コレクション構造
 
 ```
-users/{uid}
+users/{uid}                               # ユーザープロフィール（analyticsConsent フラグ等）
   coffees/{coffeeId}                      # CoffeeRecord 本体（Cafe 埋め込み / 評価 / メモ / photos 配列）
 ```
 
 > **2026-06-19 改訂**: 旧 `visits` コレクション + サブコレクション（`coffeeItems` / `foodItems` / `photos`）を廃止。`coffees` コレクションの 1 ドキュメントに `cafe`（任意）と `photos`（埋め込み配列）を含める。子サブコレクションは持たない。
+
+> **2026-06-30 追記（フェーズ 12-A）**: `users/{uid}` ルートドキュメント（`coffees` の親）にユーザープロフィールフィールドを追加。現在は `analyticsConsent: Boolean` のみ。ドキュメントが存在しない（新規ユーザー）場合は `analyticsConsent = false` と同義に扱う。
 
 写真本体は Firestore / Storage に同期せず、端末の Documents 配下にのみ保存します（[`requirements.md`](./requirements.md) §7-2）。
 
@@ -548,6 +550,17 @@ users/{uid}
 ---
 
 ## 3.2 ドキュメント定義
+
+### `users/{uid}`（ユーザープロフィール）
+
+```json
+{
+  "analyticsConsent": false
+}
+```
+
+- **analyticsConsent**: ユーザーが記録データをサービス改善目的での集計に同意したか否か。初回起動オンボーディングで取得。後から設定画面のトグルで変更可能。ドキュメント自体が存在しない場合（未オンボーディングユーザー）は `false` として扱う。
+- フィールドは今後増える可能性がある（例: フェーズ 12-D の協調フィルタリング opt-in 等）。
 
 ### `users/{uid}/coffees/{coffeeId}`
 
@@ -608,17 +621,23 @@ users/{uid}
 ## 3.3 Security Rules（概略）
 
 ```
+rules_version = '2';
 service cloud.firestore {
-  match /databases/{db}/documents {
-    match /users/{uid}/{document=**} {
-      allow read, write: if request.auth != null
-                         && request.auth.uid == uid;
+  match /databases/{database}/documents {
+    match /users/{uid} {
+      // users/{uid} ルートドキュメント（analyticsConsent フラグ保存用）
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+
+      match /{document=**} {
+        // coffees サブコレクション等
+        allow read, write: if request.auth != null && request.auth.uid == uid;
+      }
     }
   }
 }
 ```
 
-> path uid のみ検証する現行ルールで `coffees` もカバーされる（`{document=**}` ワイルドカード）。ルール本体の変更は不要。旧 `visits` の残置データは無視されるだけ（クリーンに保つなら手動削除）。
+> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加（フラットな `{document=**}` ルールでは `users/{uid}` ルートドキュメント自体への write が許可されなかったため分離）。将来の集計コレクション向けルール（`analyticsConsent == true` 条件付き）はフェーズ 12-B 以降で追加予定。
 
 ---
 

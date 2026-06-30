@@ -63,6 +63,10 @@ class AccountViewModelTest {
         override suspend fun deleteAuthUser() {
             deleteAuthUserError?.let { throw it }
         }
+
+        override suspend fun updateAnalyticsConsent(consent: Boolean) = Unit
+
+        override fun observeAnalyticsConsent(): Flow<Boolean> = flowOf(false)
     }
 
     private class FakeCoffeeRepository(

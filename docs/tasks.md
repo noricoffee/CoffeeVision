@@ -639,10 +639,10 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須 |
-| [ ] | アプリ内同意 UI 設計・実装（初回起動時またはアカウントアップグレード時に同意取得） | |
-| [ ] | `AuthRepository` / `AppContainer` に `analyticsConsent: Boolean` フラグを追加 | |
-| [ ] | Firestore Security Rules 更新（同意フラグに基づく集計用コレクションへの書き込み可否） | |
+| [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須 / ユーザー作業 |
+| [x] | アプリ内同意 UI 設計・実装（初回起動時にオンボーディング画面で同意取得） | 2026-06-30 完了。`DataConsentOnboardingView`（初回起動シート）+ SettingsView トグル。URL プレースホルダーは App Store 提出前に差し替え必要 |
+| [x] | `AuthRepository` / `AuthAccount` に `analyticsConsent: Boolean` フラグを追加。`users/{uid}` Firestore ドキュメントへ保存 | 2026-06-30 完了（KMP: kmp-engineer / iOS: 親が直接実装） |
+| [x] | Firestore Security Rules 更新（`users/{uid}` ルートドキュメント明示 + 将来の集計コレクション向けは 12-B 以降） | 2026-06-30 完了。`firebase deploy --only firestore:rules` はユーザー作業 |
 
 ### 12-B: コーヒー豆ナレッジベース（サーバー管理データ）
 

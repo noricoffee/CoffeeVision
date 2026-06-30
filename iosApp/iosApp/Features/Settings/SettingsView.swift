@@ -34,6 +34,7 @@ struct SettingsView: View {
         NavigationStack {
             Form {
                 accountSection
+                consentSection
                 themeSection
                 appInfoSection
                 licensesSection
@@ -72,6 +73,27 @@ struct SettingsView: View {
                 }
                 .accessibilityLabel(String(localized: "アカウント管理画面を開く"))
             }
+        }
+    }
+
+    /// データ共有同意セクション。
+    private var consentSection: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { appState.analyticsConsent },
+                set: { appState.updateAnalyticsConsent($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("アプリ改善への協力")
+                    Text("コーヒー記録の統計情報を匿名で収集します")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .accessibilityLabel(String(localized: "アプリ改善のためのデータ共有"))
+            .accessibilityHint(String(localized: "オンにすると匿名の統計情報を送信します"))
+        } header: {
+            Text("データとプライバシー")
         }
     }
 

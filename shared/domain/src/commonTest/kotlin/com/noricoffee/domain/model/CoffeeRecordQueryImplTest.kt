@@ -49,6 +49,8 @@ class CoffeeRecordQueryImplTest {
             throw UnsupportedOperationException()
         override suspend fun signOut() = Unit
         override suspend fun deleteAuthUser() = Unit
+        override suspend fun updateAnalyticsConsent(consent: Boolean) = Unit
+        override fun observeAnalyticsConsent(): Flow<Boolean> = MutableStateFlow(false)
     }
 
     // ----- テスト用ヘルパ -----

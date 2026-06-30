@@ -43,6 +43,10 @@ class DeleteAccountUseCaseTest {
             deleteAuthUserError?.let { throw it }
             deleteAuthUserCalled = true
         }
+
+        override suspend fun updateAnalyticsConsent(consent: Boolean) = Unit
+
+        override fun observeAnalyticsConsent(): Flow<Boolean> = flowOf(false)
     }
 
     private class RecordingCoffeeRepository(

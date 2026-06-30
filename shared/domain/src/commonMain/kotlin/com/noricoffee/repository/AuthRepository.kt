@@ -94,4 +94,27 @@ interface AuthRepository {
      */
     @Throws(Exception::class)
     suspend fun deleteAuthUser()
+
+    /**
+     * ユーザーのデータ共有同意フラグを Firestore `users/{uid}` ルートドキュメントへ保存する。
+     *
+     * `SetOptions.merge()` を使い、他のフィールドを上書きしない。
+     * 未サインインの場合は例外を投げる。
+     *
+     * Swift から呼び出されるため `@Throws(Exception::class)` を付与する。
+     */
+    @Throws(Exception::class)
+    suspend fun updateAnalyticsConsent(consent: Boolean)
+
+    /**
+     * Firestore `users/{uid}` ルートドキュメントの `analyticsConsent` フィールドをリッスンし、
+     * 変化を [Flow] として返す。
+     *
+     * - サインイン中: Firestore リスナによるリアルタイム更新を emit
+     * - サインアウト中 / ドキュメント未存在: `false` を emit
+     * - 認証状態が変化すると（サインアウト→サインイン等）、リスナを自動で切り替える
+     *
+     * SKIE により Swift 側では `AsyncSequence` として扱える。
+     */
+    fun observeAnalyticsConsent(): Flow<Boolean>
 }

@@ -1,5 +1,6 @@
 import Foundation
 import FirebaseAuth
+import FirebaseFirestore
 import SharedLogic
 
 /// `com.noricoffee.repository.AuthRepository` の iOS 実装。
@@ -222,6 +223,66 @@ final class AuthRepositoryIosImpl: NSObject, AuthRepository {
         }
     }
 
+    // MARK: - updateAnalyticsConsent
+
+    /// Firestore `users/{uid}` ルートドキュメントに `analyticsConsent` を書き込む。
+    ///
+    /// ドキュメントが存在しない場合は merge:true により作成される。
+    func __updateAnalyticsConsent(
+        consent: Bool,
+        completionHandler: @escaping @Sendable ((any Error)?) -> Void
+    ) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completionHandler(
+                NSError(
+                    domain: "AuthRepositoryIosImpl",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "サインインセッションが見つかりません。"]
+                )
+            )
+            return
+        }
+        Firestore.firestore()
+            .collection("users")
+            .document(uid)
+            .setData(["analyticsConsent": consent], merge: true) { error in
+                completionHandler(error)
+            }
+    }
+
+    // MARK: - observeAnalyticsConsent
+
+    /// Firestore `users/{uid}` の `analyticsConsent` フィールドを Flow<Boolean> として観察する。
+    ///
+    /// ドキュメントが存在しない場合は `false` を emit する。
+    /// SKIE の要求により `SkieSwiftFlow<KotlinBoolean>` を返す。
+    func observeAnalyticsConsent() -> SkieSwiftFlow<KotlinBoolean> {
+        var listenerRegistration: ListenerRegistration?
+
+        let flow = CallbackFlow<KotlinBoolean>(
+            onStart: { emit in
+                guard let uid = Auth.auth().currentUser?.uid else {
+                    emit(KotlinBoolean(value: false))
+                    return
+                }
+                listenerRegistration = Firestore.firestore()
+                    .collection("users")
+                    .document(uid)
+                    .addSnapshotListener { snapshot, _ in
+                        let consent = snapshot?.data()?["analyticsConsent"] as? Bool ?? false
+                        emit(KotlinBoolean(value: consent))
+                    }
+            },
+            onCancel: {
+                listenerRegistration?.remove()
+                listenerRegistration = nil
+            }
+        )
+        return SkieSwiftFlow._unconditionallyBridgeFromObjectiveC(
+            SkieKotlinFlow(flow)
+        )
+    }
+
     // MARK: - Apple 再認証 + トークン失効
 
     /// Apple 再認証（`reauthenticate`）と Apple トークン失効（`revokeToken`）を順次実行する。
@@ -265,7 +326,8 @@ final class AuthRepositoryIosImpl: NSObject, AuthRepository {
             uid: user.uid,
             isAnonymous: user.isAnonymous,
             providerLabel: providerLabel,
-            email: email
+            email: email,
+            analyticsConsent: false
         )
     }
 }

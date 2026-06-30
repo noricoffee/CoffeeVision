@@ -1991,3 +1991,29 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - **要追跡（リリース前の意思決定）**: 逆変換 PoC 導線（`TastePreferenceConversionView` への NavLink）は現在 DEBUG ゲートを外し分析タブ最下部に**全ユーザー常時表示**。iOSDC LT デモ用の画面なので、App Store リリース前に「本番に含める / 設定>開発者向けに移動 / 削除」のいずれかを決めること。
 - 検証: `xcodebuild -sdk iphonesimulator -scheme iosApp build` BUILD SUCCEEDED（新規 warning ゼロ）。SourceKit の `No such module SharedLogic` 等はインデクサ偽陽性（実ビルド成功）。**分析タブ最下部に PoC 導線が常時表示されることの目視はユーザー作業**。
 - 関連 lessons: [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-26「ターゲットを上げたら冗長な @available を即 sweep」。
+
+## 2026-06-30 - フェーズ 12-A: データ共有同意フロー
+
+- 領域: KMP（domain / data-firebase）+ iOS + Firestore Rules
+- **背景**: フェーズ 12「コミュニティ/データ共有基盤」の前提として、将来の集計パイプライン（12-B〜D）でユーザーの記録データをサービス改善に活用するための同意フローを実装する。App Store ガイドラインおよびプライバシー規制（GDPR 等）への準拠も目的。
+- **consent フラグの保存先**: Firestore `users/{uid}` ルートドキュメント（`analyticsConsent: Boolean`）を採用。理由: ①将来の Firestore Security Rules で「同意済みユーザーの集計コレクションへの書き込み」を条件付きで許可するために Firestore 側に必要 ②デバイス間で同意状態を共有できる（買い替え時に再同意不要）③iOS 端末の `UserDefaults` で管理すると Rules と乖離が生じる。
+- **`users/{uid}` ルートドキュメントの既存状況**: 現状 `coffees` サブコレクションしか存在しないため、`users/{uid}` ルートドキュメント自体は未使用。今回が初の利用。Firestore Rules の `{document=**}` ワイルドカードはサブコレクションのみを対象とし、ルートドキュメントへの write には別途 `match /users/{uid}` ルールが必要（Rules 要更新）。
+- **初回オンボーディングの判断**: Firestore に `users/{uid}` ドキュメントが「存在しない」= 未同意・初回ユーザーとして扱い、オンボーディング画面を表示。`analyticsConsent: false` が明示的に書き込まれている場合は「非同意済み」として表示しない。iOS の `@AppStorage` は補助的に使わない（Firestore を権威ソースとする）。
+- **オンボーディング UI の配置**: 初回起動時に `AppState.bootstrap()` の uid 確定後、`users/{uid}` ドキュメントの存在確認を行い、非存在なら `.sheet` でオンボーディング画面を表示。後から変更できるよう `SettingsView` にも同意トグルを追加。
+- **`AuthAccount` への追加**: `analyticsConsent: Boolean = false` フィールドを追加。`observeAccount()` の emit に consent 状態を含める。`observeAnalyticsConsent()` は `observeAccount().map { it?.analyticsConsent ?: false }` でも実装可能だが、`AuthRepository` に独立した Flow として公開してシンプルに使えるようにする。
+- **Firestore Rules の更新方針**: `users/{uid}` ルートドキュメントと `{document=**}` サブパスを分けて明示的に記述。将来の集計コレクション向けルール（`analyticsConsent == true` 条件付き書き込み許可）はフェーズ 12-B 以降で追加。
+- **プライバシーポリシー URL**: `DataConsentOnboardingView` は placeholder リンクで実装し、App Store 申請前にユーザーが実際の URL に差し替える（`app-store-metadata.md` のチェックリストに明記済み）。
+
+## 2026-06-30 - フェーズ 12-A: `observeAccount()` の flatMapLatest 合成パターン採用
+
+- 領域: KMP（data-firebase androidMain）
+- `AuthRepository.observeAccount()` に `analyticsConsent` を組み込む際、`combine(observeAuthState(), observeAnalyticsConsent())` 案ではなく `flatMapLatest` を採用。`combine` では `observeAnalyticsConsent()` が未サインイン時に `close()` すると合成 Flow も終了してしまうため、`flatMapLatest(observeFirebaseUser())` で auth 変化時に Firestore リスナを自動切替する設計を選択。
+- `observeAccount()` / `observeAnalyticsConsent()` は内部ヘルパ `observeFirebaseUser()` / `observeConsentForUser(uid)` を共有する構造。Firestore リスナは両メソッドを同時購読すると 2 本立つ（現状問題なし。将来 `shareIn` でホット化して共有することを検討候補）。
+
+## 2026-06-30 - フェーズ 12-A: iOS 側 consent 実装方針
+
+- 領域: iOS（iosApp）
+- `AuthRepositoryIosImpl.observeAnalyticsConsent()` は `CallbackFlow<KotlinBoolean>` + `SkieKotlinFlow` でブリッジ（`RemoteCoffeeDataSourceIosImpl.observeChanges` と同パターン）。`SkieSwiftFlow<KotlinBoolean>` を返す。
+- `AppState` は `observeAnalyticsConsent()` Flow を直接購読せず、`checkConsentOnboarding(uid:)` で Firestore `getDocument()` を一度呼ぶことでオンボーディング判断を行う（同意 Flow 購読は過剰）。`analyticsConsent` の変化観察は今回スコープ外（Settings の Toggle は imperative な `updateAnalyticsConsent` で済む）。
+- オンボーディング Binding: `.sheet(isPresented:)` + `interactiveDismissDisabled()` を組み合わせてスワイプ閉じを防止。閉じはボタン（`onConsentGranted()` / `onConsentDeclined()`）からのみ。
+- `AuthRepositoryIosImpl.makeAuthAccount` の `analyticsConsent:` には常に `false` を渡す（observeAccount は Firebase Auth state のみ監視し Firestore を二重購読しない設計）。

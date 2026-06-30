@@ -10,10 +10,14 @@ package com.noricoffee.domain.model
  * @property isAnonymous 匿名アカウントかどうか
  * @property providerLabel サインインプロバイダ識別子（例: "apple.com"）。匿名の場合は null
  * @property email プロバイダが提供するメールアドレス。Apple は非公開リレー含め null になりうる
+ * @property analyticsConsent ユーザーがサービス改善目的での集計に同意したか否か。
+ *   Firestore `users/{uid}` ルートドキュメントと同期する。
+ *   未オンボーディング / ドキュメント未作成の場合は false として扱う。
  */
 data class AuthAccount(
     val uid: String,
     val isAnonymous: Boolean,
     val providerLabel: String?,
     val email: String?,
+    val analyticsConsent: Boolean = false,
 )

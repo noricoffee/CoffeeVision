@@ -60,6 +60,15 @@ private struct AppRootView: View {
                 .errorToast(message: appState.lastError) {
                     appState.clearLastError()
                 }
+                .sheet(isPresented: Binding(
+                    get: { appState.showConsentOnboarding },
+                    set: { if !$0 { appState.showConsentOnboarding = false } }
+                )) {
+                    DataConsentOnboardingView(appState: appState)
+                        .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .interactiveDismissDisabled()
+                }
         } else {
             loadingView
                 .task {

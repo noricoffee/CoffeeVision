@@ -2017,3 +2017,20 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - `AppState` は `observeAnalyticsConsent()` Flow を直接購読せず、`checkConsentOnboarding(uid:)` で Firestore `getDocument()` を一度呼ぶことでオンボーディング判断を行う（同意 Flow 購読は過剰）。`analyticsConsent` の変化観察は今回スコープ外（Settings の Toggle は imperative な `updateAnalyticsConsent` で済む）。
 - オンボーディング Binding: `.sheet(isPresented:)` + `interactiveDismissDisabled()` を組み合わせてスワイプ閉じを防止。閉じはボタン（`onConsentGranted()` / `onConsentDeclined()`）からのみ。
 - `AuthRepositoryIosImpl.makeAuthAccount` の `analyticsConsent:` には常に `false` を渡す（observeAccount は Firebase Auth state のみ監視し Firestore を二重購読しない設計）。
+
+---
+
+### 2026-06-30: CoffeeRecordFilter.tastingMin/Max の tasting=null レコードの扱い（Phase 13-A-2）
+
+- 領域: KMP（shared/domain）
+- `tastingMin`/`tastingMax` のいずれかが指定されている場合、`record.tasting == null`（テイスティング未記録）のレコードは除外する。`rating=0.0` を評価範囲フィルタから除外するのと同じ思想（未記録を「記録済み」として誤ヒットさせない）。
+- 各軸（sweetness/body/acidity/flavor/aftertaste）は独立して評価する（全5軸がそれぞれ範囲内に収まることが条件）。
+- Phase 13-A-3 で iOS 側が `TastePreference`（Foundation Models 出力）→ `CoffeeRecordFilter` に変換する際、`tastingMin`/`tastingMax` に `TastingScores(max(1, axis-margin), ...)` / `TastingScores(min(10, axis+margin), ...)` を渡す（margin = 2 予定）。
+
+---
+
+### 2026-06-30: CoffeeRecordFilter 新フィールド追加時の Swift 呼び出し側の全更新が必要（Phase 13-A-3）
+
+- 領域: KMP/iOS ブリッジ
+- Kotlin data class に nullable フィールドをデフォルト値付きで追加した場合でも、Kotlin/Native が生成する Obj-C initializer は全パラメーター必須になる（Kotlin のデフォルト引数は Swift に伝播しない）。SKIE 0.10.12 では DefaultArgumentInterop を有効化していないため、`CoffeeRecordFilter(...)` を呼ぶ既存 Swift コード（`SearchCoffeeRecordsTool` 等）に `tastingMin: nil, tastingMax: nil` の追記が必要だった。
+- 今後 `CoffeeRecordFilter` に新フィールドを追加する場合、Swift 呼び出し側を網羅的に更新する必要がある。SKIE の DefaultArgumentInterop 有効化（`defaultArgumentInterop { enabled = true }` in `build.gradle.kts`）を検討すると、この問題が自動解消される。

@@ -64,7 +64,7 @@ struct TastePreference {
 /// - `extract(from:)` は呼ぶたびに新規 `LanguageModelSession` を作る（ステートレス）
 /// - 非対応端末では `makeIfAvailable()` が nil を返すため、呼び出し元は nil チェックで
 ///   デモ UI 自体を表示しない（graceful degradation）
-final class TastePreferenceExtractor {
+final class TastePreferenceExtractor: Sendable {
 
     // MARK: - Factory
 

@@ -322,6 +322,8 @@ data class CoffeeRecordFilter(
     val maxRating: Double? = null,
     val fromYearMonth: String? = null, // "YYYY-MM" 以降（含む）
     val toYearMonth: String? = null,   // "YYYY-MM" まで（含む）
+    val tastingMin: TastingScores? = null,  // テイスティング各軸の下限（null = 条件なし）。指定時に tasting=null のレコードは除外
+    val tastingMax: TastingScores? = null,  // テイスティング各軸の上限（null = 条件なし）。各軸は独立評価
     val limit: Int = 10,
 )
 

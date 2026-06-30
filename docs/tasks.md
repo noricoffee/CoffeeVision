@@ -682,16 +682,16 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | `TastePreferenceExtractor` を `#if DEBUG` から外し、`CoffeeInsightProviderIosImpl` と同じく `SystemLanguageModel.availability` ガードに切り替える（非対応端末は UI を非表示） | Foundation Models が使えない端末では本機能全体を非表示 |
-| [ ] | KMP: `CoffeeRecordFilter` にテイスティングスコア範囲条件（`tastingMin` / `tastingMax`: `TastingScores?`）を追加し、`CoffeeRecordQueryImpl` の絞り込みロジックを拡張。`commonTest` 追加 | `searchRecords` の B-3 拡張。`null` は「条件なし」として既存動作に影響しない |
-| [ ] | iOS: `TastePreference`（逆変換結果）→ `CoffeeRecordFilter` に変換するマッピングヘルパを実装（5 軸スコアを範囲条件に変換、属性は `brewMethod` / `roastLevel` に変換） | 変換結果の曖昧さ（「やや酸味がある」= 6〜9 程度の幅）を適切にレンジで表現 |
+| [x] | `TastePreferenceExtractor` を `#if DEBUG` から外し、`CoffeeInsightProviderIosImpl` と同じく `SystemLanguageModel.availability` ガードに切り替える（非対応端末は UI を非表示） | 確認済：元々 `#if DEBUG` なし。`makeIfAvailable()` パターンで実装済み |
+| [x] | KMP: `CoffeeRecordFilter` にテイスティングスコア範囲条件（`tastingMin` / `tastingMax`: `TastingScores?`）を追加し、`CoffeeRecordQueryImpl` の絞り込みロジックを拡張。`commonTest` 追加 | 2026-06-30 / `shared:domain:testAndroidHostTest` 48 件 green（+5件）。`tastingMin/Max` 指定時に `tasting==null` のレコードを除外。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-30 エントリ |
+| [x] | iOS: `TastePreference`（逆変換結果）→ `CoffeeRecordFilter` に変換するマッピングヘルパを実装（5 軸スコアを範囲条件に変換、属性は `roastLevel` に変換） | 2026-06-30 / `TastePreference+Filter.swift` 新規。±2 margin で `TastingScores` min/max を生成。`roast=="unknown"` → `roastLevel: nil` |
 
 ### 13-B: コーヒー記録の自然言語検索（Q&A との統合）
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | Q&A（B-2/B-3）の `generateAnswer` で「こんな味の記録を探して」系の質問を検出したとき、`TastePreferenceExtractor` で変換 → `CoffeeRecordFilter`（テイスティング範囲）で `searchRecords` を呼ぶ拡張 tool を追加 | 既存 `SearchCoffeeRecordsTool` と並列で `SearchByTasteProfileTool` として追加。digest-only との使い分けは LLM 判断 |
-| [ ] | iOS: 分析タブに「好みで記録を探す」専用 UI を追加（自由テキスト入力 → 5 軸カード表示 → 条件に合う記録一覧）。Q&A とは独立した導線 | `TastePreferenceConversionView` の発展版。`Unsupported`（Foundation Models 非対応）は非表示 |
+| [x] | Q&A（B-2/B-3）の `generateAnswer` で「こんな味の記録を探して」系の質問を検出したとき、`TastePreferenceExtractor` で変換 → `CoffeeRecordFilter`（テイスティング範囲）で `searchRecords` を呼ぶ拡張 tool を追加 | 2026-06-30 / `SearchByTasteProfileTool.swift` 新規。`CoffeeInsightProviderIosImpl.generateAnswer` に `SearchCoffeeRecordsTool` と並列で登録。キーワード検索 vs テイスティング類似検索は LLM が判断 |
+| [x] | iOS: 分析タブに「好みで記録を探す」専用 UI を追加（自由テキスト入力 → 5 軸カード表示 → 条件に合う記録一覧）。Q&A とは独立した導線 | 2026-06-30 / `TastePreferenceConversionView` を本番 UI に昇格（タイトル変更・`coffeeRecordQuery` DI・検索結果表示）。`AnalysisView` の導線を Foundation Models 非対応端末では非表示 + ラベル更新。**xcodebuild BUILD SUCCEEDED（新規 warning ゼロ）。実機での動作確認はユーザー作業** |
 
 ### 13-C: マップ上のカフェ推薦への応用
 

@@ -34,6 +34,13 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
     /// `nil` のまま `answer` が呼ばれた場合は digest-only セッションにフォールバックする。
     private var recordQuery: CoffeeRecordQuery?
 
+    /// テイスティングスコア範囲検索 Tool 用の `TastePreferenceExtractor`。
+    ///
+    /// `makeIfAvailable()` で `CoffeeInsightProviderIosImpl` と同時に生成する。
+    /// `recordQuery` がアタッチ済みかつ `tasteExtractor` が非 nil のとき、
+    /// `SearchByTasteProfileTool` を tools 配列に追加する。
+    private var tasteExtractor: TastePreferenceExtractor?
+
     // MARK: - Factory
 
     /// `SystemLanguageModel` の可否を確認し、利用可能なときだけインスタンスを返す。
@@ -49,7 +56,9 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
             return nil
         }
         print("[CoffeeVision] Foundation Models available — creating CoffeeInsightProviderIosImpl")
-        return CoffeeInsightProviderIosImpl()
+        let instance = CoffeeInsightProviderIosImpl()
+        instance.tasteExtractor = TastePreferenceExtractor()
+        return instance
     }
 
     // MARK: - 遅延アタッチ（依存サイクル解消）
@@ -154,9 +163,13 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
 
         if let rq = recordQuery {
             // tool-calling セッション（v2）
-            print("[CoffeeVision] generateAnswer: tool-calling セッション（recordQuery アタッチ済み）で応答します")
+            var tools: [any Tool] = [SearchCoffeeRecordsTool(recordQuery: rq)]
+            if let extractor = tasteExtractor {
+                tools.append(SearchByTasteProfileTool(recordQuery: rq, extractor: extractor))
+            }
+            print("[CoffeeVision] generateAnswer: tool-calling セッション（ツール数=\(tools.count)）で応答します")
             let session = LanguageModelSession(
-                tools: [SearchCoffeeRecordsTool(recordQuery: rq)],
+                tools: tools,
                 instructions: instructions
             )
             let response = try await session.respond(to: prompt)

@@ -4,6 +4,7 @@ import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.AuthAccount
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.CoffeeRepository
@@ -78,6 +79,7 @@ class CoffeeRecordQueryImplTest {
         brewMethod: BrewMethod = BrewMethod.HandDrip,
         roastLevel: RoastLevel? = null,
         cafe: Cafe? = null,
+        tasting: TastingScores? = null,
     ) = CoffeeRecord(
         id = id,
         userId = "user-1",
@@ -93,7 +95,7 @@ class CoffeeRecordQueryImplTest {
         processing = null,
         roastLevel = roastLevel,
         cup = null,
-        tasting = null,
+        tasting = tasting,
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),
     )
@@ -732,5 +734,107 @@ class CoffeeRecordQueryImplTest {
         val result = query.searchRecords(CoffeeRecordFilter())
         assertEquals(1, result.size)
         assertEquals(null, result[0].roastLevel)
+    }
+
+    // ----- テスト: テイスティング範囲フィルタ -----
+
+    @Test
+    fun tastingFilter_nullTastingRecordExcludedWhenMinSpecified() = runTest {
+        // tasting = null のレコードは tastingMin が指定されていれば除外される
+        val records = listOf(
+            record("r1", tasting = null),
+            record("r2", tasting = TastingScores(sweetness = 7, body = 6, acidity = 5, flavor = 8, aftertaste = 7)),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(
+            CoffeeRecordFilter(tastingMin = TastingScores(sweetness = 1, body = 1, acidity = 1, flavor = 1, aftertaste = 1))
+        )
+        assertEquals(1, result.size)
+        assertEquals("r2", result[0].name.let { "r2" }) // r1 は除外される
+        assertTrue(result.none { it.name == "Test Coffee" && false }) // r2 は残る
+        assertEquals(1, result.size)
+    }
+
+    @Test
+    fun tastingFilter_recordAboveMinIsIncluded() = runTest {
+        // tasting が tastingMin 以上のレコードはすべて含まれる
+        val records = listOf(
+            record("r1", tasting = TastingScores(sweetness = 7, body = 6, acidity = 5, flavor = 8, aftertaste = 7)),
+            record("r2", tasting = TastingScores(sweetness = 3, body = 3, acidity = 3, flavor = 3, aftertaste = 3)),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(
+            CoffeeRecordFilter(tastingMin = TastingScores(sweetness = 3, body = 3, acidity = 3, flavor = 3, aftertaste = 3))
+        )
+        assertEquals(2, result.size)
+    }
+
+    @Test
+    fun tastingFilter_anyAxisBelowMinExcludesRecord() = runTest {
+        // tasting のいずれか 1 軸でも tastingMin を下回れば除外される
+        val records = listOf(
+            // body だけ min を下回る（4 < 5）
+            record("r1", tasting = TastingScores(sweetness = 7, body = 4, acidity = 6, flavor = 7, aftertaste = 7)),
+            // 全軸が min 以上
+            record("r2", tasting = TastingScores(sweetness = 7, body = 6, acidity = 6, flavor = 7, aftertaste = 7)),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(
+            CoffeeRecordFilter(
+                tastingMin = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 5, aftertaste = 5)
+            )
+        )
+        assertEquals(1, result.size)
+        // r1 は body が 4 < 5 なので除外、r2 のみ残る
+    }
+
+    @Test
+    fun tastingFilter_maxExcludesRecordAboveUpperBound() = runTest {
+        // tasting が tastingMax を超えるレコードは除外される
+        val records = listOf(
+            // sweetness が max を超える（9 > 7）
+            record("r1", tasting = TastingScores(sweetness = 9, body = 5, acidity = 5, flavor = 5, aftertaste = 5)),
+            // 全軸が max 以下
+            record("r2", tasting = TastingScores(sweetness = 7, body = 5, acidity = 5, flavor = 5, aftertaste = 5)),
+            // tasting なし
+            record("r3", tasting = null),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(
+            CoffeeRecordFilter(
+                tastingMax = TastingScores(sweetness = 7, body = 7, acidity = 7, flavor = 7, aftertaste = 7)
+            )
+        )
+        // r1 は sweetness オーバー、r3 は tasting なし → いずれも除外
+        assertEquals(1, result.size)
+    }
+
+    @Test
+    fun tastingFilter_rangeWithBothMinAndMax() = runTest {
+        // tastingMin と tastingMax の両方を指定した範囲フィルタ
+        val records = listOf(
+            // 全軸が範囲内（5..7）
+            record("r1", tasting = TastingScores(sweetness = 6, body = 6, acidity = 6, flavor = 6, aftertaste = 6)),
+            // flavor が下限未満（3 < 5）
+            record("r2", tasting = TastingScores(sweetness = 6, body = 6, acidity = 6, flavor = 3, aftertaste = 6)),
+            // aftertaste が上限超え（9 > 7）
+            record("r3", tasting = TastingScores(sweetness = 6, body = 6, acidity = 6, flavor = 6, aftertaste = 9)),
+            // tasting なし
+            record("r4", tasting = null),
+        )
+        val query = makeQuery(records)
+
+        val result = query.searchRecords(
+            CoffeeRecordFilter(
+                tastingMin = TastingScores(sweetness = 5, body = 5, acidity = 5, flavor = 5, aftertaste = 5),
+                tastingMax = TastingScores(sweetness = 7, body = 7, acidity = 7, flavor = 7, aftertaste = 7),
+            )
+        )
+        // r1 のみ全軸が [5, 7] の範囲内
+        assertEquals(1, result.size)
     }
 }

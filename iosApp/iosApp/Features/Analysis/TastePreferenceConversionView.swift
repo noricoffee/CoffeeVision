@@ -1,32 +1,40 @@
 import Charts
 import SwiftUI
+@preconcurrency import SharedLogic
 
 // MARK: - TastePreferenceConversionView
 
-/// 逆向き変換 PoC のデモ UI（iOSDC LT スクショ取得用）。
+/// 感想テキスト → 5軸ベクトル → テイスティングスコア範囲検索 の本番 UI。
 ///
-/// 自由記述の日本語コーヒー感想 → `TastePreference`（5軸ベクトル）変換を体験できる最小画面。
+/// 自由記述の日本語コーヒー感想を `TastePreference`（5軸ベクトル）に変換し、
+/// `CoffeeRecordQuery.searchRecords` で類似記録を検索して結果を一覧表示する。
 ///
 /// ## 設計
 ///
 /// - `TastePreferenceExtractor.makeIfAvailable()` が nil の端末（非対応 / Apple Intelligence 無効）は
-///   `availabilityNotice` を表示してデモを出さない（graceful degradation）。
-/// - テキスト入力 → 「変換」ボタン → 抽出結果カード（5軸横棒グラフ + summary）。
-/// - KMP / SharedLogic には一切依存しない（PoC は Swift 内で自己完結）。
-///
-/// ## iOSDC LT での位置付け（§5 / S3 / S6）
-///
-/// - S3 デモ②（逆）: このデモ画面で感想文を入力 → 5軸カード をスクショ
-/// - S6: `TastePreference` の `@Generable` 定義をスライドに掲載
-/// - S7 対比: 順（`CoffeeInsightOutput`・5軸なし）vs 逆（`TastePreference`・5軸あり）
+///   `availabilityNotice` を表示して機能を出さない（graceful degradation）。
+/// - テキスト入力 → 「好みに変換」ボタン → 抽出結果カード → 類似記録一覧。
+/// - `coffeeRecordQuery` が nil（Preview 等）でも変換は動作する。検索はスキップする。
 @MainActor
 struct TastePreferenceConversionView: View {
+
+    // MARK: - 依存
+
+    /// KMP の `CoffeeRecordQuery`。nil のとき記録検索はスキップする。
+    let coffeeRecordQuery: CoffeeRecordQuery?
 
     // MARK: - State
 
     @State private var inputText: String = ""
     @State private var extractionState: ExtractionState = .idle
+    @State private var searchState: SearchState = .idle
     @State private var extractor: TastePreferenceExtractor? = TastePreferenceExtractor.makeIfAvailable()
+
+    // MARK: - Init
+
+    init(coffeeRecordQuery: CoffeeRecordQuery? = nil) {
+        self.coffeeRecordQuery = coffeeRecordQuery
+    }
 
     // MARK: - Body
 
@@ -37,6 +45,7 @@ struct TastePreferenceConversionView: View {
                     if extractor != nil {
                         inputSection
                         extractionResultSection
+                        searchResultSection
                     } else {
                         availabilityNotice
                     }
@@ -44,7 +53,7 @@ struct TastePreferenceConversionView: View {
                 .padding(.horizontal, 16)
                 .padding(.vertical, 16)
             }
-            .navigationTitle(String(localized: "逆変換 PoC"))
+            .navigationTitle(String(localized: "好みで記録を探す"))
             .navigationBarTitleDisplayMode(.large)
         }
     }
@@ -149,7 +158,6 @@ struct TastePreferenceConversionView: View {
             EmptyView()
 
         case .extracting:
-            // 処理中インジケータ（ボタン側でも表示しているが、カード位置にも出す）
             HStack(spacing: 8) {
                 ProgressView()
                     .scaleEffect(0.8)
@@ -193,6 +201,95 @@ struct TastePreferenceConversionView: View {
         }
     }
 
+    // MARK: - 検索結果セクション
+
+    @ViewBuilder
+    private var searchResultSection: some View {
+        switch searchState {
+        case .idle:
+            EmptyView()
+
+        case .searching:
+            HStack(spacing: 8) {
+                ProgressView()
+                    .scaleEffect(0.8)
+                Text(String(localized: "類似記録を検索中…"))
+                    .font(.footnote)
+                    .foregroundStyle(.secondary)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityLabel(String(localized: "類似記録を検索中"))
+
+        case .found(let summaries):
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 6) {
+                    Image(systemName: "list.bullet")
+                        .font(.subheadline)
+                        .foregroundStyle(Color.accentColor)
+                        .accessibilityHidden(true)
+                    Text(String(localized: "類似する記録（\(summaries.count) 件）"))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.secondary)
+                }
+                VStack(spacing: 0) {
+                    ForEach(Array(summaries.enumerated()), id: \.offset) { index, summary in
+                        TasteSearchResultRow(summary: summary)
+                        if index < summaries.count - 1 {
+                            Divider()
+                                .padding(.leading, 16)
+                        }
+                    }
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .accessibilityElement(children: .contain)
+            .accessibilityLabel(String(localized: "類似記録 \(summaries.count) 件"))
+
+        case .empty:
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.subheadline)
+                        .foregroundStyle(.secondary)
+                        .accessibilityHidden(true)
+                    Text(String(localized: "類似する記録が見つかりませんでした"))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                }
+                Text(String(localized: "テイスティングスコアを入力した記録がないか、±2 の範囲に一致する記録がありませんでした。"))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+
+        case .unavailable:
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(spacing: 6) {
+                    Image(systemName: "exclamationmark.triangle")
+                        .font(.subheadline)
+                        .foregroundStyle(.red)
+                        .accessibilityHidden(true)
+                    Text(String(localized: "記録の検索に失敗しました"))
+                        .font(.subheadline)
+                        .fontWeight(.semibold)
+                        .foregroundStyle(.primary)
+                }
+            }
+            .padding(16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        }
+    }
+
     // MARK: - Foundation Models 非対応端末向け通知
 
     private var availabilityNotice: some View {
@@ -205,7 +302,7 @@ struct TastePreferenceConversionView: View {
                 Text(String(localized: "Foundation Models 未対応"))
                     .font(.headline)
                     .foregroundStyle(.primary)
-                Text(String(localized: "このデモは Apple Intelligence が有効な iPhone / iPad（iOS 26 以降）でのみ動作します。"))
+                Text(String(localized: "この機能は Apple Intelligence が有効な iPhone / iPad（iOS 26 以降）でのみ利用できます。"))
                     .font(.body)
                     .foregroundStyle(.secondary)
                     .multilineTextAlignment(.center)
@@ -215,7 +312,7 @@ struct TastePreferenceConversionView: View {
         .padding(32)
         .frame(maxWidth: .infinity)
         .accessibilityElement(children: .combine)
-        .accessibilityLabel(String(localized: "Foundation Models 未対応端末のため、デモを表示できません"))
+        .accessibilityLabel(String(localized: "Foundation Models 未対応端末のため、好みで記録を探す機能を利用できません"))
     }
 
     // MARK: - 抽出処理
@@ -226,17 +323,36 @@ struct TastePreferenceConversionView: View {
         guard !text.isEmpty else { return }
 
         extractionState = .extracting
+        searchState = .idle
 
         Task { [weak extractor] in
             guard let extractor else { return }
             do {
                 let preference = try await extractor.extract(from: text)
                 extractionState = .done(preference)
+                await searchRecordsAfterExtraction(preference: preference)
             } catch {
                 let message = error.localizedDescription
                 print("[CoffeeVision] TastePreferenceConversionView: extraction failed: \(error)")
                 extractionState = .failed(message)
             }
+        }
+    }
+
+    private func searchRecordsAfterExtraction(preference: TastePreference) async {
+        guard let rq = coffeeRecordQuery else { return }
+        searchState = .searching
+        do {
+            let filter = preference.toCoffeeRecordFilter()
+            let summaries = try await rq.searchRecords(filter: filter)
+            if summaries.isEmpty {
+                searchState = .empty
+            } else {
+                searchState = .found(Array(summaries))
+            }
+        } catch {
+            print("[CoffeeVision] TastePreferenceConversionView: search failed: \(error)")
+            searchState = .unavailable
         }
     }
 
@@ -276,13 +392,19 @@ private enum ExtractionState: Equatable {
     }
 }
 
+// MARK: - SearchState
+
+private enum SearchState {
+    case idle
+    case searching
+    case found([CoffeeRecordSummary])
+    case empty
+    case unavailable
+}
+
 // MARK: - TastePreferenceResultCard
 
 /// `TastePreference` の抽出結果を5軸横棒グラフ + summary で表示するカード。
-///
-/// iOSDC LT S3 でスクショする主役カード。
-/// `CoffeeInsightOutput`（順方向・5軸なし）との対比として、
-/// このカードでは5軸を明示的に表示する。
 struct TastePreferenceResultCard: View {
 
     let preference: TastePreference
@@ -313,18 +435,12 @@ struct TastePreferenceResultCard: View {
 
             // 焙煎度バッジ
             roastBadge
-
-            // 補足キャプション（LT の概念説明補助）
-            Text(String(localized: "言葉 → 数値 の変換。同じ @Generable が向きを変えると検索条件になる。"))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
         }
         .padding(16)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
-        .accessibilityLabel(String(localized: "好みベクトル抽出結果カード"))
+        .accessibilityLabel(String(localized: "好みで記録を探す - 抽出結果カード"))
     }
 
     // MARK: - 5軸横棒グラフ
@@ -422,13 +538,68 @@ struct TastePreferenceResultCard: View {
     }
 }
 
+// MARK: - TasteSearchResultRow
+
+/// テイスティング類似検索結果の 1 件を表示する行。
+private struct TasteSearchResultRow: View {
+
+    let summary: CoffeeRecordSummary
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(summary.name)
+                .font(.body)
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+            HStack(spacing: 4) {
+                if let cafeName = summary.cafeName {
+                    Text(cafeName)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                if summary.rating >= 0.5 {
+                    Image(systemName: "star.fill")
+                        .font(.caption2)
+                        .foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
+                    Text(String(format: "%.1f", summary.rating))
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                    Text("·")
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                }
+                Text(summary.visitedOn)
+                    .font(.caption)
+                    .foregroundStyle(.tertiary)
+            }
+        }
+        .padding(.vertical, 10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(buildAccessibilityLabel())
+    }
+
+    private func buildAccessibilityLabel() -> String {
+        var label = summary.name
+        if let cafeName = summary.cafeName { label += " \(cafeName)" }
+        if summary.rating >= 0.5 { label += String(format: " 評価%.1f", summary.rating) }
+        label += " \(summary.visitedOn)"
+        return label
+    }
+}
+
 // MARK: - Preview
 
 #if DEBUG
 
-#Preview("逆変換 PoC - 結果あり") {
-    // iOS 26 シミュレータでは Foundation Models が利用できないため、
-    // Preview は固定値で結果カードを直接描画する。
+#Preview("好みで記録を探す - 結果あり") {
     NavigationStack {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
@@ -436,7 +607,7 @@ struct TastePreferenceResultCard: View {
             }
             .padding(16)
         }
-        .navigationTitle(String(localized: "逆変換 PoC"))
+        .navigationTitle(String(localized: "好みで記録を探す"))
     }
 }
 

@@ -90,51 +90,53 @@ struct AnalysisView: View {
                 brewMethodSection(stats: stats)
                 monthlyTrendSection(stats: stats)
                 topCafesSection(stats: stats)
-                reverseConversionDemoSection
+                tasteSearchSection
             }
             .padding(.horizontal, 16)
             .padding(.vertical, 16)
         }
     }
 
-    // MARK: - 逆変換 PoC 導線（iOSDC LT デモ用）
+    // MARK: - 好みで記録を探す 導線
 
-    /// iOSDC LT デモ用の逆変換 PoC 画面へのナビゲーション導線。
+    /// Foundation Models 非対応端末では表示しない。
     ///
-    /// 分析タブの最下部に配置。
-    /// `SEED_DUMMY_DATA=1` の dev Scheme でシミュレータ起動後、
-    /// 分析タブ → 最下部「逆変換 PoC（LT デモ）」から到達できる。
-    private var reverseConversionDemoSection: some View {
-        NavigationLink {
-            TastePreferenceConversionView()
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "arrow.trianglehead.2.clockwise")
-                    .font(.title3)
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 36, height: 36)
-                    .background(Color.accentColor.opacity(0.12), in: Circle())
-                    .accessibilityHidden(true)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(String(localized: "逆変換 PoC（LT デモ）"))
-                        .font(.body)
-                        .foregroundStyle(.primary)
-                    Text(String(localized: "感想 → 5軸ベクトル・Foundation Models"))
+    /// `TastePreferenceExtractor.makeIfAvailable()` でデバイスの Foundation Models 可否を確認し、
+    /// 利用可能なときだけ `TastePreferenceConversionView` へのナビゲーション導線を表示する。
+    @ViewBuilder
+    private var tasteSearchSection: some View {
+        if TastePreferenceExtractor.makeIfAvailable() != nil {
+            NavigationLink {
+                TastePreferenceConversionView(coffeeRecordQuery: appState.container.coffeeRecordQuery)
+            } label: {
+                HStack(spacing: 12) {
+                    Image(systemName: "wand.and.sparkles")
+                        .font(.title3)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(width: 36, height: 36)
+                        .background(Color.accentColor.opacity(0.12), in: Circle())
+                        .accessibilityHidden(true)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(String(localized: "好みで記録を探す"))
+                            .font(.body)
+                            .foregroundStyle(.primary)
+                        Text(String(localized: "感想 → 5軸ベクトルで類似記録を検索"))
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
                         .font(.caption)
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
                 }
-                Spacer()
-                Image(systemName: "chevron.right")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
-                    .accessibilityHidden(true)
+                .padding(16)
+                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
             }
-            .padding(16)
-            .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+            .buttonStyle(.plain)
+            .accessibilityLabel(String(localized: "好みで記録を探す画面を開く"))
+            .accessibilityHint(String(localized: "感想テキストから5軸好みベクトルを抽出し、類似するテイスティング記録を検索します"))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "逆変換 PoC デモ画面を開く"))
-        .accessibilityHint(String(localized: "感想テキストから5軸好みベクトルを抽出するデモです"))
     }
 
     // MARK: - 傾向要約カード（階層3）

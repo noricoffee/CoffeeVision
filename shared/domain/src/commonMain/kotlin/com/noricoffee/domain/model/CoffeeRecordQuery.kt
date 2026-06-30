@@ -1,6 +1,7 @@
 package com.noricoffee.domain.model
 
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.TastingScores
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.first
@@ -49,6 +50,8 @@ interface CoffeeRecordQuery {
  *   評価範囲フィルタが指定されている場合は除外（未評価を「評価済みとして扱う」誤りを防ぐ）。
  * - [fromYearMonth] / [toYearMonth]: `visitedOn` の年月（"YYYY-MM" 文字列比較）で範囲絞り込み。
  *   "YYYY-MM" 文字列の辞書順比較で正しく機能する（ISO-8601 年月形式の性質）。
+ * - [tastingMin] / [tastingMax]: テイスティング各軸の範囲条件。`record.tasting == null`（未記録）は
+ *   いずれかが指定されている場合は除外。各軸の比較は独立（すべての軸が範囲内に入る必要あり）。
  * - [limit]: 負数・0 は既定値 10 として扱う。100 超は 100 に clamp する。
  *
  * ## Swift からの呼び出し例
@@ -62,6 +65,8 @@ interface CoffeeRecordQuery {
  *     maxRating: nil,
  *     fromYearMonth: nil,
  *     toYearMonth: nil,
+ *     tastingMin: nil,
+ *     tastingMax: nil,
  *     limit: 10
  * )
  * let summaries = try await container.coffeeRecordQuery.searchRecords(filter: filter)
@@ -76,6 +81,8 @@ data class CoffeeRecordFilter(
     val maxRating: Double? = null,      // 評価の上限（含む）
     val fromYearMonth: String? = null,  // "YYYY-MM" 以降（含む）
     val toYearMonth: String? = null,    // "YYYY-MM" まで（含む）
+    val tastingMin: TastingScores? = null,  // テイスティング各軸の下限（null = 条件なし）
+    val tastingMax: TastingScores? = null,  // テイスティング各軸の上限（null = 条件なし）
     val limit: Int = DEFAULT_LIMIT,     // 最大取得件数（負数/0 → 10、101 以上 → 100）
 ) {
     companion object {
@@ -170,6 +177,26 @@ class CoffeeRecordQueryImpl(
             val yearMonth = record.visitedOn.toYearMonthString()
             if (filter.fromYearMonth != null && yearMonth < filter.fromYearMonth) return false
             if (filter.toYearMonth != null && yearMonth > filter.toYearMonth) return false
+        }
+
+        // テイスティングフィルタ: tasting なしのレコードは除外
+        val hasTastingFilter = filter.tastingMin != null || filter.tastingMax != null
+        if (hasTastingFilter) {
+            val tasting = record.tasting ?: return false
+            filter.tastingMin?.let { min ->
+                if (tasting.sweetness < min.sweetness) return false
+                if (tasting.body < min.body) return false
+                if (tasting.acidity < min.acidity) return false
+                if (tasting.flavor < min.flavor) return false
+                if (tasting.aftertaste < min.aftertaste) return false
+            }
+            filter.tastingMax?.let { max ->
+                if (tasting.sweetness > max.sweetness) return false
+                if (tasting.body > max.body) return false
+                if (tasting.acidity > max.acidity) return false
+                if (tasting.flavor > max.flavor) return false
+                if (tasting.aftertaste > max.aftertaste) return false
+            }
         }
 
         return true

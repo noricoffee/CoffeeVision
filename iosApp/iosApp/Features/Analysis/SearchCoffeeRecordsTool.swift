@@ -103,6 +103,8 @@ struct SearchCoffeeRecordsTool: Tool {
             maxRating: arguments.maxRating.map { KotlinDouble(value: $0) },
             fromYearMonth: arguments.fromYearMonth,
             toYearMonth: arguments.toYearMonth,
+            tastingMin: nil,
+            tastingMax: nil,
             limit: Int32(arguments.limit ?? 10)
         )
 

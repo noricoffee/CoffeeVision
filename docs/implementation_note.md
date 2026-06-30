@@ -2048,4 +2048,12 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 ### 2026-06-30: MapTabView フィルタチップ内の Foundation Models 可否チェック（Phase 13-C）
 
 - 領域: iOS / パフォーマンス
-- `filterChipRow` 内で `TastePreferenceExtractor.makeIfAvailable() != nil` を呼んでいるが、これは View body の再描画ごとに評価される（内部は `SystemLanguageModel.default.availability` 確認のみで軽量）。現状は実害なし。将来パフォーマンス問題が生じた場合は `MapViewModelBridge` 側に `isFoundationModelsAvailable: Bool` フラグを持たせるか、`MapTabView` 本体の `@State` でキャッシュする設計に移行する。
+- `filterChipRow` 内で `TastePreferenceExtractor.makeIfAvailable() != nil` を呼んでいるが、これは View body の再描画ごとに評価される（内部は `SystemLanguageModel.default.availability` 確認のみで軽量）。現状は実害なし。将来パフォーマンス問題が生じた場合は `MapViewModelBridge` 側に `isFoundationModelsAvailable: Bool` フラグを持たせるか、`MapTabView` 本体の `@State` でキャッシュする設計に移行する。`searchBarView` の `TastePreferenceExtractor.makeIfAvailable() != nil` チェックも同様（13-D）。
+
+---
+
+### 2026-06-30: TastePreference.searchKeywords によるカフェ検索補完（Phase 13-D）
+
+- 領域: iOS / Foundation Models
+- `TastePreference` の 5 軸ベクトルを日本語キーワード文字列（"フルーティ 浅煎り 酸味" 等）に変換する `searchKeywords` プロパティを `TastePreference+Filter.swift` に追加。スコア 7 以上を「高い特徴あり」、4 以下（body のみ）を「低い特徴あり」として特徴語を付与。`roast` は `lowercased().contains` で "light"/"medium"/"dark" にマッチ。スコアがすべて中間かつ roast が unknown の場合は空文字を返し、呼び出し元でエラーメッセージを出す仕様にした。
+- Places API は「フルーティ 浅煎り コーヒー 渋谷」のような検索に対してスペシャルティカフェを返す可能性があるが、カフェのテイスティング詳細を持たないため精度は限定的。「新しいカフェを発見する」補助機能として位置付ける。

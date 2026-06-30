@@ -219,6 +219,9 @@ struct MapTabView: View {
     /// テイストフィルタシートの表示状態。
     @State private var isPresentingTasteFilter = false
 
+    /// テイスト検索シートの表示状態。
+    @State private var isPresentingTasteSearch = false
+
     /// FAB タップ後、次の location 更新で 1 回だけ recenter する。
     /// `lastLocation` を nil にしないため、`setupLocation` の周辺カフェ検索に副作用を与えない。
     @State private var pendingRecenter = false
@@ -254,6 +257,17 @@ struct MapTabView: View {
                         }
                         .sheet(isPresented: $isPresentingTasteFilter) {
                             TasteMapFilterSheet(bridge: bridge)
+                        }
+                        .sheet(isPresented: $isPresentingTasteSearch) {
+                            TasteSearchSheet { keywords in
+                                // 補完キーワードを検索クエリに付加して検索実行
+                                // performMapSearch() 内で onQueryChanged を呼ぶため、ここでは searchQuery の更新のみ行う
+                                let combined = searchQuery.isEmpty
+                                    ? keywords
+                                    : "\(searchQuery) \(keywords)"
+                                searchQuery = combined.trimmingCharacters(in: .whitespaces)
+                                performMapSearch()
+                            }
                         }
                         .navigationDestination(for: CafeDetailRoute.self) { route in
                             CafeDetailView(
@@ -572,6 +586,20 @@ struct MapTabView: View {
                 }
                 .buttonStyle(.plain)
                 .accessibilityLabel(String(localized: "検索をクリア"))
+            }
+            // Foundation Models 対応端末のみ表示（検索クエリの有無に関わらず常時表示）
+            if TastePreferenceExtractor.makeIfAvailable() != nil {
+                Button {
+                    isPresentingTasteSearch = true
+                } label: {
+                    Image(systemName: "sparkles")
+                        .font(.body)
+                        .foregroundStyle(Color.accentColor)
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(String(localized: "テイストでカフェを検索"))
+                .accessibilityHint(String(localized: "飲みたいコーヒーの味わいを入力してカフェを検索します"))
             }
         }
         .padding(.horizontal, 12)

@@ -1,8 +1,38 @@
 import SharedLogic
 
-// MARK: - TastePreference → CoffeeRecordFilter 変換
+// MARK: - TastePreference 拡張
 
 extension TastePreference {
+
+    // MARK: - Places API 検索補完キーワード
+
+    /// `TastePreference` をカフェ検索補完キーワードに変換する。
+    ///
+    /// 各軸のスコア（1〜10）と `roast` から Places API に渡す検索キーワード群を生成する。
+    /// スコア 7 以上を「高い」、4 以下を「低い」として特徴語を付与する。
+    /// 戻り値は空白区切りの日本語キーワード文字列（例: "フルーティ 浅煎り 酸味"）。
+    /// 特徴なし（スコアがすべて中間）のときは空文字を返す。
+    var searchKeywords: String {
+        var terms: [String] = []
+        if sweetness >= 7 { terms.append("甘い") }
+        if acidity >= 7 { terms += ["フルーティ", "酸味"] }
+        if body >= 7 { terms.append("コク") }
+        if body <= 3 { terms.append("あっさり") }
+        if aftertaste >= 7 { terms.append("余韻") }
+        switch roast {
+        case let r where r.lowercased().contains("light"):
+            terms += ["浅煎り", "スペシャルティ"]
+        case let r where r.lowercased().contains("medium"):
+            terms.append("中煎り")
+        case let r where r.lowercased().contains("dark"):
+            terms += ["深煎り", "エスプレッソ"]
+        default:
+            break
+        }
+        return terms.joined(separator: " ")
+    }
+
+    // MARK: - CoffeeRecordFilter 変換
 
     /// `TastePreference`（5軸好みベクトル）を `CoffeeRecordFilter`（KMP）に変換する。
     ///

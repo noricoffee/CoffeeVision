@@ -642,7 +642,7 @@
 | [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須 / ユーザー作業 |
 | [x] | アプリ内同意 UI 設計・実装（初回起動時にオンボーディング画面で同意取得） | 2026-06-30 完了。`DataConsentOnboardingView`（初回起動シート）+ SettingsView トグル。URL プレースホルダーは App Store 提出前に差し替え必要 |
 | [x] | `AuthRepository` / `AuthAccount` に `analyticsConsent: Boolean` フラグを追加。`users/{uid}` Firestore ドキュメントへ保存 | 2026-06-30 完了（KMP: kmp-engineer / iOS: 親が直接実装） |
-| [x] | Firestore Security Rules 更新（`users/{uid}` ルートドキュメント明示 + 将来の集計コレクション向けは 12-B 以降） | 2026-06-30 完了。`firebase deploy --only firestore:rules` はユーザー作業 |
+| [x] | Firestore Security Rules 更新（`users/{uid}` ルートドキュメント明示 + 将来の集計コレクション向けは 12-B 以降） | 2026-06-30 完了。2026-07-01 デプロイ済み |
 
 ### 12-B: コーヒー豆ナレッジベース（サーバー管理データ）
 
@@ -718,8 +718,8 @@
 |------|----|------|----------------|
 | [ ] | B-1 | マルチデバイス書き込みの競合解決方針を明文化（`updatedAt` での last-writer-wins 等）。現状 remote→local は `INSERT OR REPLACE` で世代比較なし | 複数端末同期（要件 7-3、優先度○）を実装・検証する段階。単一端末では実害なし |
 | [ ] | B-2 | ViewModel テスト方針の整理。規約（architecture / coding-conventions）は「VM は runTest でテスト」だが主要 VM が未テスト。規約を実態に合わせるか、テストを足すか決める | CI を本格運用するとき / 新規 VM 追加時 |
-| [ ] | B-3 | `requirements.md` の「API キーは難読化」を実態（Google Cloud 側のキー制限ベース。Info.plist / BuildConfig は平文）に修正 | リリース準備フェーズ（doc 修正のみで完結、判断不要） |
-| [ ] | B-4 | `rating=0`=「未評価」の暗黙 sentinel を仕様化（`Visit.rating` を nullable にするか 0 を明記するか）。`ObserveVisitedCafesUseCase` が 0 を平均除外している | 集計まわりを次に触るとき。現状動作に実害なし |
+| [x] | B-3 | `requirements.md` の「API キーは難読化」を実態（Google Cloud 側のキー制限ベース。Info.plist / BuildConfig は平文）に修正 | 2026-07-01 完了。requirements→CoffeeRecord 全面改訂と同時に非機能要件の記述を修正 |
+| [ ] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を仕様化（`CoffeeRecord.rating` を nullable にするか 0 を明記するか）。`VisitedCafe` 集計が 0 を平均除外している | 集計まわりを次に触るとき。現状動作に実害なし。requirements §未決事項にも起票済み |
 | [ ] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 最初の PR を出すタイミングで自然解消 |
 | [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |

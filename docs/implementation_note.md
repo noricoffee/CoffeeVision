@@ -2087,3 +2087,15 @@ feature/analyze で androidApp に `googleServices` プラグインと Firebase 
 - 領域: iOS / Foundation Models
 - `TastePreference` の 5 軸ベクトルを日本語キーワード文字列（"フルーティ 浅煎り 酸味" 等）に変換する `searchKeywords` プロパティを `TastePreference+Filter.swift` に追加。スコア 7 以上を「高い特徴あり」、4 以下（body のみ）を「低い特徴あり」として特徴語を付与。`roast` は `lowercased().contains` で "light"/"medium"/"dark" にマッチ。スコアがすべて中間かつ roast が unknown の場合は空文字を返し、呼び出し元でエラーメッセージを出す仕様にした。
 - Places API は「フルーティ 浅煎り コーヒー 渋谷」のような検索に対してスペシャルティカフェを返す可能性があるが、カフェのテイスティング詳細を持たないため精度は限定的。「新しいカフェを発見する」補助機能として位置付ける。
+
+### 2026-07-01: マップ検索の使い勝手改善（フェーズ 14）— エリア検索ボタンのしきい値と設計
+
+- 領域: iOS / SwiftUI + KMP（`shared/feature/cafe-search`）
+- **背景**: 従来のマップ検索は「テキスト検索 → ドロップダウンリスト → 1 件選択で単一ピン」で複数候補が同時にピン表示されなかった。Google Maps 風に表示範囲内のカフェを一括ピン表示できるようにした。product 決定は「このエリアを検索」ボタン方式（自動再検索なし＝ Places API の課金/発火頻度を制御）+ テキスト検索結果は全件ピン + リスト併用。
+- **KMP**: `CafeSearchViewModel.onNearbySearchRequested` に半径付きオーバーロード（3 引数版）を追加。SKIE がデフォルト引数を Swift へ出さないため `onSearchTapped` と同じくオーバーロードで対応（既存 2 引数版は維持）。`CafeRepository.searchNearby` は元々 `radiusMeters` を持つため変更不要。
+- **「このエリアを検索」ボタンの出現しきい値**（`MapTabView.shouldShowAreaSearchButton`）: `中心移動 > アンカー半径の 30%` OR `半径比 1.5x 逸脱`。30% はパン 1 回分の典型移動量に相当し頻出を抑えつつ実用感度を確保、1.5x は大きめズーム変化のみ拾う保守値。初回カメラ確定時は判定せずベースライン採用のみ（起動直後にボタンを出さない）。**要件定義に数値根拠はない経験則**。将来チューニングはここを見る。
+- **検索完了検知の一本化**: テキスト検索・エリア検索の両方を `searchBridge.isLoading` の false 遷移（`handleSearchCompletion`）に集約し、`hasSearched && error==nil` のとき `mapBridge.onSearchResultsUpdated(sb.results)` で全ピン push。どちらのトリガーかは `isAreaSearchInFlight` で判別。トレードオフ: 極端な連打時の判別整合性は理論上完全でない（`CafeSearchViewModel` の searchJob キャンセル挙動に依存）が v1 では許容。
+- **ピン集合と選択の関心分離**: `selectSearchResult` / カード× / 「詳細を見る」から `onSearchResultsUpdated([cafe])`・`onSearchResultsCleared()` を除去し、選択してもカードを閉じても全ピンを残す（Google Maps 的）。全ピン消去は検索バーの×のみ。
+- **制約**: Places API (New) Nearby/Text は 1 回最大 20 件。密集エリアは 20 件で頭打ち（仕様上の上限）。
+- **検索モード化（追従修正）**: 当初レイアウトは上部コントロール VStack（検索バー + フィルタチップ + エリア検索ボタン）と、固定オフセット `Spacer().frame(height:120)` の結果ドロップダウンが別レイヤーで重なり、リストとエリア検索ボタンが視覚衝突していた。`@FocusState`（検索欄フォーカス）+ `showingSearchResults` で `isSearchMode` を定義し、**検索モード中は `filterChipRow`（訪問済み/タグ等）を非表示**、結果リストを検索バー直下の同一 VStack に流し込むことで固定オフセットを撤廃し重なりを構造的に解消。×/空クエリ/結果選択でブラウズモードへ復帰（フィルタチップ再表示、全ピンは維持）。
+- **エリア検索ボタンの表示条件（最終仕様）**: 「このエリアを検索」ボタンは **検索モード中 かつ パン/ズーム後** のみ表示（実質 `isSearchMode && showAreaSearchButton`）。ブラウズ中は地図を動かしても出さない（マップ閲覧を邪魔しない）。検索モード突入直後は `showAreaSearchButton=false` にリセットし、そこからパンして初めて出す。レイアウト順は `searchBar → areaSearchButton（該当時） → 結果リスト`。当初は逆（ブラウズ側でパン検知して表示、検索モードでは隠す）だったが、ユーザー要望で「検索意図があるときだけ表示範囲検索を提示する」方針に変更。パン検知（`.onMapCameraChange`）自体はモード非依存で動かし続け、表示側で `isSearchMode` を掛けている。

@@ -710,6 +710,51 @@
 
 ---
 
+## フェーズ 14: マップ検索の使い勝手改善（表示範囲ピン表示）
+
+> 起票 2026-07-01。現状のマップ検索は「テキスト検索 → ドロップダウンのリスト → 1 件選択で単一ピン + カード」で、複数候補が同時にピン表示されない。Google Maps 風に **表示範囲内のカフェ候補を一括ピン表示**できるようにして発見体験を改善する。
+>
+> **product 決定（2026-07-01 / ユーザー確認済）**:
+> - エリア検索の起動 = **「このエリアを検索」ボタン**（地図をパン/ズーム後に上部に出現。自動再検索はしない＝ Places API の課金/発火頻度を制御）
+> - テキスト検索の結果 = **全件ピン + ドロップダウンリスト併用**（ピンで位置感、リストで一覧比較）
+>
+> **既存部品（再利用）**: `CafeRepository.searchNearby(lat,lng,radius)`（`includedPrimaryTypes=[cafe,coffee_shop]` / `rankPreference=DISTANCE` / **最大 20 件**）、`CafeSearchViewModel.onNearbySearchRequested`、`MapViewModel.onSearchResultsUpdated/Cleared`（`searchResultPlaces` → 青ピン描画）、`.onMapCameraChange` の表示範囲 → 中心座標 + 半径算出（`appState.mapSearchCenter`）。
+>
+> **制約**: Places API (New) の Nearby/Text は 1 回あたり最大 20 件。密集エリアでは 20 件で頭打ち（仕様上の上限。UI に「さらに拡大して検索」等の含意は持たせない）。
+
+### 14-A: KMP — 半径指定のエリア検索
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `CafeSearchViewModel` に半径を渡せるエリア検索を追加。SKIE がデフォルト引数を出さないため `onNearbySearchRequested(latitude, longitude, radiusMeters)` のオーバーロードを新設し `CafeRepository.searchNearby(lat,lng,radiusMeters)` に委譲（既存の 2 引数版は残す） | 2026-07-01 完了（kmp-engineer）。`cafe-search:testAndroidHostTest` green（新規 3 件）+ `compileKotlinIosSimulatorArm64` 成功。既存 2 引数版は後方互換で維持。Bridge に `onNearbySearchRequested(latitude:longitude:radiusMeters:)` 追加は 14-C で iOS 側対応 |
+
+### 14-B: iOS — テキスト検索結果を全件ピン表示
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `performMapSearch` の結果到着後、`mapBridge.onSearchResultsUpdated(sb.results)` で**全候補**をピン表示（現状は選択 1 件のみ）。ドロップダウンリストは併存 | 2026-07-01 完了。検索完了検知を `searchBridge.isLoading` の false 遷移 → `handleSearchCompletion` に一本化（テキスト/エリア共通）。`hasSearched && error==nil` で push |
+| [x] | `selectSearchResult` を「全ピンを残したまま該当カフェのカードを出す」挙動に変更（現状は `onSearchResultsUpdated([cafe])` で 1 件に潰している）。ピン集合＝全結果 / 選択＝カード の関心分離 | 2026-07-01 完了。カード×/「詳細を見る」からも `onSearchResultsCleared()` を削除しピンを残す（Google Maps 的挙動）。検索バー×のみ全消去 |
+
+### 14-C: iOS —「このエリアを検索」ボタン（エリア検索）
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 検索バー下に floating pill「このエリアを検索」を追加。地図の中心が前回検索位置から一定以上動いた / ズーム変化したときに出現、検索後は次のパンまで非表示 | 2026-07-01 完了。`shouldShowAreaSearchButton`: 中心移動 > アンカー半径の 30% OR 半径比 1.5x 逸脱。初回カメラ確定時はベースライン採用のみ（起動直後は非表示）。しきい値の経緯は implementation_note 2026-07-01 |
+| [x] | ボタンタップ → `searchBridge.onNearbySearchRequested(center.lat, center.lng, center.radiusMeters)`（14-A）→ 結果を `mapBridge.onSearchResultsUpdated(results)` で全ピン表示。ローディング表示あり | 2026-07-01 完了。`isAreaSearchInFlight` で完了経路を判別。検索中はボタンをスピナー化、完了後アンカー更新+非表示 |
+| [x] | 0 件時のフィードバック（「このエリアにカフェが見つかりませんでした」）とエラー時のトースト | 2026-07-01 完了。`activeToast` の優先順位チェーンに `searchBridge.error`（失敗）と `areaSearchEmptyMessage`（0 件、4 秒自動消去）を追加。既存 `ErrorToast` 再利用 |
+| [x] | 追従修正: 検索結果リストと「このエリアを検索」ボタンの重なりを解消し「検索モード」化 | 2026-07-01 完了。`@FocusState` + `showingSearchResults` で `isSearchMode` 判定。検索モード中は `filterChipRow`（訪問済み/タグ等）を非表示、結果リストを検索バー直下の同一 VStack に流し込み（固定オフセット `height:120` 撤廃）。×/空クエリ/結果選択でブラウズ復帰。BUILD SUCCEEDED |
+| [x] | 追従修正: 「このエリアを検索」ボタンを「検索モード＋パン後のみ」表示に変更 | 2026-07-01 完了。ブラウズ中は非表示、検索モードでパン/ズーム後に検索バー直下へ表示（`isSearchMode && showAreaSearchButton`）。パン検知はモード非依存で継続、表示側で `isSearchMode` を掛ける。BUILD SUCCEEDED |
+
+### 14-D: 検証
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `shared:feature:cafe-search` の commonTest green + `assembleSharedLogicXCFramework` 成功（KMP） | 2026-07-01 / commonTest green、`compileKotlinIosSimulatorArm64` 成功（framework ファクトリ変更不要のため umbrella 再ビルドは不要と判断） |
+| [x] | iOS: xcodebuild BUILD SUCCEEDED（新規 warning ゼロ） | 2026-07-01 / `DEVELOPER_DIR=Xcode-beta` で実ビルド成功。SourceKit の `No such module SharedLogic` はインデックス由来ノイズ（実ビルドは通過） |
+| [ ] | 実機/シミュレータで「このエリアを検索」→ 複数ピン、パン後のボタン再出現、テキスト検索の全件ピン + リストを目視確認 | **ユーザー作業**（実 Places API キー必要） |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

@@ -122,10 +122,11 @@ class CafeSearchViewModel(
     }
 
     /**
-     * 現在地周辺のカフェを検索する。
+     * 現在地周辺のカフェを検索する（半径省略版・デフォルト 500m）。
      *
-     * [CafeRepository.searchNearby] を実行し、結果を [UIState.results] に反映する。
-     * 検索半径は 500m 固定（将来 UI からスライダ等で渡せるようにする際は引数追加で対応）。
+     * [CafeRepository.searchNearby] をデフォルト半径（500m）で実行し、結果を [UIState.results] に反映する。
+     * 現在地ボタンなど、表示範囲を考慮しない呼び出し元向け。表示範囲（マップの可視領域）に応じた
+     * 半径で検索したい場合は [onNearbySearchRequested(latitude, longitude, radiusMeters)][onNearbySearchRequested] を使うこと。
      * [UIState.query] はテキスト検索のクエリとは独立しているため更新しない。
      *
      * 前回の検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
@@ -139,6 +140,27 @@ class CafeSearchViewModel(
     fun onNearbySearchRequested(latitude: Double, longitude: Double) {
         launchSearch(errorMessage = "近隣検索に失敗しました") {
             cafeRepository.searchNearby(latitude, longitude)
+        }
+    }
+
+    /**
+     * 指定座標周辺のカフェを、指定半径で検索する。
+     *
+     * [CafeRepository.searchNearby] に [radiusMeters] をそのまま渡して実行し、結果を [UIState.results] に反映する。
+     * マップの「このエリアを検索」機能（表示範囲に応じた半径での一括ピン表示）向け。
+     * 半径省略版（[onNearbySearchRequested(latitude, longitude)][onNearbySearchRequested]）との 2 本立ては、
+     * SKIE がデフォルト引数を Swift に引き出せないため既存の [onSearchTapped] と同様のオーバーロード戦略を踏襲している。
+     * [UIState.query] はテキスト検索のクエリとは独立しているため更新しない。
+     *
+     * 状態遷移（isLoading / error / results / hasSearched の更新）は半径省略版と完全に同一。
+     *
+     * @param latitude 検索中心の緯度（通常はマップの表示範囲の中心）
+     * @param longitude 検索中心の経度（通常はマップの表示範囲の中心）
+     * @param radiusMeters 検索半径（メートル）。呼び出し元がマップの表示範囲から算出して渡す
+     */
+    fun onNearbySearchRequested(latitude: Double, longitude: Double, radiusMeters: Double) {
+        launchSearch(errorMessage = "近隣検索に失敗しました") {
+            cafeRepository.searchNearby(latitude, longitude, radiusMeters)
         }
     }
 

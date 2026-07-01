@@ -1,5 +1,6 @@
 import SwiftUI
 import MapKit
+import CoreLocation
 import SharedLogic
 
 // MARK: - RecommendationMatchSheet
@@ -192,8 +193,11 @@ struct CafeDetailRoute: Hashable {
 ///
 /// - MapKit の `Map` に訪問済みカフェ（brown）と周辺カフェ（gray）の Annotation を表示する
 /// - 上部の Google Maps スタイル検索バーからカフェ名検索を行い、結果ピンをマップに表示する
+/// - 検索欄フォーカス中 or 結果表示中は「検索モード」（`isSearchMode`）となり、フィルタチップ行を隠して
+///   検索結果ドロップダウンを表示する（重なり防止）。「このエリアを検索」ボタンは検索モード中に
+///   地図をパン / ズームした場合のみ結果ドロップダウンの上に出現する（ブラウズモードでは出さない）
 /// - 検索結果タップで下部カードを表示し、「詳細を見る」で `CafeDetailView` へ push する
-/// - フィルタトグルで各種ピンの表示 / 非表示を切り替える
+/// - フィルタトグルで各種ピンの表示 / 非表示を切り替える（ブラウズモード時のみ表示）
 /// - カスタムピンタップで `CafeDetailView` へ push する（`NavigationLink(value:)` 経由）
 /// - Apple Maps 標準 POI タップ → Places ルックアップ → `CafeDetailView` プログラマティック push
 /// - 自身が `NavigationStack(path: $navigationPath)` を保持するため RootTabView 側の NavigationStack は不要
@@ -237,9 +241,39 @@ struct MapTabView: View {
     /// 検索結果ドロップダウンの表示フラグ。
     @State private var showingSearchResults: Bool = false
 
+    /// 検索バー `TextField` のフォーカス状態。
+    @FocusState private var isSearchFieldFocused: Bool
+
     /// 検索結果から選択されたカフェ（下部カード表示用）。nil = カード非表示。
     @State private var selectedSearchCafe: Cafe? = nil
 
+    // MARK: - 「このエリアを検索」関連 State
+
+    /// 最後にエリア検索（またはカメラ初期化）した際のマップ中心。
+    ///
+    /// - `nil`: まだエリア検索・初期カメラ確定が行われていない（ボタン非表示）
+    /// - 非 `nil`: 「このエリアを検索」ボタンの出現判定の基準点
+    @State private var lastAreaSearchCenter: MapSearchCenter? = nil
+
+    /// 「このエリアを検索」ボタンの表示フラグ。
+    @State private var showAreaSearchButton: Bool = false
+
+    /// 「このエリアを検索」の検索実行中フラグ（ボタンのローディング表示用）。
+    @State private var isAreaSearchInFlight: Bool = false
+
+    /// エリア検索が 0 件だったときの軽量案内メッセージ。`errorToast` 経由で表示する。
+    @State private var areaSearchEmptyMessage: String? = nil
+
+    // MARK: - 検索モード
+
+    /// 検索モード判定: 検索欄フォーカス中、または検索結果ドロップダウン表示中。
+    ///
+    /// 検索モード中はフィルタチップ（ブラウズ用アフォーダンス）を隠し、代わりに検索結果リストを
+    /// `searchBarView` 直下に表示する。「このエリアを検索」ボタンはブラウズモードでは常に非表示。
+    /// 検索モード中でも `showAreaSearchButton`（地図パン検知）が true のときだけ表示する。
+    private var isSearchMode: Bool {
+        isSearchFieldFocused || showingSearchResults
+    }
 
     // MARK: - Body
 
@@ -319,6 +353,11 @@ struct MapTabView: View {
                                 mapFeatureSelection = nil
                             }
                         }
+                        // 検索完了（テキスト検索 / エリア検索の両方）を検知して全件ピン反映する
+                        .onChange(of: searchBridge?.isLoading) { _, isLoading in
+                            guard isLoading == false, let sb = searchBridge else { return }
+                            handleSearchCompletion(sb: sb, mapBridge: bridge)
+                        }
                         // pendingRecenter フラグを監視し、次の location 更新で 1 回だけ recenter する
                         .onChange(of: locationManager.lastLocation?.latitude) { _, _ in
                             if pendingRecenter, let loc = locationManager.lastLocation {
@@ -357,11 +396,18 @@ struct MapTabView: View {
 
     /// 複数のエラー源を優先順位付きで単一トーストに集約する。
     ///
-    /// `bridge.error`（一般エラー）を `poiLookupError`（POI 検索失敗）より優先する。
+    /// 優先度: `bridge.error`（一般エラー）> `searchBridge.error`（検索失敗）
+    /// > `areaSearchEmptyMessage`（エリア検索 0 件案内）> `poiLookupError`（POI 検索失敗）。
     /// `.errorToast` は 1 つしか付けられないため、body から 1 個だけ渡す。
     private func activeToast(bridge: MapViewModelBridge) -> (message: String, dismiss: () -> Void)? {
         if let e = bridge.error {
             return (e, { bridge.onErrorDismissed() })
+        }
+        if let e = searchBridge?.error {
+            return (e, { searchBridge?.onErrorDismissed() })
+        }
+        if let message = areaSearchEmptyMessage {
+            return (message, { areaSearchEmptyMessage = nil })
         }
         if let e = bridge.poiLookupError {
             return (e, { bridge.onPoiLookupErrorDismissed() })
@@ -469,11 +515,20 @@ struct MapTabView: View {
                 let rawRadius = max(latMeters, lngMeters)
                 // Places API locationBias circle の制約 1...50_000 m にクランプ
                 let radius = min(max(rawRadius, 1), 50_000)
-                appState.mapSearchCenter = MapSearchCenter(
+                let newCenter = MapSearchCenter(
                     latitude: region.center.latitude,
                     longitude: region.center.longitude,
                     radiusMeters: radius
                 )
+                appState.mapSearchCenter = newCenter
+
+                // 「このエリアを検索」ボタンの出現判定。
+                // アンカー未設定（初回カメラ確定時）はボタンを出さず、静かにベースラインとして採用する。
+                if let anchor = lastAreaSearchCenter {
+                    showAreaSearchButton = shouldShowAreaSearchButton(current: newCenter, anchor: anchor)
+                } else {
+                    lastAreaSearchCenter = newCenter
+                }
             }
             .safeAreaInset(edge: .bottom) {
                 if let cafe = selectedSearchCafe {
@@ -481,73 +536,92 @@ struct MapTabView: View {
                 }
             }
 
-            // 上部コントロール（検索バー行 + フィルタチップ行）
+            // 上部コントロール（検索バー行 + モードに応じた下段コンテンツ）
+            //
+            // ブラウズモード: フィルタチップ行のみ（「このエリアを検索」ボタンは出さない）
+            // 検索モード:（パンで出現した場合）「このエリアを検索」ボタン + 検索結果ドロップダウン
+            // 同一 VStack 内に流し込むことで、ドロップダウンとボタンの重なりを構造的に防ぐ。
             VStack(spacing: 8) {
                 searchBarView
-                filterChipRow(bridge: bridge)
+                if isSearchMode {
+                    if showAreaSearchButton {
+                        HStack {
+                            Spacer(minLength: 0)
+                            areaSearchButton
+                            Spacer(minLength: 0)
+                        }
+                        .transition(.move(edge: .top).combined(with: .opacity))
+                    }
+                    searchResultsSection
+                } else {
+                    filterChipRow(bridge: bridge)
+                }
             }
             .padding(.horizontal, 16)
             .padding(.top, 8)
+            .animation(.default, value: showAreaSearchButton)
+            .animation(.default, value: isSearchMode)
+            .onChange(of: isSearchFieldFocused) { _, focused in
+                // 検索モードに入るタイミングでブラウズ用アフォーダンスを確実に隠す
+                if focused {
+                    showAreaSearchButton = false
+                }
+            }
+        }
+    }
 
-            // 検索結果ドロップダウン（条件付き表示）
-            if showingSearchResults, let sb = searchBridge {
-                VStack {
-                    // 上部コントロール（検索バー + フィルタ行）分のスペース
-                    Spacer().frame(height: 120)
-
-                    ZStack {
-                        if sb.isLoading {
-                            ProgressView()
-                                .frame(maxWidth: .infinity)
-                                .padding()
-                                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                                .padding(.horizontal, 16)
-                        } else if !sb.results.isEmpty {
-                            ScrollView {
-                                LazyVStack(spacing: 0) {
-                                    ForEach(sb.results, id: \.placeId) { cafe in
-                                        Button {
-                                            selectSearchResult(cafe)
-                                        } label: {
-                                            HStack(spacing: 12) {
-                                                Image(systemName: "mappin.circle.fill")
-                                                    .font(.title2)
-                                                    .foregroundStyle(.blue)
-                                                VStack(alignment: .leading, spacing: 2) {
-                                                    Text(cafe.name)
-                                                        .font(.subheadline.weight(.medium))
-                                                        .foregroundStyle(.primary)
-                                                        .multilineTextAlignment(.leading)
-                                                    if let address = cafe.address {
-                                                        Text(address)
-                                                            .font(.caption)
-                                                            .foregroundStyle(.secondary)
-                                                            .lineLimit(1)
-                                                            .multilineTextAlignment(.leading)
-                                                    }
-                                                }
-                                                Spacer()
-                                            }
-                                            .padding(.horizontal, 16)
-                                            .padding(.vertical, 12)
-                                            .frame(maxWidth: .infinity)
-                                            .contentShape(Rectangle())
-                                        }
-                                        .buttonStyle(.plain)
-                                        if cafe.placeId != sb.results.last?.placeId {
-                                            Divider().padding(.leading, 52)
+    /// 検索モード中に `searchBarView` の直下へ表示する結果ドロップダウン。
+    ///
+    /// ローディング中はスピナー、結果があればリストを表示する。0 件かつ非ローディングのときは
+    /// 何も表示しない（結果を待つ間の空白を許容し、余計なプレースホルダは出さない）。
+    @ViewBuilder
+    private var searchResultsSection: some View {
+        if let sb = searchBridge {
+            if sb.isLoading {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding()
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+            } else if !sb.results.isEmpty {
+                ScrollView {
+                    LazyVStack(spacing: 0) {
+                        ForEach(sb.results, id: \.placeId) { cafe in
+                            Button {
+                                selectSearchResult(cafe)
+                            } label: {
+                                HStack(spacing: 12) {
+                                    Image(systemName: "mappin.circle.fill")
+                                        .font(.title2)
+                                        .foregroundStyle(.blue)
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(cafe.name)
+                                            .font(.subheadline.weight(.medium))
+                                            .foregroundStyle(.primary)
+                                            .multilineTextAlignment(.leading)
+                                        if let address = cafe.address {
+                                            Text(address)
+                                                .font(.caption)
+                                                .foregroundStyle(.secondary)
+                                                .lineLimit(1)
+                                                .multilineTextAlignment(.leading)
                                         }
                                     }
+                                    Spacer()
                                 }
+                                .padding(.horizontal, 16)
+                                .padding(.vertical, 12)
+                                .frame(maxWidth: .infinity)
+                                .contentShape(Rectangle())
                             }
-                            .frame(maxHeight: 300)
-                            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-                            .padding(.horizontal, 16)
+                            .buttonStyle(.plain)
+                            if cafe.placeId != sb.results.last?.placeId {
+                                Divider().padding(.leading, 52)
+                            }
                         }
                     }
-
-                    Spacer()
                 }
+                .frame(maxHeight: 300)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
         }
     }
@@ -560,6 +634,7 @@ struct MapTabView: View {
                 .foregroundStyle(.secondary)
                 .font(.body)
             TextField(String(localized: "カフェ名で検索"), text: $searchQuery)
+                .focused($isSearchFieldFocused)
                 .submitLabel(.search)
                 .onSubmit { performMapSearch() }
                 .onChange(of: searchQuery) { _, newValue in
@@ -599,9 +674,103 @@ struct MapTabView: View {
         .frame(maxWidth: .infinity)
     }
 
+    // MARK: - このエリアを検索
+
+    /// 検索モード中にマップをパン / ズームした後、上部へ出現する floating pill。
+    ///
+    /// ブラウズモードでは表示されない（検索モード突入 + パン検知の両方を満たしたときのみ呼び出し元が表示する）。
+    /// タップで `performAreaSearch()` を呼び、表示範囲内のカフェを一括検索する。
+    /// 検索中は `isAreaSearchInFlight` に応じてスピナーへ差し替え、タップを無効化する。
+    private var areaSearchButton: some View {
+        Button {
+            performAreaSearch()
+        } label: {
+            HStack(spacing: 6) {
+                if isAreaSearchInFlight {
+                    ProgressView()
+                        .tint(.white)
+                        .controlSize(.small)
+                } else {
+                    Image(systemName: "arrow.clockwise.circle")
+                }
+                Text(String(localized: "このエリアを検索"))
+            }
+            .font(.subheadline.weight(.medium))
+            .foregroundStyle(.white)
+            .padding(.horizontal, 16)
+            .frame(minHeight: 44)
+            .background(Capsule().fill(Color.accentColor))
+            .shadow(color: .black.opacity(0.15), radius: 6, x: 0, y: 2)
+        }
+        .buttonStyle(.plain)
+        .disabled(isAreaSearchInFlight)
+        .accessibilityLabel(String(localized: "このエリアを検索"))
+        .accessibilityHint(String(localized: "表示中の地図範囲内のカフェを検索してピン表示します"))
+    }
+
+    /// 表示中のマップ範囲でカフェを検索する。「このエリアを検索」ボタンから呼ぶ。
+    private func performAreaSearch() {
+        guard let sb = searchBridge,
+              let center = appState.mapSearchCenter,
+              !isAreaSearchInFlight else { return }
+        isAreaSearchInFlight = true
+        sb.onNearbySearchRequested(
+            latitude: center.latitude,
+            longitude: center.longitude,
+            radiusMeters: center.radiusMeters
+        )
+    }
+
+    /// 現在のマップ中心が前回エリア検索アンカーから閾値以上動いたかを判定する。
+    ///
+    /// - 中心移動距離がアンカー半径の 30% を超える、または
+    /// - 半径比（ズーム変化）が 1.5 倍以上乖離する
+    /// のいずれかで `true` を返す（Google Maps 的な「この範囲を再検索」導線の一般的な目安）。
+    private func shouldShowAreaSearchButton(current: MapSearchCenter, anchor: MapSearchCenter) -> Bool {
+        let currentLocation = CLLocation(latitude: current.latitude, longitude: current.longitude)
+        let anchorLocation = CLLocation(latitude: anchor.latitude, longitude: anchor.longitude)
+        let movedDistance = currentLocation.distance(from: anchorLocation)
+        let centerMoved = movedDistance > anchor.radiusMeters * 0.3
+
+        let radiusRatio = current.radiusMeters / anchor.radiusMeters
+        let zoomChanged = radiusRatio > 1.5 || radiusRatio < (1.0 / 1.5)
+
+        return centerMoved || zoomChanged
+    }
+
+    /// 検索完了（`searchBridge.isLoading` が false に変わった時）の共通ハンドラ。
+    ///
+    /// テキスト検索・「このエリアを検索」の両方の完了を検知し、成功時は結果を全件ピンとして
+    /// `mapBridge` に反映する。「このエリアを検索」由来の完了時はさらにアンカーを更新して
+    /// ボタンを隠し、0 件だった場合は軽量な案内メッセージを出す。
+    private func handleSearchCompletion(sb: CafeSearchViewModelBridge, mapBridge: MapViewModelBridge) {
+        let wasAreaSearch = isAreaSearchInFlight
+        isAreaSearchInFlight = false
+
+        // hasSearched が false（未検索）、または直近の呼び出しが失敗（error 設定済み）の場合は
+        // ピン反映しない。失敗時はボタンを隠さず再試行できる状態のまま残す。
+        guard sb.hasSearched, sb.error == nil else { return }
+
+        mapBridge.onSearchResultsUpdated(sb.results)
+
+        if wasAreaSearch {
+            if let center = appState.mapSearchCenter {
+                lastAreaSearchCenter = center
+            }
+            showAreaSearchButton = false
+            if sb.results.isEmpty {
+                areaSearchEmptyMessage = String(localized: "このエリアにカフェが見つかりませんでした")
+            }
+        }
+    }
+
     // MARK: - 検索アクション
 
     /// 検索バーの送信時に呼ばれる。位置バイアスがあれば付与する。
+    ///
+    /// 結果の全件ピン反映は `.onChange(of: searchBridge?.isLoading)`（→ `handleSearchCompletion`）が
+    /// 検索完了を検知して行う。ここでは「このエリアを検索」ボタンをテキスト検索直後は
+    /// 出さないよう非表示にするのみ。
     private func performMapSearch() {
         guard let sb = searchBridge, !searchQuery.isEmpty else { return }
         sb.onQueryChanged(searchQuery)
@@ -615,22 +784,26 @@ struct MapTabView: View {
             sb.onSearchTapped()
         }
         showingSearchResults = true
+        showAreaSearchButton = false
     }
 
-    /// 検索選択状態をクリアし、マップオーバーレイもリセットする。
+    /// 検索選択状態をクリアし、マップオーバーレイもリセットする。フォーカスも解除しブラウズモードへ戻す。
     private func clearSearchSelection() {
         selectedSearchCafe = nil
         showingSearchResults = false
+        isSearchFieldFocused = false
         appState.mapBridge?.onSearchResultsCleared()
     }
 
     /// 検索結果（ドロップダウンまたはピン）からカフェを選択する。
     ///
-    /// 下部カードを表示し、マップをそのカフェに中心移動する。
+    /// ピン集合（全検索結果）はそのまま維持し、下部カードの表示とマップ中心移動のみ行う
+    /// （ピン集合と選択状態の関心を分離するため、ここでは `onSearchResultsUpdated` を呼ばない）。
+    /// ドロップダウンを閉じ、フォーカスも解除してブラウズモードへ戻す。
     private func selectSearchResult(_ cafe: Cafe) {
         selectedSearchCafe = cafe
         showingSearchResults = false
-        appState.mapBridge?.onSearchResultsUpdated([cafe])
+        isSearchFieldFocused = false
         guard let lat = cafe.latitude?.doubleValue,
               let lng = cafe.longitude?.doubleValue else { return }
         withAnimation {
@@ -663,8 +836,8 @@ struct MapTabView: View {
                 }
                 Spacer()
                 Button {
+                    // ピン集合（全検索結果）は維持し、カードの選択のみ解除する
                     selectedSearchCafe = nil
-                    appState.mapBridge?.onSearchResultsCleared()
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
@@ -677,8 +850,8 @@ struct MapTabView: View {
                 navigationPath.append(
                     CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
                 )
+                // ピン集合（全検索結果）は維持し、カードの選択のみ解除する
                 selectedSearchCafe = nil
-                appState.mapBridge?.onSearchResultsCleared()
             } label: {
                 Text(String(localized: "詳細を見る"))
                     .frame(maxWidth: .infinity)

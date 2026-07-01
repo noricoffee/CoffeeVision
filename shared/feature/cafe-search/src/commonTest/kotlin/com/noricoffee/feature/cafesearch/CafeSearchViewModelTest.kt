@@ -23,6 +23,7 @@ import kotlin.test.assertTrue
  * - `onSearchTapped(lat, lng, radius)` が正しい [LocationBias] を渡すこと
  * - `onNearbySearchRequested` 成功後 `hasSearched == true`
  * - `onNearbySearchRequested` 失敗後 `hasSearched == false`
+ * - `onNearbySearchRequested(lat, lng, radiusMeters)` が `radiusMeters` をそのまま `searchNearby` に渡すこと
  * - `onErrorDismissed` は `hasSearched` を変更しない
  * - `onSearchTapped` 成功時に `results` が反映される
  * - `onSearchTapped` 失敗時に `error` がセットされる
@@ -50,6 +51,9 @@ class CafeSearchViewModelTest {
         /** バイアスあり版 searchText が最後に受け取った LocationBias を記録する。 */
         var lastLocationBias: LocationBias? = null
 
+        /** searchNearby が最後に受け取った radiusMeters を記録する。 */
+        var lastSearchNearbyRadiusMeters: Double? = null
+
         override suspend fun searchText(query: String): List<Cafe> {
             searchTextError?.let { throw it }
             return searchTextResult
@@ -66,6 +70,7 @@ class CafeSearchViewModelTest {
             longitude: Double,
             radiusMeters: Double,
         ): List<Cafe> {
+            lastSearchNearbyRadiusMeters = radiusMeters
             searchNearbyError?.let { throw it }
             return searchNearbyResult
         }
@@ -359,6 +364,83 @@ class CafeSearchViewModelTest {
         )
         try {
             vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701)
+            testScheduler.advanceUntilIdle()
+
+            val state = vm.state.value
+            assertFalse(state.hasSearched)
+            assertFalse(state.isLoading)
+            assertEquals("Location error", state.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tests — onNearbySearchRequested(latitude, longitude, radiusMeters)
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onNearbySearchRequestedWithRadius_success_passesRadiusAndReflectsResults() = runTest {
+        val cafe = makeCafe()
+        val fake = FakeCafeRepository()
+        fake.searchNearbyResult = listOf(cafe)
+
+        val vm = CafeSearchViewModel(
+            cafeRepository = fake,
+            scope = this,
+        )
+        try {
+            vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701, radiusMeters = 1500.0)
+            testScheduler.advanceUntilIdle()
+
+            // radiusMeters がそのまま searchNearby に伝播していること
+            assertEquals(1500.0, fake.lastSearchNearbyRadiusMeters)
+
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertEquals(listOf(cafe), state.results)
+            assertFalse(state.isLoading)
+            assertNull(state.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onNearbySearchRequestedWithRadius_success_withEmptyResults_setsHasSearchedTrue() = runTest {
+        val fake = FakeCafeRepository()
+        fake.searchNearbyResult = emptyList()
+
+        val vm = CafeSearchViewModel(
+            cafeRepository = fake,
+            scope = this,
+        )
+        try {
+            vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701, radiusMeters = 800.0)
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(800.0, fake.lastSearchNearbyRadiusMeters)
+
+            val state = vm.state.value
+            assertTrue(state.hasSearched)
+            assertTrue(state.results.isEmpty())
+            assertFalse(state.isLoading)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onNearbySearchRequestedWithRadius_failure_hasSearchedRemainsfalse() = runTest {
+        val fake = FakeCafeRepository()
+        fake.searchNearbyError = Exception("Location error")
+
+        val vm = CafeSearchViewModel(
+            cafeRepository = fake,
+            scope = this,
+        )
+        try {
+            vm.onNearbySearchRequested(latitude = 35.658, longitude = 139.701, radiusMeters = 2000.0)
             testScheduler.advanceUntilIdle()
 
             val state = vm.state.value

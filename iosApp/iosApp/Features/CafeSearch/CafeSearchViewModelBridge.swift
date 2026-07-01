@@ -83,6 +83,16 @@ final class CafeSearchViewModelBridge {
         kotlin.onNearbySearchRequested(latitude: latitude, longitude: longitude)
     }
 
+    /// 指定エリア（マップ表示範囲）に応じた半径でカフェを検索する。「このエリアを検索」から呼ぶ。
+    ///
+    /// - Parameters:
+    ///   - latitude: 検索中心の緯度（マップの表示範囲の中心）
+    ///   - longitude: 検索中心の経度（マップの表示範囲の中心）
+    ///   - radiusMeters: 検索半径（メートル）。マップの表示範囲から算出して渡す
+    func onNearbySearchRequested(latitude: Double, longitude: Double, radiusMeters: Double) {
+        kotlin.onNearbySearchRequested(latitude: latitude, longitude: longitude, radiusMeters: radiusMeters)
+    }
+
     // MARK: - Private
 
     private func startObservation() {

@@ -766,7 +766,10 @@
 | [x] | `app-store-metadata.md` を CoffeeRecord 主体モデルへ全面改訂（説明文 / スクショ計画 / 審査メモ / プライバシー申告。Sign in with Apple・analyticsConsent・分析タブを反映） | 2026-07-02 / 原稿は引き続き下書き扱い（サブタイトル / カテゴリ / メールアドレス申告要否はユーザー確定が必要）。詳細は同ファイル変更履歴 |
 | [x] | `implementation_note.md`「現在生きてる方針サマリ」を現状（CoffeeRecord / 4 タブ / AppContainer 6 引数 / 12-A〜14 の生きてる方針）に更新 | 2026-07-02 / サマリに「最終棚卸し」日付を導入。経緯は implementation_note 2026-07-02 エントリ |
 
-> 精査で検出した中・低優先の残件（kmp-bridge / coding-conventions / ui-ux-guidelines の Visit 系旧例文、CLAUDE.md・architecture.md の feature 列挙欠け、backlog ID「B-4」と Phase B-4 の名前衝突など）は未着手。必要になったら下の設計判断バックログへ起票する。
+| [x] | `coding-conventions.md` / `kmp-bridge.md` の旧モデル例文を CoffeeRecord 系へ更新（削除済み型の例・`case hadDrip` typo・「追加予定」等の陳腐化記述・runCatching を教える例文の是正を含む） | 2026-07-02 / §1.7 は try/catch + `CancellationException` 再スローのパターンに書き換え（2026-06-24 方針の昇格）。ViewModel 構造例に所有 viewModelScope + `clear()`、Bridge 例に `deinit { kotlin.clear() }` を反映。architecture.md のエラーハンドリング節・状態管理サンプルの runCatching も是正 |
+| [x] | CLAUDE.md / `architecture.md` の feature 列挙に `account` / `analysis` を追加、CLAUDE.md の data-firebase 旧クラス名を現行名に修正 | 2026-07-02 |
+
+> 精査で検出した残りの低優先残件（ui-ux-guidelines の Visit 系旧用語・FAB 等の新 UI パターン未記載、backlog ID「B-4」と Phase B-4 の名前衝突、implementation_note のエントリ形式ゆれ、tasks.md フェーズ 6 の実装済み項目整理など）は未着手。必要になったら下の設計判断バックログへ起票する。
 
 ---
 

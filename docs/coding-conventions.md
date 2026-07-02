@@ -15,24 +15,24 @@
 
 | 対象 | 規則 | 例 |
 |------|------|----|
-| パッケージ | 全小文字 | `com.noricoffee.viewmodel` |
-| クラス / インターフェース / オブジェクト | UpperCamelCase | `VisitRepository`, `BrewMethod` |
-| 関数・プロパティ | lowerCamelCase | `saveVisit()`, `isLoading` |
+| パッケージ | 全小文字 | `com.noricoffee.feature.coffeelist` |
+| クラス / インターフェース / オブジェクト | UpperCamelCase | `CoffeeRepository`, `BrewMethod` |
+| 関数・プロパティ | lowerCamelCase | `saveRecord()`, `isLoading` |
 | 定数（`const val` / `companion`） | UPPER_SNAKE_CASE | `const val MAX_PHOTOS = 10` |
-| ローカル変数 | lowerCamelCase | `val newVisit = ...` |
+| ローカル変数 | lowerCamelCase | `val newRecord = ...` |
 | Enum 値 | UpperCamelCase | `BrewMethod.HandDrip` |
-| ファイル名 | クラス名と一致 | `VisitRepository.kt` |
+| ファイル名 | クラス名と一致 | `CoffeeRepository.kt` |
 
 ### ドメイン固有の命名
 
 | 要素 | 規則 | 例 |
 |------|------|----|
-| ドメインモデル | `data class` 単一型 | `Visit`, `Cafe`, `CoffeeItem`, `FoodItem` |
-| ViewModel | `<画面名>ViewModel` | `VisitListViewModel`, `VisitEditorViewModel` |
-| UIState | ViewModel 内のネスト型 | `VisitListViewModel.UIState` |
-| Repository | `<エンティティ>Repository`（IF） + `Impl` 接尾辞（実装） | `VisitRepository` / `VisitRepositoryImpl` |
-| UseCase | `<動詞 + 目的語>UseCase` | `SaveVisitUseCase`, `SearchCafesUseCase` |
-| Remote クライアント | `<サービス>Client` | `PlacesClient`, `FirestoreClient` |
+| ドメインモデル | `data class` 単一型 | `CoffeeRecord`, `Cafe`, `Photo`, `BeanProfile` |
+| ViewModel | `<画面名>ViewModel` | `CoffeeListViewModel`, `CoffeeEditorViewModel` |
+| UIState | ViewModel 内のネスト型 | `CoffeeListViewModel.UIState` |
+| Repository | `<エンティティ>Repository`（IF） + `Impl` 接尾辞（実装） | `CoffeeRepository` / `CoffeeRepositoryImpl` |
+| UseCase | `<動詞 + 目的語>UseCase` | `BuildCoffeeStatsUseCase`, `ObserveVisitedCafesUseCase` |
+| Remote クライアント | `<サービス>Client` | `PlacesClient` |
 
 ---
 
@@ -41,40 +41,49 @@
 ### 1 ファイル = 1 公開型を基本とする
 
 ```kotlin
-// Good — VisitRepository.kt
-interface VisitRepository { ... }
-class VisitRepositoryImpl(...) : VisitRepository { ... }
+// Good — CoffeeRepository.kt
+interface CoffeeRepository { ... }
+class CoffeeRepositoryImpl(...) : CoffeeRepository { ... }
 
 // Bad — Models.kt に複数のドメインモデルを詰め込む
-data class Visit(...)
+data class CoffeeRecord(...)
 data class Cafe(...)
-data class CoffeeItem(...)
+data class Photo(...)
 ```
 
 ### ViewModel ファイルの構造
 
 ```kotlin
-class VisitListViewModel(
-    private val visitRepository: VisitRepository,
-    private val scope: CoroutineScope,
+class CoffeeListViewModel(
+    private val coffeeRepository: CoffeeRepository,
+    scope: CoroutineScope,
 ) {
-    // 1. UIState（ネスト型）
+    // 1. 所有スコープ（注入 scope の Job を親にした SupervisorJob 子スコープ。
+    //    launch はすべてこちらで行い、Bridge の deinit から clear() で畳む）
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
+
+    // 2. UIState（ネスト型）
     data class UIState(
-        val visits: List<Visit> = emptyList(),
+        val records: List<CoffeeRecord> = emptyList(),
         val isLoading: Boolean = false,
         val error: String? = null,
     )
 
-    // 2. State の公開
+    // 3. State の公開
     private val _state = MutableStateFlow(UIState())
     val state: StateFlow<UIState> = _state.asStateFlow()
 
-    // 3. ユーザーアクションハンドラ（on○○ 形式）
+    // 4. ユーザーアクションハンドラ（on○○ 形式）
     fun onAppear() { ... }
     fun onRefreshTriggered() { ... }
-    fun onVisitDeleted(id: String) { ... }
+    fun onRecordDeleted(id: String) { ... }
 
-    // 4. 内部ヘルパ（private）
+    // 5. ライフサイクル
+    fun clear() { viewModelScope.cancel() }
+
+    // 6. 内部ヘルパ（private）
     private fun reload() { ... }
 }
 ```
@@ -89,18 +98,17 @@ class VisitListViewModel(
 - 各モデルファイルはドメインロジックを持たない純粋なデータ構造とする（バリデーション等はファクトリ関数か Repository 側に置く）
 
 ```kotlin
-// Good
-data class CoffeeItem(
+// Good（抜粋。全フィールドは data-model.md §1.1 を真とする）
+data class CoffeeRecord(
     val id: String,
+    val cafe: Cafe?,               // null = セルフ抽出
+    val visitedOn: LocalDate,
+    val rating: Double,            // 0.5 刻み。0.0 = 未評価 sentinel
     val name: String,
     val brewMethod: BrewMethod,
-    val origin: String?,
-    val variety: String?,
-    val processing: ProcessingMethod?,
     val roastLevel: RoastLevel?,
-    val cup: String?,
-    val rating: Int,
-    val notes: String?,
+    val tasting: TastingScores?,   // all-or-nothing
+    val tags: List<String>,
 )
 
 enum class BrewMethod {
@@ -119,8 +127,8 @@ enum class BrewMethod {
 
 ```kotlin
 // Good
-fun List<Visit>.recent(limit: Int = 20): List<Visit> =
-    sortedByDescending { it.visitedAt }.take(limit)
+fun List<CoffeeRecord>.recent(limit: Int = 20): List<CoffeeRecord> =
+    sortedByDescending { it.visitedOn }.take(limit)
 ```
 
 ---
@@ -153,6 +161,7 @@ fun label(status: SyncStatus): String = when (status) {
 - `kotlinx.coroutines` を使う。`Thread` を直接使わない
 - `suspend` 関数は **呼び出し元の Dispatcher を尊重** する（関数内で `withContext` を使ってブロッキング処理を逃がす）
 - `Flow` は冷たいまま公開し、`StateFlow` / `SharedFlow` は ViewModel 内でのみ生成する
+- ViewModel は注入された scope を直接使わず、**所有 `viewModelScope`（注入 scope の Job を親にした SupervisorJob 子スコープ）で `launch` し、`clear()` で畳む**（§1.2 の構造例参照。iOS Bridge の `deinit` から呼ぶ。経緯は `implementation_note.md` 2026-06-24）
 - グローバルな `GlobalScope` は禁止
 
 ```kotlin
@@ -167,21 +176,31 @@ suspend fun fetchCafes(query: String): List<Cafe> = withContext(Dispatchers.Defa
 ## 1.7 例外とエラー
 
 - Repository は `Result<T>` を返さず、**例外を投げる**
-- ViewModel が `runCatching {}` で受け、`UIState.error` に詰める
+- ViewModel が try / catch で受け、`UIState.error` に詰める
+- **コルーチン内で `runCatching {}` は使わない**（2026-06-24 確定）。`CancellationException` まで握りつぶし、画面破棄・サインアウト等の協調キャンセルがエラー扱いになるため。`CancellationException` を先行 catch でフラグをリセットして**再スロー**し、`Exception` でユーザー向けエラーを表示する
 - カスタム例外は意味のある単位でのみ定義する（過剰に増やさない）
 
 ```kotlin
-// Good
-suspend fun save(visit: Visit) {
-    db.visitQueries.insert(visit.toRow())
-    firestore.collection("visits").document(visit.id).set(visit)
+// Good — 呼び出し側（ViewModel）
+fun onSaveTapped() {
+    viewModelScope.launch {
+        _state.update { it.copy(isSaving = true) }
+        try {
+            coffeeRepository.save(currentRecord)
+            _state.update { it.copy(isSaving = false, saved = true) }
+        } catch (e: CancellationException) {
+            _state.update { it.copy(isSaving = false) }
+            throw e   // 協調キャンセルを遮断しない
+        } catch (e: Exception) {
+            _state.update { it.copy(isSaving = false, error = e.message) }
+        }
+    }
 }
 
-// 呼び出し側（ViewModel）
+// Bad — CancellationException も握りつぶす
 fun onSaveTapped() {
-    scope.launch {
-        runCatching { visitRepository.save(currentVisit) }
-            .onSuccess { _state.update { it.copy(saved = true) } }
+    viewModelScope.launch {
+        runCatching { coffeeRepository.save(currentRecord) }
             .onFailure { e -> _state.update { it.copy(error = e.message) } }
     }
 }
@@ -215,17 +234,19 @@ fun onSaveTapped() {
 
 ```kotlin
 @Test
-fun saves_visit_locally_and_remotely() = runTest {
-    val fakeDb = FakeVisitDao()
-    val fakeRemote = FakeFirestore()
-    val repo = VisitRepositoryImpl(fakeDb, fakeRemote)
+fun saves_record_locally_and_remotely() = runTest {
+    val fakeLocal = FakeCoffeeRepository()
+    val fakeRemote = FakeRemoteCoffeeDataSource()
+    val repo = CoffeeRepositoryImpl(fakeLocal, fakeRemote)
 
-    repo.save(sampleVisit)
+    repo.save(sampleRecord)
 
-    assertEquals(listOf(sampleVisit), fakeDb.all())
-    assertEquals(sampleVisit, fakeRemote.get("visits", sampleVisit.id))
+    assertEquals(listOf(sampleRecord), fakeLocal.all())
+    assertEquals(sampleRecord, fakeRemote.uploaded.single())
 }
 ```
+
+> 所有 `viewModelScope` を持つ ViewModel を `runTest` でテストする場合は、テスト末尾（`finally`）で `vm.clear()` を呼ぶこと（`TestScope` の子として生き残り `UncompletedCoroutinesError` になるため。`tasks/lessons.md` 参照）。
 
 ---
 
@@ -253,18 +274,18 @@ data["brewMethod"] = item.brewMethod.name
 
 | 対象 | 規則 | 例 |
 |------|------|----|
-| 型 | UpperCamelCase | `VisitListView`, `VisitListViewModelBridge` |
-| 関数・プロパティ・変数 | lowerCamelCase | `fetchVisits()`, `isLoading` |
+| 型 | UpperCamelCase | `CoffeeListView`, `CoffeeListViewModelBridge` |
+| 関数・プロパティ・変数 | lowerCamelCase | `fetchRecords()`, `isLoading` |
 | 定数 | lowerCamelCase | `let maxPhotos = 10` |
-| Enum case | lowerCamelCase | `case hadDrip` |
+| Enum case | lowerCamelCase | `case handDrip` |
 
 ### CoffeeVision 固有の命名
 
 | 要素 | 規則 | 例 |
 |------|------|----|
-| SwiftUI View | `<画面名>View` | `VisitListView`, `VisitEditorView` |
-| ViewModel ブリッジ | `<画面名>ViewModelBridge` | `VisitListViewModelBridge` |
-| Kotlin 型の Swift 側エイリアス | 元の名前を尊重 | `SharedLogic.Visit` |
+| SwiftUI View | `<画面名>View` | `CoffeeListView`, `CoffeeEditorView` |
+| ViewModel ブリッジ | `<画面名>ViewModelBridge` | `CoffeeListViewModelBridge` |
+| Kotlin 型の Swift 側エイリアス | 元の名前を尊重 | `SharedLogic.CoffeeRecord` |
 
 ---
 
@@ -276,18 +297,18 @@ data["brewMethod"] = item.brewMethod.name
 iosApp/iosApp/
 ├── App/
 │   ├── iOSApp.swift                 // @main・Firebase 初期化
-│   └── AppContainer.swift           // shared/core の AppContainer をラップ
+│   └── AppState.swift               // bootstrap・AppContainer 構築・タブ常駐 Bridge 保持
 ├── Features/
-│   ├── VisitList/
-│   │   ├── VisitListView.swift
-│   │   └── VisitListViewModelBridge.swift
-│   ├── VisitEditor/
-│   │   ├── VisitEditorView.swift
-│   │   └── VisitEditorViewModelBridge.swift
+│   ├── CoffeeList/
+│   │   ├── CoffeeListView.swift
+│   │   └── CoffeeListViewModelBridge.swift
+│   ├── CoffeeEditor/
+│   │   ├── CoffeeEditorView.swift
+│   │   └── CoffeeEditorViewModelBridge.swift
 │   └── ...
 ├── Components/                      // 2 画面以上で共用する汎用 View（StarRatingView 等）
 ├── FirebaseRepositories/            // shared/domain の Repository インターフェースを Swift で実装
-│   ├── VisitRepositoryIosImpl.swift
+│   ├── RemoteCoffeeDataSourceIosImpl.swift
 │   └── AuthRepositoryIosImpl.swift
 ├── Bridge/                          // Flow / suspend / sealed を Swift から扱うヘルパ
 └── Extensions/
@@ -302,12 +323,12 @@ iosApp/iosApp/
 ### View ファイルの構造
 
 ```swift
-struct VisitListView: View {
+struct CoffeeListView: View {
 
     // 1. ViewModel
-    @State private var viewModel: VisitListViewModelBridge
+    @State private var viewModel: CoffeeListViewModelBridge
 
-    init(viewModel: VisitListViewModelBridge) {
+    init(viewModel: CoffeeListViewModelBridge) {
         self._viewModel = State(initialValue: viewModel)
     }
 
@@ -331,13 +352,13 @@ struct VisitListView: View {
 ```swift
 // Good
 Button("追加") {
-    viewModel.onAddVisitTapped()
+    viewModel.onAddRecordTapped()
 }
 
 // Bad
 Button("追加") {
-    if viewModel.state.visits.count < 100 {
-        viewModel.onAddVisitTapped()
+    if viewModel.records.count < 100 {
+        viewModel.onAddRecordTapped()
     }
 }
 ```
@@ -346,7 +367,7 @@ Button("追加") {
 
 ```swift
 #Preview {
-    VisitListView(viewModel: .preview)
+    CoffeeListView(viewModel: .preview)
 }
 ```
 
@@ -373,9 +394,9 @@ Button("追加") {
 ```swift
 @MainActor
 @Observable
-final class VisitListViewModelBridge { ... }
+final class CoffeeListViewModelBridge { ... }
 
-VisitListView(...)
+CoffeeListView(...)
     .task { await viewModel.onAppear() }
 ```
 
@@ -397,7 +418,7 @@ Kotlin 側と同じ方針。**WHY** のみ書き、WHAT は書かない。
 
 ## 3.2 コミットメッセージ
 
-- 1 行目: 50 文字以内の要約。`動詞 + 目的語` 形式（例: `Add VisitRepository skeleton`）
+- 1 行目: 50 文字以内の要約。`動詞 + 目的語` 形式（例: `Add CoffeeRepository skeleton`）
 - 本文があれば 1 行空けて 72 文字で折り返し
 - 言語は **英語または日本語のいずれかに統一**（混在しない）
 

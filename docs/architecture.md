@@ -52,7 +52,7 @@ coffeevision/
 │   └── feature/
 │       └── <feature-name>/               # [com.noricoffee.feature.<name>] 1 画面 = 1 モジュール（<Name>ViewModel + UIState）
 │                                         #   画面追加ごとに増える。正確な一覧は settings.gradle.kts を真とする
-│                                         #   現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail
+│                                         #   現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail / account / analysis
 │
 ├── sharedUI/                             # Compose Multiplatform（Android 検証用、feature/coffee-list を 1 画面表示）
 ├── iosApp/
@@ -289,7 +289,7 @@ Android ターゲットを **「常にビルドが通り、共通 ViewModel を�
 | レイヤー | 役割 | 配置 |
 |---------|------|------|
 | Presentation | 描画・入力。SwiftUI / Compose | `iosApp/` / `androidApp/` |
-| ViewModel | UI 状態の保持と更新、ユーザーアクションのハンドリング | `shared/feature/*`（coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail に配置済） |
+| ViewModel | UI 状態の保持と更新、ユーザーアクションのハンドリング | `shared/feature/*`（coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail / account / analysis に配置済） |
 | UseCase | 複数 Repository をまたぐ手続き（薄ければ省略可） | `shared/domain/usecase/` |
 | Repository | データソースの集約。UI に対しては単一のインターフェースを提供 | インターフェース: `shared/domain/repository/` / 合成実装: `shared/core/repository/` |
 | Local | SQLDelight。検索・オフライン参照を高速化する用途 | `shared/data-local/` |
@@ -342,8 +342,13 @@ class VisitListViewModel(
     fun onVisitDeleted(id: String) {
         val userId = currentUserId ?: return   // onAppear 前の削除は uid 未確定として黙殺
         scope.launch {
-            runCatching { visitRepository.delete(userId, id) }
-                .onFailure { e -> _state.update { it.copy(error = e.message) } }
+            try {
+                visitRepository.delete(userId, id)
+            } catch (e: CancellationException) {
+                throw e   // 協調キャンセルを遮断しない（coding-conventions.md §1.7）
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message) }
+            }
         }
     }
 }
@@ -521,7 +526,7 @@ class AppContainer(
 ## エラーハンドリング
 
 - Repository は `Result<T>` を返さず、**例外を投げる**（Kotlin らしい流儀）
-- ViewModel が `runCatching {}` で受け、`UIState.error` に詰めて View に通知する
+- ViewModel が try / catch で受け、`UIState.error` に詰めて View に通知する。**コルーチン内で `runCatching {}` は使わない**（`CancellationException` を握りつぶすため。`CancellationException` は先行 catch で再スローする。詳細は [`coding-conventions.md`](./coding-conventions.md) §1.7）
 - 致命的でないネットワーク失敗（Firestore 同期）は SDK のリトライに任せ、UI に出さない
 
 ---

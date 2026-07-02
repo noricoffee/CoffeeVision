@@ -3,7 +3,7 @@
 ## 概要
 
 CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
-`shared/*` モジュール群（`shared/core` / `shared/domain` / `shared/data-local` / `shared/data-firebase` / `shared/framework`、Phase 3 以降で `shared/feature/*` / `shared/data-places` を追加予定）を iOS 側から扱う際の相互運用ルール・回避策・お作法をまとめます。
+`shared/*` モジュール群（基盤層 `core` / `domain` / `data-local` / `data-places` / `data-firebase` + `feature/*` + `framework`。正確な一覧は `settings.gradle.kts` を真とする）を iOS 側から扱う際の相互運用ルール・回避策・お作法をまとめます。
 
 対象: `iosApp/iosApp/Bridge/` を実装する人、Kotlin → Swift で型が崩れたときのトラブルシュート時
 
@@ -54,8 +54,8 @@ plugins {
 
 | Kotlin | Swift（SKIE 適用後・呼び出し側） |
 |--------|---------------------|
-| `suspend fun save(visit: Visit)` | `func save(visit: Visit) async throws` |
-| `fun observe(): Flow<List<Visit>>` | `SkieSwiftFlow<List<Visit>>`（`AsyncSequence` 準拠）→ `for await x in flow` |
+| `suspend fun save(record: CoffeeRecord)` | `func save(record: CoffeeRecord) async throws` |
+| `fun observe(): Flow<List<CoffeeRecord>>` | `SkieSwiftFlow<List<CoffeeRecord>>`（`AsyncSequence` 準拠）→ `for await x in flow` |
 | `sealed class Result { object Loading; data class Success(...) }` | `enum Result { case loading; case success(...) }`（Swift の `switch` で網羅性チェックが効く） |
 | `enum class BrewMethod { HandDrip, FullCity, ... }` | `@frozen enum BrewMethod: Hashable, CaseIterable { case handDrip, fullCity, ... }` — case 名は **camelCase 変換**。全列挙は `.allCases`（CaseIterable）、Obj-C ヘッダの `.entries` は Swift 側からは使わない。`.name` プロパティで Kotlin 側の元名（`"HandDrip"`）を取得可能 |
 
@@ -85,7 +85,7 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 | Kotlin interface 定義 | Swift 側で「実装する」ときのシグネチャ |
 |----------------------|------------------------------|
 | `suspend fun signInAnonymouslyIfNeeded(): String` | `func signInAnonymouslyIfNeeded(completionHandler: @escaping (String?, Error?) -> Void)` |
-| `suspend fun upload(visit: Visit)` | `func upload(visit: Visit, completionHandler: @escaping (Error?) -> Void)` |
+| `suspend fun upload(record: CoffeeRecord)` | `func upload(record: CoffeeRecord, completionHandler: @escaping (Error?) -> Void)` |
 | `suspend fun answer(question: String, stats: CoffeeStats): String` | `func answer(question:stats:completionHandler:)`（実装側は `__answer(...)`、completion は `(String?, Error?)`） |
 | `fun observeUserId(): Flow<String?>` | `func observeUserId() -> any Kotlinx_coroutines_coreFlow`（Kotlin Flow を返す。Swift の `AsyncStream` を直接返せない） |
 
@@ -120,18 +120,24 @@ import SharedLogic
 
 @MainActor
 @Observable
-final class VisitListViewModelBridge {
+final class CoffeeListViewModelBridge {
 
-    private let kotlin: VisitListViewModel
+    private let kotlin: CoffeeListViewModel
     private var observationTask: Task<Void, Never>?
 
     // SwiftUI が観測するプロパティ
-    private(set) var visits: [Visit] = []
+    private(set) var records: [CoffeeRecord] = []
     private(set) var isLoading: Bool = false
     private(set) var error: String?
 
-    init(kotlin: VisitListViewModel) {
+    init(kotlin: CoffeeListViewModel) {
         self.kotlin = kotlin
+    }
+
+    deinit {
+        // Kotlin 側の所有 viewModelScope を畳む（スレッドセーフ。
+        // 遷移アニメ中にも発火する onDisappear ではなく必ず deinit で呼ぶ）
+        kotlin.clear()
     }
 
     func onAppear() {
@@ -145,39 +151,36 @@ final class VisitListViewModelBridge {
         }
     }
 
-    func onDisappear() {
-        observationTask?.cancel()
-        observationTask = nil
+    func onRecordDeleted(id: String) {
+        kotlin.onRecordDeleted(id: id)
     }
 
-    func onVisitDeleted(id: String) {
-        kotlin.onVisitDeleted(id: id)
-    }
-
-    private func apply(_ state: VisitListViewModel.UIState) {
-        self.visits = state.visits as? [Visit] ?? []
+    private func apply(_ state: CoffeeListViewModel.UIState) {
+        self.records = state.records
         self.isLoading = state.isLoading
         self.error = state.error
     }
 }
 ```
 
+> **observation の停止タイミングに注意**: タブ常駐画面の View で `.onDisappear { observationTask?.cancel() }` をすると、タブ往復や push → 戻る で observation が止まったまま再開されないバグになる（2026-06-25 の実例）。observation は Bridge の `deinit`（= View 破棄）まで生かすのが基本。
+
 ### View 側の使い方
 
 ```swift
-struct VisitListView: View {
-    @State var viewModel: VisitListViewModelBridge
+struct CoffeeListView: View {
+    @State var viewModel: CoffeeListViewModelBridge
 
     var body: some View {
-        List(viewModel.visits, id: \.id) { visit in
-            VisitRow(visit: visit)
+        List(viewModel.records, id: \.id) { record in
+            CoffeeRecordRow(record: record)
         }
         .overlay {
             if viewModel.isLoading { ProgressView() }
         }
         .alert("エラー", isPresented: .init(
             get: { viewModel.error != nil },
-            set: { _ in viewModel.error = nil }
+            set: { _ in viewModel.onErrorDismissed() }
         )) {
             Button("OK") {}
         } message: {
@@ -186,7 +189,6 @@ struct VisitListView: View {
         .task {
             viewModel.onAppear()
         }
-        .onDisappear { viewModel.onDisappear() }
     }
 }
 ```
@@ -199,19 +201,16 @@ Kotlin の ViewModel は `CoroutineScope` を外部から受け取る設計（[`
 iOS では `MainScope()` を Kotlin 側で生成して渡すか、`AppContainer` 内で隠蔽します。
 
 ```kotlin
-// shared/core/commonMain
-class AppContainer(...) {
-    private val scope = MainScope()  // SupervisorJob + Dispatchers.Main
-
-    fun makeVisitListViewModel() = VisitListViewModel(visitRepository, scope)
-}
+// shared/framework/AppContainerViewModelFactory.kt（拡張関数。core → feature の循環依存回避）
+fun AppContainer.makeCoffeeListViewModel(userId: String) =
+    CoffeeListViewModel(coffeeRepository, userId, scope)
 ```
 
-Swift 側はこの `AppContainer` のファクトリメソッドを呼ぶだけで、`CoroutineScope` を意識しないで済みます。
+Swift 側はこの `AppContainer` のファクトリ拡張関数を呼ぶだけで、`CoroutineScope` を意識しないで済みます（各 ViewModel は渡された scope を親に所有 `viewModelScope` を内部生成する）。
 
 ```swift
-let viewModel = appContainer.makeVisitListViewModel()
-let bridge = VisitListViewModelBridge(kotlin: viewModel)
+let viewModel = appContainer.makeCoffeeListViewModel(userId: userId)
+let bridge = CoffeeListViewModelBridge(kotlin: viewModel)
 ```
 
 ---
@@ -288,7 +287,7 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 import SharedLogic
 
 let container = AppContainer(...)
-let bridge = VisitListViewModelBridge(kotlin: container.makeVisitListViewModel())
+let bridge = CoffeeListViewModelBridge(kotlin: container.makeCoffeeListViewModel(userId: userId))
 ```
 
 ### 補足: `data-firebase` も `export` 対象に含める
@@ -316,41 +315,41 @@ GitLive 製の Kotlin Multiplatform Firebase SDK（`dev.gitlive.firebase.*`）�
 ### 設計パターン
 
 ```
-shared/domain/src/commonMain/kotlin/com/noricoffee/domain/repository/
-    VisitRepository.kt            ← interface のみ
-    AuthRepository.kt             ← interface のみ
+shared/domain/src/commonMain/kotlin/com/noricoffee/repository/
+    CoffeeRepository.kt                  ← interface のみ（RemoteCoffeeDataSource も同居）
+    AuthRepository.kt                    ← interface のみ
 
-shared/data-firebase/src/androidMain/kotlin/com/noricoffee/data/firebase/
-    VisitRepositoryAndroidImpl.kt ← firebase-firestore-ktx を使う
-    AuthRepositoryAndroidImpl.kt  ← firebase-auth-ktx を使う
+shared/data-firebase/src/androidMain/kotlin/com/noricoffee/repository/
+    RemoteCoffeeDataSourceAndroidImpl.kt ← firebase-firestore-ktx を使う
+    AuthRepositoryAndroidImpl.kt         ← firebase-auth-ktx を使う
 
 iosApp/iosApp/FirebaseRepositories/
-    VisitRepositoryIosImpl.swift  ← FirebaseFirestore (Swift) を使う
-    AuthRepositoryIosImpl.swift   ← FirebaseAuth を使う
+    RemoteCoffeeDataSourceIosImpl.swift  ← FirebaseFirestore (Swift) を使う
+    AuthRepositoryIosImpl.swift          ← FirebaseAuth を使う
 ```
 
-> Phase 2.5（2026-06-08 完了）で `shared/domain` と `shared/data-firebase` に分離済。`shared/data-firebase/androidMain` の Firebase Android 実装本格移送は Phase 3 以降に予定（[`tasks.md`](./tasks.md) 参照）。
+> Phase 2.5（2026-06-08）で `shared/domain` と `shared/data-firebase` に分離、2026-06-11 に Android Firebase 実装を `shared/data-firebase/androidMain` へ移送完了。
 
 ### Repository 合成パターン
 
-`VisitRepository` は `commonMain` で **2 段構成** にします：
+`CoffeeRepository` は `commonMain` で **2 段構成** にします：
 
-1. `RemoteVisitDataSource`（interface, `commonMain`） — Firestore リスナを `Flow` で公開し、`upload(visit)` / `remove(userId, id)` を持つ薄いアダプタ
-2. `VisitRepositoryImpl`（class, `commonMain`） — `LocalVisitRepository`（SQLDelight）と `RemoteVisitDataSource` を合成し、UI には `VisitRepository` 1 本だけを見せる
+1. `RemoteCoffeeDataSource`（interface, `commonMain`） — Firestore リスナを `Flow` で公開し、`upload(record)` / `remove(userId, id)` を持つ薄いアダプタ
+2. `CoffeeRepositoryImpl`（class, `shared/core`） — `LocalCoffeeRepository`（SQLDelight）と `RemoteCoffeeDataSource` を合成し、UI には `CoffeeRepository` 1 本だけを見せる
 
-各プラットフォームが書くのは `RemoteVisitDataSource` の実装のみ。合成ロジック（ローカル → リモートの書き込み順序、`startSync(userId, scope)` でリモート変更をローカル DB へ反映）は共通層で 1 度だけ書きます。
+各プラットフォームが書くのは `RemoteCoffeeDataSource` の実装のみ。合成ロジック（ローカル → リモートの書き込み順序、`startSync(userId, scope)` でリモート変更をローカル DB へ反映）は共通層で 1 度だけ書きます。
 
 ```
 iOS Swift / Android Kotlin
-    │  RemoteVisitDataSource を実装（Firestore SDK 直叩き）
+    │  RemoteCoffeeDataSource を実装（Firestore SDK 直叩き）
     ▼
-RemoteVisitDataSource (commonMain interface)
+RemoteCoffeeDataSource (commonMain interface)
     │
-    ├─ VisitRepositoryImpl.save()  : ローカル → リモートの順で書く
-    └─ VisitRepositoryImpl.startSync(): リモート変更を購読してローカル DB に upsert
+    ├─ CoffeeRepositoryImpl.save()  : ローカル → リモートの順で書く
+    └─ CoffeeRepositoryImpl.startSync(): リモート変更を購読してローカル DB に upsert
             │
             ▼
-    VisitRepository (UI から見える唯一の API)
+    CoffeeRepository (UI から見える唯一の API)
 ```
 
 書き込み時のリモート失敗扱いは `WritePolicy.PropagateRemoteFailure`（既定）と `WritePolicy.IgnoreRemoteFailure` で切り替え可能。後者は Firestore のオフライン永続化による再送に委ねる選択肢です。
@@ -361,30 +360,29 @@ iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kot
 `AppContainer` 構築時に、Swift 側で作った Repository 実装を Kotlin の `AppContainer` コンストラクタに渡します。
 
 ```swift
-// iosApp 起動時
-let visitRepo = VisitRepositoryIosImpl()      // Swift 実装
-let authRepo  = AuthRepositoryIosImpl()       // Swift 実装
-
+// iosApp 起動時（AppState）。coffeeInsightProvider を注入する 6 引数セカンダリコンストラクタ
 let container = AppContainer(
-    sqlDriver: makeIosSqlDriver(),
-    placesApiKey: Config.placesApiKey,
-    visitRepository: visitRepo,
-    authRepository: authRepo
+    sqlDriver: DatabaseDriverFactory().create(),
+    remoteCoffeeDataSource: RemoteCoffeeDataSourceIosImpl(),   // Swift 実装
+    authRepository: AuthRepositoryIosImpl(),                   // Swift 実装
+    placesApiKey: placesApiKey,
+    coffeeInsightProvider: CoffeeInsightProviderIosImpl.makeIfAvailable(),  // 非対応端末は nil
+    beanProfileRepository: BeanProfileRepositoryIosImpl()      // Swift 実装
 )
 ```
 
 ```kotlin
-// Android（Application#onCreate など）
-val visitRepo = VisitRepositoryAndroidImpl(/* Firestore.getInstance() などを内部で参照 */)
-val authRepo = AuthRepositoryAndroidImpl()
-
+// Android（Application#onCreate など）。coffeeInsightProvider なしの 5 引数セカンダリコンストラクタ
 val container = AppContainer(
-    sqlDriver = makeAndroidSqlDriver(this),
+    sqlDriver = DatabaseDriverFactory(this).create(),
+    remoteCoffeeDataSource = RemoteCoffeeDataSourceAndroidImpl(),
+    authRepository = AuthRepositoryAndroidImpl(),
     placesApiKey = BuildConfig.PLACES_API_KEY,
-    visitRepository = visitRepo,
-    authRepository = authRepo,
+    beanProfileRepository = BeanProfileRepositoryAndroidImpl(),
 )
 ```
+
+> 引数の正確なシグネチャは `shared/core/.../AppContainer.kt` を真とする（scope 引数ありのプライマリはテスト専用）。
 
 ### なぜ `expect`/`actual` ではなく interface + DI なのか
 
@@ -431,14 +429,14 @@ Swift 側でも `catch let e as SharedLogic.CafeNotFoundException` の形で受�
 
 ## Collection（`List`/`Map`）の扱い
 
-Kotlin の `List<Visit>` は Swift 側で `NSArray`（または SKIE 環境では `[Visit]`）として現れます。
+Kotlin の `List<CoffeeRecord>` は Swift 側で `NSArray`（または SKIE 環境では `[CoffeeRecord]`）として現れます。
 
 ```swift
 // SKIE なし
-let visits: [Visit] = (state.visits as? [Visit]) ?? []
+let records: [CoffeeRecord] = (state.records as? [CoffeeRecord]) ?? []
 
-// SKIE あり（型がそのまま [Visit] になる）
-let visits = state.visits
+// SKIE あり（型がそのまま [CoffeeRecord] になる。as? キャストを書くと "always succeeds" 警告）
+let records = state.records
 ```
 
 `Map<String, Cafe>` も同様に `NSDictionary` → `[String: Cafe]` のキャストが必要になることがあります。
@@ -451,9 +449,8 @@ Kotlin の `data class` は `id` プロパティを持っていても、Swift �
 Swift 側の Extension で準拠させます。
 
 ```swift
-extension Visit: Identifiable {}  // id プロパティが Hashable ならこれだけで OK
-extension CoffeeItem: Identifiable {}
-extension FoodItem: Identifiable {}
+extension CoffeeRecord: Identifiable {}  // id プロパティが Hashable ならこれだけで OK
+extension Photo_: Identifiable {}        // SQLDelight 生成行型と同名衝突するため Swift 側では Photo_
 ```
 
 ---
@@ -515,9 +512,9 @@ Kotlin/Native の生 SDK では `suspend` 関数は **completion handler** 形�
 Swift 側で `withCheckedThrowingContinuation` を使ってラップします。
 
 ```swift
-func save(_ visit: Visit) async throws {
+func save(_ record: CoffeeRecord) async throws {
     try await withCheckedThrowingContinuation { cont in
-        viewModel.save(visit: visit) { error in
+        viewModel.save(record: record) { error in
             if let error { cont.resume(throwing: error) }
             else { cont.resume() }
         }
@@ -539,7 +536,7 @@ func save(_ visit: Visit) async throws {
 ### Swift 側
 
 - [ ] ViewModel ブリッジに `@MainActor` を付けたか
-- [ ] `Task` を `onDisappear` でキャンセルしているか
+- [ ] Bridge の `deinit` で `kotlin.clear()` を呼んでいるか（observation を `onDisappear` で止めていないか）
 - [ ] Kotlin の `List` を Swift の `[T]` にキャストしたか
 - [ ] エラーは `NSError` または SKIE 経由の型で適切に分岐しているか
 

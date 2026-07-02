@@ -157,8 +157,8 @@ Phase 2.5 で基盤レイヤーを分割し、Phase 3 / 3.5 / 4 で `feature/*` 
 | `shared/domain/` | `com.noricoffee.domain` | ドメインモデル（`CoffeeRecord` 主体）+ enum + Repository インターフェース + UseCase + `VisitedCafe` |
 | `shared/data-local/` | `com.noricoffee.dataLocal` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalCoffeeRepository` |
 | `shared/data-places/` | `com.noricoffee.dataPlaces` | Ktor + Google Places API クライアント（`PlacesClient` / `CafeRepositoryImpl`） |
-| `shared/data-firebase/` | `com.noricoffee.dataFirebase` | Android Firebase 実装（`AuthRepositoryAndroidImpl` / `RemoteVisitDataSourceAndroidImpl` / `VisitFirestoreMapper`）。iOS 実装は iosApp 側 Swift |
-| `shared/feature/<name>/` | `com.noricoffee.feature.<name>` | **1 画面 = 1 モジュール**（`<Name>ViewModel` + UIState）。画面追加ごとに増える。現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail |
+| `shared/data-firebase/` | `com.noricoffee.dataFirebase` | Android Firebase 実装（`AuthRepositoryAndroidImpl` / `RemoteCoffeeDataSourceAndroidImpl` / `CoffeeFirestoreMapper` / `BeanProfileRepositoryAndroidImpl`）。iOS 実装は iosApp 側 Swift |
+| `shared/feature/<name>/` | `com.noricoffee.feature.<name>` | **1 画面 = 1 モジュール**（`<Name>ViewModel` + UIState）。画面追加ごとに増える。現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail / account / analysis |
 | `shared/framework/` | `com.noricoffee.framework` | iOS 向け Umbrella（`SharedLogic.xcframework` を出力、SKIE 適用先）+ `AppContainer` の ViewModel ファクトリ拡張関数 |
 | `sharedUI/` | - | Compose Multiplatform（Android 検証用、`feature/coffee-list` を 1 画面表示） |
 | `iosApp/` | - | SwiftUI エントリポイント + Swift Firebase 実装 |
@@ -178,7 +178,7 @@ Phase 2.5 で基盤レイヤーを分割し、Phase 3 / 3.5 / 4 で `feature/*` 
 | コーディング規約 | Kotlin / Swift 双方の命名・実装ルール | [`docs/coding-conventions.md`](./docs/coding-conventions.md) |
 | UI/UX ガイドライン | SwiftUI（iOS）の HIG ベース UI 設計方針 | [`docs/ui-ux-guidelines.md`](./docs/ui-ux-guidelines.md) |
 | 要件定義 | 機能一覧・画面一覧・非機能要件 | [`docs/requirements.md`](./docs/requirements.md) |
-| データモデル | Visit / CoffeeItem / FoodItem の Kotlin / SQLDelight / Firestore 表現 | [`docs/data-model.md`](./docs/data-model.md) |
+| データモデル | CoffeeRecord / Cafe / Photo / BeanProfile の Kotlin / SQLDelight / Firestore 表現 | [`docs/data-model.md`](./docs/data-model.md) |
 | KMP ブリッジ | Swift ⇄ Kotlin 相互運用ルール、`expect`/`actual`、Flow / suspend の扱い | [`docs/kmp-bridge.md`](./docs/kmp-bridge.md) |
 | 実装ノート | 要件未満の実装上の決定・影響・トレードオフ・経緯の時系列ログ（親のみ更新） | [`docs/implementation_note.md`](./docs/implementation_note.md) |
 | タスク一覧 | フェーズ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |

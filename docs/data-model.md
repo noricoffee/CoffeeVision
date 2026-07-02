@@ -54,6 +54,7 @@ data class CoffeeRecord(
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
     val tasting: TastingScores?,          // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須
+    val tags: List<String> = emptyList(), // ユーザー定義タグ（例: "ラテアート" "浅煎り"）。フェーズ 10-D 追加
     // --- メタ ---
     val createdAt: Instant,
     val updatedAt: Instant,
@@ -93,10 +94,18 @@ data class Cafe(
     val photoReferences: List<String>,    // Places の photo_reference
     val websiteUrl: String?,
     val mapsUrl: String?,
+    // --- Places API 取得時のみ利用する表示用フィールド（フェーズ 10-B 追加。永続化しない）---
+    val openNow: Boolean? = null,                        // 営業中か（currentOpeningHours.openNow）
+    val weekdayDescriptions: List<String> = emptyList(), // 曜日別営業時間の表示文字列
+    val phoneNumber: String? = null,                     // 電話番号（nationalPhoneNumber）
+    val priceLevel: String? = null,                      // 価格帯（PRICE_LEVEL_* 文字列）
+    val googleRating: Double? = null,                    // Google 上の評価
 )
 ```
 
-> `CoffeeRecord.cafe` が null の場合はカフェに紐づかないセルフ抽出を表す。`Cafe` 自体の定義は不変。
+> `CoffeeRecord.cafe` が null の場合はカフェに紐づかないセルフ抽出を表す。
+
+> **永続化されるのは先頭 8 フィールドのみ**: フェーズ 10-B で追加した 5 フィールド（`openNow`〜`googleRating`）は Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面の表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
 
 > **写真について**: Places API の写真は `photo_reference` をキーに **都度取得** する規約。
 > ローカルに永続キャッシュしないこと（規約違反になる場合がある）。
@@ -187,6 +196,7 @@ data class CoffeeStats(
     val recentHighlights: List<RecordDigest>,  // Q&A 文脈用の代表レコード（高評価・直近）
     val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
     val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
+    val preferredBeanTraits: PreferredBeanTraits? = null, // 階層2+: 好みの産地 × BeanProfile 突合結果（フェーズ 12-C。BeanProfile 未提供時は null）
 )
 
 data class TastingAverages(
@@ -241,6 +251,17 @@ data class TastingAxisCorrelation(
 )
 
 enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
+
+// フェーズ 12-C: FavoriteSignals と BeanProfile（§1.8）を突合した「好みやすい豆の特徴」。
+// PreferredBeanTraitsUseCase が決定論的に生成し、ObserveCoffeeStatsUseCase に
+// BeanProfileRepository? を注入したときだけ CoffeeStats.preferredBeanTraits に付加される（未注入 / 信号なしは null）。
+data class PreferredBeanTraits(
+    val matchedProfiles: List<BeanProfile>,   // bestOrigin ラベルと origin が部分一致するプロファイル
+    val dominantFlavorNotes: List<String>,    // マッチしたプロファイルの flavorNotes 頻度集計 top-5
+    val originHint: String?,                  // FavoriteSignals.bestOrigin のラベル（信号なしは null）
+    val roastLevelHint: String?,              // FavoriteSignals.bestRoastLevel のラベル（同上）
+    val dominantTastingAxis: TastingAxis?,    // FavoriteSignals.dominantTastingAxis の axis（同上）
+)
 ```
 
 ### 集計ルール（決定論）
@@ -282,6 +303,12 @@ interface CoffeeInsightProvider {
     // 戻り値は整形済みの日本語プレーンテキスト（@Generable 不使用）。tool / 会話履歴は持たない。
     @Throws(Exception::class)
     suspend fun answer(question: String, stats: CoffeeStats): String
+
+    // 好みの豆傾向の言語化（フェーズ 12-C）: PreferredBeanTraits を入力に「あなたが好みやすい豆の特徴」を生成する。
+    // iOS 実装は __summarizeBeanTraits(traits:completionHandler:) の protocol witness 形式。
+    // null 返却を許可（Foundation Models 不可時は UI がフレーバータグのみ表示にフォールバック）。
+    @Throws(Exception::class)
+    suspend fun summarizeBeanTraits(traits: PreferredBeanTraits): CoffeeInsight?
 }
 
 data class CoffeeInsight(
@@ -496,6 +523,8 @@ CREATE TABLE coffee_record (
     acidity INTEGER,
     flavor INTEGER,
     aftertaste INTEGER,
+    -- ユーザー定義タグ（JSON 配列文字列。空リストは "[]"、マイグレーション前の行は ""）
+    tags TEXT NOT NULL DEFAULT '',
     created_at INTEGER NOT NULL,           -- epoch millis
     updated_at INTEGER NOT NULL
 );
@@ -520,8 +549,9 @@ INSERT OR REPLACE INTO coffee_record (
     visited_on, rating, notes,
     name, brew_method, origin, variety, processing, roast_level, cup,
     sweetness, body, acidity, flavor, aftertaste,
+    tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;
@@ -566,7 +596,7 @@ DELETE FROM photo WHERE id = ?;
 
 - DB 行 ↔ ドメインモデル変換は `db/Mapper.kt` に集約する
 - 子テーブル（photo）は別クエリで取得し、Repository でまとめる（JOIN は使わず、`Flow.combine` で結合）
-- 写真の参照配列など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する
+- 写真の参照配列やタグ（`tags`）など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する。`tags` は空文字（旧行）も空リストとして読む
 - `cafe_place_id` が null の行は `cafe = null` で組み立てる。非 null の行のみ `Cafe(...)` を構築する
 
 ---
@@ -660,6 +690,7 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
     "flavor": 7,
     "aftertaste": 6
   },
+  "tags": ["ラテアート", "浅煎り"],
   "photos": [
     {
       "id": "uuid-v4",
@@ -678,6 +709,8 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
 - **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup）: null の場合はキーごと省略
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
+- **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
+- **cafe** に書くのはスナップショット 8 フィールドのみ（§1.2 の注記参照。`openNow` 等の表示用フィールドは書かない）
 - **photos**: 埋め込み配列。`localPath` は端末固有値のため Firestore には書かない。`remoteUrl` も書かない（Storage 採用見送り）。`sortOrder` は配列 index を upload 時に採番、decode 時はソート用途で破棄
 - `visitedOn` は `"YYYY-MM-DD"` 文字列、`createdAt` / `updatedAt` は Firestore `Timestamp`
 

@@ -291,10 +291,10 @@ let container = AppContainer(...)
 let bridge = VisitListViewModelBridge(kotlin: container.makeVisitListViewModel())
 ```
 
-### 例外: `data-firebase`
+### 補足: `data-firebase` も `export` 対象に含める
 
-`data-firebase` は `androidMain` のみソースを持つ（iOS Firebase 実装は `iosApp` 側 Swift）ため、`shared/framework` の `export` 対象には含めません。
-`domain` の Repository インターフェースだけが iOS 側から見えていれば十分です。
+`data-firebase` は `androidMain` にのみ実装ソースを持ちます（iOS Firebase 実装は `iosApp` 側 Swift）が、`shared/framework` の `api` + `export` 対象には **他モジュールと同様に含めます**（`commonMain` の再公開のため。[`architecture.md`](./architecture.md) §iOS 配布戦略と同方針、実体は `shared/framework/build.gradle.kts` を真とする）。
+iOS が実装・利用する Repository インターフェース自体は `shared/domain` にあるため export の実利は薄いものの、「全 shared モジュールを一律 re-export する」規則を崩さない方を優先しています。
 
 ---
 

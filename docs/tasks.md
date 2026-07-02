@@ -755,6 +755,21 @@
 
 ---
 
+## docs 棚卸し（2026-07-02）
+
+> 2026-07-02 の docs 全体精査で検出した「実装と docs の齟齬」のうち、重大 4 件を修正する。精査の詳細は本セクション起票時の親セッションログ参照。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `data-model.md` をフェーズ 10 / 12-C に追随（`CoffeeRecord.tags` / `Cafe` 追加 5 フィールド / `CoffeeStats.preferredBeanTraits` + `PreferredBeanTraits` / `CoffeeInsightProvider.summarizeBeanTraits`。SQLDelight / Firestore 表現も追随） | 2026-07-02 / `Cafe` の 5 フィールドは「永続化しない表示用」の注記付きで追記（実装事実: Mapper / スキーマとも書き出しなし） |
+| [x] | `kmp-bridge.md` の「data-firebase は export 対象に含めない」記述を実体（export に含める）に修正し architecture.md と整合 | 2026-07-02 / `shared/framework/build.gradle.kts` を真とする旨も明記 |
+| [x] | `app-store-metadata.md` を CoffeeRecord 主体モデルへ全面改訂（説明文 / スクショ計画 / 審査メモ / プライバシー申告。Sign in with Apple・analyticsConsent・分析タブを反映） | 2026-07-02 / 原稿は引き続き下書き扱い（サブタイトル / カテゴリ / メールアドレス申告要否はユーザー確定が必要）。詳細は同ファイル変更履歴 |
+| [x] | `implementation_note.md`「現在生きてる方針サマリ」を現状（CoffeeRecord / 4 タブ / AppContainer 6 引数 / 12-A〜14 の生きてる方針）に更新 | 2026-07-02 / サマリに「最終棚卸し」日付を導入。経緯は implementation_note 2026-07-02 エントリ |
+
+> 精査で検出した中・低優先の残件（kmp-bridge / coding-conventions / ui-ux-guidelines の Visit 系旧例文、CLAUDE.md・architecture.md の feature 列挙欠け、backlog ID「B-4」と Phase B-4 の名前衝突など）は未着手。必要になったら下の設計判断バックログへ起票する。
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

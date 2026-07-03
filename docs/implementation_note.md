@@ -2109,3 +2109,14 @@ docs 全体精査（実コードとの突合を含む）で検出した重大 4 
 
 - 経緯: lessons.md 2026-06-16「横断 doc は構造的に陳腐化する」の再発。同エントリの再発防止策（機械的事実との定期突き合わせ）を今回の棚卸しとして実施。サマリに「最終棚卸し」日付を付け、次回以降の鮮度判定を容易にした
 - 未対応（別途バックログ）: kmp-bridge.md / coding-conventions.md / ui-ux-guidelines.md に残る Visit 系の旧例文、CLAUDE.md・architecture.md の feature 列挙（account / analysis 欠け）、backlog ID「B-4」と Phase B-4 の名前衝突
+
+### 2026-07-03: iosApp コードレビュー指摘 #1〜#5 の修正 — ライフサイクル / 削除順序の判断
+
+- 領域: iOS / AppState・AccountView・CoffeeList・CafeDetail
+- 関連: tasks.md「iosApp コードレビュー指摘対応（2026-07-03）」、lessons.md 2026-07-03 エントリ
+
+2026-07-03 の iosApp 全件レビューで確定した高優先 5 件を修正した。実装は ios-engineer に委譲、設計は親が確定。記録に値する判断は以下。
+
+1. **`bootstrap()` は「観測される状態の公開を最後」にする**（#3/#4）: `self.uid` / `status = .ready` の代入は AppRootView の画面切り替えトリガーであり、途中で代入すると loadingView の `.task` キャンセルに巻き込まれて `checkConsentOnboarding` が CancellationError で無音スキップされる（初回同意シートが出ない timing バグ）。startInitialSync → seed/clear → ブリッジ生成 → consent チェック → 最後に uid/status 公開、の順に固定した。再入は `guard status != .signingIn` で防止（`resetAndRebootstrap` と `.task` の二重起動対策）
+2. **アカウント処理の完了待ちは二相ポーリング**（#2）: `AccountViewModelBridge.awaitProcessingCompletion()` に集約。相1 = `isProcessing == true` 遷移を最大 2 秒待つ（KMP の emission 到着前に「完了」と誤判定して処理中に写真全削除 / reboot が走るレースの解消）、相2 = false 遷移を最大 30 秒待つ。相1 タイムアウト（KMP 側が 2 秒超遅延）時に誤判定する理論上の穴は残るが、根治には KMP 側の完了イベント公開が必要なため v1 では許容。KMP 側に完了 API を足す場合はこのメソッドを置き換える
+3. **写真物理削除は「レコード消失を state で確認してから」**（#5）: `CoffeeListViewModelBridge.pendingPhotoDeletions`（coffeeId → fileNames）に登録し、`apply()` で `coffees` から id が消えたのを確認して削除。KMP 削除失敗時は pending に残り続ける = 孤児ファイルが残る可能性があるが、「孤児ファイル < 写真消失」の安全側を選択。アプリ強制終了でも同様に孤児化し得る（許容）。孤児掃除が必要になったら起動時 GC（DB の photo.fileName と Documents/photos の突合）を別途検討

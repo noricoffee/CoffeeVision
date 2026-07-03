@@ -7,6 +7,9 @@ import SharedLogic
 /// - ツールバーの `+` ボタンで `CoffeeEditorView` を sheet で起動（cafe pre-filled）
 /// - NavigationStack push ごとに新規 Bridge を生成するため、`@State` で保持する
 /// - マップの Annotation タップ / 検索結果タップの両方から push される
+/// - observation は `bridge` の `deinit`（= View 破棄）まで生かす。`onDisappear` での
+///   cancel は push → pop 後の再表示で observation が凍結するバグになるため行わない
+///   （`kmp-bridge.md` の既知パターン）
 struct CafeDetailView: View {
 
     // MARK: - Properties
@@ -47,9 +50,6 @@ struct CafeDetailView: View {
                     )
                 )
             }
-        }
-        .onDisappear {
-            bridge?.cancel()
         }
         .sheet(isPresented: $isPresentingEditor) {
             CoffeeEditorView(

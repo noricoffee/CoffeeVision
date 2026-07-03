@@ -267,8 +267,11 @@ struct AccountView: View {
     /// サインアウト確認後の処理。ViewModel を通じてサインアウトし、完了後に reset。
     private func handleSignOut() {
         viewModel.onSignOutTapped()
-        observeProcessingCompletion { [self] in
-            onResetRequested()
+        let vm = viewModel
+        Task { @MainActor in
+            if await vm.awaitProcessingCompletion() {
+                onResetRequested()
+            }
         }
     }
 
@@ -316,7 +319,8 @@ struct AccountView: View {
                 // revoke 成功 → preflight フラグを落として KMP 削除 UseCase 呼び出しへ
                 viewModel.onDeletePreflightSucceeded()
                 viewModel.onDeleteAccountTapped(userId: account.uid)
-                observeProcessingCompletion { [self] in
+                let vm = viewModel
+                if await vm.awaitProcessingCompletion() {
                     try? PhotoFileStore.deleteAllPhotos()
                     onResetRequested()
                 }
@@ -324,29 +328,12 @@ struct AccountView: View {
         } else {
             // 匿名アカウントは従来フロー（revoke なし）
             viewModel.onDeleteAccountTapped(userId: account.uid)
-            observeProcessingCompletion { [self] in
-                // 端末ローカルの写真ディレクトリを全消去（iOS 責務）
-                try? PhotoFileStore.deleteAllPhotos()
-                onResetRequested()
-            }
-        }
-    }
-
-    /// `isProcessing` が false に変わるまでポーリングで待ち、エラーがなければ `completion` を呼ぶ。
-    ///
-    /// `@Observable` は Task 内での変化検知が非同期の場合に遅れることがあるため、
-    /// 0.1s 間隔で isProcessing を確認するポーリングを採用する。
-    /// 最大 30 秒（300 * 0.1s）タイムアウトで無視する。
-    private func observeProcessingCompletion(completion: @escaping @Sendable () -> Void) {
-        let vm = viewModel
-        Task { @MainActor in
-            for _ in 0 ..< 300 {
-                try? await Task.sleep(for: .milliseconds(100))
-                if !vm.isProcessing {
-                    if vm.error == nil {
-                        completion()
-                    }
-                    return
+            let vm = viewModel
+            Task { @MainActor in
+                if await vm.awaitProcessingCompletion() {
+                    // 端末ローカルの写真ディレクトリを全消去（iOS 責務）
+                    try? PhotoFileStore.deleteAllPhotos()
+                    onResetRequested()
                 }
             }
         }

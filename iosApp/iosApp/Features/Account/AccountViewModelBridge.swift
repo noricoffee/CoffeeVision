@@ -82,6 +82,36 @@ final class AccountViewModelBridge {
         kotlin.onErrorDismissed()
     }
 
+    // MARK: - 処理完了待ち
+
+    /// `onSignOutTapped()` / `onDeleteAccountTapped(userId:)` 呼び出し直後の完了待ちを二相で行う。
+    ///
+    /// `@Observable` の変化検知は Task 内で遅れることがあるため、ポーリングで `isProcessing` を確認する。
+    /// 呼び出し直後は KMP 側の `isProcessing = true` emission がまだ届いていないことがあり、
+    /// これを待たずに `isProcessing == false` を「完了」と誤判定すると、処理中に
+    /// 呼び出し側（写真削除・reboot）が走ってしまう。そのため:
+    ///   1. まず `isProcessing == true` になるのを待つ（KMP 側が即時同期完了するケースを許容し、
+    ///      タイムアウトしても次相へ進む）
+    ///   2. 次に `isProcessing == false` になるのを待つ
+    ///
+    /// - Returns: `true` = エラーなく完了。`false` = タイムアウトまたはエラーあり
+    func awaitProcessingCompletion() async -> Bool {
+        // 相 1: isProcessing == true になるのを待つ（最大 2 秒、タイムアウトは次相へ進む）
+        for _ in 0 ..< 40 {
+            if isProcessing { break }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+
+        // 相 2: isProcessing == false になるのを待つ（最大 30 秒）
+        for _ in 0 ..< 300 {
+            if !isProcessing {
+                return error == nil
+            }
+            try? await Task.sleep(for: .milliseconds(100))
+        }
+        return false
+    }
+
     // MARK: - Apple 削除前段（preflight）制御
 
     /// Apple 再サインイン / reauth / revokeToken の前段処理を開始する。

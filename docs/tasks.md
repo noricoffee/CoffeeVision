@@ -773,6 +773,21 @@
 
 ---
 
+## iosApp コードレビュー指摘対応（2026-07-03）
+
+> 2026-07-03 の iosApp 全件コードレビューで検出した高優先 5 件（#1〜#5）の修正。すべて Swift / iosApp 完結。レビュー全文は親セッションログ参照。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | #1 CafeDetailView: `.onDisappear { bridge?.cancel() }` を撤去し、observation を Bridge deinit まで生かす（push→pop 後の凍結バグ。kmp-bridge.md 2026-06-25 の既知パターン） | 2026-07-03 完了。呼び出し元が消えた `cancel()` も削除。既知パターン再発の教訓は lessons.md 2026-07-03 |
+| [x] | #2 AccountView: `observeProcessingCompletion` のポーリング競合を解消（`isProcessing` の true 遷移を待ってから false を待つ。ロジックは Bridge 側へ移動） | 2026-07-03 完了。`AccountViewModelBridge.awaitProcessingCompletion()`（二相待ち）。残存する理論上の穴と根治条件は implementation_note 2026-07-03 |
+| [x] | #3 AppState: `bootstrap()` に再入ガードを追加（`resetAndRebootstrap` と AppRootView `.task` の二重実行防止） | 2026-07-03 完了。`guard status != .signingIn` |
+| [x] | #4 AppState: 初回同意オンボーディングチェックが `.task` キャンセルで消える timing バグの解消（`uid` / `status` の公開を bootstrap 完了後に遅延） | 2026-07-03 完了。「観測される状態の公開は bootstrap 末尾」原則は implementation_note 2026-07-03 |
+| [x] | #5 CoffeeListView: スワイプ削除の写真物理削除を「レコード削除が state に反映された後」に移動（順序逆転バグ + View 内業務ロジックの Bridge への移動） | 2026-07-03 完了。`pendingPhotoDeletions` 方式（孤児ファイル < 写真消失の安全側）。implementation_note 2026-07-03 |
+| [ ] | 実機 / シミュレータで目視確認: CafeDetail push→pop 後の一覧更新、サインアウト/削除時のオーバーレイと完了処理、初回同意シート表示、スワイプ削除失敗時の写真残存 | **ユーザー作業**。ビルドは 2026-07-03 に BUILD SUCCEEDED 済（新規 warning ゼロ） |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

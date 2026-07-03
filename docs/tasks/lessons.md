@@ -478,3 +478,11 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - `Tab(role:) { CafeSearchView(...) }` のようにタブのルートに直接置かれた View は、タブ切替や子画面 push（`CafeDetailView` への `NavigationLink`）で `onDisappear` が発火するが、**View インスタンス自体は破棄されず `@State` も保持される**。ここで `.onDisappear { bridge.cancel() }` のように Kotlin `StateFlow` の `observationTask` を止めると、`startObservation()` は init でしか呼ばれないため、戻ってきても観測が再開されず、以降 Kotlin 側の状態更新が Swift に一切反映されなくなる
 - 2026-06-25、`CafeSearchView` でこれが顕在化（検索 → カフェ詳細 push → 戻る、で検索が効かなくなる「1,2 回はできたが止まる」バグ）。`.onDisappear { bridge.cancel() }` を削除して解消
 - **教訓**: タブ常駐 View（`@State` でブリッジを自前生成し、push/タブ切替で破棄されないもの）の observation は `onDisappear` でキャンセルしない。observation は**ブリッジの `deinit`（`kotlin.clear()`）まで生かす**。sheet/push で都度生成・破棄される使い方（同 View を sheet 起動するモード等）では、View 破棄 → `deinit` が自然に observation と Kotlin scope を片付ける。`onDisappear` は「遷移アニメ中にも発火する」「常駐 View では再 init されない」の二点で破棄フックとして不適。所有 viewModelScope の `clear()` を呼ぶのも同じ理由で `deinit` 起点にする（本ファイル「画面ごとの ViewModel に app-wide scope を共有させない」エントリと同根）（[`implementation_note.md`](../implementation_note.md) 2026-06-25「現在地系を撤去しテキスト検索のみに整理」エントリ参照）
+
+## 2026-07-03
+
+### 「observation を onDisappear でキャンセルしない」既知パターンが CafeDetailView で再発
+
+- 2026-06-25 に `CafeSearchView` で記録済みの同型バグ（本ファイル「タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない」）が、`CafeDetailView` にも残存していたことが 2026-07-03 の iosApp 全件レビューで発覚。push → pop 後に `startObservation()` を再呼び出しする経路がなく、コーヒー一覧・カフェ情報が凍結する
+- lessons 記録時（2026-06-25）に**横展開点検をしていなかった**のが直接原因。今回のレビューで全 `*ViewModelBridge` を横断点検し、凍結するのは `CafeDetailView` のみと確認（`CoffeeListView` / `AnalysisView` / `CoffeeDetailView` は `onAppear` で観測を再スタートする型のため自己回復する。ただし規約上は deinit まで生かす型に寄せるのが望ましい → 別途バックログ）
+- **教訓**: バグパターンを lessons に記録したら、その場で `grep -rn "onDisappear" iosApp/ | grep -i "cancel"` 相当の横断点検までやり切る。点検結果（該当なし / 該当あり→修正）も lessons に残す。レビュー時のチェック観点: 「`cancel()` を呼ぶ `.onDisappear`」があれば、observation を再開する経路が本当にあるかを必ず追う

@@ -95,13 +95,10 @@ struct CoffeeListView: View {
                 }
                 .swipeActions(edge: .trailing, allowsFullSwipe: true) {
                     Button(role: .destructive) {
-                        // CoffeeRecord 削除前に紐付く写真ファイルを Documents から物理削除する
-                        for photo in coffee.photos {
-                            if let fileName = photo.fileName {
-                                try? PhotoFileStore.delete(fileName: fileName)
-                            }
-                        }
-                        viewModel.onCoffeeDeleted(id: coffee.id)
+                        viewModel.onCoffeeDeleted(
+                            id: coffee.id,
+                            photoFileNames: coffee.photos.compactMap(\.fileName)
+                        )
                     } label: {
                         Label(
                             String(localized: "削除"),

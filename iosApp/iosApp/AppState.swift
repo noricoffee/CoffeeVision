@@ -153,12 +153,19 @@ final class AppState {
     ///
     /// 成功時に `coffeeListBridge` / `mapBridge` / `accountBridge` を 1 度だけ生成する。
     /// 既に生成済み（bootstrap 再呼び出し）の場合は再生成しない。
+    ///
+    /// `self.uid` / `self.status = .ready` の代入は関数の最後まで遅らせる。
+    /// これらは AppRootView の画面切り替えトリガーであり、先に代入すると
+    /// loadingView の `.task` がキャンセルされ、`checkConsentOnboarding` が
+    /// `CancellationError` で中断し初回同意オンボーディングが出ない timing バグになるため。
     func bootstrap() async {
+        // resetAndRebootstrap() が Task { bootstrap() } を起動しつつ status = .idle にするため、
+        // AppRootView の loadingView `.task` からも bootstrap() が走り、
+        // startInitialSync() が並行 2 回呼ばれ得る。再入を防ぐ。
+        guard status != .signingIn else { return }
         status = .signingIn
         do {
             let uid = try await container.startInitialSync()
-            self.uid = uid
-            self.status = .ready
             // [DEBUG] ダミーデータの seed / clear（bridge 生成前に実行し、最初の Flow emit からダミーが反映されるようにする）
             // 専用 Scheme「iosApp (Dummy Data)」で起動したときだけ seed、それ以外は clear する。
             // seed / clear は開発用途のため失敗しても致命扱いにせずログのみ出す。
@@ -182,6 +189,9 @@ final class AppState {
                 analysisBridge = AnalysisViewModelBridge(viewModel: container.makeAnalysisViewModel(userId: uid))
             }
             await checkConsentOnboarding(uid: uid)
+            // 状態の公開はここで最後に行う（uid != nil が RootTabView への切り替えトリガーのため）
+            self.uid = uid
+            self.status = .ready
             print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
         } catch {
             self.lastError = error.localizedDescription

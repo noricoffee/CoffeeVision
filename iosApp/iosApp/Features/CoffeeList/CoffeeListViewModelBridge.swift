@@ -23,6 +23,14 @@ final class CoffeeListViewModelBridge {
     private(set) var isLoading: Bool = false
     private(set) var error: String?
 
+    /// coffeeId → 削除待ちの写真ファイル名。
+    ///
+    /// `onCoffeeDeleted(id:photoFileNames:)` で登録し、`apply(_:)` で `coffees` から
+    /// 当該 id が消えたのを確認してから物理削除する（KMP 側の削除が失敗しても写真だけ
+    /// 消えてしまう順序バグを避けるため）。KMP 側で削除が失敗しレコードが残存する場合は
+    /// pending に残り続ける（孤児ファイルより写真消失の方が害が大きいため、安全側の選択）。
+    private var pendingPhotoDeletions: [String: [String]] = [:]
+
     // MARK: - Init
 
     init(kotlin: CoffeeListViewModel) {
@@ -60,7 +68,12 @@ final class CoffeeListViewModelBridge {
 
     // MARK: - ユーザーアクション
 
-    func onCoffeeDeleted(id: String) {
+    /// コーヒー記録を削除する。紐付く写真ファイルは、KMP 側の削除が確認できてから
+    /// `apply(_:)` 内で物理削除する（削除失敗時に写真だけ消えるのを防ぐため）。
+    func onCoffeeDeleted(id: String, photoFileNames: [String]) {
+        if !photoFileNames.isEmpty {
+            pendingPhotoDeletions[id] = photoFileNames
+        }
         kotlin.onCoffeeDeleted(id: id)
     }
 
@@ -75,5 +88,19 @@ final class CoffeeListViewModelBridge {
         self.coffees = state.coffees
         self.isLoading = state.isLoading
         self.error = state.error
+
+        resolvePendingPhotoDeletions()
+    }
+
+    /// `coffees` から消えた id の pending 写真を物理削除し、pending から取り除く。
+    private func resolvePendingPhotoDeletions() {
+        guard !pendingPhotoDeletions.isEmpty else { return }
+        let remainingIds = Set(coffees.map(\.id))
+        for (coffeeId, fileNames) in pendingPhotoDeletions where !remainingIds.contains(coffeeId) {
+            for fileName in fileNames {
+                try? PhotoFileStore.delete(fileName: fileName)
+            }
+            pendingPhotoDeletions.removeValue(forKey: coffeeId)
+        }
     }
 }

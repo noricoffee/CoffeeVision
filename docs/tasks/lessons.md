@@ -486,3 +486,19 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-25 に `CafeSearchView` で記録済みの同型バグ（本ファイル「タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない」）が、`CafeDetailView` にも残存していたことが 2026-07-03 の iosApp 全件レビューで発覚。push → pop 後に `startObservation()` を再呼び出しする経路がなく、コーヒー一覧・カフェ情報が凍結する
 - lessons 記録時（2026-06-25）に**横展開点検をしていなかった**のが直接原因。今回のレビューで全 `*ViewModelBridge` を横断点検し、凍結するのは `CafeDetailView` のみと確認（`CoffeeListView` / `AnalysisView` / `CoffeeDetailView` は `onAppear` で観測を再スタートする型のため自己回復する。ただし規約上は deinit まで生かす型に寄せるのが望ましい → 別途バックログ）
 - **教訓**: バグパターンを lessons に記録したら、その場で `grep -rn "onDisappear" iosApp/ | grep -i "cancel"` 相当の横断点検までやり切る。点検結果（該当なし / 該当あり→修正）も lessons に残す。レビュー時のチェック観点: 「`cancel()` を呼ぶ `.onDisappear`」があれば、observation を再開する経路が本当にあるかを必ず追う
+
+### テストダブルの接続設定を本番ドライバと乖離させると「テストは通るのに本番で壊れる」
+
+- shared レビュー #3（FK 無効）の根: JVM テストドライバだけ `PRAGMA foreign_keys = ON` を明示し、本番 `DatabaseDriverFactory`（android / ios）と iOS テストドライバは既定 OFF のままだった。cascade テストは JVM でだけ green になり、本番では photo の `ON DELETE CASCADE` が一度も発火していなかった
+- **教訓**: 接続レベルの設定（PRAGMA / driver config）はテストと本番で必ず同一にする。乖離させる場合（inMemory 等）は差分をコメントで明示する。スキーマに `ON DELETE CASCADE` / トリガ等「接続設定に依存する宣言」を書いたら、その場で全ターゲットの有効化を確認する
+- 併発した第 2 の穴: commonTest を `testAndroidHostTest` でしか回しておらず、iOS ターゲットでは cascade テストが赤だったことに気づけなかった。**commonTest は iosSimulatorArm64Test でも回す**（CI 導入時は必須ターゲットに含める）
+
+### dev シードデータが本番の作成経路のバグをマスクする
+
+- shared レビュー #2（エディタの座標欠落）が長期間気づかれなかったのは、`DummyCoffeeData` が座標付きの `Cafe` を直接組み立てており、マップのピン表示がシードデータでは正常に見えていたため。本番経路（`CoffeeEditorViewModel.buildRecord`）は座標を常に null で保存していた
+- **教訓**: シードデータは可能な限り本番の作成経路（ViewModel の save）を通す。直接組み立てる場合は「本番経路で作れない状態をシードが作っていないか」をレビュー観点にする。機能検証は最低 1 回シードなし（実経路のみ）で行う
+
+### KMP テスト実行の環境メモ（Gradle タスク名 / sandbox の Xcode 制約）
+
+- ユニットテスト実行タスクは `testAndroidHostTest`（`androidHostTest` はソースセット名。AGP 慣例で `test` プレフィックスが付く）。サブエージェントへの指示に検証コマンドを書くときは実在タスク名を確認してから書く
+- サブエージェントの sandbox では `xcode-select` が CommandLineTools を指し、`iosSimulatorArm64Test` 等リンク・実行を伴うタスクは `MissingXcodeException` で失敗する。フロントエンドコンパイル（`compileKotlinIosSimulatorArm64` / `compileTestKotlinIosSimulatorArm64`）は通るため構文・型検証はそれで代替し、テスト実行は親セッションで `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew ...` を付けて行う（2026-07-03 実証済み）

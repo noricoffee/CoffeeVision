@@ -2120,3 +2120,14 @@ docs 全体精査（実コードとの突合を含む）で検出した重大 4 
 1. **`bootstrap()` は「観測される状態の公開を最後」にする**（#3/#4）: `self.uid` / `status = .ready` の代入は AppRootView の画面切り替えトリガーであり、途中で代入すると loadingView の `.task` キャンセルに巻き込まれて `checkConsentOnboarding` が CancellationError で無音スキップされる（初回同意シートが出ない timing バグ）。startInitialSync → seed/clear → ブリッジ生成 → consent チェック → 最後に uid/status 公開、の順に固定した。再入は `guard status != .signingIn` で防止（`resetAndRebootstrap` と `.task` の二重起動対策）
 2. **アカウント処理の完了待ちは二相ポーリング**（#2）: `AccountViewModelBridge.awaitProcessingCompletion()` に集約。相1 = `isProcessing == true` 遷移を最大 2 秒待つ（KMP の emission 到着前に「完了」と誤判定して処理中に写真全削除 / reboot が走るレースの解消）、相2 = false 遷移を最大 30 秒待つ。相1 タイムアウト（KMP 側が 2 秒超遅延）時に誤判定する理論上の穴は残るが、根治には KMP 側の完了イベント公開が必要なため v1 では許容。KMP 側に完了 API を足す場合はこのメソッドを置き換える
 3. **写真物理削除は「レコード消失を state で確認してから」**（#5）: `CoffeeListViewModelBridge.pendingPhotoDeletions`（coffeeId → fileNames）に登録し、`apply()` で `coffees` から id が消えたのを確認して削除。KMP 削除失敗時は pending に残り続ける = 孤児ファイルが残る可能性があるが、「孤児ファイル < 写真消失」の安全側を選択。アプリ強制終了でも同様に孤児化し得る（許容）。孤児掃除が必要になったら起動時 GC（DB の photo.fileName と Documents/photos の突合）を別途検討
+
+### 2026-07-03: shared コードレビュー指摘 #1〜#3 の修正 — 同期・座標・FK の判断
+
+- 領域: KMP / shared（core・feature/coffee-editor・data-local）
+- 関連: tasks.md「shared コードレビュー指摘対応（2026-07-03）」、data-model.md §2.2 注記・§4.2、lessons.md 2026-07-03 エントリ
+
+2026-07-03 の shared/ 全モジュールレビューで確定した高優先 3 件を修正した。実装は kmp-engineer に委譲、仕様は親が data-model.md / architecture.md に先行確定。記録に値する判断は以下。
+
+1. **同期 reconciliation は「全件スナップショット差分」方式**（#1）: `startSync` がスナップショットに無い id のローカル行を削除してから upsert する。tombstone（削除マーカー）方式は個人アプリ規模に過剰と判断し不採用。`DummyCoffeeData.ids` の除外で core の Repository が dev データを知る結合が生じたが、除外セットを引数化する案より単純さを優先（dev データは同一モジュール内の固定 ID 30 件）。save〜upload 間に新規レコードが一瞬消えて listener echo で復活しうる窓は Firestore の pending writes 込みリスナ前提で極小として許容（競合解決の本格化は backlog B-1）
+2. **エディタは選択 `Cafe` を丸ごとセッション保持**（#2）: `selectedCafe` は onAppear〜次の onAppear の間のみ有効。座標・photoReferences は「選択あり → selectedCafe / Edit 選択なし → 初期レコード / Create 手入力 → null」の優先順位で `buildCafe()` に集約。**既存レコードの座標は次回その記録を保存するまで null のまま**（VisitedCafe は最新値勝ちのため、座標ありの古い記録があっても新規保存で null に戻る問題は本修正で解消済みだが、過去分の遡及補正はしない）。Edit で元 cafe が null のまま手入力カフェを新設するケースは従来どおり cafe = null（スコープ外。必要になったら別タスク）。旧判断「draft に座標を保持しない」（本ノート 2026-06 スライス 3 エントリ）は本修正で**廃止**
+3. **FK は本番ドライバで有効化 + 掃除 migration**（#3）: Android は `AndroidSqliteDriver.Callback.onConfigure`（migration 中に framework が制約を自動で外す挙動に乗る）、iOS は sqliter の `extendedConfig.foreignKeyConstraints = true`。`LocalCoffeeRepository.delete` に明示 `deleteByRecord` を足す案は CASCADE と二重管理になるため不採用。FK 無効期間の孤児 photo 行は `2.sqm` で一括削除。iOS テストドライバも FK ON に統一し、`iosSimulatorArm64Test` で cascade テストの赤（FK OFF）→ 緑（FK ON）を実証 — つまり従来 iOS ターゲットのテストは回っておらず、回していれば #3 は検出できていた（→ lessons）

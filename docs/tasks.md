@@ -796,7 +796,7 @@
 |------|------|------|
 | [x] | #1 リモート削除のローカル伝播: `CoffeeRepositoryImpl.startSync` にスナップショット reconciliation を追加（スナップショットに無い id のローカル行を削除。`DummyCoffeeData.ids` はローカル専用のため除外） | 2026-07-03 完了。テスト 2 件追加（削除伝播 / ダミー除外）、`testAndroidHostTest` 10 件 green + iosSimulatorArm64 コンパイル確認 |
 | [x] | #2 エディタの cafe 座標欠落: `CoffeeEditorViewModel` が Places 選択済み `Cafe` を丸ごと内部保持（`selectedCafe`）し、保存時に placeId / latitude / longitude / photoReferences を引き継ぐ。`onAppear` で選択状態をリセット | 2026-07-03 完了。cafe 組み立てを `buildCafe()` に集約。テスト 5 件新設（`CoffeeEditorViewModelTest`、feature/coffee-editor 初の commonTest）。iOS 側変更なし（`selectedPlaceId` は派生値として互換維持）。既存レコードの座標は次回保存時まで null のまま（最新値勝ち仕様） |
-| [ ] | #3 FOREIGN KEY 有効化: 本番 `DatabaseDriverFactory`（android / ios）で FK 制約を有効化し `ON DELETE CASCADE` を機能させる。孤児 photo 行を掃除する migration `2.sqm` を追加。iOS の `TestSqlDriver` も FK ON に揃える | 仕様: data-model.md §2.2 注記。sqliter の `foreignKeyConstraints` 既定は false（1.3.3 ソース確認済）のため、commonTest の cascade テストは現状 iOS ターゲットで成立していないはず → 修正後に iosSimulatorArm64Test で確認 |
+| [x] | #3 FOREIGN KEY 有効化: 本番 `DatabaseDriverFactory`（android / ios）で FK 制約を有効化し `ON DELETE CASCADE` を機能させる。孤児 photo 行を掃除する migration `2.sqm` を追加。iOS の `TestSqlDriver` も FK ON に揃える | 2026-07-03 完了。`testAndroidHostTest` / `verifySqlDelightMigration` green。iosSimulatorArm64Test は親セッションで `DEVELOPER_DIR=Xcode-beta` 指定により実行し、cascade テスト green + FK OFF に戻すと FAILED になる赤→緑を確認（= 従来 iOS では cascade テストが成立していなかった仮説を実証） |
 | [ ] | シミュレータ / 実機で目視確認: 記録作成 → マップに訪問済みピンが立つ / Firestore コンソールで記録削除 → ローカル一覧から消える | **ユーザー作業** |
 
 ---

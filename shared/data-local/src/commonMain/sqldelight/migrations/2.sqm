@@ -1,0 +1,2 @@
+-- FOREIGN KEY 制約が未有効だった期間（レビュー指摘 #3 修正前）に発生した孤児 photo 行を掃除する。
+DELETE FROM photo WHERE record_id NOT IN (SELECT id FROM coffee_record);

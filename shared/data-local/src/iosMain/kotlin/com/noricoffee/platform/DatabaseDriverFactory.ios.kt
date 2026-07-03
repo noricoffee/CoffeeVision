@@ -6,7 +6,12 @@ import com.noricoffee.db.AppDatabase
 
 actual class DatabaseDriverFactory {
     actual fun create(): SqlDriver =
-        NativeSqliteDriver(AppDatabase.Schema, DATABASE_NAME)
+        NativeSqliteDriver(
+            schema = AppDatabase.Schema,
+            name = DATABASE_NAME,
+            // SQLite の FOREIGN KEY 制約は接続ごとの opt-in（既定 OFF）。sqliter の既定も false。
+            onConfiguration = { it.copy(extendedConfig = it.extendedConfig.copy(foreignKeyConstraints = true)) },
+        )
 
     private companion object {
         const val DATABASE_NAME = "coffeevision.db"

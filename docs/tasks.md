@@ -794,7 +794,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | #1 リモート削除のローカル伝播: `CoffeeRepositoryImpl.startSync` にスナップショット reconciliation を追加（スナップショットに無い id のローカル行を削除。`DummyCoffeeData.ids` はローカル専用のため除外） | 仕様: data-model.md §4.2。テスト: `CoffeeRepositoryImplTest` に削除伝播 / ダミーデータ除外ケースを追加 |
+| [x] | #1 リモート削除のローカル伝播: `CoffeeRepositoryImpl.startSync` にスナップショット reconciliation を追加（スナップショットに無い id のローカル行を削除。`DummyCoffeeData.ids` はローカル専用のため除外） | 2026-07-03 完了。テスト 2 件追加（削除伝播 / ダミー除外）、`testAndroidHostTest` 10 件 green + iosSimulatorArm64 コンパイル確認 |
 | [ ] | #2 エディタの cafe 座標欠落: `CoffeeEditorViewModel` が Places 選択済み `Cafe` を丸ごと内部保持（`selectedCafe`）し、保存時に placeId / latitude / longitude / photoReferences を引き継ぐ。`onAppear` で選択状態をリセット | 現状 latitude / longitude が常に null で保存され、マップの訪問済みピンが実データで表示されない（DummyCoffeeData の座標でマスクされていた）。手入力カフェ（Places 非選択）は座標 null のままで可。`UIState.selectedPlaceId` は iosApp 未参照のため `selectedCafe` からの導出に変更してよい |
 | [ ] | #3 FOREIGN KEY 有効化: 本番 `DatabaseDriverFactory`（android / ios）で FK 制約を有効化し `ON DELETE CASCADE` を機能させる。孤児 photo 行を掃除する migration `2.sqm` を追加。iOS の `TestSqlDriver` も FK ON に揃える | 仕様: data-model.md §2.2 注記。sqliter の `foreignKeyConstraints` 既定は false（1.3.3 ソース確認済）のため、commonTest の cascade テストは現状 iOS ターゲットで成立していないはず → 修正後に iosSimulatorArm64Test で確認 |
 | [ ] | シミュレータ / 実機で目視確認: 記録作成 → マップに訪問済みピンが立つ / Firestore コンソールで記録削除 → ローカル一覧から消える | **ユーザー作業** |

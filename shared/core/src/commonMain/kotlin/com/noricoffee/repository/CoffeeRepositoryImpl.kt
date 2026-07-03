@@ -1,10 +1,12 @@
 package com.noricoffee.repository
 
+import com.noricoffee.dev.DummyCoffeeData
 import com.noricoffee.domain.CoffeeRecord
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 /**
@@ -15,7 +17,8 @@ import kotlinx.coroutines.launch
  *
  * - UI は [CoffeeRepository] 1 本だけを見る
  * - **読み取り**: ローカル DB をそのまま流す（[LocalCoffeeRepository] へ委譲）。Firestore からの
- *   変更は [startSync] でローカル DB に反映してから UI に流れる（二重キャッシュを避ける）
+ *   変更は [startSync] でローカル DB に反映してから UI に流れる（二重キャッシュを避ける）。反映は
+ *   upsert だけでなく reconciliation（スナップショットに無い id のローカル削除）も含む（詳細は [startSync]）
  * - **書き込み**: ローカル → リモート の順序を共通層で保証する。リモート側の失敗時の挙動は
  *   [WritePolicy] で切り替える
  *
@@ -78,12 +81,24 @@ class CoffeeRepositoryImpl(
      *
      * - 呼び出し元（[com.noricoffee.AppContainer] 等）が `userId` 確定後に呼ぶ
      * - 返り値の [Job] をキャンセルすれば購読が止まる
-     * - リモートからの全件スナップショットを受けるたびにローカル DB を更新する
-     *   （差分計算は本層では行わず、Firestore SDK の効率に委ねる）
+     * - [RemoteCoffeeDataSource.observeChanges] は指定 `userId` の**全件スナップショット**を返す契約。
+     *   スナップショットを受けるたびに次の reconciliation を行う:
+     *   1. スナップショットに存在しない id のローカル行を削除する（他端末での削除をローカルに伝播）
+     *      - 例外: [DummyCoffeeData.ids] はローカル DB 限定の dev データ（Firestore に流さない設計）
+     *        のため、スナップショットに無くても削除しない
+     *   2. スナップショットの全件を upsert する（差分計算は行わず Firestore SDK の効率に委ねる）
+     * - **既知の許容トレードオフ**: [save] のローカル書き込みから [RemoteCoffeeDataSource.upload] 完了
+     *   までの間に「その新規レコードを含まないスナップショット」が届くと、reconciliation で一瞬ローカル
+     *   から消え、upload 完了後のリスナ echo で復活しうる。Firestore リスナは pending writes を含むため
+     *   窓は極小であり MVP では許容する（本格的な競合解決は backlog）
      */
     fun startSync(userId: String, scope: CoroutineScope): Job =
         scope.launch {
             remote.observeChanges(userId).collect { records ->
+                val remoteIds = records.map { it.id }.toSet()
+                local.observeAll(userId).first()
+                    .filter { it.id !in remoteIds && it.id !in DummyCoffeeData.ids }
+                    .forEach { local.delete(userId, it.id) }
                 records.forEach { local.save(it) }
             }
         }

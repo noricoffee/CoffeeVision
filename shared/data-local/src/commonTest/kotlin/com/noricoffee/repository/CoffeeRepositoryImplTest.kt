@@ -2,6 +2,7 @@ package com.noricoffee.repository
 
 import com.noricoffee.db.AppDatabase
 import com.noricoffee.db.createInMemoryTestSqlDriver
+import com.noricoffee.dev.DummyCoffeeData
 import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
@@ -114,6 +115,64 @@ class CoffeeRepositoryImplTest {
 
         val list = local.observeAll(USER_ID).first()
         assertEquals(listOf(r1.id), list.map { it.id })
+
+        job.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun start_sync_reconciles_deletion_of_records_missing_from_snapshot() = runTest {
+        local = LocalCoffeeRepository(db, coroutineContext)
+        fakeRemote = FakeRemoteCoffeeDataSource()
+        val repo = CoffeeRepositoryImpl(local, fakeRemote)
+
+        val scope = CoroutineScope(coroutineContext)
+        val job = repo.startSync(USER_ID, scope)
+        runCurrent()
+
+        // photos を含む 2 件のレコードがまず同期される
+        val r1 = sampleRecord(id = "r-remote-1")
+        val r2 = sampleRecord(id = "r-remote-2")
+        fakeRemote.emit(listOf(r1, r2))
+        runCurrent()
+
+        assertEquals(
+            setOf("r-remote-1", "r-remote-2"),
+            local.observeAll(USER_ID).first().map { it.id }.toSet(),
+        )
+
+        // 他端末で r-remote-1 が削除され、次のスナップショットには r-remote-2 のみが含まれる
+        fakeRemote.emit(listOf(r2))
+        runCurrent()
+
+        assertEquals(listOf("r-remote-2"), local.observeAll(USER_ID).first().map { it.id })
+
+        job.cancel()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun start_sync_does_not_delete_dummy_coffee_data_missing_from_snapshot() = runTest {
+        local = LocalCoffeeRepository(db, coroutineContext)
+        fakeRemote = FakeRemoteCoffeeDataSource()
+        val repo = CoffeeRepositoryImpl(local, fakeRemote)
+
+        // dev ダミーデータはローカル DB 限定（Firestore には流さない設計）のため、
+        // ここではローカルにだけ事前投入してその状況を再現する
+        val dummyId = DummyCoffeeData.ids.first()
+        local.save(sampleRecord(id = dummyId))
+
+        val scope = CoroutineScope(coroutineContext)
+        val job = repo.startSync(USER_ID, scope)
+        runCurrent()
+
+        // スナップショットにはダミー id を含まない別レコードのみ届く
+        fakeRemote.emit(listOf(sampleRecord(id = "r-remote-1")))
+        runCurrent()
+
+        val ids = local.observeAll(USER_ID).first().map { it.id }.toSet()
+        assertTrue(dummyId in ids, "DummyCoffeeData.ids はスナップショットに無くても削除されない")
+        assertTrue("r-remote-1" in ids)
 
         job.cancel()
     }

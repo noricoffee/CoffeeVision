@@ -788,6 +788,19 @@
 
 ---
 
+## shared コードレビュー指摘対応（2026-07-03）
+
+> 2026-07-03 の shared/ 全モジュールコードレビューで検出した高優先 3 件の修正。すべて KMP / shared 完結（iosApp 変更なし。公開 API は非破壊）。仕様は `data-model.md` §2.2 注記 / §4.2 と `architecture.md` データフロー（読み取り）に確定済み。レビュー全文は親セッションログ参照。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | #1 リモート削除のローカル伝播: `CoffeeRepositoryImpl.startSync` にスナップショット reconciliation を追加（スナップショットに無い id のローカル行を削除。`DummyCoffeeData.ids` はローカル専用のため除外） | 仕様: data-model.md §4.2。テスト: `CoffeeRepositoryImplTest` に削除伝播 / ダミーデータ除外ケースを追加 |
+| [ ] | #2 エディタの cafe 座標欠落: `CoffeeEditorViewModel` が Places 選択済み `Cafe` を丸ごと内部保持（`selectedCafe`）し、保存時に placeId / latitude / longitude / photoReferences を引き継ぐ。`onAppear` で選択状態をリセット | 現状 latitude / longitude が常に null で保存され、マップの訪問済みピンが実データで表示されない（DummyCoffeeData の座標でマスクされていた）。手入力カフェ（Places 非選択）は座標 null のままで可。`UIState.selectedPlaceId` は iosApp 未参照のため `selectedCafe` からの導出に変更してよい |
+| [ ] | #3 FOREIGN KEY 有効化: 本番 `DatabaseDriverFactory`（android / ios）で FK 制約を有効化し `ON DELETE CASCADE` を機能させる。孤児 photo 行を掃除する migration `2.sqm` を追加。iOS の `TestSqlDriver` も FK ON に揃える | 仕様: data-model.md §2.2 注記。sqliter の `foreignKeyConstraints` 既定は false（1.3.3 ソース確認済）のため、commonTest の cascade テストは現状 iOS ターゲットで成立していないはず → 修正後に iosSimulatorArm64Test で確認 |
+| [ ] | シミュレータ / 実機で目視確認: 記録作成 → マップに訪問済みピンが立つ / Firestore コンソールで記録削除 → ローカル一覧から消える | **ユーザー作業** |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。
@@ -801,4 +814,5 @@
 | [ ] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 最初の PR を出すタイミングで自然解消 |
 | [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
+| [ ] | D-2 | `architecture.md`「データフロー（書き込み）」節が旧 Visit モデル / 旧構成（プラットフォーム別 VisitRepository 実装）のまま。現行の CoffeeRepositoryImpl 合成構成に書き直す（読み取り側は 2026-07-03 の shared レビュー対応で修正済） | docs を次に棚卸しするとき |
 | [~] | E-1 | アカウント削除時の Apple トークン失効（revoke）。App Store ガイドライン 5.1.1(v) 対応。**2026-06-24 着手 → 専用セクション「フェーズ 5.2」に移管**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-17 コールバック URL エントリ | App Store 申請前。現状の `deleteAuthUser` は Firebase ユーザー + Firestore データのみ削除 |

@@ -388,22 +388,22 @@ SwiftUI View は ViewModel を `@State` または `@Bindable` で保持し、状
 
 ## データフロー（読み取り）
 
-UI は `VisitRepository.observeAll(userId)` 等の **ローカル DB に対する Flow** を購読します。
-リモート（Firestore）からの変更は `VisitRepositoryImpl` が `RemoteVisitDataSource.observeChanges` を購読し、受信した Visit をローカル DB に upsert することで反映します。
+UI は `CoffeeRepository.observeAll(userId)` 等の **ローカル DB に対する Flow** を購読します。
+リモート（Firestore）からの変更は `CoffeeRepositoryImpl` が `RemoteCoffeeDataSource.observeChanges` を購読し、受信した全件スナップショットをローカル DB に **reconcile**（upsert + スナップショットに無い id の削除）することで反映します（削除伝播の仕様は [`data-model.md`](./data-model.md) §4.2 参照）。
 
 ```
-RemoteVisitDataSource.observeChanges()  ──┐
-                                          ▼
-                              VisitRepositoryImpl.startSync()
-                                          │
-                                          ▼
-                              LocalVisitRepository.save()
-                                          │
-                                          ▼
-                                   SQLDelight emit
-                                          │
-                                          ▼
-                              VisitRepository.observeAll()  ◀── UI が購読
+RemoteCoffeeDataSource.observeChanges()  ──┐
+                                           ▼
+                              CoffeeRepositoryImpl.startSync()
+                                           │  upsert + 欠落 id の削除（reconciliation）
+                                           ▼
+                              LocalCoffeeRepository.save() / delete()
+                                           │
+                                           ▼
+                                    SQLDelight emit
+                                           │
+                                           ▼
+                              CoffeeRepository.observeAll()  ◀── UI が購読
 ```
 
 これにより「Firestore キャッシュとローカル DB の二重キャッシュ」を避け、**ローカル DB を唯一の Source of Truth** として扱います。

@@ -592,6 +592,13 @@ deleteById:
 DELETE FROM photo WHERE id = ?;
 ```
 
+> **FOREIGN KEY は接続ごとの opt-in（2026-07-03 確定）**: SQLite の外部キー制約は既定で OFF のため、`ON DELETE CASCADE` を機能させるには**本番ドライバ側で明示的に有効化する**必要がある。
+> - Android: `AndroidSqliteDriver` の `Callback.onConfigure` で `db.setForeignKeyConstraintsEnabled(true)`（onConfigure に置くことで migration 実行中は framework 側が自動で制約を外す挙動に乗る）
+> - iOS: `NativeSqliteDriver` の `onConfiguration` で `extendedConfig.foreignKeyConstraints = true`（sqliter の既定は false）
+> - テストドライバ（`TestSqlDriver.*`）も同じ設定に揃える（JVM は `PRAGMA foreign_keys = ON` 済み、iOS は要追随）
+>
+> 有効化以前に記録削除で発生した孤児 photo 行（`record_id` が `coffee_record` に存在しない行）は migration `2.sqm` で一括削除して掃除する。
+
 ## 2.3 マッピング方針
 
 - DB 行 ↔ ドメインモデル変換は `db/Mapper.kt` に集約する
@@ -782,6 +789,9 @@ interface RemoteCoffeeDataSource {
 - **読み取り** は **SQLDelight の Flow を Single Source として返す**
   - Firestore の更新は `RemoteCoffeeDataSource.observeChanges` を `startSync` で購読し、SQLDelight に書き戻す
   - UI からは SQLDelight のみを見る（書き戻しが完了次第、Flow が emit する）
+  - **スナップショット reconciliation（2026-07-03 確定）**: `observeChanges` は指定 userId の**全件スナップショット**を返す契約のため、`startSync` は upsert だけでなく「スナップショットに存在しない id のローカル行の削除」も行う。これが無いと他端末での削除がローカル DB に永久に伝播しない
+    - **除外**: dev ダミーデータ（`DummyCoffeeData.ids`）はローカル DB 限定で Firestore に流さない設計のため、reconciliation の削除対象から除外する
+    - **既知の許容トレードオフ**: `save`（ローカル書き込み）から `upload` 完了までの間に「新規レコードを含まないスナップショット」が届くと、そのレコードが一瞬ローカルから消えて upload 後のリスナ echo で復活しうる。Firestore リスナは pending writes を含むため窓は極小であり、MVP では許容する（競合解決の本格化は backlog B-1）
 - **書き込み** は **ローカル（SQLDelight）→ リモート（Firestore）の順** で実施
   - ローカル書き込み完了で即座に UI 更新
   - リモート書き込みの失敗扱いは `WritePolicy` で切り替え可能（既定 `PropagateRemoteFailure` = 呼び出し元に伝播 / `IgnoreRemoteFailure` = SDK のオフライン永続化の再送に委ねる）
@@ -810,6 +820,12 @@ class CoffeeRepositoryImpl(
     fun startSync(userId: String, scope: CoroutineScope) {
         scope.launch {
             remote.observeChanges(userId).collect { records ->
+                // reconciliation: スナップショットに無い id は他端末で削除済みとみなしローカルからも削除
+                // （dev ダミーデータ DummyCoffeeData.ids はローカル専用のため除外）
+                val remoteIds = records.map { it.id }.toSet()
+                local.observeAll(userId).first()
+                    .filter { it.id !in remoteIds && it.id !in DummyCoffeeData.ids }
+                    .forEach { local.delete(userId, it.id) }
                 records.forEach { local.save(it) }
             }
         }

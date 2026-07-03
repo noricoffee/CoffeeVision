@@ -44,8 +44,16 @@ import kotlinx.datetime.todayIn
  *
  * ## cafe の任意化
  *
- * [CoffeeDraft.cafeName] が空かつ [UIState.selectedPlaceId] が null のとき、cafe = null の
- * レコード（セルフ抽出）として保存する。[validate] は cafeName 不要、name 必須のみを検証する。
+ * [CoffeeDraft.cafeName] が空のとき、cafe = null のレコード（セルフ抽出）として保存する。
+ * [validate] は cafeName 不要、name 必須のみを検証する。
+ *
+ * ## Places 選択カフェの座標 / 写真参照の引き継ぎ
+ *
+ * [onPlacesCafeSelected] は選択された [Cafe] を丸ごと内部プロパティ（`selectedCafe`）に保持する
+ * （表示用フィールドだけでなく `latitude` / `longitude` / `photoReferences` も含む）。
+ * [buildRecord] はこの `selectedCafe` があればその座標 / 写真参照を採用し、
+ * name / address / websiteUrl / mapsUrl は draft の編集値を優先する。
+ * [UIState.selectedPlaceId] は `selectedCafe?.placeId` から導出される表示用の派生値。
  *
  * @param coffeeRepository コーヒー記録の永続化と取得を担うリポジトリ
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
@@ -81,7 +89,7 @@ class CoffeeEditorViewModel(
     /**
      * 編集中の UI 値を保持する draft オブジェクト。
      *
-     * cafe は任意 — cafeName が空かつ selectedPlaceId が null のとき null cafe で保存する。
+     * cafe は任意 — cafeName が空のとき null cafe（セルフ抽出）で保存する。
      *
      * @property cafeName カフェ名（任意。空の場合はセルフ抽出として扱う）
      * @property cafeAddress カフェ住所（任意）
@@ -130,7 +138,8 @@ class CoffeeEditorViewModel(
      * @property isSaving 保存処理実行中かどうか
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      * @property savedCoffeeId 保存成功時に非 null になる。Swift 側はこれを監視して画面を dismiss する
-     * @property selectedPlaceId Places API 検索で選択したカフェの Google placeId（任意）
+     * @property selectedPlaceId Places API 検索で選択したカフェの Google placeId（任意）。
+     *   内部で保持する選択済み [Cafe]（`selectedCafe`）の `placeId` を表示用に写した派生値
      */
     data class UIState(
         val mode: Mode = Mode.Create,
@@ -147,6 +156,10 @@ class CoffeeEditorViewModel(
 
     // Edit モードで取得した初期 CoffeeRecord。保存時に id / placeId / createdAt を引き出すために保持する。
     private var currentInitialRecord: CoffeeRecord? = null
+
+    // onPlacesCafeSelected で選択された Cafe を丸ごと保持する（placeId / 座標 / photoReferences を含む）。
+    // buildRecord はこれを見つけたら座標 / photoReferences をこの値から採用する。onAppear でリセットする。
+    private var selectedCafe: Cafe? = null
 
     // onAppear で受け取った userId を保持し、save / onAppear 内で使う。
     private var currentUserId: String? = null
@@ -169,14 +182,17 @@ class CoffeeEditorViewModel(
         currentUserId = userId
         loadJob?.cancel()
         saveJob?.cancel()
+        selectedCafe = null
 
         when (mode) {
             is Mode.Create -> {
                 currentInitialRecord = null
-                _state.update { it.copy(mode = mode, draft = defaultDraft(), isLoading = false) }
+                _state.update {
+                    it.copy(mode = mode, draft = defaultDraft(), isLoading = false, selectedPlaceId = null)
+                }
             }
             is Mode.Edit -> {
-                _state.update { it.copy(mode = mode, isLoading = true) }
+                _state.update { it.copy(mode = mode, isLoading = true, selectedPlaceId = null) }
                 loadJob = viewModelScope.launch {
                     val record = coffeeRepository.observeById(mode.coffeeId).first()
                     if (record == null) {
@@ -404,12 +420,14 @@ class CoffeeEditorViewModel(
     /**
      * Places API 検索結果からカフェを選択した際に呼ぶ。
      *
-     * [cafe] の各フィールドで [UIState.draft] の表示フィールドを上書きし、
-     * [UIState.selectedPlaceId] に Google placeId を保持する。
+     * [cafe] を丸ごと内部プロパティ（`selectedCafe`）に保持し（[buildRecord] が座標 / photoReferences の
+     * 引き継ぎに使う）、[cafe] の表示用フィールドで [UIState.draft] を上書きする。
+     * [UIState.selectedPlaceId] にも Google placeId を保持する（表示用の派生値）。
      *
      * @param cafe Places API 検索から選択したカフェ情報
      */
     fun onPlacesCafeSelected(cafe: Cafe) {
+        selectedCafe = cafe
         _state.update {
             it.copy(
                 draft = it.draft.copy(
@@ -526,7 +544,7 @@ class CoffeeEditorViewModel(
     /**
      * draft と [Mode] から保存用の [CoffeeRecord] を組み立てる。
      *
-     * - cafe は cafeName が空かつ selectedPlaceId が null のとき null（セルフ抽出）
+     * - cafe は [buildCafe] に委譲する（cafeName が空のとき null = セルフ抽出）
      * - [Mode.Create]: id を新規 UUID で採番し、createdAt / updatedAt を now で設定する
      * - [Mode.Edit]: [currentInitialRecord] から id / placeId / createdAt を引き継ぎ、updatedAt を now で更新する
      */
@@ -547,69 +565,7 @@ class CoffeeEditorViewModel(
             }
         }
 
-        // cafe の組み立て: selectedPlaceId があるか cafeName が非空の場合のみ構築する
-        val selectedPlaceId = _state.value.selectedPlaceId
-        val cafe = when (mode) {
-            is Mode.Edit -> {
-                // Edit モード: 既存レコードの cafe を引き継ぐ（selectedPlaceId は使わない）
-                // cafeName が空になったとき null にしてセルフ抽出化する
-                val initial = currentInitialRecord
-                val initialCafe = initial?.cafe
-                if (initialCafe != null && draft.cafeName.isNotBlank()) {
-                    Cafe(
-                        placeId = initialCafe.placeId,
-                        name = draft.cafeName,
-                        address = draft.cafeAddress.takeIf { it.isNotBlank() },
-                        latitude = initialCafe.latitude,
-                        longitude = initialCafe.longitude,
-                        photoReferences = initialCafe.photoReferences,
-                        websiteUrl = draft.cafeWebsiteUrl.takeIf { it.isNotBlank() },
-                        mapsUrl = draft.cafeMapsUrl.takeIf { it.isNotBlank() },
-                    )
-                } else if (selectedPlaceId != null && draft.cafeName.isNotBlank()) {
-                    Cafe(
-                        placeId = selectedPlaceId,
-                        name = draft.cafeName,
-                        address = draft.cafeAddress.takeIf { it.isNotBlank() },
-                        latitude = null,
-                        longitude = null,
-                        photoReferences = emptyList(),
-                        websiteUrl = draft.cafeWebsiteUrl.takeIf { it.isNotBlank() },
-                        mapsUrl = draft.cafeMapsUrl.takeIf { it.isNotBlank() },
-                    )
-                } else {
-                    null
-                }
-            }
-            is Mode.Create -> {
-                if (selectedPlaceId != null && draft.cafeName.isNotBlank()) {
-                    Cafe(
-                        placeId = selectedPlaceId,
-                        name = draft.cafeName,
-                        address = draft.cafeAddress.takeIf { it.isNotBlank() },
-                        latitude = null,
-                        longitude = null,
-                        photoReferences = emptyList(),
-                        websiteUrl = draft.cafeWebsiteUrl.takeIf { it.isNotBlank() },
-                        mapsUrl = draft.cafeMapsUrl.takeIf { it.isNotBlank() },
-                    )
-                } else if (draft.cafeName.isNotBlank()) {
-                    // Places から選んでいないが手入力でカフェ名がある場合は UUID を placeId として採番
-                    Cafe(
-                        placeId = kotlin.uuid.Uuid.random().toString(),
-                        name = draft.cafeName,
-                        address = draft.cafeAddress.takeIf { it.isNotBlank() },
-                        latitude = null,
-                        longitude = null,
-                        photoReferences = emptyList(),
-                        websiteUrl = draft.cafeWebsiteUrl.takeIf { it.isNotBlank() },
-                        mapsUrl = draft.cafeMapsUrl.takeIf { it.isNotBlank() },
-                    )
-                } else {
-                    null
-                }
-            }
-        }
+        val cafe = buildCafe(mode, draft)
 
         return CoffeeRecord(
             id = id,
@@ -632,6 +588,59 @@ class CoffeeEditorViewModel(
             updatedAt = now,
         )
     }
+
+    /**
+     * draft と [mode] から保存用の [Cafe]（任意）を組み立てる。
+     *
+     * 優先順位:
+     * 1. [draft].cafeName が空 → null（セルフ抽出）
+     * 2. このセッションで Places 選択があった（`selectedCafe` が非 null）→
+     *    `selectedCafe` の placeId / latitude / longitude / photoReferences を採用
+     * 3. [Mode.Edit] かつ選択なし → [currentInitialRecord] の cafe（placeId / 座標 / photoReferences）を引き継ぐ
+     * 4. [Mode.Create] かつ選択なし（手入力カフェ）→ UUID を placeId として採番、座標は null
+     *
+     * いずれの場合も name / address / websiteUrl / mapsUrl は draft の編集値を採用する。
+     */
+    private fun buildCafe(mode: Mode, draft: CoffeeDraft): Cafe? {
+        if (draft.cafeName.isBlank()) return null
+
+        val selected = selectedCafe
+        val (placeId, latitude, longitude, photoReferences) = if (selected != null) {
+            CafeSnapshot(selected.placeId, selected.latitude, selected.longitude, selected.photoReferences)
+        } else {
+            when (mode) {
+                is Mode.Edit -> {
+                    val initialCafe = currentInitialRecord?.cafe ?: return null
+                    CafeSnapshot(
+                        initialCafe.placeId,
+                        initialCafe.latitude,
+                        initialCafe.longitude,
+                        initialCafe.photoReferences,
+                    )
+                }
+                is Mode.Create -> CafeSnapshot(kotlin.uuid.Uuid.random().toString(), null, null, emptyList())
+            }
+        }
+
+        return Cafe(
+            placeId = placeId,
+            name = draft.cafeName,
+            address = draft.cafeAddress.takeIf { it.isNotBlank() },
+            latitude = latitude,
+            longitude = longitude,
+            photoReferences = photoReferences,
+            websiteUrl = draft.cafeWebsiteUrl.takeIf { it.isNotBlank() },
+            mapsUrl = draft.cafeMapsUrl.takeIf { it.isNotBlank() },
+        )
+    }
+
+    /** [buildCafe] の内部ヘルパ: 引き継ぎ元 cafe の非表示フィールド（placeId / 座標 / photoReferences）。 */
+    private data class CafeSnapshot(
+        val placeId: String,
+        val latitude: Double?,
+        val longitude: Double?,
+        val photoReferences: List<String>,
+    )
 
     companion object {
         /**

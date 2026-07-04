@@ -2,33 +2,7 @@
 
 実装を進める中で気付いた、再発させたくない落とし穴・お作法を蓄積する場所です。
 セッション開始時に見直し、関連するルールを再確認してください。
-
----
-
-## 2026-06-26
-
-### `IPHONEOS_DEPLOYMENT_TARGET` を上げたら冗長な `@available` / `#if available` を即 sweep する
-
-- デプロイターゲットが iOS 26.0 なのに `@available(iOS 26.0, *)` 属性や `if #available(iOS 26, *)` 分岐が各所に残っていた（Foundation Models 導入時に「26 専用 API だから」と機械的に付けた名残）。ターゲット = 対象 OS 下限なので、下限と同じバージョンの可用性ガードは**全て冗長**。
-- 対処: ターゲットを上げた直後に `grep -rn "@available(iOS <target>" iosApp --include="*.swift"` と `if #available(iOS <target>` を sweep して除去する。型宣言に付いた `@available` が残ると、その型を参照する `#Preview` 内にも `@available` が連鎖して残り見落としやすい。
-- `if #available { A } else { B }`（B = 下限未満フォールバック）は then 節 A を素のコードに開いて else を削る。
-- 注意: ターゲット**より上**の OS を対象にした `@available`（例: ターゲット 26 で `@available(iOS 27, *)`）は当然残す。sweep 対象は「ターゲットと同一バージョン」のものだけ。
-- 別件で混同しないこと: `#if DEBUG` には2用途がある。①機能ゲート（未リリースなら不要 → 除去）②Xcode Preview 補助（`#Preview` / preview 専用サンプル、リリースバイナリ除外目的 → 残す）。dev 専用ツール（ダミーデータ投入/削除など破壊的副作用を持つもの）の DEBUG ゲートも残す。
-- 発生源: iOSDC LT 逆変換 PoC 追加後のクリーンアップ（`implementation_note.md` 2026-06-26）。
-
-### `runTest` で Flow を永続購読する ViewModel をテストするとき `MutableStateFlow` Fake は `UncompletedCoroutinesError` を起こす
-
-- `init` で `repository.observeXxx()` を `scope.launch { collect }` する ViewModel（例: `AccountViewModel` の `observeAccount()`）を `runTest` でテストする際、Fake repo が `MutableStateFlow`（= 完了しない無限 Flow）を返すと、`advanceUntilIdle()` が待機中コルーチンの完了を待ち続けて `UncompletedCoroutinesError` になる
-- 回避: テスト Fake では `flowOf(value)` で **1 値 emit 後に完了する Flow** を返す。`MapViewModel` テストの `FakeVisitRepository.observeAll` が `flowOf(emptyList())` を使っているのと同じ理由
-- 「状態更新の連続変化をテストしたい」場合は `backgroundScope` を使った別アプローチが必要
-- 発生源: Phase 5 アカウント機能 KMP 実装（`AccountViewModelTest` / `DeleteAccountUseCaseTest`）
-
-### `SignInWithAppleButton`（SwiftUI 組み込み）は rawNonce を外部公開しない
-
-- Firebase の `OAuthProvider.appleCredential(withIDToken:rawNonce:)` は nonce 検証のため rawNonce が必須だが、SwiftUI 標準の `SignInWithAppleButton` は内部で nonce を扱い外に出さない → link/signIn の nonce 突き合わせができない
-- 対処: `ASAuthorizationController` を `async` ラップしたカスタムコーディネータ（`AppleSignInCoordinator`、CryptoKit で nonce 生成 + SHA256）を自作し、見た目は `applelogo` SF Symbol のカスタム黒ボタン（Apple HIG 相当）で代替する
-- 補足: シミュレータでは `ASAuthorizationController` の Apple ID フローは起動しない（実機必須）。動作確認は実機作業になる
-- 発生源: Phase 5 アカウント機能 iOS 実装（`AppleSignInCoordinator.swift` / `AccountView.swift`）
+セクションは発生日ごと・日付昇順。新しい教訓は末尾に追記する（2026-07-04 整列。旧例文は現行モデルに更新済み）。
 
 ---
 
@@ -36,10 +10,10 @@
 
 ### SQLDelight 2.x の命名規則
 
-- `.sq` ファイル内の `CREATE TABLE coffee_item` から生成される Kotlin クラスは **`Coffee_item`**（先頭大文字のみ）になる。`CoffeeItem` にはならない
+- `.sq` ファイル内の `CREATE TABLE coffee_record` から生成される Kotlin クラスは **`Coffee_record`**（先頭大文字のみ）になる。`CoffeeRecord` にはならない
 - カラム名 `cafe_place_id` もそのまま `cafe_place_id` プロパティになる（自動 camelCase 化しない）
-- Queries クラスは `.sq` ファイル名から: `Visit.sq` → `VisitQueries`、`CoffeeItem.sq` → `CoffeeItemQueries`。データクラス名と命名が揃わないので注意
-- ドメインモデルと生成行クラスの名前衝突は **import alias**（`import com.noricoffee.domain.Visit as DomainVisit`）で解消する
+- Queries クラスは `.sq` ファイル名から: `CoffeeRecord.sq` → `CoffeeRecordQueries`、`Photo.sq` → `PhotoQueries`。データクラス名と命名が揃わないので注意
+- ドメインモデルと生成行クラスの名前衝突は **import alias**（`import com.noricoffee.domain.Photo as DomainPhoto`）で解消する
 
 ### KMP + SQLDelight のテスト配置
 
@@ -62,19 +36,19 @@
 ### SQLDelight トランザクションと Flow の emit タイミング
 
 - `db.transaction { ... }` 内で複数テーブルを upsert しても、`asFlow()` の購読者には **トランザクション commit 後に一度だけ** 通知が届く
-- 子テーブル（coffee_item / food_item / photo）だけを更新した場合、`visit` 行を観測している `observeAll` には emit が **来ない**。Phase 1 は常に `save(visit)` で visit 行も更新する設計のため問題なしだが、将来子テーブル単独更新を入れるなら `combine` で複数 Query を束ねる
+- 子テーブル（`photo`）だけを更新した場合、`coffee_record` 行を観測している `observeAll` には emit が **来ない**。現行設計は常に `save(record)` で本体行も更新するため問題なしだが、将来子テーブル単独更新を入れるなら `combine` で複数 Query を束ねる
 
 ### iOS で `Undefined symbol: _sqlite3_bind_blob` が出たとき
 
 - 原因: `NativeSqliteDriver`（の依存 `sqliter`）は iOS の **システム SQLite** に動的リンクする。`SharedLogic.framework` を `isStatic = true` で出しているので、最終リンク（Xcode 側のアプリビルド）で `-lsqlite3` が要る
-- **`sharedLogic/build.gradle.kts` の framework ブロックに `linkerOpts("-lsqlite3")` を入れただけでは不十分**（実測: 31 件の `_sqlite3_*` 未解決が残った）。`isStatic = true` の framework は Xcode 側のアプリリンクにフラグを伝播しないことがある
+- **`shared/framework/build.gradle.kts` の framework ブロックに `linkerOpts("-lsqlite3")` を入れただけでは不十分**（実測: 31 件の `_sqlite3_*` 未解決が残った）。`isStatic = true` の framework は Xcode 側のアプリリンクにフラグを伝播しないことがある
 - 確実な対処: **Xcode の xcconfig に `OTHER_LDFLAGS = $(inherited) -lsqlite3` を追加**する。本プロジェクトでは `iosApp/Configuration/Config.xcconfig` がアプリの base configuration として使われているので、そこに書く
 - Xcode のキャッシュが古い framework を掴んでいると反映されないので、**Product → Clean Build Folder** してから再ビルド
 - なお Gradle 側の `linkerOpts("-lsqlite3")` も残しておくのが安全（KMP の build 内で iOS テスト等を走らせるときに必要になり得る）
 
 ### ドメインモデルとマッパの責任分担
 
-- バリデーション（rating の 1..5、name の長さ等）は **ViewModel 層に置く** 方針（`data-model.md` §7）
+- バリデーション（rating の範囲、name の長さ等）は **ViewModel 層に置く** 方針（`data-model.md` §7）
 - Mapper は純粋な型変換に徹し、例外を投げる箇所を増やさない
 - Enum の DB 表現は `name` 文字列。未知の値が DB に入っていたら `valueOf` が `IllegalArgumentException` を投げるが、これは「マイグレーション漏れ」を即座に検知できるのでむしろ望ましい
 
@@ -86,7 +60,7 @@
 
 - SKIE は「Kotlin の `suspend` / `Flow` を Swift から **呼び出す**」方向のエルゴノミクス改善ツール。Swift 側で `async throws` / `for await` が自然に使える
 - **逆方向（Swift で Kotlin interface を実装する側）には効果が及ばない**: 生成された Obj-C プロトコル準拠の生シグネチャ（`completionHandler:` 形式 / `Kotlinx_coroutines_coreFlow` 戻り値）を実装する必要がある
-- Phase 2 では `AuthRepositoryIosImpl.swift` / `RemoteVisitDataSourceIosImpl.swift` がこのパターンに該当
+- 現行では `AuthRepositoryIosImpl.swift` / `RemoteCoffeeDataSourceIosImpl.swift` / `CoffeeInsightProviderIosImpl.swift` がこのパターンに該当
 - Swift から Kotlin `Flow` を作って返すには `MutableStateFlow(initialValue:)` を SKIE 経由で構築し、イベントごとに `setValue` で更新するのが第一候補
 - 両方向の interop を SKIE が魔法のように解決する、という誤解は禁物。Kotlin 側の interface 定義時から「Swift 実装」と「Swift 呼び出し」の両側を意識すること
 
@@ -165,14 +139,14 @@
 ### KMP iOS framework の `export(...)` は `api(...)` 依存とは別に明示が必要
 
 - `commonMain.dependencies { api(projects.shared.other) }` は klib への取り込みを保証するが、`framework { ... }` ブロックで `export(projects.shared.other)` を **追加で明示** しないと Obj-C ヘッダに依存モジュールの class 宣言が出てこない
-- 症状: ビルド・リンク・`import SharedLogic` はすべて成功するのに、Swift から `AppContainer` / `VisitRepository` 等が「Cannot find type in scope」になる。自モジュール内シンボル（`Greeting` 等）だけは引き続き見える
-- 切り分け: `sharedLogic/build/bin/iosSimulatorArm64/releaseFramework/SharedLogic.framework/Headers/SharedLogic.h` を `wc -l` / `grep` で覗く。export 抜けだと数百行、`export(...)` 追加後は数千行に激変する（実測 631 行 → 2412 行）
+- 症状: ビルド・リンク・`import SharedLogic` はすべて成功するのに、Swift から `AppContainer` / `CoffeeRepository` 等が「Cannot find type in scope」になる。自モジュール内シンボルだけは引き続き見える
+- 切り分け: `shared/framework/build/.../SharedLogic.framework/Headers/SharedLogic.h` を `wc -l` / `grep` で覗く。export 抜けだと数百行、`export(...)` 追加後は数千行に激変する（実測 631 行 → 2412 行）
 - Umbrella framework パターン（`shared/framework` モジュール）でも同じ知見が必要。`export(...)` 群を framework モジュール側に集約する
 
 ### `expect/actual` を含む test ヘルパは「ヘルパが置かれているモジュールの内部から閉じる」
 
 - `expect fun createInMemoryTestSqlDriver()` を `shared/data-local` の commonTest に置くと、その actual は同モジュールの `androidHostTest` / `iosTest` にしか書けない。他モジュールの commonTest から再利用する標準手段はない（`testFixtures` 導入 or ヘルパ自体を `commonMain` に置くなど工夫が必要）
-- 結果として「`VisitRepositoryImpl` のテストを `shared/core` 側に置きたい」が、`data-local` の expect/actual ドライバを再利用したいので **テストを `data-local` 側に置く** 妥協が現実解になる
+- 結果として「合成リポジトリ（現 `CoffeeRepositoryImpl`）のテストを `shared/core` 側に置きたい」が、`data-local` の expect/actual ドライバを再利用したいので **テストを `data-local` 側に置く** 妥協が現実解になる
 - 教訓: `expect/actual` は「同モジュール内で完結する」前提で設計する。一度書いた expect/actual を他モジュールから使いまわすコストは高いので、最初から「ヘルパだけ別の共有テストモジュールに切り出す」設計を選ぶか、テストの所属モジュールを実装の所属と切り離す覚悟を持つ
 
 ### KMP の `XCFramework(name)` と framework `baseName` は揃えると warning が消えタスク名も直感的になる
@@ -254,12 +228,12 @@
 - `shared/domain` が `kotlinx-datetime` を `implementation` で宣言している場合、`api` 依存で `domain` を取り込んでいても `androidMain` の Kotlin ソースからは `Instant` / `LocalDate` が見えない（コンパイルエラー）
 - 対処: 使う側モジュールの `androidMain.dependencies { implementation(libs.kotlinx.datetime) }` に個別追加する。`commonMain` 側でも同様
 - 同じことが他の `implementation` 宣言ライブラリ（`kotlinx-coroutines-core` 等）にも起きる。KMP の `androidMain` は JVM classpath として扱われるため、推移的依存の `api` / `implementation` 区別が strict に効く
-- 公開 API（`Visit` data class が `Instant` プロパティを持つなど）の型として `kotlinx-datetime` が露出するなら `domain` 側で `api` 宣言に変えるべきだが、影響範囲が広がるため判断は慎重に
+- 公開 API（`CoffeeRecord` data class が `Instant` プロパティを持つなど）の型として `kotlinx-datetime` が露出するなら `domain` 側で `api` 宣言に変えるべきだが、影響範囲が広がるため判断は慎重に
 
 ### callbackFlow 内での coroutine 起動は ProducerScope を取り出して使う
 
 - `callbackFlow { ... }` の ProducerScope は `CoroutineScope` を実装しているため、ブロック内で `this.launch(Dispatchers.IO) {}` が使える
-- リスナーコールバック（非 suspend）から suspend 処理（子コレクション取得など）を起こす場合は `val flowScope = this` でスコープを保持 → コールバック内で `flowScope.launch { ... }` するパターンが安全
+- リスナーコールバック（非 suspend）から suspend 処理を起こす場合は `val flowScope = this` でスコープを保持 → コールバック内で `flowScope.launch { ... }` するパターンが安全
 - `GlobalScope` は使わない（ライフサイクルが callbackFlow と切り離されて、リスナー削除後も走り続けるリスク）
 
 ### Firebase Android SDK の `Task<T>` は `suspendCancellableCoroutine` で十分薄くラップできる
@@ -318,6 +292,24 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 ---
 
+## 2026-06-17
+
+### `SignInWithAppleButton`（SwiftUI 組み込み）は rawNonce を外部公開しない
+
+- Firebase の `OAuthProvider.appleCredential(withIDToken:rawNonce:)` は nonce 検証のため rawNonce が必須だが、SwiftUI 標準の `SignInWithAppleButton` は内部で nonce を扱い外に出さない → link/signIn の nonce 突き合わせができない
+- 対処: `ASAuthorizationController` を `async` ラップしたカスタムコーディネータ（`AppleSignInCoordinator`、CryptoKit で nonce 生成 + SHA256）を自作し、見た目は `applelogo` SF Symbol のカスタム黒ボタン（Apple HIG 相当）で代替する
+- 補足: シミュレータでは `ASAuthorizationController` の Apple ID フローは起動しない（実機必須）。動作確認は実機作業になる
+- 発生源: Phase 5 アカウント機能 iOS 実装（`AppleSignInCoordinator.swift` / `AccountView.swift`）
+
+### `runTest` で Flow を永続購読する ViewModel をテストするとき `MutableStateFlow` Fake は `UncompletedCoroutinesError` を起こす
+
+- `init` で `repository.observeXxx()` を `scope.launch { collect }` する ViewModel（例: `AccountViewModel` の `observeAccount()`）を `runTest` でテストする際、Fake repo が `MutableStateFlow`（= 完了しない無限 Flow）を返すと、`advanceUntilIdle()` が待機中コルーチンの完了を待ち続けて `UncompletedCoroutinesError` になる
+- 回避: テスト Fake では `flowOf(value)` で **1 値 emit 後に完了する Flow** を返す。`MapViewModel` テストの Fake repo が `flowOf(emptyList())` を使っているのと同じ理由
+- 「状態更新の連続変化をテストしたい」場合は `backgroundScope` を使った別アプローチが必要
+- 発生源: Phase 5 アカウント機能 KMP 実装（`AccountViewModelTest` / `DeleteAccountUseCaseTest`）
+
+---
+
 ## 2026-06-19
 
 ### Kotlin/Native クロスモジュールの nullable プロパティは smart cast が効かない（commonMain では検出されない）
@@ -332,7 +324,7 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 - `testAndroidHostTest` が使う `JdbcSqliteDriver` は SQLite の Foreign Key サポートがデフォルト OFF。`ON DELETE CASCADE` のテストが通らない
 - `AppDatabase.Schema.create(driver)` の直後に `driver.execute(null, "PRAGMA foreign_keys = ON", 0, null)` を実行する（`createInMemoryTestSqlDriver()` に追加）
-- 実機の `AndroidSqliteDriver` / iOS の `NativeSqliteDriver` とは挙動が異なる。iOS テストで CASCADE を検証する場合も同様の pragma 設定を確認すること
+- 実機の `AndroidSqliteDriver` / iOS の `NativeSqliteDriver` とは挙動が異なる。iOS テストで CASCADE を検証する場合も同様の pragma 設定を確認すること（→ 2026-07-03「テストダブルの接続設定」エントリで本番側の穴として顕在化）
 - 発生源: Phase 7 Phase 1（`coffee_record` ⇄ `photo` の CASCADE 削除テスト）
 
 ### iOS ビルド検証で `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` を付けると SharedLogic の Gradle ビルドがスキップされ「偽の成功」になる
@@ -362,6 +354,8 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **改善パターン**: ①個別データの問いには「**必ず**ツールを呼ぶ／ツールを呼ばずに分からないとは言わない」と命令形で書く ②「分かりません」は「**ツールを呼んだ結果が 0 件のときだけ**」に限定して早期 escape を塞ぐ ③tool description も指示的にする
 - **切り分けの仕込み**: tool の `call` 冒頭/末尾と、セッション選択経路に診断 `print` を入れ、「tool が呼ばれていない」のか「呼ばれたが 0 件（filter マッチ漏れ）」なのかを実機ログで判別できるようにする。instructions 強化だけで不足なら、質問をプロンプト側で「個別 / 全体傾向」に事前分類してセッション分岐する案が次の手
 - 発生源: 9-4b 対話 Q&A v2（個別記録の質問に「不明」を返す → instructions の逃げ道が原因）
+
+---
 
 ## 2026-06-22
 
@@ -397,6 +391,10 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 「最良候補が基準を有意に超えるか」を問うガードは、固定オフセットでなく `差 > z · SE`（SE ≈ stdev/√n）のような n 連動の信頼区間ゲートにする。固定 δ は対症療法に留まると疑う
 - **親の運用**: サブエージェントの「これはテストの人工物で実データなら問題ない」という説明は、数理 or 実測で裏が取れるまで**留保**する。鵜呑みにせず「現実的な分布で測り直す」一手を挟む（CLAUDE.md No Laziness / Verification Before Done）
 
+---
+
+## 2026-06-23
+
 ### xcconfig はフォールバック宣言を `#include?` より「前」に置く（後ろだと実値を空で上書き）
 
 - xcconfig は**同一キーの最後の代入が勝つ**。`#include? "Secrets.xcconfig"`（実キーを設定）の**後ろ**に `PLACES_API_KEY =`（空フォールバック）を書くと、Secrets の実キーが空文字で上書きされ、ビルドは通るが実行時に空キーになる
@@ -428,6 +426,10 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 「重い」報告は最初に **(a) Release/Profile ビルドで再現するか (b) デバッガをデタッチして再現するか** を切り分ける。debug 限定なら追わない（MapKit ライフサイクル制御や Tab 構成の作り変えは実在しない問題への過剰設計になる）。`candidate resultset` / `containerToPush` / `gesture gate timed out` は OS フレームワーク由来のログでアプリからは抑制できない無害ノイズ
 - 補足: このとき検索欄テキストを Kotlin StateFlow 直結から View ローカル `@State` + `.onChange` 一方向転送に変えた変更は、debug 問題とは独立に「表示を非同期ラウンドトリップに依存させない」定石として正しいので残した（[`implementation_note.md`](../implementation_note.md) 2026-06-23 エントリ参照）
 
+---
+
+## 2026-06-24
+
 ### `runCatching` はコルーチン内（ViewModel / Repository）で使ってはいけない
 
 - Kotlin の `runCatching` は `Throwable` 全体をキャッチするため、コルーチンキャンセル時の `CancellationException` も `onFailure` に落ちる。これにより (a) ローディングフラグをエラー扱いで上書きする競合、(b) スコープ上位へのキャンセル伝播の遮断（構造化並行性の協調キャンセルが弱まる）が起きる
@@ -447,6 +449,10 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 各 ViewModel は注入 scope を親として `CoroutineScope(parent.coroutineContext + SupervisorJob(parentJob))` で**自分の子スコープを所有**し、`fun clear() { viewModelScope.cancel() }` を公開する。iOS Bridge は **`deinit`** で `kotlin.clear()` を呼ぶ（`onDisappear` は遷移アニメ中に発火するので push/pop 画面では不可）。`SupervisorJob(parentJob)` で親 Job に連結すれば app teardown 時の連鎖キャンセルも両立。`clear()` はスコープ畳みのみに留める（`Job.cancel()` はスレッドセーフ＝K/N の deinit スレッドから安全。`@MainActor` 前提の処理を足すと壊れる）（[`implementation_note.md`](../implementation_note.md) 2026-06-24「所有 viewModelScope + clear()」エントリ参照）
 - **検証の落とし穴**: このリークは **Swift の Bridge を Instruments Allocations で見ても検出できない**。Bridge は `[weak self]` で循環がなく修正前から正しく deinit するため、Swift クラスでフィルタした Persistent は修正前後とも「表示中=1 / pop 後=0」で**変わらない**。実際に漏れるのは **app-wide scope で走り続ける Kotlin の collector と、それに掴まれて解放されない Kotlin VM**（Swift 名では出ず、K/N オブジェクトの解放追跡も Instruments では不安定）。→ 検証は**コルーチンの寿命**で見る: collector に `.onCompletion { println(...) }` を一時的に仕込み、push→pop で完了ログが出れば畳めている。修正前は出ない（孤児コルーチン継続）。「Swift 側の解放＝リーク解消」ではない点に注意
 
+---
+
+## 2026-06-25
+
 ### ボタン背景に `Color.primary` を使うとダークモードで不可視になる
 
 - 2026-06-25、`AccountView` の「Apple でサインイン」ボタンが背景 `Color.primary.opacity(0.9)` + 前景 `.white` だった。`Color.primary` はライトで黒・**ダークで白**になるため、ダークモードで「白背景 + 白文字」となりボタンがほぼ見えなかった（ユーザー報告で発覚。ビルドは通るので静的には気づけない）
@@ -455,9 +461,31 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 ### 所有 viewModelScope（SupervisorJob 子スコープ）を持つ ViewModel のテストは `finally { vm.clear() }` が必須
 
-- 「所有 viewModelScope + clear()」パターン（`CoroutineScope(parentScope.coroutineContext + SupervisorJob(parentJob))` を VM 内で生成）の ViewModel を `runTest { ... }` でテストする際、親に `this`（TestScope）を渡すと VM の `viewModelScope` が `TestScope` の子 Job として登録される。テスト終了時にこの子スコープが生きていると `runTest` が `UncompletedCoroutinesError` を報告してテストが**失敗**する。`advanceUntilIdle()` だけでは collector 等が残るため不十分
+- 「所有 viewModelScope + clear()」パターンの ViewModel を `runTest { ... }` でテストする際、親に `this`（TestScope）を渡すと VM の `viewModelScope` が `TestScope` の子 Job として登録される。テスト終了時にこの子スコープが生きていると `runTest` が `UncompletedCoroutinesError` を報告してテストが**失敗**する。`advanceUntilIdle()` だけでは collector 等が残るため不十分
 - 2026-06-25、`CafeSearchViewModel` にバイアス版 `onSearchTapped` を追加してテストを通そうとした際に発覚。git stash で確認したところ**変更前から cafe-search の全テストが同エラーで落ちていた**（新メソッド追加で初めて実行され顕在化）
-- **教訓**: 各テストの `runTest` ブロックを `try { ... } finally { vm.clear() }` で囲み、テスト終了前に必ず scope を畳む。**横展開注意**: 同じ「所有 viewModelScope + clear()」パターン（本ファイル「画面ごとの ViewModel に app-wide scope を共有させない」エントリ）を持つ他 feature の既存テストも同様に落ちている可能性が高い。cafe-search は修正済。他モジュールは別タスクで横断点検が必要（[`implementation_note.md`](../implementation_note.md) 2026-06-25「テキスト検索にマップ中心の位置バイアス」エントリ参照）
+- **教訓**: 各テストの `runTest` ブロックを `try { ... } finally { vm.clear() }` で囲み（末尾で `vm.clear()` でも可）、テスト終了前に必ず scope を畳む。**横展開注意**: 同パターンを持つ他 feature の既存テストも同様に落ちる（2026-06-29 の `MapViewModel` タグフィルタ実装時にも同対応を実施）
+- 注意: `scope = backgroundScope` は `advanceUntilIdle()` の到達範囲外になるケースがある（Job がルートになる実装）。「テスト中に完了を待つコルーチン」（`poiLookupJob` 等）には使わない
+
+### タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない
+
+- `Tab { CafeSearchView(...) }` のようにタブのルートに直接置かれた View は、タブ切替や子画面 push（`CafeDetailView` への `NavigationLink`）で `onDisappear` が発火するが、**View インスタンス自体は破棄されず `@State` も保持される**。ここで `.onDisappear { bridge.cancel() }` のように Kotlin `StateFlow` の `observationTask` を止めると、`startObservation()` は init でしか呼ばれないため、戻ってきても観測が再開されず、以降 Kotlin 側の状態更新が Swift に一切反映されなくなる
+- 2026-06-25、`CafeSearchView` でこれが顕在化（検索 → カフェ詳細 push → 戻る、で検索が効かなくなる「1,2 回はできたが止まる」バグ）。`.onDisappear { bridge.cancel() }` を削除して解消
+- **教訓**: タブ常駐 View（`@State` でブリッジを自前生成し、push/タブ切替で破棄されないもの）の observation は `onDisappear` でキャンセルしない。observation は**ブリッジの `deinit`（`kotlin.clear()`）まで生かす**。sheet/push で都度生成・破棄される使い方（同 View を sheet 起動するモード等）では、View 破棄 → `deinit` が自然に observation と Kotlin scope を片付ける。`onDisappear` は「遷移アニメ中にも発火する」「常駐 View では再 init されない」の二点で破棄フックとして不適。所有 viewModelScope の `clear()` を呼ぶのも同じ理由で `deinit` 起点にする（本ファイル 2026-06-24「画面ごとの ViewModel に app-wide scope を共有させない」エントリと同根）（[`implementation_note.md`](../implementation_note.md) 2026-06-25「現在地系を撤去しテキスト検索のみに整理」エントリ参照）
+
+---
+
+## 2026-06-26
+
+### `IPHONEOS_DEPLOYMENT_TARGET` を上げたら冗長な `@available` / `#if available` を即 sweep する
+
+- デプロイターゲットが iOS 26.0 なのに `@available(iOS 26.0, *)` 属性や `if #available(iOS 26, *)` 分岐が各所に残っていた（Foundation Models 導入時に「26 専用 API だから」と機械的に付けた名残）。ターゲット = 対象 OS 下限なので、下限と同じバージョンの可用性ガードは**全て冗長**。
+- 対処: ターゲットを上げた直後に `grep -rn "@available(iOS <target>" iosApp --include="*.swift"` と `if #available(iOS <target>` を sweep して除去する。型宣言に付いた `@available` が残ると、その型を参照する `#Preview` 内にも `@available` が連鎖して残り見落としやすい。
+- `if #available { A } else { B }`（B = 下限未満フォールバック）は then 節 A を素のコードに開いて else を削る。
+- 注意: ターゲット**より上**の OS を対象にした `@available`（例: ターゲット 26 で `@available(iOS 27, *)`）は当然残す。sweep 対象は「ターゲットと同一バージョン」のものだけ。
+- 別件で混同しないこと: `#if DEBUG` には2用途がある。①機能ゲート（未リリースなら不要 → 除去）②Xcode Preview 補助（`#Preview` / preview 専用サンプル、リリースバイナリ除外目的 → 残す）。dev 専用ツール（ダミーデータ投入/削除など破壊的副作用を持つもの）の DEBUG ゲートも残す。
+- 発生源: iOSDC LT 逆変換 PoC 追加後のクリーンアップ（`implementation_note.md` 2026-06-26）。
+
+---
 
 ## 2026-06-29
 
@@ -467,23 +495,13 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: `combine` に入れてよいのは「完了する Flow」（`flowOf` / DB ワンショット / `take(1)` 等）のみ。「選択状態」等の変化ストリームは `combine` から外し、変化イベントごとに副作用メソッドで即時再計算するキャッシュ変数パターンにする
 - 2026-06-29、`MapViewModel` タグフィルタ実装で `_selectedTagsFlow` を `combine` に含めようとして顕在化
 
-### 所有 viewModelScope（SupervisorJob 子スコープ）を持つ ViewModel のテストは末尾で `vm.clear()` を呼ぶ
-
-- `scope = this`（TestScope）を ViewModel に渡すと内部 `SupervisorJob` が TestScope 子になる。テスト終了時に `SupervisorJob` が生きていると `runTest` が `UncompletedCoroutinesError` で失敗する（`advanceUntilIdle()` だけでは不十分）
-- **教訓**: 各テストの `runTest` ブロック末尾で `vm.clear()` を呼び viewModelScope を畳む。`finally { vm.clear() }` でも可
-- 注意: `scope = backgroundScope` は `advanceUntilIdle()` の到達範囲外になるケースがある（Job がルートになる実装）。`poiLookupJob` 等「テスト中に完了を待つコルーチン」には使わない
-
-### タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない
-
-- `Tab(role:) { CafeSearchView(...) }` のようにタブのルートに直接置かれた View は、タブ切替や子画面 push（`CafeDetailView` への `NavigationLink`）で `onDisappear` が発火するが、**View インスタンス自体は破棄されず `@State` も保持される**。ここで `.onDisappear { bridge.cancel() }` のように Kotlin `StateFlow` の `observationTask` を止めると、`startObservation()` は init でしか呼ばれないため、戻ってきても観測が再開されず、以降 Kotlin 側の状態更新が Swift に一切反映されなくなる
-- 2026-06-25、`CafeSearchView` でこれが顕在化（検索 → カフェ詳細 push → 戻る、で検索が効かなくなる「1,2 回はできたが止まる」バグ）。`.onDisappear { bridge.cancel() }` を削除して解消
-- **教訓**: タブ常駐 View（`@State` でブリッジを自前生成し、push/タブ切替で破棄されないもの）の observation は `onDisappear` でキャンセルしない。observation は**ブリッジの `deinit`（`kotlin.clear()`）まで生かす**。sheet/push で都度生成・破棄される使い方（同 View を sheet 起動するモード等）では、View 破棄 → `deinit` が自然に observation と Kotlin scope を片付ける。`onDisappear` は「遷移アニメ中にも発火する」「常駐 View では再 init されない」の二点で破棄フックとして不適。所有 viewModelScope の `clear()` を呼ぶのも同じ理由で `deinit` 起点にする（本ファイル「画面ごとの ViewModel に app-wide scope を共有させない」エントリと同根）（[`implementation_note.md`](../implementation_note.md) 2026-06-25「現在地系を撤去しテキスト検索のみに整理」エントリ参照）
+---
 
 ## 2026-07-03
 
 ### 「observation を onDisappear でキャンセルしない」既知パターンが CafeDetailView で再発
 
-- 2026-06-25 に `CafeSearchView` で記録済みの同型バグ（本ファイル「タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない」）が、`CafeDetailView` にも残存していたことが 2026-07-03 の iosApp 全件レビューで発覚。push → pop 後に `startObservation()` を再呼び出しする経路がなく、コーヒー一覧・カフェ情報が凍結する
+- 2026-06-25 に `CafeSearchView` で記録済みの同型バグ（本ファイル 2026-06-25「タブ常駐 View の `@State` ブリッジ observation を `onDisappear` でキャンセルしない」）が、`CafeDetailView` にも残存していたことが 2026-07-03 の iosApp 全件レビューで発覚。push → pop 後に `startObservation()` を再呼び出しする経路がなく、コーヒー一覧・カフェ情報が凍結する
 - lessons 記録時（2026-06-25）に**横展開点検をしていなかった**のが直接原因。今回のレビューで全 `*ViewModelBridge` を横断点検し、凍結するのは `CafeDetailView` のみと確認（`CoffeeListView` / `AnalysisView` / `CoffeeDetailView` は `onAppear` で観測を再スタートする型のため自己回復する。ただし規約上は deinit まで生かす型に寄せるのが望ましい → 別途バックログ）
 - **教訓**: バグパターンを lessons に記録したら、その場で `grep -rn "onDisappear" iosApp/ | grep -i "cancel"` 相当の横断点検までやり切る。点検結果（該当なし / 該当あり→修正）も lessons に残す。レビュー時のチェック観点: 「`cancel()` を呼ぶ `.onDisappear`」があれば、observation を再開する経路が本当にあるかを必ず追う
 

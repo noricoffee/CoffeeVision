@@ -203,15 +203,15 @@ Button { viewModel.onAddTapped() } label: {
 
 ```swift
 NavigationStack {
-    VisitListView(viewModel: ...)
-        .navigationTitle("訪問記録")
+    CoffeeListView(...)
+        .navigationTitle(String(localized: "コーヒー記録"))
         .navigationBarTitleDisplayMode(.large)
 }
 ```
 
 ### モーダル
 
-- Visit 作成のような一連の入力フローは `.sheet` で表示する
+- コーヒー記録の作成・編集のような一連の入力フローは `.sheet` で表示する
 - 写真の全画面表示は `.fullScreenCover` を使う
 
 ---

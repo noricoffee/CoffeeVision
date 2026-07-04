@@ -218,7 +218,7 @@
 
 > 完了（2026-07-02）: 実装と docs の齟齬 4 件（data-model のフェーズ 10 / 12-C 追随、kmp-bridge の export 記述、app-store-metadata の CoffeeRecord 化、implementation_note サマリ全面更新）+ 旧モデル例文・runCatching 例文の是正 + CLAUDE.md / architecture.md の feature 列挙修正。経緯は implementation_note 2026-07-02 エントリ。
 >
-> 残りの低優先残件（ui-ux-guidelines の Visit 系旧用語・FAB 等の新 UI パターン未記載、backlog ID「B-4」と Phase B-4 の名前衝突など）は未着手。必要になったら下の設計判断バックログへ起票する。
+> 残りの低優先残件のうち ui-ux-guidelines の Visit 系旧用語は 2026-07-04 に消し込み済み。未着手で残るのは FAB 等の新 UI パターン未記載（ui-ux-guidelines）、backlog ID「B-4」と Phase B-4 の名前衝突など。必要になったら下の設計判断バックログへ起票する。
 
 ---
 

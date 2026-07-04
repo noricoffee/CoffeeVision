@@ -700,6 +700,6 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **例コードと実体の乖離を修正**: `kmp.library` 例（実体は jvmToolchain なし / iosX64 なし / `com.android.kotlin.multiplatform.library`）、`kmp.feature` 例（自動配線は core+domain のみ。coroutines-core は手動追加）、ViewModel / Bridge 例（所有 viewModelScope + clear() / @MainActor / deinit）、テスト例（`finally { vm.clear() }`）、Security Rules 記述（path uid 検証が実体）、外部依存表（未採用の Napier/kermit 行を削除し SKIE / Foundation Models を追加）
 - **完了済みの「段階的移行ステップ」表を削除**し、今後も効く運用ルール（別 PR / ビルド確認 / パッケージ一致 / framework 追記）だけ「モジュール分割の運用ルール」として残した
 - iosApp ツリーの実在しない `Bridge/` ディレクトリ表記を実体（`Features/<Name>/` 同居 + `FirebaseRepositories/FlowBridge.swift`）に修正（2026-07-04 エージェント定義改善で発覚したのと同じ誤り）
-- 未対応で残る Visit 旧例文: `ui-ux-guidelines.md` 2 件・`coding-conventions.md` 1 件（軽微。次の docs 棚卸しで消し込み）
+- 残っていた Visit 旧例文は同日中に消し込み済み: `ui-ux-guidelines.md` 2 件を CoffeeListView / コーヒー記録の例に更新（`coding-conventions.md` の 1 件は `ObserveVisitedCafesUseCase` = 現行の正当名で修正不要と確認）。あわせて `tasks/lessons.md` を日付順に整列（誤配置 12 件を発生日セクションへ移動・重複 1 件を統合・旧モデル例文を現行化。教訓 64 件は全数維持）
 
 

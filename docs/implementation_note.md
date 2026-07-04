@@ -2145,3 +2145,16 @@ docs 全体精査（実コードとの突合を含む）で検出した重大 4 
 4. **model は `sonnet` 据え置き**: 実装ワーカーはコスト効率の良い Sonnet、仕様判断は親、という現行ルーティングを維持（公式ベストプラクティスとも一致）
 5. **必読 docs から CLAUDE.md を削除**: カスタムサブエージェントには CLAUDE.md が自動ロードされる（公式仕様）ため Read 指示は冗長だった。Explore / Plan（組み込み）だけはスキップされる点に注意
 6. **起動確認 dispatch での補正**（同日）: メモリが `memory: project` 指定にもかかわらずユーザースコープ（`~/.claude/agent-memory/`）へ書かれたため、定義本文で「リポジトリ内 `.claude/agent-memory/<name>/` を正とする」と明示し、初期メモリをリポジトリ側へ移動。また ios-engineer の書き込みスコープ記述にあった `iosApp/iosApp/Bridge/`（実在しないパス）を実体（`Features/<Name>/<Name>ViewModelBridge.swift` + `FirebaseRepositories/FlowBridge.swift`）に修正 — エージェント定義も「横断 doc」として陳腐化する実例（lessons 2026-06-16 と同根）
+
+### 2026-07-04: CLAUDE.md スリム化 — .claude/rules/ パススコープ分割とモジュール表の参照一本化
+
+- 領域: CLAUDE.md / `.claude/rules/**`
+- 関連: tasks.md「CLAUDE.md のスリム化と .claude/rules/ 分割（2026-07-04）」、lessons.md 2026-06-16（横断 doc 陳腐化）
+
+CLAUDE.md が 240 行と公式推奨（200 行以下。長いほど遵守率低下）を超過し、docs との二重管理箇所が陳腐化の常習箇所になっていたため再構成した（240 → 131 行）。記録に値する判断は以下。
+
+1. **言語別規約は `.claude/rules/` のパススコープ規則へ**: `kotlin-kmp.md`（paths: `shared/**` / `**/*.kt` 等）と `swift-ios.md`（paths: `iosApp/**` / `**/*.swift`）。対象ファイルを触るときだけロードされるため、常時コンテキストを消費しない。`@import` 分割は起動時全ロードで節約にならないため不採用。rules は「要点 + docs 正本への参照」の薄い構成とし、docs・エージェント定義との三重管理を避けた。rules のサブエージェント伝播は kmp-engineer への実測 dispatch で確認済み: 起動時ではなく、paths にマッチするファイルを Read した直後に「Contents of <path>:」形式でルール全文が遅延注入される（skills プリロードと違い現行ハーネスで機能する）。エージェント定義側の同等規約は、rules 注入前（ファイルを読む前の計画段階）もカバーする二重化として維持
+2. **モジュール構成 11 行表を削除**: `settings.gradle.kts`（一覧）と `architecture.md`（役割・依存方向）への参照に一本化。この表は lessons 2026-06-16 / 2026-07-02 で陳腐化が実証されたストック型キャッシュであり、複製をやめて陳腐化面そのものを消した
+3. **lessons の親運用ルールを CLAUDE.md へ昇格**: ①サブエージェントの `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` 付き成功報告は親がフラグ無しで再検証（06-19）②iOS ターゲットのテスト実行は親が `DEVELOPER_DIR` 付きで実行（07-03）③方針転換時は横断 doc の旧記述消し込みまで同一変更内で行う（06-16）④lessons 記録時は横断点検までやり切る（07-03）。lessons は「読み返せば分かる」だが、毎セッション必ず載る CLAUDE.md に置くことで運用ルールとして常時効かせる
+4. **アーキテクチャ不変条件は CLAUDE.md 本体に残置**: 配置原則 / feature 相互依存禁止 / StateFlow 1 本 / Firebase 非対称吸収などは仕様判断・dispatch 判断に毎回必要で、変更頻度も低い（陳腐化リスク小）ため rules に出さなかった
+5. **消失ルールゼロの棚卸し**: 旧 CLAUDE.md の実質ルールが「新 CLAUDE.md / rules / エージェント定義」のいずれかに残ることを diff で確認。意図的に落としたのは汎用論（「複雑な問題には計算リソースを投入」等）と完了済みフェーズの dispatch パターン（モジュール分割 Phase 2.x）のみ

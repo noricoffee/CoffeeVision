@@ -5,168 +5,112 @@
 
 ---
 
-# 基礎ルール（すべてのタスクに適用）
+## プロジェクト概要
 
-## ワークフロー・オーケストレーション
+- **アプリ名**: CoffeeVision — 訪れたカフェでのコーヒー・フード体験を記録・振り返るモバイルアプリ
+- **プラットフォーム**: iOS（リリース対象）/ Android（KMP 共通レイヤーの検証ターゲット、リリース対象外）
+- **アーキテクチャ**: Kotlin Multiplatform（KMP）+ ネイティブ UI
+- **iOS UI**: SwiftUI + MVVM（`@Observable`）/ **Android UI**: Compose Multiplatform（1 画面のみの検証実装）
+- **ローカル DB**: SQLDelight / **クラウド同期**: Firebase 公式プラットフォーム別 SDK / **カフェ検索**: Google Places API
 
-### 1. Plan Mode Default（プランモードをデフォルトに）
+### モジュール構成
 
-- 非自明なタスク（3 ステップ以上、またはアーキテクチャの意思決定）には必ずプランモードに入ること
-- 何かがうまくいかなくなったら、すぐに止めて再計画する。そのまま進め続けない
-- 構築だけでなく、検証ステップにもプランモードを使う
-- 曖昧さを減らすために、詳細な仕様を最初に書く
+`shared/*` は基盤層（`core` / `domain` / `data-local` / `data-places` / `data-firebase`）+ `feature/*`（1 画面 = 1 モジュール、増減する）+ iOS 配布用 `framework`（`SharedLogic.xcframework`、SKIE 適用先）のレイヤー構成。
+**正確なモジュール一覧は `settings.gradle.kts`、各モジュールの役割と依存方向ルールは [`docs/architecture.md`](./docs/architecture.md) を真とする**（一覧をここに複製しない — 陳腐化防止）。
 
-### 2. Subagent Strategy（サブエージェント戦略）
+### アーキテクチャ不変条件
 
-- メインのコンテキストウィンドウをクリーンに保つため、サブエージェントを積極的に活用する
-- リサーチ・探索・並列分析はサブエージェントにオフロードする
-- 複雑な問題には、サブエージェントを通じてより多くの計算リソースを投入する
-- サブエージェント 1 つにつきタスクは 1 つ（集中した実行のため）
+- ドメインモデル・UseCase・Repository インターフェース・ViewModel はすべて KMP 共通層に置く（配置先: モデル / UseCase は `domain`、ViewModel は `feature/*`、DB は `data-local`、Places は `data-places`、Firestore は `data-firebase`）
+- `feature` 同士の相互依存は禁止。画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
+- `expect`/`actual` はプラットフォーム API ラッパに限定。ロジックは `commonMain` に寄せる
+- ViewModel は `StateFlow<UIState>` を 1 本だけ公開する
+- Firebase は公式プラットフォーム別 SDK（GitLive 不採用）。iOS 実装は `iosApp` 側 Swift、Android 実装は `shared/data-firebase/androidMain`。`shared/domain` の Repository インターフェースで非対称性を吸収する
+- Firestore の同期はオフライン永続化に委ね、独自の同期キューは書かない。SQLDelight は検索・オフライン参照の高速化用途
 
-#### CoffeeVision の 3 ロール体制
+言語別の実装規約とチェックリストは `.claude/rules/`（パススコープ規則）に分離済み: `kotlin-kmp.md`（`shared/**` 等を触るとき）/ `swift-ios.md`（`iosApp/**` を触るとき）。
 
-このプロジェクトでは Swift / Kotlin の実装は専用サブエージェントに委譲し、メインセッション（= 親）が仕様の番人として全体を統制する 3 ロール体制を取る。
+---
+
+## 3 ロール体制（サブエージェント運用）
+
+Swift / Kotlin の実装は専用サブエージェントに委譲し、メインセッション（= 親）が仕様の番人として統制する。コンテキストをクリーンに保つため実装・探索はオフロードし、サブエージェント 1 つにつきタスクは 1 つ。
 
 | ロール | 実体 | 書き込みスコープ | 主な責務 |
 |--------|------|------------------|---------|
-| **親** | メインセッション（このファイルに従う Claude） | `docs/**` / `CLAUDE.md` / `.claude/**` / プロジェクト全体の調整 | 仕様の意思決定、docs 更新、`lessons.md` 記録、サブエージェント間の橋渡し、PR / commit |
+| **親** | メインセッション（このファイルに従う Claude） | `docs/**` / `CLAUDE.md` / `.claude/**` / 全体調整 | 仕様の意思決定、docs 更新、`lessons.md` 記録、エージェント間の橋渡し、PR / commit |
 | **`ios-engineer`** | `.claude/agents/ios-engineer.md` | `iosApp/**` のみ | Swift / SwiftUI 実装、ブリッジの Swift 側、iOS Firebase 実装、ビルド検証 |
-| **`kmp-engineer`** | `.claude/agents/kmp-engineer.md` | `shared*/**` / `androidApp/**` / `gradle*` / `build-logic/**` | Kotlin Multiplatform 実装、共通 ViewModel、SQLDelight、Android Firebase、Gradle |
+| **`kmp-engineer`** | `.claude/agents/kmp-engineer.md` | `shared*/**` / `androidApp/**` / `gradle*` / `build-logic/**` | KMP 実装、共通 ViewModel、SQLDelight、Android Firebase、Gradle |
 
-##### 親（メインセッション）の責務
+### 親（メインセッション）の責務
 
-- **仕様・docs 更新の独占権**: `docs/**` / `CLAUDE.md` / `lessons.md` / `implementation_note.md` を更新できるのは親だけ。サブエージェントから上がってきた「親への依頼」を吸収して反映する
-- **dispatch 判断**: 実装タスクが Swift だけで完結するなら `ios-engineer` に、Kotlin だけなら `kmp-engineer` に Agent ツールで委譲する。両方に跨るタスクは分解する
-- **KMP ブリッジの仲介**: Swift ⇄ Kotlin の境界は `iOS=Swift`, `KMP=Kotlin` で分担。`commonMain` の公開 API 変更が出たら、親が「インターフェースの合意書」を docs に固めてから両エージェントに dispatch する
-- **整合性チェック**: 両サブエージェントが返したレポートを突き合わせ、`commonMain` API 変更と iOS Bridge の追随が齟齬なくマージされているか確認する
-- **実装ノートの記録**: サブエージェントレポートに含まれる「仕様 / トレードオフの論点」のうち、`requirements.md` に上げるほどではないが残しておくべき判断・影響・経緯を [`docs/implementation_note.md`](./docs/implementation_note.md) に追記する。タイトル + 本文だけで十分（影響 / トレードオフ / 経緯は必要なときだけ）
-- **実装ノートの整理**: 定期的に同種エントリが溜まったら正規 doc（`coding-conventions.md` / `kmp-bridge.md` / `architecture.md` / `lessons.md` 等）へ昇格させ、ノートから削除する。「現在生きてる方針サマリ」も更新する。判断基準は実装ノート内の運用ルールを参照
-- **commit / PR**: コードを書いたサブエージェントではなく親が最終 commit する（仕様変更と実装変更を分けたい場合はその限りでない）
+- **仕様・docs 更新の独占権**: `docs/**` / `CLAUDE.md` / `lessons.md` / `implementation_note.md` を更新できるのは親だけ。サブエージェントの「親への依頼」を吸収して反映する
+- **dispatch 判断**: Swift だけで完結するなら `ios-engineer`、Kotlin だけなら `kmp-engineer`。両方に跨るタスクは分解する
+- **KMP ブリッジの仲介**: `commonMain` の公開 API 変更が出たら、親が「インターフェースの合意書」を docs に固めてから両エージェントに dispatch する
+- **整合性チェックと再検証**: 両エージェントのレポートを突き合わせ、`commonMain` API 変更と iOS Bridge の追随の齟齬を確認する。サブエージェントのビルド成功報告が `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` 付きなら親がフラグ無しで再検証する（偽の成功になるため）
+- **iOS ターゲットのテスト実行**: sandbox 制約でサブエージェントは `iosSimulatorArm64Test` 等を実行できない。親が `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew ...` で実行する
+- **実装ノートの記録**: レポート中の「仕様 / トレードオフの論点」のうち要件未満だが残すべき判断・経緯を [`docs/implementation_note.md`](./docs/implementation_note.md) に追記（タイトル + 本文で十分）。同種エントリが溜まったら正規 doc へ昇格させ、ノートから削除する
+- **横断 doc の同時更新**: 方針転換・モジュール追加時は、同じ変更内で横断 doc（architecture 現状 / 本ファイル / 各サマリ）の旧記述の消し込みまで行う（陳腐化防止。lessons 2026-06-16）
+- **commit / PR**: コードを書いたサブエージェントではなく親が最終 commit する
 
-##### dispatch の基本形
+### dispatch の基本形
 
 ```
-1. 親がタスクを受ける（ユーザーまたは自発）
-2. 親が `docs/tasks.md` に計画項目を追加
-3. 親が必要なら docs を先に整える（仕様の事前確定）
-4. 親が Agent ツールで ios-engineer / kmp-engineer に委譲
-   - サブエージェントへの指示には「触ってよいスコープ」「期待される成果物」「関連 docs のパス」を明示
-5. サブエージェントが構造化レポートを返す
-6. 親がレポートを評価し、
-   - 「親への依頼」を docs / 別サブエージェントへの dispatch に変換
-   - 要件未満の決定・影響・トレードオフ・経緯を `docs/implementation_note.md` に追記
-   - 汎用的に学んだ落とし穴があれば `docs/tasks/lessons.md` に追記
-   - `docs/tasks.md` のチェックボックスを更新
-7. 必要に応じて 4 に戻る
+1. 親がタスクを受ける → `docs/tasks.md` に計画項目を追加
+2. 親が必要なら docs を先に整える（仕様の事前確定）
+3. Agent ツールで委譲（指示には「触ってよいスコープ」「期待される成果物」「関連 docs のパス」を明示）
+4. サブエージェントが構造化レポートを返す
+5. 親がレポートを評価: 「親への依頼」→ docs / 別 dispatch へ変換、
+   判断は implementation_note.md へ、汎用的な落とし穴は lessons.md へ、tasks.md をチェック
+6. 必要に応じて 3 に戻る
 ```
 
-##### サブエージェントが守ること（参考）
+### サブエージェントが守ること（参考）
 
-両サブエージェントの定義ファイル（`.claude/agents/ios-engineer.md` / `.claude/agents/kmp-engineer.md`）に詳細を記載。要点：
+詳細は各定義ファイル（`.claude/agents/*.md`）に記載。要点：
 
-- `docs/**` / `CLAUDE.md` への書き込みは禁止（スコープ外は親に依頼で返す）。書き込みスコープは PreToolUse フック（`.claude/hooks/validate-write-scope.sh`）で機械的にも強制される
-- 必読 docs を毎回 Read してから着手
-- 同じアプローチで 2 回失敗したら止めて親にレポート
-- 最終レスポンスは「実装した内容 / 検証結果 / 仕様トレードオフ / 親への依頼 / 未解決」の構造化 Markdown で返す
-- 各エージェントは永続メモリ（`memory: project` → `.claude/agent-memory/<name>/`、git 管理）を持ち、**作業ノウハウ**（ビルドコマンド・環境のハマりどころ・実装パターン）を自己蓄積する。仕様・トレードオフ・教訓の正本は従来どおり `docs/**`（親管轄）で、メモリに複製しない
-- 関連 Skill（ios: `ios-developer` / `mobile-ios-design`、kmp: `kotlin-coroutines-flows`）は frontmatter `skills` で起動時プリロード済み
+- `docs/**` / `CLAUDE.md` への書き込みは禁止（スコープ外は親に依頼で返す）。スコープは PreToolUse フック（`.claude/hooks/validate-write-scope.sh`）で機械的にも強制される
+- 必読 docs を毎回 Read してから着手。同じアプローチで 2 回失敗したら止めて親にレポート
+- 最終レスポンスは「実装した内容 / 検証結果 / 仕様トレードオフ / 親への依頼 / 未解決」の構造化 Markdown
+- 永続メモリ（`.claude/agent-memory/<name>/`、git 管理）に**作業ノウハウ**を自己蓄積する。仕様・トレードオフ・教訓の正本は `docs/**`（親管轄）で、メモリに複製しない
+- 関連 Skill（ios: `ios-developer` / `mobile-ios-design`、kmp: `kotlin-coroutines-flows`）は frontmatter `skills` でプリロード指定済み
 
-##### よくある dispatch パターン
+### よくある dispatch パターン
 
 - **新機能の追加**: 親が docs で仕様確定 → `kmp-engineer` でドメインモデル + ViewModel → `ios-engineer` で SwiftUI + Bridge → 親がレポート 2 件を統合 → commit
 - **既存機能のバグ修正（片側完結）**: 該当側のサブエージェントに直接 dispatch
-- **KMP ブリッジ周りの変更**: `kmp-engineer` で `commonMain` API + `@Throws` / `sealed` 調整 → レポートの公開 API 差分を親が docs に固定 → `ios-engineer` で Bridge 追随
-- **モジュール分割（Phase 2.x）**: 親が分割計画を `docs/architecture.md` / `docs/tasks.md` で確定 → `kmp-engineer` に dispatch → 親が integration 検証
+- **KMP ブリッジ周りの変更**: `kmp-engineer` で `commonMain` API 調整 → 公開 API 差分を親が docs に固定 → `ios-engineer` で Bridge 追随
 
-### 3. Self-Improvement Loop（自己改善ループ）
+---
 
-- ユーザーからの修正があったら必ず `docs/tasks/lessons.md` にパターンを記録する
-- 同じミスを繰り返さないためのルールを自分のために書く
-- セッション開始時に、関連プロジェクトの教訓を見直す
+## ワークフロー原則
 
-### 4. Verification Before Done（完了前の検証）
+### Plan Mode Default
 
-- 動作を証明せずにタスクを完了済みにしない
-- 必要に応じて、`main` と自分の変更の差分を確認する
-- 「スタッフエンジニアはこれを承認するか？」と自問する
-- テストを実行し、ログを確認し、正確性を実証する
+- 非自明なタスク（3 ステップ以上、またはアーキテクチャの意思決定）には必ずプランモードに入る（構築だけでなく検証ステップも対象）。曖昧さを減らすため詳細な仕様を最初に書く
+- うまくいかなくなったら止めて再計画する。**同じ系統のアプローチで 2 回失敗したら必ずプランモードに入り、根本原因を再調査する**
+
+### Verification Before Done
+
+- 動作を証明せずにタスクを完了済みにしない。テストを実行し、ログを確認し、「スタッフエンジニアはこれを承認するか？」と自問する
 - **UI 挙動バグの修正**: ビルド成功 ≠ 修正完了。ユーザーにシミュレータ / 実機での確認を促す
-- **同じ系統のアプローチで 2 回失敗したら必ずプランモードに入り、根本原因を再調査する**
 - **KMP の Swift ⇄ Kotlin ブリッジ部分**: 小さな PoC で動作確認してから本実装に組み込む
 
-### 5. Demand Elegance（エレガンスを求める）
+### Self-Improvement Loop
 
-- 非自明な変更では「より洗練された方法はないか？」と立ち止まって考える
-- 修正がハック的に感じたら「今知っていることをすべて踏まえて、エレガントな解決策を実装する」
-- 単純・明快な修正にはこれをスキップする。過剰設計しない
-- 提示する前に、自分の作業に自ら異議を唱える
+- ユーザーからの修正があったら `docs/tasks/lessons.md` にパターンを記録し、セッション開始時に関連する教訓を見直す
+- **バグパターンを lessons に記録したら、その場で同型箇所の横断点検（grep）までやり切り、点検結果も残す**（lessons 2026-07-03）
 
-### 6. Autonomous Bug Fixing（自律的なバグ修正）
+### タスク管理
 
-- バグレポートが来たら: すぐに直す。手取り足取りを求めない
-- ログ・エラー・失敗テストを指摘し、それを解決する
-- ユーザーからのコンテキスト切り替えはゼロ
-- 方法を指示されずとも、失敗している CI テストを修正しに行く
+- 着手前にチェック可能な項目を `docs/tasks.md` に書き、完了したら随時チェックを付ける。各ステップで高レベルのサマリーを示す
 
----
+### 核となる原則
 
-## タスク管理
-
-1. **Plan First**: チェック可能な項目を `docs/tasks.md` に書く
-2. **Verify Plan**: 実装を始める前に確認する
-3. **Track Progress**: 完了したら随時チェックマークを付ける
-4. **Explain Changes**: 各ステップで高レベルのサマリーを示す
-5. **Document Results**: `docs/tasks.md` にレビューセクションを追加する
-6. **Capture Lessons**: 修正後に `docs/tasks/lessons.md` を更新する
-
----
-
-## 核となる原則
-
-- **Simplicity First（シンプルさ優先）**: すべての変更をできる限りシンプルに。影響するコードを最小限に
-- **No Laziness（怠けるな）**: 根本原因を探る。一時的な修正はしない。シニアデベロッパーの基準で
-- **Minimal Impact（最小限の影響）**: 変更は必要なものだけに触れる。バグを持ち込まない
-
----
-
-# プロジェクト固有ルール（CoffeeVision）
-
-## プロジェクト概要
-
-- **アプリ名**: CoffeeVision
-- **コンセプト**: 訪れたカフェでのコーヒー・フード体験を記録・振り返るためのモバイルアプリ
-- **プラットフォーム**: iOS（リリース対象）/ Android（KMP 共通レイヤーの検証ターゲット、リリース対象外）
-- **アーキテクチャ**: Kotlin Multiplatform（KMP）+ ネイティブ UI
-- **共通言語**: Kotlin（`shared/*` モジュール群。基盤層 `core` / `domain` / `data-local` / `data-places` / `data-firebase` + `feature/*`（1 画面 = 1 モジュール、増減する）+ iOS 配布用 `framework` に分割済。正確な一覧は `settings.gradle.kts`）
-- **iOS UI**: SwiftUI + MVVM（`@Observable`）
-- **Android UI**: Compose Multiplatform（`feature/coffee-list` を 1 画面だけ表示する検証実装）
-- **ローカル DB**: SQLDelight
-- **クラウド同期**: Firebase 公式プラットフォーム別 SDK（オフライン永続化に委譲）
-- **カフェ検索**: Google Places API
-
----
-
-## モジュール構成
-
-### 現状（Phase 5 時点）
-
-Phase 2.5 で基盤レイヤーを分割し、Phase 3 / 3.5 / 4 で `feature/*` と `data-places` を切り出し完了済。**モジュールの正確な一覧は `settings.gradle.kts` を真とする**（feature は画面追加ごとに増えるため、下表では feature を 1 行にまとめる）。
-
-| モジュール | namespace | 役割 |
-|----------|-----------|------|
-| `build-logic/convention/` | - | KMP / Android 共通設定の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`） |
-| `shared/core/` | `com.noricoffee.core` | `AppContainer` / `CoffeeRepositoryImpl`（local+remote 合成） |
-| `shared/domain/` | `com.noricoffee.domain` | ドメインモデル（`CoffeeRecord` 主体）+ enum + Repository インターフェース + UseCase + `VisitedCafe` |
-| `shared/data-local/` | `com.noricoffee.dataLocal` | SQLDelight スキーマ / Mapper / DriverFactory / `LocalCoffeeRepository` |
-| `shared/data-places/` | `com.noricoffee.dataPlaces` | Ktor + Google Places API クライアント（`PlacesClient` / `CafeRepositoryImpl`） |
-| `shared/data-firebase/` | `com.noricoffee.dataFirebase` | Android Firebase 実装（`AuthRepositoryAndroidImpl` / `RemoteCoffeeDataSourceAndroidImpl` / `CoffeeFirestoreMapper` / `BeanProfileRepositoryAndroidImpl`）。iOS 実装は iosApp 側 Swift |
-| `shared/feature/<name>/` | `com.noricoffee.feature.<name>` | **1 画面 = 1 モジュール**（`<Name>ViewModel` + UIState）。画面追加ごとに増える。現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail / account / analysis |
-| `shared/framework/` | `com.noricoffee.framework` | iOS 向け Umbrella（`SharedLogic.xcframework` を出力、SKIE 適用先）+ `AppContainer` の ViewModel ファクトリ拡張関数 |
-| `sharedUI/` | - | Compose Multiplatform（Android 検証用、`feature/coffee-list` を 1 画面表示） |
-| `iosApp/` | - | SwiftUI エントリポイント + Swift Firebase 実装 |
-| `androidApp/` | `com.noricoffee` | Android エントリポイント（検証ターゲット、リリース対象外） |
-
-詳細・依存方向ルール・移行経緯は [`docs/architecture.md`](./docs/architecture.md) を参照してください。
+- **Simplicity First**: すべての変更をできる限りシンプルに。影響するコードを最小限に
+- **No Laziness**: 根本原因を探る。一時的な修正はしない。シニアデベロッパーの基準で
+- **Minimal Impact**: 変更は必要なものだけに触れる。バグを持ち込まない
+- **Demand Elegance**: 非自明な変更で修正がハック的に感じたら、立ち止まってより洗練された方法を探す（単純な修正では過剰設計しない）
+- **Autonomous Bug Fixing**: バグレポートが来たらすぐ直す。ログ・エラー・失敗テストを自分で特定して解決し、手取り足取りを求めない
 
 ---
 
@@ -185,56 +129,3 @@ Phase 2.5 で基盤レイヤーを分割し、Phase 3 / 3.5 / 4 で `feature/*` 
 | 実装ノート | 要件未満の実装上の決定・影響・トレードオフ・経緯の時系列ログ（親のみ更新） | [`docs/implementation_note.md`](./docs/implementation_note.md) |
 | タスク一覧 | フェーズ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |
 | App Store メタデータ | App Store Connect 提出用の原稿・プライバシー申告・提出前チェックリスト | [`docs/app-store-metadata.md`](./docs/app-store-metadata.md) |
-
----
-
-## 重要なルール（抜粋）
-
-### アーキテクチャ
-
-- ドメインモデル・ユースケース・リポジトリ・ViewModel はすべて KMP 共通層（`shared/domain` + `shared/feature/*` + `shared/data-*`）に置く
-- `feature` 同士の相互依存は禁止。画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
-- iOS / Android 固有実装が必要なものは `expect`/`actual` で表現する（プラットフォーム API ラッパに限定）
-- ViewModel は `kotlinx.coroutines` の `StateFlow` で UI 状態を公開する
-- Firebase は公式プラットフォーム別 SDK を採用。iOS 実装は `iosApp` 側 Swift、Android 実装は `shared/data-firebase/androidMain`。`shared/domain` の Repository インターフェースで非対称性を吸収する
-- Firestore の同期はオフライン永続化に委ね、独自の同期キューは書かない
-- ローカル DB（SQLDelight）は検索・オフライン参照を高速化する用途で利用する
-
-### コーディング規約
-
-- Kotlin: 公式 [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html) に従う
-- Swift: [API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/) に従う
-- ViewModel は `<機能名>ViewModel`、SwiftUI View は `<機能名>View` と命名する
-- UI イベントは ViewModel のメソッド（`on○○Tapped` 等）で受ける
-- `switch` / `when` の `default` / `else` は極力使わず、全 case を網羅する
-
-### UI/UX（iOS）
-
-- カラーはシステムカラー（`.primary` / `Color(.systemBackground)` など）を優先する
-- フォントは Dynamic Type スタイル（`.body` / `.headline` など）を使用する
-- スペーシングは 8pt グリッドを基準にする
-- タップ可能な要素の最小サイズは 44×44pt を確保する
-- SF Symbols をアイコンとして使用する
-- アクセシビリティラベルをすべてのインタラクティブ要素に付与する
-
----
-
-## コード生成時のチェックリスト
-
-### Kotlin（KMP 共通層）
-
-- [ ] ドメインモデルは `data class`、UI 状態は `data class` または `sealed interface`
-- [ ] ViewModel は `StateFlow<UIState>` を 1 本だけ公開しているか
-- [ ] 副作用は `suspend` 関数または `Flow` として定義されているか
-- [ ] `commonMain` で書ける処理を `iosMain` / `androidMain` に漏らしていないか
-- [ ] `when` で全ケースを網羅しているか
-- [ ] 配置先モジュールが正しいか（モデル / UseCase は `domain`、ViewModel は `feature/*`、DB は `data-local`、Places は `data-places`、Firestore は `data-firebase`）
-
-### Swift（iosApp）
-
-- [ ] View にビジネスロジックが混入していないか
-- [ ] `@Observable` の ViewModel を介して共通層（`shared/*` の Kotlin ViewModel）を呼んでいるか
-- [ ] Firebase Repository の iOS 実装（`iosApp/FirebaseRepositories/`）は `shared/domain` のインターフェースに準拠しているか
-- [ ] システムカラー・Dynamic Type を使用しているか
-- [ ] アクセシビリティラベルが付与されているか
-- [ ] Kotlin の `suspend`/`Flow` を Swift から扱う際は `docs/kmp-bridge.md` のラッパを通しているか

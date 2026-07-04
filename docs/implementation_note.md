@@ -2131,3 +2131,17 @@ docs 全体精査（実コードとの突合を含む）で検出した重大 4 
 1. **同期 reconciliation は「全件スナップショット差分」方式**（#1）: `startSync` がスナップショットに無い id のローカル行を削除してから upsert する。tombstone（削除マーカー）方式は個人アプリ規模に過剰と判断し不採用。`DummyCoffeeData.ids` の除外で core の Repository が dev データを知る結合が生じたが、除外セットを引数化する案より単純さを優先（dev データは同一モジュール内の固定 ID 30 件）。save〜upload 間に新規レコードが一瞬消えて listener echo で復活しうる窓は Firestore の pending writes 込みリスナ前提で極小として許容（競合解決の本格化は backlog B-1）
 2. **エディタは選択 `Cafe` を丸ごとセッション保持**（#2）: `selectedCafe` は onAppear〜次の onAppear の間のみ有効。座標・photoReferences は「選択あり → selectedCafe / Edit 選択なし → 初期レコード / Create 手入力 → null」の優先順位で `buildCafe()` に集約。**既存レコードの座標は次回その記録を保存するまで null のまま**（VisitedCafe は最新値勝ちのため、座標ありの古い記録があっても新規保存で null に戻る問題は本修正で解消済みだが、過去分の遡及補正はしない）。Edit で元 cafe が null のまま手入力カフェを新設するケースは従来どおり cafe = null（スコープ外。必要になったら別タスク）。旧判断「draft に座標を保持しない」（本ノート 2026-06 スライス 3 エントリ）は本修正で**廃止**
 3. **FK は本番ドライバで有効化 + 掃除 migration**（#3）: Android は `AndroidSqliteDriver.Callback.onConfigure`（migration 中に framework が制約を自動で外す挙動に乗る）、iOS は sqliter の `extendedConfig.foreignKeyConstraints = true`。`LocalCoffeeRepository.delete` に明示 `deleteByRecord` を足す案は CASCADE と二重管理になるため不採用。FK 無効期間の孤児 photo 行は `2.sqm` で一括削除。iOS テストドライバも FK ON に統一し、`iosSimulatorArm64Test` で cascade テストの赤（FK OFF）→ 緑（FK ON）を実証 — つまり従来 iOS ターゲットのテストは回っておらず、回していれば #3 は検出できていた（→ lessons）
+
+### 2026-07-04: サブエージェント定義の改善 — memory / skills プリロード / スコープ強制フックの採用
+
+- 領域: `.claude/agents/**` / `.claude/hooks/**` / CLAUDE.md（3 ロール運用）
+- 関連: tasks.md「サブエージェント定義の改善（2026-07-04）」、lessons.md 2026-06-16（横断 doc 陳腐化）・06-19（偽ビルド成功）・07-03（sandbox 制約 / タスク名）
+
+エージェント定義が Phase 2.5 時点のまま陳腐化していた（旧 `sharedLogic` スコープ / 実在しない `androidHostTest` タスク名 / 旧 Visit モデルの説明）のを現行構成に更新し、あわせて 2026 年時点の Claude Code 公式機能を採用した。記録に値する判断は以下。
+
+1. **`memory: project` を採用（`.claude/agent-memory/<name>/` を git 管理）**: 「サブエージェントは docs を読めるが書けない → 学びが残らない」という 2026-06-16 lessons の構造問題への公式解。責任分界は「作業ノウハウ（コマンド・環境のハマり・実地パターン）= agent memory / 仕様・トレードオフ・汎用教訓 = 従来どおりレポート経由で親が docs へ」。docs と重複する内容のメモリ複製は禁止と明記し、正本の二重化を避けた。`local` スコープ（git 管理外）はチーム共有・履歴のメリットを捨てるため不採用
+2. **書き込みスコープを PreToolUse フックで機械強制**: 従来はプロンプト指示のみの性善説。`validate-write-scope.sh` 1 本を両エージェント共用し、許可プレフィックスは frontmatter の引数で渡す。`.claude/agent-memory*/`（memory 機能が Write/Edit を使う）とリポジトリ外パス（スクラッチパッド）は常時許可。違反は exit 2 で理由がエージェントに返り、「親への依頼」ルートへ誘導される。Bash 経由の書き込みは対象外（ガードレールであってセキュリティ境界ではない）
+3. **Skill は起動時プリロード（frontmatter `skills`）+ フォールバック**: 従来の「Skill ツールで必ず起動してから着手」は起動忘れリスクとターン消費があった。プリロード指定を入れたが、**起動確認 dispatch で現行ハーネスは本文を展開しないと判明**（一覧と 1 行説明のみ）。定義には「本文が展開されていなければ Skill ツールで起動してから着手」のフォールバックを残した。ハーネス更新で効くようになったらフォールバック文は削除する（tasks.md 運用検証行）。「競合したらプロジェクト規約優先」ルールは維持
+4. **model は `sonnet` 据え置き**: 実装ワーカーはコスト効率の良い Sonnet、仕様判断は親、という現行ルーティングを維持（公式ベストプラクティスとも一致）
+5. **必読 docs から CLAUDE.md を削除**: カスタムサブエージェントには CLAUDE.md が自動ロードされる（公式仕様）ため Read 指示は冗長だった。Explore / Plan（組み込み）だけはスキップされる点に注意
+6. **起動確認 dispatch での補正**（同日）: メモリが `memory: project` 指定にもかかわらずユーザースコープ（`~/.claude/agent-memory/`）へ書かれたため、定義本文で「リポジトリ内 `.claude/agent-memory/<name>/` を正とする」と明示し、初期メモリをリポジトリ側へ移動。また ios-engineer の書き込みスコープ記述にあった `iosApp/iosApp/Bridge/`（実在しないパス）を実体（`Features/<Name>/<Name>ViewModelBridge.swift` + `FirebaseRepositories/FlowBridge.swift`）に修正 — エージェント定義も「横断 doc」として陳腐化する実例（lessons 2026-06-16 と同根）

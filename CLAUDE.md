@@ -64,10 +64,12 @@
 
 両サブエージェントの定義ファイル（`.claude/agents/ios-engineer.md` / `.claude/agents/kmp-engineer.md`）に詳細を記載。要点：
 
-- `docs/**` / `CLAUDE.md` への書き込みは禁止（スコープ外は親に依頼で返す）
+- `docs/**` / `CLAUDE.md` への書き込みは禁止（スコープ外は親に依頼で返す）。書き込みスコープは PreToolUse フック（`.claude/hooks/validate-write-scope.sh`）で機械的にも強制される
 - 必読 docs を毎回 Read してから着手
 - 同じアプローチで 2 回失敗したら止めて親にレポート
 - 最終レスポンスは「実装した内容 / 検証結果 / 仕様トレードオフ / 親への依頼 / 未解決」の構造化 Markdown で返す
+- 各エージェントは永続メモリ（`memory: project` → `.claude/agent-memory/<name>/`、git 管理）を持ち、**作業ノウハウ**（ビルドコマンド・環境のハマりどころ・実装パターン）を自己蓄積する。仕様・トレードオフ・教訓の正本は従来どおり `docs/**`（親管轄）で、メモリに複製しない
+- 関連 Skill（ios: `ios-developer` / `mobile-ios-design`、kmp: `kotlin-coroutines-flows`）は frontmatter `skills` で起動時プリロード済み
 
 ##### よくある dispatch パターン
 

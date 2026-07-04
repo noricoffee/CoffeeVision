@@ -5,7 +5,7 @@
 CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 `shared/*` モジュール群（基盤層 `core` / `domain` / `data-local` / `data-places` / `data-firebase` + `feature/*` + `framework`。正確な一覧は `settings.gradle.kts` を真とする）を iOS 側から扱う際の相互運用ルール・回避策・お作法をまとめます。
 
-対象: `iosApp/iosApp/Bridge/` を実装する人、Kotlin → Swift で型が崩れたときのトラブルシュート時
+対象: ViewModel ブリッジ（`iosApp/iosApp/Features/<Name>/<Name>ViewModelBridge.swift`）や共通 Flow ブリッジ（`iosApp/iosApp/FirebaseRepositories/FlowBridge.swift`）を実装する人、Kotlin → Swift で型が崩れたときのトラブルシュート時
 
 ---
 

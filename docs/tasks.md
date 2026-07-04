@@ -801,6 +801,21 @@
 
 ---
 
+## サブエージェント定義の改善（2026-07-04）
+
+> `.claude/agents/*.md` の陳腐化解消（旧 sharedLogic 記述 / 実在しない Gradle タスク名）+ lessons 未反映の再発防止ルールの取り込み + 2026 年時点の公式機能（`memory` / `skills` プリロード / frontmatter `hooks`）の採用。判断の詳細は [`implementation_note.md`](./implementation_note.md) 2026-07-04 エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 書き込みスコープ強制フック `.claude/hooks/validate-write-scope.sh` を新設（PreToolUse で Edit/Write の対象パスを許可リスト照合、違反は exit 2） | 2026-07-04 完了。単体テスト 13 ケース green（スコープ内外 / agent-memory / リポジトリ外 / パストラバーサル） |
+| [x] | `ios-engineer.md` 改訂: `skills` プリロード（ios-developer / mobile-ios-design）、`memory: project`、hooks、OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED 禁止、`.swiftinterface` 裏取り、横断点検ルール | 2026-07-04 完了 |
+| [x] | `kmp-engineer.md` 改訂: 書き込みスコープ・モジュール配置表を現行構成（分割完了後）に更新、検証コマンド修正（`testAndroidHostTest` / iOS 実ターゲットコンパイル必須 / sandbox 制約明記）、`skills` プリロード（kotlin-coroutines-flows）、`memory: project`、hooks | 2026-07-04 完了 |
+| [x] | CLAUDE.md「サブエージェントが守ること」にメモリ / フック / Skill プリロードの位置づけを追記 | 2026-07-04 完了 |
+| [x] | ios-engineer への軽量 dispatch で起動確認 | 2026-07-04 完了。判明: ①現行ハーネスでは `skills` プリロードが本文展開されない → 両定義に「展開されていなければ Skill ツールで起動」のフォールバックを追記 ②メモリがユーザースコープ（`~/.claude/`）に書かれた → 定義でリポジトリ内 `.claude/agent-memory/<name>/` を正と明示し、初期メモリを移動 ③スコープ記述の `iosApp/iosApp/Bridge/` が実在しない → 実体（`Features/*/​*ViewModelBridge.swift` + `FlowBridge.swift`）に修正 |
+| [ ] | 次回の実 dispatch で観察: メモリ運用（リポジトリ内パスへの追記）が定着すること / ハーネス更新後に `skills` プリロードが効くようになったらフォールバック文を削除 | 運用検証 |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

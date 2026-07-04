@@ -689,4 +689,17 @@ CLAUDE.md が 240 行と公式推奨（200 行以下）を超過し、docs 二�
 - 見出しスタイルを `### YYYY-MM-DD: タイトル` に統一し日付順へ整列。削除済みエントリへの過去参照（tasks.md の完了行等）は git 履歴（`git log -p docs/implementation_note.md`）で辿る
 - **同日 `tasks.md` も縮約**（860 行 / 127KB → 285 行 / 24KB）: 完了フェーズは「完了サマリ + 未完行のみの表」に置換し、未完 26 件は全数維持・`##` セクション見出しは参照アンカーとして全保全。以後この運用（tasks.md 冒頭に明記）を継続する
 
+### 2026-07-04: architecture.md 現行化 — D-2 書き込みフロー再構成と例コードの実体化
+
+- 領域: Docs
+- 関連: `docs/architecture.md`, tasks.md バックログ D-2
+
+Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイド含む）を消し込み、現行構成に全面追随した。
+
+- **D-2（書き込みフロー）**: 「プラットフォーム別 VisitRepository 実装」という旧構成の図を、現行の `CoffeeRepositoryImpl`（shared/core・プラットフォーム共通合成）+ `RemoteCoffeeDataSource`（プラットフォーム別実装）+ `WritePolicy` に書き直した
+- **例コードと実体の乖離を修正**: `kmp.library` 例（実体は jvmToolchain なし / iosX64 なし / `com.android.kotlin.multiplatform.library`）、`kmp.feature` 例（自動配線は core+domain のみ。coroutines-core は手動追加）、ViewModel / Bridge 例（所有 viewModelScope + clear() / @MainActor / deinit）、テスト例（`finally { vm.clear() }`）、Security Rules 記述（path uid 検証が実体）、外部依存表（未採用の Napier/kermit 行を削除し SKIE / Foundation Models を追加）
+- **完了済みの「段階的移行ステップ」表を削除**し、今後も効く運用ルール（別 PR / ビルド確認 / パッケージ一致 / framework 追記）だけ「モジュール分割の運用ルール」として残した
+- iosApp ツリーの実在しない `Bridge/` ディレクトリ表記を実体（`Features/<Name>/` 同居 + `FirebaseRepositories/FlowBridge.swift`）に修正（2026-07-04 エージェント定義改善で発覚したのと同じ誤り）
+- 未対応で残る Visit 旧例文: `ui-ux-guidelines.md` 2 件・`coding-conventions.md` 1 件（軽微。次の docs 棚卸しで消し込み）
+
 

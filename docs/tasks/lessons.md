@@ -531,3 +531,23 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 「失敗を無音にする」仕様を確定させるときは、同じ変更内で検証手順に環境前提を書き下ろす（仕様確定と検証手順はセット）。親がユーザーに目視依頼を出すときも依頼文にこの前提を含める
 - **発生源**: フェーズ 15-B（`CoffeeEditorView` 現在地サジェスト、2026-07-06）
 - **横展開点検（2026-07-06）**: `grep -rn "requestLocation()" iosApp` → 位置情報利用は `CoffeeEditorView`（無音設計・今回対処済み）と `MapTabView`（`activeToast` で `locationManager.error` を可視化する設計のため無音ではない）の 2 画面のみで該当なし。他の環境ゲート系（Foundation Models = フェーズ 8 / 12-C / 13、E-1 Apple サインイン、フェーズ 14 実 Places キー）は tasks.md 検証行に「Apple Intelligence 有効実機」「実機必須」「実 Places API キー必要」の前提が明記済み → 漏れなし
+
+### VM テストの `vm.clear()` は iOS/Native では直後に `advanceUntilIdle()` で drain が要る
+
+- **症状**: 15-D で `AnalysisViewModelReadinessTest` / `AnalysisViewModelQaTest` が **iosSimulatorArm64Test だけ 16 件全滅**（`UncompletedCoroutinesError: After waiting for 1m, there were active child jobs: [SupervisorJobImpl{Active}]`、各 60 秒）。`testAndroidHostTest` は全 green。各テストは `try { … } finally { vm.clear() }` を既に持っていた
+- **原因の構造**: `vm.clear()`＝`viewModelScope.cancel()` は**キャンセルをスケジュールするだけ**。Kotlin/Native の `runTest` は完了チェックがこのキャンセル処理より先に走るため、VM の `SupervisorJob` が `Active` のまま残り timeout する。JVM（androidHostTest）は runTest の最終 drain がキャンセルを処理するため顕在化しない
+- **修正パターン**: `finally { vm.clear() }` を **`finally { vm.clear(); testScheduler.advanceUntilIdle() }`** にする（キャンセルを test body 内で drain し、runTest の完了チェック前に SupervisorJob を finalize させる）。`backgroundScope` に VM を載せる案は「`advanceUntilIdle()` が VM の observe を駆動せず state が null になりアサーション失敗」という別の壊れ方をしたため不採用
+- **教訓**:
+  1. **VM テストは必ず `iosSimulatorArm64Test` でも実行する**（親作業。`testAndroidHostTest` の green はコルーチン後始末の Native 差を検出できない。既存教訓「commonTest は iosSimulatorArm64Test でも回す」の具体例）
+  2. 独自 `viewModelScope`（`SupervisorJob(scope[Job])`）を持つ VM のテストで iOS だけ `UncompletedCoroutinesError` が出たら、まず clear 後の `advanceUntilIdle()` を疑う
+- **発生源**: フェーズ 15-D（`shared/feature/analysis` の VM テスト、2026-07-06）
+- **横展開点検（2026-07-06）**: `grep -rln "\.clear()" shared --include="*Test.kt"` で全 VM テスト 8 ファイルを点検。clear 後 drain を入れたのは analysis の 2 ファイルのみ。他 6（coffee-editor / coffee-list / map×2 / cafe-detail / cafe-search）は**現状 clear 後 drain 無しでも iOS green**（Map×2 / CoffeeList / CafeDetail / CoffeeEditor は本フェーズまでに iosSimulatorArm64Test 実測 green を確認済み）。＝現時点で壊れているのは analysis のみで修正済み。他は「同型リスクはあるが未発症」のためフラジャイルだが変更しない（Minimal Impact）。将来いずれかが iOS で同エラーを出したら 1 行（clear 後 drain）で直せる
+
+### interface にメソッドを足したら、その interface を実装する**テスト用 fake** の追随漏れで commonTest が長期間コンパイル不能になりうる
+
+- **症状**: 15-D 着手時、`AnalysisViewModelQaTest` の `FakeCoffeeInsightProvider` が `CoffeeInsightProvider.summarizeBeanTraits`（フェーズ 12-C で追加）を override しておらず、`compileTestKotlinIosSimulatorArm64` / `testAndroidHostTest` が**ずっと FAILED のまま見過ごされていた**（本体の `compileKotlinIosSimulatorArm64` は green なので気づけない）
+- **原因の構造**: 本体（main）のコンパイルが通っても、同一モジュールの commonTest が別原因（interface 拡張時の fake 追随漏れ等）でコンパイル不能なまま放置されうる。テストが「存在するが一度も実行できていない」状態は、実行ログを見ないと本体ビルドの green に紛れて見えない
+- **修正パターン**: `interface` に abstract メソッドを追加したら、その場で `grep -rln ": <InterfaceName>" shared --include="*Test.kt"` でテスト fake を洗い出し、`compileTestKotlin*` / `testAndroidHostTest` / `iosSimulatorArm64Test` まで通ることを確認する
+- **教訓**: 既存 VM / interface に手を入れる際は「その commonTest が実際に**実行**できているか」を疑う（未着手 VM のテスト有無だけでなく、着手済みテストが実行可能かも）。CI 導入時は `iosSimulatorArm64Test` を必須ターゲットに含める（これが無いと Native のコンパイル/実行の破れが素通りする）
+- **発生源**: フェーズ 12-C の `summarizeBeanTraits` 追加時（fake 追随漏れ）→ 15-D で発覚・修正（2026-07-06）
+- **横展開点検（2026-07-06）**: `CoffeeInsightProvider` を実装する fake は `AnalysisViewModelQaTest`（修正済み）のみ（`grep -rn "CoffeeInsightProvider" shared --include="*Test.kt"`）。他 interface（`CoffeeRepository` / `RemoteCoffeeDataSource` / `CafeRepository` 等）の test fake は、直近フェーズ（15-A〜C）で各モジュールの `iosSimulatorArm64Test` が実測 green のため追随漏れ無しと確認

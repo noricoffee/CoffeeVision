@@ -36,10 +36,13 @@ metadata:
 ./gradlew :shared:data-local:verifySqlDelightMigration   # migration ファイル ↔ 最終スキーマの整合確認
 ```
 
-`:shared:framework:assembleSharedLogicXCFramework` はサンドボックスでは
-`linkDebugFrameworkIosSimulatorArm64` 等が `xcrun xcodebuild -version` 失敗で FAILED になる
-（CommandLineTools しかない環境の既知の制約。`compileKotlinIosSimulatorArm64` が通っていれば
-型チェックは済んでいるので、リンクの失敗はレポートで「親が DEVELOPER_DIR 付きで再検証」を依頼すればよい）。
+`:shared:framework:assembleSharedLogicXCFramework` は `xcode-select -p` が CommandLineTools を指す
+デフォルト状態だと `linkDebugFrameworkIosSimulatorArm64` 等が `xcrun xcodebuild -version` 失敗で FAILED になる。
+**ただし `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` を付けて自分（サブエージェント）で
+実行すれば通る**（2026-07-06 確認。フルビルド 47 秒、debug/release 両 XCFramework 生成成功）。
+`iosSimulatorArm64Test`（実機/シミュレータ実行を伴う）は依然サンドボックス制約でサブエージェントには不可だが、
+リンクだけの `assembleSharedLogicXCFramework` は DEVELOPER_DIR 環境変数だけで解決するので、
+`commonMain` 公開 API 変更時は自分で最後まで検証してから報告してよい（親への委任は不要）。
 
 ## data-local の commonTest 配置ルール（既存パターン）
 

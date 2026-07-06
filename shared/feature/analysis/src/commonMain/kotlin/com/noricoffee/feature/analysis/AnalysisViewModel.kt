@@ -3,7 +3,9 @@ package com.noricoffee.feature.analysis
 import com.noricoffee.domain.model.CoffeeInsight
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeStats
+import com.noricoffee.domain.model.FavoriteSignals
 import com.noricoffee.domain.model.PreferredBeanTraits
+import com.noricoffee.domain.usecase.BuildCoffeeStatsUseCase
 import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -69,6 +71,7 @@ class AnalysisViewModel(
      * @property qaQuestion 直近の質問テキスト。[onQaCleared] で null に戻る
      * @property qaAnswer 直近の回答テキスト。[onQaCleared] で null に戻る
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
+     * @property readiness 空状態プログレス（要件 9-7）。[stats] からの派生値で [stats] が null の間は null
      */
     data class UIState(
         val stats: CoffeeStats? = null,
@@ -81,6 +84,31 @@ class AnalysisViewModel(
         val qaQuestion: String? = null,
         val qaAnswer: String? = null,
         val error: String? = null,
+        val readiness: AnalysisReadiness? = null,
+    )
+
+    /**
+     * 分析タブの空状態プログレス（要件 9-7）。[CoffeeStats] からの純粋な派生値。
+     *
+     * [CoffeeStats] は Foundation Models（階層3）に渡す唯一の入力のため、
+     * この UI 向けメタ情報は [CoffeeStats] 自体には持たせず [UIState.readiness] として別に保持する。
+     * 表示文言（「あと N 杯記録すると…」等）は生成しない。数値と閾値のみを渡し、文言生成は iOS 側の責務とする。
+     *
+     * @property ratedCount 評価済み件数（[CoffeeStats.ratedCount] と同値。rating >= 0.5）
+     * @property tastedCount tasting を持つ記録数（[TastingAverages.ratedCount] と同値）。
+     *   相関の母数は厳密には `rating > 0` も要るが、動機付け表示のため tasting 保有数で近似する
+     * @property categoryThreshold カテゴリ好み信号（[FavoriteSignals.bestBrewMethod] 等）に必要な最小件数。
+     *   [FavoriteSignals.minSampleSize]（既定 3）を参照する
+     * @property correlationThreshold テイスティング相関信号（[FavoriteSignals.dominantTastingAxis]）に必要な最小件数。
+     *   [BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE]（既定 5）を参照する
+     * @property hasAnySignal [FavoriteSignals] のいずれかの信号（カテゴリ 3 種 + 相関軸）が既に出ているか
+     */
+    data class AnalysisReadiness(
+        val ratedCount: Int,
+        val tastedCount: Int,
+        val categoryThreshold: Int,
+        val correlationThreshold: Int,
+        val hasAnySignal: Boolean,
     )
 
     /**
@@ -182,7 +210,13 @@ class AnalysisViewModel(
             _state.update { it.copy(isLoading = true) }
             observeCoffeeStatsUseCase(userId).collect { stats ->
                 latestStats = stats
-                _state.update { it.copy(stats = stats, isLoading = false) }
+                _state.update {
+                    it.copy(
+                        stats = stats,
+                        isLoading = false,
+                        readiness = buildReadiness(stats),
+                    )
+                }
                 // 統計が確定 / 更新されたら要約を再生成する
                 launchInsightGeneration(stats)
             }
@@ -357,4 +391,24 @@ class AnalysisViewModel(
             }
         }
     }
+
+    /**
+     * [stats] から [AnalysisReadiness] を導出する（内部ヘルパ）。
+     *
+     * `totalCount == 0` でも算出する（[UIState.readiness] が null になるのは [stats] 未取得時のみ）。
+     */
+    private fun buildReadiness(stats: CoffeeStats): AnalysisReadiness =
+        AnalysisReadiness(
+            ratedCount = stats.ratedCount,
+            tastedCount = stats.tastingAverages.ratedCount,
+            categoryThreshold = FavoriteSignals().minSampleSize,
+            correlationThreshold = BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE,
+            hasAnySignal = stats.favoriteSignals.hasAnySignal(),
+        )
 }
+
+/**
+ * [FavoriteSignals] のいずれかの信号（カテゴリ 3 種 + 相関軸）が既に出ているかを判定する（内部ヘルパ）。
+ */
+private fun FavoriteSignals.hasAnySignal(): Boolean =
+    bestBrewMethod != null || bestOrigin != null || bestRoastLevel != null || dominantTastingAxis != null

@@ -772,3 +772,14 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **サブエージェント（kmp-engineer）がビルド検証直前でセッション上限により中断**。実装・テストは完成状態で残っており、親が内容をレビューのうえ検証を引き継いだ
 - **破壊的変更の波及先を親が補完**: `coffees` 廃止により `sharedUI/CoffeeListScreen.kt`（Android 検証用 Compose 画面）が未追随でビルドを壊す状態だった。`sections` ベース（月別ヘッダ + 記録行）に更新。Android 検証画面は「VM が Android でも動く + Firestore observe 往復」を示す最小実装のため、検索 UI は付けず月別表示のみに留める（検索は iOS 一覧の関心事）
 - 教訓寄り: feature の `UIState` フィールドを rename/廃止する破壊的変更は、`sharedUI`（Android 検証）と `iosApp`（Bridge）の両方が波及先になる。KMP 側 dispatch 時に「`shared*` 内の参照追随（sharedUI 含む）まで」を必ずスコープに含める
+
+### 2026-07-06: 15-D 分析空状態プログレス KMP 実装 + iOS テストの Native cancel drain 修正
+
+- 領域: KMP / feature/analysis
+- 関連: requirements 9-7、tasks.md フェーズ 15-D、lessons 2026-07-06（2 件）
+
+- `AnalysisViewModel.UIState` に `readiness: AnalysisReadiness?` を派生追加（`CoffeeStats` は不変＝LLM 入力を汚さない）。閾値は `FavoriteSignals().minSampleSize` / `BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE` を参照しハードコードしない。`hasAnySignal` は `FavoriteSignals` の file-private 拡張関数
+- **サブエージェント（kmp-engineer）のレポートがセッション上限で尻切れ**になり、`androidHostTest` green のみ報告。親が iOS 検証を引き継いだところ **iosSimulatorArm64Test が 16 件全滅**（`UncompletedCoroutinesError` / SupervisorJob Active / 各 60s）だった
+- **根本原因と修正**: `vm.clear()`（`viewModelScope.cancel()`）は Native では runTest の完了チェック前にキャンセルが処理されず SupervisorJob が Active のまま残る。`finally { vm.clear() }` → `finally { vm.clear(); testScheduler.advanceUntilIdle() }` に変更して drain。iOS/Android とも 16/0 green を親が実測確認。`backgroundScope` に載せ替える案は `advanceUntilIdle()` が VM の observe を駆動せず state=null になる別の壊れ方をしたため不採用（経緯は lessons 2026-07-06）
+- **副次発見**: `AnalysisViewModelQaTest` の fake が 12-C の `summarizeBeanTraits` override を欠き、commonTest が長期間コンパイル不能なまま見過ごされていた（本体 main は green のため気付けず）。fake 追随 + drain 追加で解消
+- **プロセス教訓**: サブエージェントの「androidHostTest green」報告を VM テストの完了根拠にしない。親が必ず `iosSimulatorArm64Test` を回す（既存の親責務「iOS ターゲットのテスト実行」の具体例。CLAUDE.md 準拠）

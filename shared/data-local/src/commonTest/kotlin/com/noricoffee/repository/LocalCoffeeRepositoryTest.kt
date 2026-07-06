@@ -249,6 +249,30 @@ class LocalCoffeeRepositoryTest {
         assertEquals(tags, loaded?.tags, "非空 tags はそのまま往復するべき")
     }
 
+    // --- brewRecipe 往復テスト（フェーズ 15-E-1）---
+
+    @Test
+    fun brew_recipe_with_value_round_trips_correctly() = runTest {
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord(brewRecipe = "豆 15g / 湯 240ml / 92℃ / 2:30")
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertEquals("豆 15g / 湯 240ml / 92℃ / 2:30", loaded?.brewRecipe)
+    }
+
+    @Test
+    fun brew_recipe_null_round_trips_correctly() = runTest {
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord(brewRecipe = null)
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertNull(loaded?.brewRecipe, "brewRecipe = null のレコードは null として往復するべき")
+    }
+
     private companion object {
         const val USER_ID = "test-user"
 
@@ -256,6 +280,7 @@ class LocalCoffeeRepositoryTest {
             id: String = "record-1",
             placeId: String = "place-1",
             visitedOn: LocalDate = LocalDate(2026, 6, 2),
+            brewRecipe: String? = null,
             cafe: Cafe? = Cafe(
                 placeId = placeId,
                 name = "Blue Bottle 三軒茶屋",
@@ -291,6 +316,7 @@ class LocalCoffeeRepositoryTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = "ノリタケ",
+            brewRecipe = brewRecipe,
             tasting = TastingScores(sweetness = 7, body = 5, acidity = 9, flavor = 7, aftertaste = 6), // all-or-nothing: 5 要素すべてセット
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),

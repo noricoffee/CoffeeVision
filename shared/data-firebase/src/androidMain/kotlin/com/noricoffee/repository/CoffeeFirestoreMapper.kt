@@ -19,7 +19,7 @@ import kotlinx.datetime.LocalDate
  * photos は `CoffeeRecord` ドキュメントに埋め込み配列として保存する。
  *
  * ## フィールド規則
- * - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup）は null ならキーごと省略
+ * - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup / brewRecipe）は null ならキーごと省略
  * - cafe が null（セルフ抽出）の場合は `cafe` キーごと省略
  * - photos は埋め込み配列。`localPath` / `remoteUrl` は端末固有値または未使用のため Firestore に書かない
  * - `sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番。decode 時はソートに使い破棄
@@ -69,6 +69,7 @@ object CoffeeFirestoreMapper {
         record.processing?.let { doc["processing"] = it.name }
         record.roastLevel?.let { doc["roastLevel"] = it.name }
         record.cup?.let { doc["cup"] = it }
+        record.brewRecipe?.let { doc["brewRecipe"] = it }
 
         // tasting: all-or-nothing。非 null のとき 5 要素すべてを書き出す。null なら tasting ごと省略
         record.tasting?.let { doc["tasting"] = tastingToMap(it) }
@@ -166,6 +167,7 @@ object CoffeeFirestoreMapper {
             RoastLevel.entries.firstOrNull { it.name == roastName }
         }
         val cup = data["cup"] as? String
+        val brewRecipe = data["brewRecipe"] as? String
 
         // photos 埋め込み配列: sortOrder でソートして破棄
         val rawPhotos = (data["photos"] as? List<Map<String, Any>>) ?: emptyList()
@@ -195,6 +197,7 @@ object CoffeeFirestoreMapper {
             processing = processing,
             roastLevel = roastLevel,
             cup = cup,
+            brewRecipe = brewRecipe,
             tasting = tasting,
             tags = tags,
             createdAt = Instant.fromEpochSeconds(

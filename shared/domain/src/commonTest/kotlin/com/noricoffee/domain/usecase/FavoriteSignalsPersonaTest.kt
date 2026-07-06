@@ -90,6 +90,7 @@ class FavoriteSignalsPersonaTest {
         processing = processing,
         roastLevel = roastLevel,
         cup = null,
+        brewRecipe = null,
         tasting = tasting,
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),

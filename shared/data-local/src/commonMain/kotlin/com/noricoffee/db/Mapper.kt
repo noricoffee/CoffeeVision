@@ -67,6 +67,7 @@ internal fun CoffeeRecord.toRow(): Coffee_record = Coffee_record(
     processing = processing?.name,
     roast_level = roastLevel?.name,
     cup = cup,
+    brew_recipe = brewRecipe,
     // all-or-nothing: tasting が null なら全列 null、非 null なら全列セット（Long として保存）
     sweetness = tasting?.sweetness?.toLong(),
     body = tasting?.body?.toLong(),
@@ -130,6 +131,7 @@ internal fun Coffee_record.toDomain(photos: List<DomainPhoto>): CoffeeRecord {
         processing = processing?.let { ProcessingMethod.valueOf(it) },
         roastLevel = roast_level?.let { RoastLevel.valueOf(it) },
         cup = cup,
+        brewRecipe = brew_recipe,
         tasting = tastingScores,
         tags = tags.toTagList(),
         createdAt = Instant.fromEpochMilliseconds(created_at),

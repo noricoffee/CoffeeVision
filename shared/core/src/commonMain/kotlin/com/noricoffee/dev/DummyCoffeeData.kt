@@ -59,6 +59,7 @@ object DummyCoffeeData {
                 processing = raw.processing,
                 roastLevel = raw.roastLevel,
                 cup = raw.cup,
+                brewRecipe = raw.brewRecipe,
                 tasting = raw.tasting,
                 createdAt = now,
                 updatedAt = now,
@@ -132,6 +133,7 @@ object DummyCoffeeData {
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,
         val cup: String?,
+        val brewRecipe: String? = null,       // 抽出レシピ自由メモ（フェーズ 15-E 追加。セルフ抽出向け）
         val tasting: TastingScores? = null,  // all-or-nothing: 5 要素セット or null
     )
 
@@ -245,6 +247,7 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Light,
             cup = "ノリタケ",
+            brewRecipe = "豆 18g / 湯 220ml / 93℃ / 3:00",
             tasting = TastingScores(sweetness = 7, body = 3, acidity = 6, flavor = 10, aftertaste = 9),
         ),
         // 009: Indonesia / Syphon / High / cafe2 — tasting 未設定（全 null）
@@ -381,6 +384,7 @@ object DummyCoffeeData {
             processing = ProcessingMethod.Natural,
             roastLevel = null,
             cup = null,
+            brewRecipe = "豆 15g / 湯 240ml / 90℃ / 2:45",
         ),
         // 019: Indonesia / HandDrip / City / cafe4 — 全要素設定
         RawData(

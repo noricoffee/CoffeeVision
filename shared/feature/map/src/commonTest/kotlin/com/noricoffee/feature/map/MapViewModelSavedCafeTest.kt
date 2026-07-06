@@ -109,6 +109,7 @@ class MapViewModelSavedCafeTest {
             processing = null,
             roastLevel = null,
             cup = null,
+            brewRecipe = null,
             tasting = null,
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),

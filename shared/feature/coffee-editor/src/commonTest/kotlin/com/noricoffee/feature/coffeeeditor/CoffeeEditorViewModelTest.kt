@@ -102,6 +102,7 @@ class CoffeeEditorViewModelTest {
         processing: ProcessingMethod? = null,
         roastLevel: RoastLevel? = null,
         cup: String? = null,
+        brewRecipe: String? = null,
         tasting: TastingScores? = null,
         tags: List<String> = emptyList(),
     ): CoffeeRecord = CoffeeRecord(
@@ -119,6 +120,7 @@ class CoffeeEditorViewModelTest {
         processing = processing,
         roastLevel = roastLevel,
         cup = cup,
+        brewRecipe = brewRecipe,
         tasting = tasting,
         tags = tags,
         createdAt = Instant.fromEpochMilliseconds(0),
@@ -380,6 +382,7 @@ class CoffeeEditorViewModelTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Light,
             cup = "紙コップ",
+            brewRecipe = "豆 15g / 湯 240ml / 92℃ / 2:30",
             tasting = TastingScores(7, 6, 8, 5, 4),
             tags = listOf("ラテアート", "浅煎り"),
         )
@@ -395,7 +398,7 @@ class CoffeeEditorViewModelTest {
             val draft = vm.state.value.draft
             val today = Clock.System.todayIn(TimeZone.currentSystemDefault())
 
-            // 引き継ぐ 9 項目
+            // 引き継ぐ 10 項目
             assertEquals(sourceCafe.name, draft.cafeName)
             assertEquals(sourceRecord.name, draft.name)
             assertEquals(sourceRecord.brewMethod, draft.brewMethod)
@@ -404,6 +407,7 @@ class CoffeeEditorViewModelTest {
             assertEquals(sourceRecord.processing, draft.processing)
             assertEquals(sourceRecord.roastLevel, draft.roastLevel)
             assertEquals(sourceRecord.cup, draft.cup)
+            assertEquals(sourceRecord.brewRecipe, draft.brewRecipe)
             assertEquals(sourceRecord.tags, draft.tags)
 
             // 引き継がない 4 項目
@@ -427,6 +431,7 @@ class CoffeeEditorViewModelTest {
             assertEquals(sourceCafe.latitude, savedCafe.latitude)
             assertEquals(sourceCafe.longitude, savedCafe.longitude)
             assertEquals(sourceCafe.photoReferences, savedCafe.photoReferences)
+            assertEquals(sourceRecord.brewRecipe, saved.brewRecipe)
         } finally {
             vm.clear()
         }
@@ -566,6 +571,73 @@ class CoffeeEditorViewModelTest {
 
             assertTrue(vm.state.value.suggestedCafes.isEmpty())
             assertNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tests — 15-E-1 抽出レシピ（brewRecipe）
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onSaveTapped_brewRecipeWithinLimit_savesSuccessfully() = runTest {
+        val fake = FakeCoffeeRepository()
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+
+            vm.onNameChanged("ハンドドリップ")
+            vm.onRatingChanged(4.0)
+            vm.onBrewRecipeChanged("豆 15g / 湯 240ml / 92℃ / 2:30")
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            val saved = fake.savedRecords.single()
+            assertEquals("豆 15g / 湯 240ml / 92℃ / 2:30", saved.brewRecipe)
+            assertNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onSaveTapped_blankBrewRecipe_savesNull() = runTest {
+        val fake = FakeCoffeeRepository()
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+
+            vm.onNameChanged("ハンドドリップ")
+            vm.onRatingChanged(4.0)
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            val saved = fake.savedRecords.single()
+            assertNull(saved.brewRecipe)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onSaveTapped_brewRecipeOver500Chars_setsErrorAndDoesNotSave() = runTest {
+        val fake = FakeCoffeeRepository()
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+
+            vm.onNameChanged("ハンドドリップ")
+            vm.onRatingChanged(4.0)
+            vm.onBrewRecipeChanged("あ".repeat(501))
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(fake.savedRecords.isEmpty())
+            assertNotNull(vm.state.value.error)
         } finally {
             vm.clear()
         }

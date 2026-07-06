@@ -311,6 +311,7 @@ class CoffeeRepositoryImplTest {
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
+            brewRecipe = null,
             tasting = null,
             createdAt = Instant.fromEpochMilliseconds(1_750_000_000_000),
             updatedAt = Instant.fromEpochMilliseconds(1_750_000_000_000),

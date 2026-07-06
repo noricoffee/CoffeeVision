@@ -83,6 +83,7 @@ class CoffeeListViewModelTest {
         processing = null,
         roastLevel = null,
         cup = null,
+        brewRecipe = null,
         tasting = null,
         tags = emptyList(),
         createdAt = createdAt,

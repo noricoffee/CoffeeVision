@@ -71,6 +71,7 @@ class LocalCoffeeRepository(
                 processing = row.processing,
                 roast_level = row.roast_level,
                 cup = row.cup,
+                brew_recipe = row.brew_recipe,
                 sweetness = row.sweetness,
                 body = row.body,
                 acidity = row.acidity,

@@ -107,7 +107,7 @@ class CoffeeEditorViewModel(
         /**
          * 既存記録を複製元にした新規作成モード（要件 2-10）。
          *
-         * 引き継ぐ: cafe / name / brewMethod / origin / variety / processing / roastLevel / cup / tags。
+         * 引き継ぐ: cafe / name / brewMethod / origin / variety / processing / roastLevel / cup / brewRecipe / tags。
          * 引き継がない: rating（0.0 = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
          * `visitedOn` は今日、保存時の id / createdAt は [Create] と同様に新規採番する。
          *
@@ -136,6 +136,7 @@ class CoffeeEditorViewModel(
      * @property processing 精製方法（任意）
      * @property roastLevel 焙煎度（任意）
      * @property cup カップ（任意）
+     * @property brewRecipe 抽出レシピ（任意。自由メモ。最大 500 文字）
      * @property tasting テイスティング 5 要素（null = 未記入。非 null = 5 要素すべてセット済み）
      * @property tags ユーザー定義タグ（任意。空リスト = タグなし）
      */
@@ -155,6 +156,7 @@ class CoffeeEditorViewModel(
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,
         val cup: String,
+        val brewRecipe: String,
         val tasting: TastingScores? = null,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット
         val tags: List<String> = emptyList(), // ユーザー定義タグ
     )
@@ -370,6 +372,11 @@ class CoffeeEditorViewModel(
     /** カップを更新する。 */
     fun onCupChanged(cup: String) {
         _state.update { it.copy(draft = it.draft.copy(cup = cup)) }
+    }
+
+    /** 抽出レシピ（自由メモ。最大 500 文字）を更新する。 */
+    fun onBrewRecipeChanged(brewRecipe: String) {
+        _state.update { it.copy(draft = it.draft.copy(brewRecipe = brewRecipe)) }
     }
 
     // --- テイスティング要素更新（all-or-nothing）---
@@ -650,6 +657,7 @@ class CoffeeEditorViewModel(
      * - name（コーヒー名）は必須・最大 200 文字
      * - rating は 0.5..5.0（0.5 刻み）必須（0.0 は未評価扱いでエラー）
      * - notes は最大 2000 文字
+     * - brewRecipe は最大 500 文字
      * - cafe は任意（空の場合はセルフ抽出として保存）
      */
     private fun validate(draft: CoffeeDraft): String? = when {
@@ -658,6 +666,7 @@ class CoffeeEditorViewModel(
         draft.rating < 0.5 || draft.rating > 5.0 || (draft.rating * 2) % 1.0 != 0.0 ->
             "評価を 0.5〜5.0 で入力してください"
         draft.notes.length > 2000 -> "メモは 2000 文字以内で入力してください"
+        draft.brewRecipe.length > 500 -> "抽出レシピは 500 文字以内で入力してください"
         else -> null
     }
 
@@ -702,6 +711,7 @@ class CoffeeEditorViewModel(
             processing = draft.processing,
             roastLevel = draft.roastLevel,
             cup = draft.cup.takeIf { it.isNotBlank() },
+            brewRecipe = draft.brewRecipe.takeIf { it.isNotBlank() },
             tasting = draft.tasting?.clamped(),
             tags = draft.tags,
             createdAt = createdAt,
@@ -790,6 +800,7 @@ class CoffeeEditorViewModel(
             processing = null,
             roastLevel = null,
             cup = "",
+            brewRecipe = "",
             tasting = null,  // all-or-nothing: 初期状態は tasting なし
             tags = emptyList(),
         )
@@ -819,6 +830,7 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
         processing = processing,
         roastLevel = roastLevel,
         cup = cup ?: "",
+        brewRecipe = brewRecipe ?: "",
         tasting = tasting,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット（edit モードで既存 tasting を反映）
         tags = tags,
     )
@@ -828,7 +840,7 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
  *
  * 引き継ぐ: cafe（表示用フィールドのみ。placeId / 座標 / photoReferences は `currentInitialRecord` 経由で
  * [CoffeeEditorViewModel.buildCafe] が引き継ぐ）/ name / brewMethod / origin / variety / processing /
- * roastLevel / cup / tags。
+ * roastLevel / cup / brewRecipe / tags。
  * 引き継がない: rating（0.0 = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
  * `visitedOn` は今日にする（元記録の日付は使わない）。
  */
@@ -849,6 +861,7 @@ private fun CoffeeRecord.toDuplicateDraft(): CoffeeEditorViewModel.CoffeeDraft =
         processing = processing,
         roastLevel = roastLevel,
         cup = cup ?: "",
+        brewRecipe = brewRecipe ?: "",
         tasting = null,  // all-or-nothing: 複製では引き継がない（要件 2-10）
         tags = tags,
     )

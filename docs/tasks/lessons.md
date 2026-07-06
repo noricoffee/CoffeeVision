@@ -551,3 +551,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 既存 VM / interface に手を入れる際は「その commonTest が実際に**実行**できているか」を疑う（未着手 VM のテスト有無だけでなく、着手済みテストが実行可能かも）。CI 導入時は `iosSimulatorArm64Test` を必須ターゲットに含める（これが無いと Native のコンパイル/実行の破れが素通りする）
 - **発生源**: フェーズ 12-C の `summarizeBeanTraits` 追加時（fake 追随漏れ）→ 15-D で発覚・修正（2026-07-06）
 - **横展開点検（2026-07-06）**: `CoffeeInsightProvider` を実装する fake は `AnalysisViewModelQaTest`（修正済み）のみ（`grep -rn "CoffeeInsightProvider" shared --include="*Test.kt"`）。他 interface（`CoffeeRepository` / `RemoteCoffeeDataSource` / `CafeRepository` 等）の test fake は、直近フェーズ（15-A〜C）で各モジュールの `iosSimulatorArm64Test` が実測 green のため追随漏れ無しと確認
+
+## 2026-07-07
+
+### SQLDelight で列を追加したら `Mapper.toRow()` だけでなく Repository の `queries.upsert(...)` 呼び出しにも手で足す
+
+- **症状**: 15-E-1 で `coffee_record` に `brew_recipe` 列を追加。`.sq` の `upsert` 文と `Mapper.toRow()` を直しても、`LocalCoffeeRepository.save()` 内の `coffeeRecordQueries.upsert(...)` は **named パラメータで各値を明示的に渡している**ため、新列の引数が漏れて `compileKotlinIosSimulatorArm64` が `No value passed for parameter 'brew_recipe'` で FAILED
+- **原因の構造**: SQLDelight の生成 `upsert(...)` 関数は列ごとの引数を取る。`Mapper.toRow()` が `Coffee_record` 行オブジェクトを作っても、Repository が行オブジェクトを丸ごと渡さず個別引数で呼んでいると自動反映されない（`row.brew_recipe` を明示的に渡す 1 行が要る）
+- **修正パターン**: 列追加時のチェックリスト = ①`.sq`（CREATE + upsert 文）②`migrations/N.sqm`（ALTER ADD COLUMN）③`Mapper.toRow()`/`toDomain()` ④**`LocalXxxRepository` の `queries.upsert(...)` 呼び出し** ⑤Firestore mapper（android/ios 両方）⑥ドメイン model。コンパイラが ④ の漏れを `No value passed for parameter` で必ず捕まえるので、`compileKotlinIosSimulatorArm64` まで通して確認する
+- **教訓**: SQLDelight の列追加は「.sq と Mapper を直せば終わり」ではない。Repository の named-parameter upsert 呼び出しが単一の見落としポイント。列追加時は上記 6 点セットで grep 点検する
+- **発生源**: フェーズ 15-E-1（`brew_recipe` 追加、2026-07-07）
+- **横展開点検（2026-07-07）**: 現状 `queries.upsert(` を named 引数で呼ぶ Repository は `LocalCoffeeRepository` / `LocalSavedCafeRepository` の 2 箇所。今回の追加で `LocalCoffeeRepository` は修正済み。`LocalSavedCafeRepository`（saved_cafe）は今回の列追加対象外で漏れなし

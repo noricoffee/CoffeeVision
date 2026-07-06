@@ -292,11 +292,17 @@
 
 ### 15-C: 記録一覧の検索 + 月別グルーピング【要件 6-1 / 2-11】
 
+**確定仕様（2026-07-06 親確定）**:
+- **検索**: クエリを `trim().lowercase()` 正規化し、各 `CoffeeRecord` の `name` / `cafe?.name` / `notes` のいずれかに部分一致（大小無視）でヒット。空クエリ = 全件。フィールドは requirements 6-1 どおり 3 つに限定（産地・品種は含めない）。メモリ内 filter（`observeAll` の結果を private に保持し、クエリ変更で再導出）
+- **月別グルーピング**: `visitedOn`（LocalDate）の年月でセクション化。`yearMonth` は `"YYYY-MM"`（ゼロパディング。既存 `CoffeeStats.MonthlyStat` と統一）。**表示文字列（"2026年7月"）は iOS 側で生成**（KMP は yearMonth のみ持つ。既存パターンと統一）。セクションは yearMonth 降順、セクション内は既存 `observeAll` の順序（visited_on DESC, created_at DESC）を維持
+- **UIState 変更**: `coffees` を廃止し `sections: List<MonthSection>`（検索適用後・月別・降順）に置換 + `searchQuery: String` を追加。`MonthSection(yearMonth: String, records: List<CoffeeRecord>)`。空状態の出し分け（記録 0 件 vs 検索ヒット 0 件）は iOS 側が `sections.isEmpty` と `searchQuery` の組で判定
+- **新規メソッド**: `onSearchQueryChanged(query: String)`
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | kmp-engineer: `CoffeeListViewModel` にキーワードフィルタ（コーヒー名 / カフェ名 / メモ、メモリ内 filter で開始）+ 月別セクションモデル | SQLDelight FTS 化はフェーズ 6 の既存項目（データ量で遅くなってから） |
-| [ ] | ios-engineer: 一覧に `.searchable` + 月別セクションヘッダ表示 | |
-| [ ] | 検証: 検索ヒット / 0 件表示、月跨ぎのセクション表示、検索中の FAB 挙動 | |
+| [ ] | kmp-engineer: `CoffeeListViewModel` にキーワードフィルタ + 月別 `MonthSection` モデル（上記確定仕様）+ commonTest | 破壊的変更（`coffees` → `sections`）。iOS 追随は次行。SQLDelight FTS 化はフェーズ 6 の既存項目（データ量で遅くなってから） |
+| [ ] | ios-engineer: 一覧に `.searchable`（`searchQuery` バインド）+ 月別 `Section` ヘッダ（yearMonth → "YYYY年M月" 生成）+ 空状態 2 種の出し分け | `sections` 参照へ全面追随 |
+| [ ] | 検証: 検索ヒット / 記録 0 件 / 検索ヒット 0 件の 3 状態、月跨ぎのセクション表示、検索中の FAB 挙動 | シミュレータ目視はユーザー作業 |
 
 ### 15-D: 分析タブの空状態プログレス【要件 9-7】
 

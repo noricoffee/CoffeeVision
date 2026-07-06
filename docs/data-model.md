@@ -202,6 +202,7 @@ data class CoffeeStats(
     val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
     val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
     val preferredBeanTraits: PreferredBeanTraits? = null, // 階層2+: 好みの産地 × BeanProfile 突合結果（フェーズ 12-C。BeanProfile 未提供時は null）
+    val unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList(), // 好み合致 × 未記録の BeanProfile 提案（フェーズ 15-E-3。BeanProfile 未提供 / 信号なしは空）
 )
 
 data class TastingAverages(
@@ -443,6 +444,40 @@ interface CafeRecommendationProvider {
 - `MapViewModel` は `CafeRecommendationProvider.observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。公開 API 追加は加算的。
 - iOS `MapTabView`: 一致カフェを**区別ピン**（アクセント色＋ハート/星）で強調し、タップで理由（`matches`）を表示。理由文言（「好みのエチオピアを高評価で記録（〇〇 ★4.5）」）は iOS でローカライズ生成。
 - **Foundation Models 連携は将来 9-6 で「推薦理由の自然言語化」一点に限定**（v1 は構造化 reason を iOS が定型文で表示。LLM は使わない）。
+
+---
+
+## 1.7a UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8・フェーズ 15-E-3）
+
+好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計（永続化しない）。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
+
+```kotlin
+data class UnexploredBeanSuggestion(
+    val profile: BeanProfile,             // 提案する豆
+    val matchedOriginLabel: String,       // マッチ理由の表示用ラベル（FavoriteSignals.bestOrigin 由来）
+)
+```
+
+**`SuggestUnexploredBeansUseCase`**（`shared/domain/.../usecase/`、決定論）:
+
+```kotlin
+class SuggestUnexploredBeansUseCase(
+    private val beanProfileMatchUseCase: BeanProfileMatchUseCase = BeanProfileMatchUseCase(),
+) {
+    operator fun invoke(
+        records: List<CoffeeRecord>,
+        profiles: List<BeanProfile>,
+        signals: FavoriteSignals,
+    ): List<UnexploredBeanSuggestion>   // 上位 SUGGESTED_BEANS_LIMIT 件
+    companion object { const val SUGGESTED_BEANS_LIMIT = 5 }
+}
+```
+
+- **好み合致**: `signals.bestOrigin`（非 null のとき）に対し、既存 `BeanProfileMatchUseCase`（§1.8 の origin ファジーマッチ・スコアリング）を再利用して候補を選定・並べる（DRY）。`bestRoastLevel` / `bestBrewMethod` は `BeanProfile` に対応フィールドが無いため使わない（origin 主軸）
+- **「未経験」判定 = (origin, variety) ペア**: `BeanProfile.variety != null` の候補は `(origin正規化, variety正規化)` ペアがユーザーの記録に無ければ未経験（同産地でも品種違いは別体験として提案）。`variety == null` の候補は origin のみで判定（その産地を一度でも記録済みなら経験済み扱い）。正規化は `trim().lowercase()`（`buildOriginRanking` と同じ）
+- **空になる条件**: `signals.bestOrigin == null`（好み未確定）/ `profiles` 空（BeanProfile 未投入）
+- **配線**: `BuildCoffeeStatsUseCase.invoke(records, beanProfiles)` 内で `beanProfiles.isNotEmpty()` のときだけ計算し `CoffeeStats.unexploredBeanSuggestions` に格納（`preferredBeanTraits` = 12-C と同じ流儀。`ObserveCoffeeStatsUseCase` に `BeanProfileRepository?` を注入した端末でのみ非空）。`readiness`（UI メタ）と違い**ドメイン実質のある派生値**なので `CoffeeStats` 内に置く
+- **LLM 非混入**: iOS の `buildPrompt(from: stats)` はフィールドを選択的に読む実装のため、本フィールドを buildPrompt に足さない限り Foundation Models の digest には入らない（分析タブ UI 表示専用）
 
 ---
 

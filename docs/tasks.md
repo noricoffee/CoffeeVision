@@ -355,7 +355,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | kmp-engineer: `SuggestUnexploredBeansUseCase` + `AnalysisViewModel` 派生 or UIState 追加 + commonTest | 「未記録」判定は origin/variety の正規化一致（既存 buildOriginRanking と同じ正規化）。`BeanProfileRepository?` 未注入時は空 |
+| [x] | kmp-engineer: `SuggestUnexploredBeansUseCase` + `CoffeeStats.unexploredBeanSuggestions` + commonTest | 2026-07-07 完了。UIState でなく `CoffeeStats` に格納（`preferredBeanTraits`=12-C と同型。ドメイン実質派生値・`BuildCoffeeStatsUseCase` が records+beanProfiles を既に持つため配線最小）。未経験判定 =(origin,variety) ペア、好み合致は `BeanProfileMatchUseCase` 再利用。iOS 9/0 green + XCFramework link OK。LLM 非混入も親確認済（buildPrompt は選択読み）。data-model.md §1.7a 反映 |
 | [ ] | ios-engineer: 分析タブに探索提案セクション（BeanProfile 名 + flavorNotes チップ） | beanProfiles 未投入時は非表示 |
 | [ ] | 検証: 好み信号あり + 未記録 BeanProfile で提案表示、記録済みは除外、0 件時非表示 | シミュレータ目視はユーザー作業（beanProfiles 投入前提） |
 

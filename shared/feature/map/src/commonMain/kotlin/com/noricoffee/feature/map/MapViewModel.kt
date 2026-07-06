@@ -6,10 +6,12 @@ import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.CafeRecommendationProvider
 import com.noricoffee.domain.model.RecommendedCafe
+import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.domain.model.VisitedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
+import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -39,6 +41,7 @@ import kotlinx.coroutines.launch
  * @param cafeRecommendationProvider 好み一致カフェの推薦プロバイダ（v1 = [com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase]）
  * @param cafeRepository POI タップ時の Places テキスト検索を担うリポジトリ
  * @param coffeeRepository タグフィルタ用のコーヒー記録リポジトリ
+ * @param savedCafeRepository 「行きたい店」の購読 / 解除を担うリポジトリ（フェーズ 15-A）
  * @param userId 現在サインイン中のユーザー ID
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
  */
@@ -47,6 +50,7 @@ class MapViewModel(
     private val cafeRecommendationProvider: CafeRecommendationProvider,
     private val cafeRepository: CafeRepository,
     private val coffeeRepository: CoffeeRepository,
+    private val savedCafeRepository: SavedCafeRepository,
     private val userId: String,
     scope: CoroutineScope,
 ) {
@@ -104,6 +108,16 @@ class MapViewModel(
          * アクティブなテイストフィルタの上限スコア。null = 上限なし。
          */
         val activeTastingMax: TastingScores? = null,
+        /**
+         * 「行きたい店」一覧（savedAt 降順、フェーズ 15-A）。マップの 4 種目ピン / 一覧シート用。
+         * [com.noricoffee.repository.SavedCafeRepository.observeAll] を購読して常時最新化する。
+         */
+        val savedCafes: List<SavedCafe> = emptyList(),
+        /**
+         * 記録（[VisitedCafe]）があるカフェの placeId 集合（フェーズ 15-A）。タグフィルタに左右されない
+         * 全件ベースの集合で、行きたい一覧の「記録あり」バッジ判定に使う。
+         */
+        val recordedPlaceIds: Set<String> = emptySet(),
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -164,6 +178,13 @@ class MapViewModel(
                 }
             }
         }
+
+        // 「行きたい店」一覧の購読を開始する（フェーズ 15-A）。savedAt 降順は SQLDelight クエリ側で保証済み。
+        viewModelScope.launch {
+            savedCafeRepository.observeAll(userId).collect { savedCafes ->
+                _state.update { it.copy(savedCafes = savedCafes) }
+            }
+        }
     }
 
     /**
@@ -173,6 +194,9 @@ class MapViewModel(
      * - [observeVisitedCafesUseCase] または [coffeeRepository] の新データ到着時
      * - [onTagFilterToggled] / [onTagFilterCleared] でタグ選択が変化した時
      * の両方で呼ばれる。
+     *
+     * [UIState.recordedPlaceIds] は [latestVisitedCafes]（タグフィルタ適用前の全件）から算出するため、
+     * タグフィルタの影響を受けない（行きたい一覧の「記録あり」バッジ判定用）。
      */
     private fun applyTagFilter() {
         val selectedTags = _state.value.selectedTags
@@ -188,6 +212,7 @@ class MapViewModel(
             it.copy(
                 visitedCafes = filteredCafes,
                 availableTags = latestAvailableTags,
+                recordedPlaceIds = latestVisitedCafes.map { vc -> vc.cafe.placeId }.toSet(),
             )
         }
     }
@@ -390,6 +415,26 @@ class MapViewModel(
      */
     fun onSearchResultsCleared() {
         _state.update { it.copy(searchResultPlaces = emptyList()) }
+    }
+
+    /**
+     * 「行きたい店」一覧シートでのスワイプ解除操作を受ける（フェーズ 15-A）。
+     *
+     * [SavedCafeRepository.delete] を呼び、成功すれば [UIState.savedCafes] の購読が
+     * 自動で更新される（明示的な _state.update は不要）。
+     *
+     * @param placeId 解除するカフェの Google Places ID
+     */
+    fun onSavedCafeRemoved(placeId: String) {
+        viewModelScope.launch {
+            try {
+                savedCafeRepository.delete(userId, placeId)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "行きたい店の解除に失敗しました") }
+            }
+        }
     }
 
     /**

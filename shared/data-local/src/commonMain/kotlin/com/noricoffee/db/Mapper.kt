@@ -7,6 +7,7 @@ import com.noricoffee.domain.Photo as DomainPhoto
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
+import com.noricoffee.domain.model.SavedCafe
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.builtins.ListSerializer
@@ -163,4 +164,39 @@ internal fun Photo.toDomain(): DomainPhoto = DomainPhoto(
     width = width?.toInt(),
     height = height?.toInt(),
     createdAt = Instant.fromEpochMilliseconds(created_at),
+)
+
+/**
+ * [SavedCafe] を SQLDelight の [Saved_cafe] 行に変換する。
+ * `cafe_*` 列の直列化規則は [CoffeeRecord.toRow] と共通化する（photoReferences の JSON 化等）。
+ */
+internal fun SavedCafe.toRow(): Saved_cafe = Saved_cafe(
+    place_id = cafe.placeId,
+    user_id = userId,
+    cafe_name = cafe.name,
+    cafe_address = cafe.address,
+    cafe_latitude = cafe.latitude,
+    cafe_longitude = cafe.longitude,
+    cafe_photo_references = cafe.photoReferences.encodeToJson(),
+    cafe_website_url = cafe.websiteUrl,
+    cafe_maps_url = cafe.mapsUrl,
+    note = note,
+    saved_at = savedAt.toEpochMilliseconds(),
+)
+
+/** SQLDelight の [Saved_cafe] 行を [SavedCafe] ドメインモデルに変換する。 */
+internal fun Saved_cafe.toDomain(): SavedCafe = SavedCafe(
+    userId = user_id,
+    cafe = Cafe(
+        placeId = place_id,
+        name = cafe_name,
+        address = cafe_address,
+        latitude = cafe_latitude,
+        longitude = cafe_longitude,
+        photoReferences = cafe_photo_references?.decodeStringList() ?: emptyList(),
+        websiteUrl = cafe_website_url,
+        mapsUrl = cafe_maps_url,
+    ),
+    note = note,
+    savedAt = Instant.fromEpochMilliseconds(saved_at),
 )

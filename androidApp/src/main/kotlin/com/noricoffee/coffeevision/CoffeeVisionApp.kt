@@ -10,6 +10,7 @@ import com.noricoffee.platform.DatabaseDriverFactory
 import com.noricoffee.repository.AuthRepositoryAndroidImpl
 import com.noricoffee.repository.BeanProfileRepositoryAndroidImpl
 import com.noricoffee.repository.RemoteCoffeeDataSourceAndroidImpl
+import com.noricoffee.repository.RemoteSavedCafeDataSourceAndroidImpl
 import kotlinx.coroutines.launch
 
 /**
@@ -53,6 +54,7 @@ class CoffeeVisionApp : Application() {
         appContainer = AppContainer(
             sqlDriver = sqlDriver,
             remoteCoffeeDataSource = RemoteCoffeeDataSourceAndroidImpl(),
+            remoteSavedCafeDataSource = RemoteSavedCafeDataSourceAndroidImpl(),
             authRepository = AuthRepositoryAndroidImpl(),
             placesApiKey = BuildConfig.PLACES_API_KEY,
             beanProfileRepository = BeanProfileRepositoryAndroidImpl(FirebaseFirestore.getInstance()),

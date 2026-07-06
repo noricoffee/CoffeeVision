@@ -720,3 +720,14 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **写真のクラウド同期復活**: 端末ローカル + iCloud Backup の確定方針（2026-06-10）は変更しない。代わりにエクスポート 7-4 を ○ に引き上げてテキストデータの持ち出し手段を確保
 - **分析の統計精度のさらなる向上**: 収縮平均 + z ゲートで十分。現段階はループの穴埋め（15-A/B）の方がユーザー価値が高い
 - **9-8（未経験豆の探索提案）は △ に留めた**: 9-5（既訪問店の再訪推薦）・12-D（協調フィルタ = サーバー前提）の中間に位置する新規開拓ナッジ。BeanProfile × FavoriteSignals でサーバー不要に作れる算段だが、優先度は 15-A〜D の後
+
+### 2026-07-06: 15-A SavedCafe KMP 実装 — WritePolicy 共用ほかの実装判断
+
+- 領域: KMP / shared
+- 関連: `data-model.md` §1.9〜§4.3、tasks.md フェーズ 15-A（kmp-engineer レポートより親が採録）
+
+- **`WritePolicy` の共用方法**: `SavedCafeRepositoryImpl` は独自 enum を作らず `CoffeeRepositoryImpl.WritePolicy`（nested enum）をそのまま型として再利用する。トップレベル切り出し案は、既存テストが `CoffeeRepositoryImpl.WritePolicy.*` を参照しており無用な破壊的変更になるため見送り。**3 つ目の Repository 合成パターンが増えた時点でトップレベル化を再検討**（現状 2 箇所の YAGNI 判断）
+- **`MapViewModel.recordedPlaceIds` はタグフィルタ前の全件から算出**: 行きたい一覧の「記録あり」バッジは、タグでピンを絞り込んでいても「実は記録済み」を正しく示すべきで、フィルタ適用後の `visitedCafes` に連動させない
+- **一覧シートの表示状態（isPresented）は KMP に持たせない**: sheet 表示トグルを VM 状態に持つ前例がコードベースに無く、「画面遷移は iosApp / androidApp の Navigation 層で繋ぐ」原則に従い SwiftUI の `@State` に委ねる
+- **`CafeDetailViewModel` に `error: String?` / `onErrorDismissed()` を追加**: `onSaveToggled` の失敗を握りつぶすと `MapViewModel` のエラーハンドリング規約と非対称になるため、同じパターンで対称化（依頼に明記は無かったが妥当と判断し親が承認）
+- 破壊的変更は `AppContainer` 公開コンストラクタ 3 本への `remoteSavedCafeDataSource` 追加のみ（SKIE がデフォルト引数を出さないため全オーバーロードに必須追加）。iOS 追随は ios-engineer に dispatch

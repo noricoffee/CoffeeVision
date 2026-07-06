@@ -277,7 +277,7 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | 親: `data-model.md` に `SavedCafe` 設計を追加（ドメイン / SQLDelight / Firestore / Repository 2 段構成） | 2026-07-06 完了（`data-model.md` §1.9 / §2.4 / §3 / §4.3）。確定判断: placeId 自然キー（UUID 例外）/ 記録作成時の自動解除なし（ピン優先順位 + バッジで表示解決）/ 一覧はマップ内シート（新 feature モジュール無し）/ migration 3.sqm |
-| [ ] | kmp-engineer: `SavedCafe` ドメイン + data-local（migration 3.sqm）+ data-firebase（Android）+ Repository 合成（reconciliation 込み）+ `MapViewModel` / `CafeDetailViewModel` への配線 | 既存 `CoffeeRepository` / `RemoteCoffeeDataSource` の 2 段パターン踏襲。仕様は data-model.md §1.9〜§4.3 |
+| [x] | kmp-engineer: `SavedCafe` ドメイン + data-local（migration 3.sqm）+ data-firebase（Android）+ Repository 合成（reconciliation 込み）+ `MapViewModel` / `CafeDetailViewModel` への配線 | 2026-07-06 完了。新規テスト 19 件 + 既存追随 7 件 green / `verifySqlDelightMigration` 成功 / `:androidApp:assembleDebug` 成功 / override フラグ不使用。破壊的変更は `AppContainer` コンストラクタへの `remoteSavedCafeDataSource` 追加（iOS 追随は次行）。判断は implementation_note 2026-07-06 |
 | [ ] | ios-engineer: iOS 側 RemoteDataSource（Swift / Firestore）+ カフェ詳細のブックマークボタン + マップ 4 種目ピン + フィルタチップ + 一覧導線 | 既存 3 種ピンのビジュアル体系（フェーズ 10-A）に追加 |
 | [ ] | 検証: 保存 → ピン表示 → 解除の round-trip、Firestore コンソール確認、既存ピンとの共存・フィルタ切替 | `verify-kmp-ios` skill に従う |
 

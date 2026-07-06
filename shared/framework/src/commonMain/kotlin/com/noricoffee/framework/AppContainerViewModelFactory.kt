@@ -99,6 +99,7 @@ fun AppContainer.makeMapViewModel(userId: String): MapViewModel =
         ),
         cafeRepository = cafeRepository,
         coffeeRepository = coffeeRepository,
+        savedCafeRepository = savedCafeRepository,
         userId = userId,
         scope = scope,
     )
@@ -125,6 +126,7 @@ fun AppContainer.makeCafeDetailViewModel(
 ): CafeDetailViewModel =
     CafeDetailViewModel(
         coffeeRepository = coffeeRepository,
+        savedCafeRepository = savedCafeRepository,
         placeId = placeId,
         initialCafe = initialCafe,
         userId = userId,

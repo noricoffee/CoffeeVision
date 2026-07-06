@@ -13,5 +13,9 @@ kotlin {
             // CafeDetailViewModel が Visit.visitedOn（LocalDate）で sortedByDescending を使うため
             implementation(libs.kotlinx.datetime)
         }
+        commonTest.dependencies {
+            implementation(libs.kotlin.test)
+            implementation(libs.kotlinx.coroutines.test)
+        }
     }
 }

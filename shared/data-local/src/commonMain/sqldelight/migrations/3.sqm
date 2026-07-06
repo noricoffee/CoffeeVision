@@ -1,0 +1,17 @@
+-- フェーズ 15-A: 「行きたい店」（SavedCafe）テーブルを追加する。
+CREATE TABLE saved_cafe (
+    place_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    cafe_name TEXT NOT NULL,
+    cafe_address TEXT,
+    cafe_latitude REAL,
+    cafe_longitude REAL,
+    cafe_photo_references TEXT,
+    cafe_website_url TEXT,
+    cafe_maps_url TEXT,
+    note TEXT NOT NULL DEFAULT '',
+    saved_at INTEGER NOT NULL,
+    PRIMARY KEY (place_id, user_id)
+);
+
+CREATE INDEX saved_cafe_by_user ON saved_cafe (user_id, saved_at DESC);

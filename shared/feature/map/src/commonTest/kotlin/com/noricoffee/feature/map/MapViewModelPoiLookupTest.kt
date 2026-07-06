@@ -5,9 +5,11 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.model.CafeRecommendationProvider
 import com.noricoffee.domain.model.RecommendedCafe
+import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
+import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -115,10 +117,18 @@ class MapViewModelPoiLookupTest {
             flowOf(emptyList())
     }
 
+    private class FakeSavedCafeRepository : SavedCafeRepository {
+        override fun observeAll(userId: String): Flow<List<SavedCafe>> = flowOf(emptyList())
+        override fun observeByPlaceId(userId: String, placeId: String): Flow<SavedCafe?> = flowOf(null)
+        override suspend fun save(savedCafe: SavedCafe) = Unit
+        override suspend fun delete(userId: String, placeId: String) = Unit
+    }
+
     private val fakeCafeRepo = FakeCafeRepository()
     private val fakeCoffeeRepo = FakeCoffeeRepository()
     private val useCase = ObserveVisitedCafesUseCase(fakeCoffeeRepo)
     private val fakeRecommendationProvider = FakeCafeRecommendationProvider()
+    private val fakeSavedCafeRepo = FakeSavedCafeRepository()
 
     // --- テスト ---
 
@@ -132,6 +142,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -156,6 +167,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -182,6 +194,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -206,6 +219,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -230,6 +244,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -254,6 +269,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )
@@ -278,6 +294,7 @@ class MapViewModelPoiLookupTest {
             cafeRecommendationProvider = fakeRecommendationProvider,
             cafeRepository = fakeCafeRepo,
             coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
             userId = "user-01",
             scope = this,
         )

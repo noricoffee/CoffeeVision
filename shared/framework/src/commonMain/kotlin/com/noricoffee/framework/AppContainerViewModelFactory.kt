@@ -60,14 +60,16 @@ fun AppContainer.makeCoffeeDetailViewModel(): CoffeeDetailViewModel =
 /**
  * [CoffeeEditorViewModel] を生成して返す。
  *
- * [AppContainer] が保持する [com.noricoffee.repository.CoffeeRepository] と
+ * [AppContainer] が保持する [com.noricoffee.repository.CoffeeRepository] /
+ * [com.noricoffee.repository.CafeRepository]（現在地カフェサジェスト用）と
  * CoroutineScope（内部の MainScope）を自動配線する。
  *
- * 新規作成（[CoffeeEditorViewModel.Mode.Create]）と編集（[CoffeeEditorViewModel.Mode.Edit]）の
- * 両モードを同一 ViewModel で扱う。モードの切り替えは [CoffeeEditorViewModel.onAppear] に渡す。
+ * 新規作成（[CoffeeEditorViewModel.Mode.Create]）・編集（[CoffeeEditorViewModel.Mode.Edit]）・
+ * 複製（[CoffeeEditorViewModel.Mode.Duplicate]）の 3 モードを同一 ViewModel で扱う。
+ * モードの切り替えは [CoffeeEditorViewModel.onAppear] に渡す。
  */
 fun AppContainer.makeCoffeeEditorViewModel(): CoffeeEditorViewModel =
-    CoffeeEditorViewModel(coffeeRepository, scope)
+    CoffeeEditorViewModel(coffeeRepository, cafeRepository, scope)
 
 /**
  * [CafeSearchViewModel] を生成して返す。

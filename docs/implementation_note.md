@@ -742,3 +742,12 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **「行きたい」フィルタチップの表示状態は Swift `@State` のみ（KMP に持たない）**: `MapViewModel` の `onShowVisitedToggled`（訪問済みトグル）とは非対称になるが、表示切替のみの関心事として View 側で完結させた。KMP 側へ寄せ直すかは他プラットフォーム実装が現実化した時に再検討
 - **一覧シートは保存日時テキストを表示しない**（savedAt 降順の並びだけで表現。Simplicity First、必要なら後付け可）
 - `CoffeeFirestoreMapper` の `toCafeMap`/`cafeFromMap` を `private` → `internal static` 化し、`SavedCafeFirestoreMapper` から再利用（cafe 直列化規則の重複実装を回避）
+
+### 2026-07-06: 15-B 記録摩擦低減 KMP 実装 — Duplicate の cafe 引き継ぎ経路と既存バグの発見
+
+- 領域: KMP / feature/coffee-editor
+- 関連: requirements 2-8 / 2-9 / 2-10、tasks.md フェーズ 15-B（kmp-engineer レポートより親が採録）
+
+- **`Mode.Duplicate` の cafe は `Mode.Edit` と同一経路（`currentInitialRecord.cafe` フォールバック）で引き継ぐ**: 複製後の新記録は複製元と同一の placeId を持つ（Places 実在カフェはその ID、セルフ抽出の手入力カフェは複製元採番の UUID）。「cafe を引き継ぐ」=「同じ物理カフェへの参照を保つ」の解釈で、placeId に一意性制約は無いため矛盾しない。`VisitedCafe` 集計上も同一店としてまとまるのはむしろ意図どおり
+- **サジェストの発火条件は `draft.cafeName` が空かどうかで判定**（`selectedCafe` 変数ではなく）: `buildCafe` の「cafe = null」判定も `cafeName` ベースであり、判定基準を統一
+- **既存バグを発見（未修正・15-B スコープ外）**: `buildCafe` の Edit 分岐は `currentInitialRecord?.cafe` が null なら `return null` するため、セルフ抽出記録の編集で手動カフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき）。`Mode.Duplicate` も同分岐のため同挙動を継承。フェーズ 6 の後続タスクに起票済み。次に Edit/Duplicate のカフェ引き継ぎを触るときに修正する

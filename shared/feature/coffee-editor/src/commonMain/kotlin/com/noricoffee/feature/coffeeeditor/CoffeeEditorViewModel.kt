@@ -7,6 +7,7 @@ import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
+import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +43,13 @@ import kotlinx.datetime.todayIn
  * 継続購読にすると他端末更新が編集中の draft を上書きする事故が起き得るため、
  * MVP では last-write-wins（`updatedAt = now` で上書き）で対処する。
  *
+ * ## Duplicate モード（複製）の初期化
+ *
+ * [Mode.Duplicate] は複製元 [CoffeeRecord.id] を受け取り、[Mode.Edit] と同様に
+ * [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得して draft の初期値に展開する
+ * （`toDuplicateDraft`）。保存時は [Mode.Create] と同じく新規 id / createdAt を採番する（[buildRecord]）。
+ * 引き継ぐ項目・引き継がない項目は `docs/requirements.md` 2-10 を参照。
+ *
  * ## cafe の任意化
  *
  * [CoffeeDraft.cafeName] が空のとき、cafe = null のレコード（セルフ抽出）として保存する。
@@ -55,12 +63,22 @@ import kotlinx.datetime.todayIn
  * name / address / websiteUrl / mapsUrl は draft の編集値を優先する。
  * [UIState.selectedPlaceId] は `selectedCafe?.placeId` から導出される表示用の派生値。
  *
+ * ## 現在地カフェサジェスト（[Mode.Create] 専用）
+ *
+ * [onLocationAvailable] はプラットフォーム側から現在地座標が取得できたときに呼ぶ。
+ * [Mode.Create] かつ cafe 未選択（`draft.cafeName` が空）のときだけ [CafeRepository.searchNearby]
+ * を実行し、上位 3 件を [UIState.suggestedCafes] に反映する。カフェが選択されると
+ * （[onPlacesCafeSelected] / [onSuggestedCafeSelected] いずれも）チップは消える。
+ * Nearby 検索の失敗は無音（補助機能のため [UIState.error] には流さない）。
+ *
  * @param coffeeRepository コーヒー記録の永続化と取得を担うリポジトリ
+ * @param cafeRepository 現在地カフェサジェスト（Nearby 検索）を担うリポジトリ
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
  */
 @OptIn(kotlin.uuid.ExperimentalUuidApi::class)
 class CoffeeEditorViewModel(
     private val coffeeRepository: CoffeeRepository,
+    private val cafeRepository: CafeRepository,
     scope: CoroutineScope,
 ) {
 
@@ -73,6 +91,7 @@ class CoffeeEditorViewModel(
      *
      * - [Create]: 新規作成モード
      * - [Edit]: 既存記録の編集モード
+     * - [Duplicate]: 既存記録を初期値にした複製モード（保存動作は [Create] と同一）
      */
     sealed interface Mode {
         /** 新規作成モード。 */
@@ -84,6 +103,17 @@ class CoffeeEditorViewModel(
          * @property coffeeId 編集対象の [CoffeeRecord.id]
          */
         data class Edit(val coffeeId: String) : Mode
+
+        /**
+         * 既存記録を複製元にした新規作成モード（要件 2-10）。
+         *
+         * 引き継ぐ: cafe / name / brewMethod / origin / variety / processing / roastLevel / cup / tags。
+         * 引き継がない: rating（0.0 = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
+         * `visitedOn` は今日、保存時の id / createdAt は [Create] と同様に新規採番する。
+         *
+         * @property sourceCoffeeId 複製元の [CoffeeRecord.id]
+         */
+        data class Duplicate(val sourceCoffeeId: String) : Mode
     }
 
     /**
@@ -140,6 +170,8 @@ class CoffeeEditorViewModel(
      * @property savedCoffeeId 保存成功時に非 null になる。Swift 側はこれを監視して画面を dismiss する
      * @property selectedPlaceId Places API 検索で選択したカフェの Google placeId（任意）。
      *   内部で保持する選択済み [Cafe]（`selectedCafe`）の `placeId` を表示用に写した派生値
+     * @property suggestedCafes 現在地カフェサジェスト（最大 3 件）。[Mode.Create] かつ cafe 未選択の
+     *   ときだけ [onLocationAvailable] で反映される。カフェが選択されると空リストに戻る
      */
     data class UIState(
         val mode: Mode = Mode.Create,
@@ -149,6 +181,7 @@ class CoffeeEditorViewModel(
         val error: String? = null,
         val savedCoffeeId: String? = null,
         val selectedPlaceId: String? = null,
+        val suggestedCafes: List<Cafe> = emptyList(),
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -170,6 +203,9 @@ class CoffeeEditorViewModel(
     // 保存 Job。保存中に再度 onSaveTapped が呼ばれた場合に前回を cancel する。
     private var saveJob: Job? = null
 
+    // 現在地カフェサジェスト（Nearby 検索）Job。onLocationAvailable が複数回呼ばれた場合に前回を cancel する。
+    private var suggestionJob: Job? = null
+
     // --- ライフサイクル ---
 
     /**
@@ -177,22 +213,33 @@ class CoffeeEditorViewModel(
      *
      * - [Mode.Create]: draft を初期値にリセットする
      * - [Mode.Edit]: [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得して draft を更新する
+     * - [Mode.Duplicate]: 複製元を [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得し、
+     *   複製用の初期値（`toDuplicateDraft`）に展開する
      */
     fun onAppear(mode: Mode, userId: String) {
         currentUserId = userId
         loadJob?.cancel()
         saveJob?.cancel()
+        suggestionJob?.cancel()
         selectedCafe = null
 
         when (mode) {
             is Mode.Create -> {
                 currentInitialRecord = null
                 _state.update {
-                    it.copy(mode = mode, draft = defaultDraft(), isLoading = false, selectedPlaceId = null)
+                    it.copy(
+                        mode = mode,
+                        draft = defaultDraft(),
+                        isLoading = false,
+                        selectedPlaceId = null,
+                        suggestedCafes = emptyList(),
+                    )
                 }
             }
             is Mode.Edit -> {
-                _state.update { it.copy(mode = mode, isLoading = true, selectedPlaceId = null) }
+                _state.update {
+                    it.copy(mode = mode, isLoading = true, selectedPlaceId = null, suggestedCafes = emptyList())
+                }
                 loadJob = viewModelScope.launch {
                     val record = coffeeRepository.observeById(mode.coffeeId).first()
                     if (record == null) {
@@ -213,6 +260,30 @@ class CoffeeEditorViewModel(
                     }
                 }
             }
+            is Mode.Duplicate -> {
+                _state.update {
+                    it.copy(mode = mode, isLoading = true, selectedPlaceId = null, suggestedCafes = emptyList())
+                }
+                loadJob = viewModelScope.launch {
+                    val record = coffeeRepository.observeById(mode.sourceCoffeeId).first()
+                    if (record == null) {
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "複製元のコーヒー記録が見つかりませんでした",
+                            )
+                        }
+                    } else {
+                        currentInitialRecord = record
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                draft = record.toDuplicateDraft(),
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -222,6 +293,7 @@ class CoffeeEditorViewModel(
     fun onDisappear() {
         loadJob?.cancel()
         saveJob?.cancel()
+        suggestionJob?.cancel()
     }
 
     // --- フィールド更新（cafe 関連）---
@@ -423,11 +495,13 @@ class CoffeeEditorViewModel(
      * [cafe] を丸ごと内部プロパティ（`selectedCafe`）に保持し（[buildRecord] が座標 / photoReferences の
      * 引き継ぎに使う）、[cafe] の表示用フィールドで [UIState.draft] を上書きする。
      * [UIState.selectedPlaceId] にも Google placeId を保持する（表示用の派生値）。
+     * カフェが選択されたので [UIState.suggestedCafes] は空にする（進行中の Nearby 検索も cancel する）。
      *
      * @param cafe Places API 検索から選択したカフェ情報
      */
     fun onPlacesCafeSelected(cafe: Cafe) {
         selectedCafe = cafe
+        suggestionJob?.cancel()
         _state.update {
             it.copy(
                 draft = it.draft.copy(
@@ -437,7 +511,53 @@ class CoffeeEditorViewModel(
                     cafeMapsUrl = cafe.mapsUrl ?: "",
                 ),
                 selectedPlaceId = cafe.placeId,
+                suggestedCafes = emptyList(),
             )
+        }
+    }
+
+    /**
+     * 現在地カフェサジェストのチップをタップした際に呼ぶ。
+     *
+     * 挙動は [onPlacesCafeSelected] と完全に同一（サジェスト経由・検索経由を問わずカフェ選択の
+     * アクションを共通化する）。
+     *
+     * @param cafe サジェストチップに表示していたカフェ情報
+     */
+    fun onSuggestedCafeSelected(cafe: Cafe) {
+        onPlacesCafeSelected(cafe)
+    }
+
+    /**
+     * プラットフォーム側から現在地座標が取得できたときに呼ぶ。
+     *
+     * [Mode.Create] かつ [UIState.draft] の `cafeName` が空（cafe 未選択）のときだけ
+     * [CafeRepository.searchNearby] を実行し、上位 3 件を [UIState.suggestedCafes] に反映する。
+     * それ以外のモード、または既にカフェ名が入っている場合は no-op（位置情報の取得自体は
+     * プラットフォーム側の関心事のため、呼び出し側は条件を気にせず毎回呼んでよい）。
+     *
+     * 前回の Nearby 検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
+     * 検索失敗時は無音（[UIState.error] は変更しない。サジェストは補助機能のため）。
+     *
+     * @param latitude 現在地の緯度
+     * @param longitude 現在地の経度
+     */
+    fun onLocationAvailable(latitude: Double, longitude: Double) {
+        if (_state.value.mode !is Mode.Create) return
+        if (_state.value.draft.cafeName.isNotBlank()) return
+
+        suggestionJob?.cancel()
+        suggestionJob = viewModelScope.launch {
+            try {
+                val results = cafeRepository.searchNearby(latitude, longitude).take(3)
+                if (_state.value.mode is Mode.Create && _state.value.draft.cafeName.isBlank()) {
+                    _state.update { it.copy(suggestedCafes = results) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 無音: サジェストは補助機能のため error には流さない（要件 2-8）
+            }
         }
     }
 
@@ -545,14 +665,14 @@ class CoffeeEditorViewModel(
      * draft と [Mode] から保存用の [CoffeeRecord] を組み立てる。
      *
      * - cafe は [buildCafe] に委譲する（cafeName が空のとき null = セルフ抽出）
-     * - [Mode.Create]: id を新規 UUID で採番し、createdAt / updatedAt を now で設定する
+     * - [Mode.Create] / [Mode.Duplicate]: id を新規 UUID で採番し、createdAt / updatedAt を now で設定する
      * - [Mode.Edit]: [currentInitialRecord] から id / placeId / createdAt を引き継ぎ、updatedAt を now で更新する
      */
     private fun buildRecord(draft: CoffeeDraft, userId: String): CoffeeRecord {
         val now = Clock.System.now()
         val mode = _state.value.mode
         val (id, createdAt) = when (mode) {
-            is Mode.Create -> Pair(
+            is Mode.Create, is Mode.Duplicate -> Pair(
                 kotlin.uuid.Uuid.random().toString(),
                 now,
             )
@@ -596,7 +716,8 @@ class CoffeeEditorViewModel(
      * 1. [draft].cafeName が空 → null（セルフ抽出）
      * 2. このセッションで Places 選択があった（`selectedCafe` が非 null）→
      *    `selectedCafe` の placeId / latitude / longitude / photoReferences を採用
-     * 3. [Mode.Edit] かつ選択なし → [currentInitialRecord] の cafe（placeId / 座標 / photoReferences）を引き継ぐ
+     * 3. [Mode.Edit] / [Mode.Duplicate] かつ選択なし → [currentInitialRecord] の cafe
+     *    （placeId / 座標 / photoReferences）を引き継ぐ（[Mode.Duplicate] は複製元の cafe を同一カフェとして扱う）
      * 4. [Mode.Create] かつ選択なし（手入力カフェ）→ UUID を placeId として採番、座標は null
      *
      * いずれの場合も name / address / websiteUrl / mapsUrl は draft の編集値を採用する。
@@ -609,7 +730,7 @@ class CoffeeEditorViewModel(
             CafeSnapshot(selected.placeId, selected.latitude, selected.longitude, selected.photoReferences)
         } else {
             when (mode) {
-                is Mode.Edit -> {
+                is Mode.Edit, is Mode.Duplicate -> {
                     val initialCafe = currentInitialRecord?.cafe ?: return null
                     CafeSnapshot(
                         initialCafe.placeId,
@@ -644,6 +765,12 @@ class CoffeeEditorViewModel(
 
     companion object {
         /**
+         * 新規作成モードにおけるコーヒー名の初期値（要件 2-9）。編集可能。
+         * 複製モード（[Mode.Duplicate]）では使わない（複製元の `name` を引き継ぐ）。
+         */
+        const val DEFAULT_COFFEE_NAME: String = "本日のコーヒー"
+
+        /**
          * [CoffeeDraft] の初期値を返す。
          * Create モードの初期 draft として、また onAppear 前のデフォルト値として使う。
          */
@@ -656,7 +783,7 @@ class CoffeeEditorViewModel(
             rating = 0.0,
             notes = "",
             photos = emptyList(),
-            name = "",
+            name = DEFAULT_COFFEE_NAME,
             brewMethod = BrewMethod.HandDrip,
             origin = "",
             variety = "",
@@ -693,6 +820,36 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
         roastLevel = roastLevel,
         cup = cup ?: "",
         tasting = tasting,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット（edit モードで既存 tasting を反映）
+        tags = tags,
+    )
+
+/**
+ * [CoffeeRecord] を複製（[CoffeeEditorViewModel.Mode.Duplicate]）の初期 draft に変換する。
+ *
+ * 引き継ぐ: cafe（表示用フィールドのみ。placeId / 座標 / photoReferences は `currentInitialRecord` 経由で
+ * [CoffeeEditorViewModel.buildCafe] が引き継ぐ）/ name / brewMethod / origin / variety / processing /
+ * roastLevel / cup / tags。
+ * 引き継がない: rating（0.0 = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
+ * `visitedOn` は今日にする（元記録の日付は使わない）。
+ */
+private fun CoffeeRecord.toDuplicateDraft(): CoffeeEditorViewModel.CoffeeDraft =
+    CoffeeEditorViewModel.CoffeeDraft(
+        cafeName = cafe?.name ?: "",
+        cafeAddress = cafe?.address ?: "",
+        cafeWebsiteUrl = cafe?.websiteUrl ?: "",
+        cafeMapsUrl = cafe?.mapsUrl ?: "",
+        visitedOn = Clock.System.todayIn(TimeZone.currentSystemDefault()),
+        rating = 0.0,
+        notes = "",
+        photos = emptyList(),
+        name = name,
+        brewMethod = brewMethod,
+        origin = origin ?: "",
+        variety = variety ?: "",
+        processing = processing,
+        roastLevel = roastLevel,
+        cup = cup ?: "",
+        tasting = null,  // all-or-nothing: 複製では引き継がない（要件 2-10）
         tags = tags,
     )
 

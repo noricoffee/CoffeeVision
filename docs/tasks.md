@@ -98,6 +98,7 @@
 | [ ] | 検索（キーワード）の高速化（SQLDelight FTS） | 一覧検索そのものはフェーズ 15-C（まずはメモリ内 filter）。FTS はデータ量で遅くなったら |
 | [ ] | エクスポート（JSON）機能 | フェーズ 15-E と同件（7-4 を ○ へ引き上げ済み） |
 | [ ] | 同一カフェの集計表示 | |
+| [ ] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-06 の 15-B 実装中に kmp-engineer が発見（既存バグ・15-B スコープ外のため未修正）。次に Edit/Duplicate 周りを触るときに対応。implementation_note 2026-07-06 参照 |
 | [ ] | Widget / ホーム画面ショートカット | |
 
 ---
@@ -285,7 +286,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | kmp-engineer: エディタ VM に現在地カフェサジェスト状態（Nearby 上位 1〜3 件）+ コーヒー名デフォルト値 + 複製用の初期値生成ロジック | 既存 `CafeRepository`（5-2 Nearby）再利用。複製の引き継ぎ範囲（写真・評価は引き継がない等）は親が事前確定 |
+| [x] | kmp-engineer: エディタ VM に現在地カフェサジェスト状態（Nearby 上位 1〜3 件）+ コーヒー名デフォルト値 + 複製用の初期値生成ロジック | 2026-07-06 完了。`CoffeeEditorViewModel` に `Mode.Duplicate` + `suggestedCafes` + `onLocationAvailable` + `DEFAULT_COFFEE_NAME` を追加。新規テスト 7 件 green・override 不使用。コンストラクタに `cafeRepository` 追加（`AppContainer.makeCoffeeEditorViewModel()` 経由なら iOS 呼び出し側は無変更）。判断は implementation_note 2026-07-06 |
 | [ ] | ios-engineer: エディタのサジェストチップ UI（位置情報許可 UX 込み）+ 詳細画面「これをもとに記録」導線 | 位置情報は Places 検索時のみ利用の方針（非機能要件）を維持 |
 | [ ] | 検証: FAB → サジェストタップ → 星 + 写真だけで保存できる最短パス（目標 15 秒）、複製で visitedOn が今日になること | シミュレータ目視はユーザー作業 |
 

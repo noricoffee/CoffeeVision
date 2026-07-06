@@ -8,6 +8,7 @@ import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeRecordQuery
 import com.noricoffee.domain.model.CoffeeRecordQueryImpl
 import com.noricoffee.domain.usecase.BeanProfileMatchUseCase
+import com.noricoffee.domain.usecase.ExportCoffeeRecordsUseCase
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.BeanProfileRepository
 import com.noricoffee.repository.CafeRepository
@@ -164,6 +165,17 @@ class AppContainer(
     )
 
     val cafeRepository: CafeRepository = createCafeRepository(apiKey = placesApiKey)
+
+    /**
+     * データエクスポート（要件 §7-4 / フェーズ 15-E-2）。全 [CoffeeRecord][com.noricoffee.domain.CoffeeRecord]
+     * を JSON 文字列化する。[coffeeRepository] のみに依存する純粋な UseCase なので内部で生成する。
+     *
+     * Swift からの呼び出しシグネチャ（`.swiftinterface` で裏取り済み）:
+     * `appContainer.exportCoffeeRecordsUseCase.invoke(userId: String) async throws -> String`
+     */
+    val exportCoffeeRecordsUseCase: ExportCoffeeRecordsUseCase = ExportCoffeeRecordsUseCase(
+        coffeeRepository = coffeeRepository,
+    )
 
     /**
      * 匿名サインインを起こし、確定した uid でリモート → ローカルの同期購読を開始する。

@@ -791,3 +791,13 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 
 - `AnalysisView` に `AnalysisReadinessProgressCard` を追加。表示条件は `readiness != null && !readiness.hasAnySignal`（`totalCount==0` は既存 emptyState 分岐に入り到達しない）。`ProgressView(value: ratedCount/categoryThreshold)` を主表示に、残り件数 = `max(0, categoryThreshold - ratedCount)` で「あと N 杯…」/「もう少し記録すると…」を出し分け。テイスティング相関 track は残数ありのとき控えめな補足キャプション（「できます」止まりで断定回避）
 - **将来リスク（tasks.md 15-D にバックログ化）**: 既存 `favoriteSignalsSection` は iOS 側で `stats.favoriteSignals` の 4 フィールドから独自に「信号あり」を再計算しており、今回の `readiness.hasAnySignal`（KMP 算出）と別経路。現状は同一 `stats` から同時導出で齟齬なしだが、KMP 側判定が変わると乖離しうる。単一ソース化は分析タブを次に触るときに寄せる
+
+### 2026-07-07: 15-E-2 データエクスポート KMP 実装 + B-6（Native .format）解消
+
+- 領域: KMP / shared/domain
+- 関連: requirements 7-4、tasks.md フェーズ 15-E-2 / backlog B-6
+
+- `ExportCoffeeRecordsUseCase`（`suspend operator fun invoke(userId): String`、`@Throws`）: `observeAll(userId).first()` → **export 専用 `@Serializable` DTO**（`domain/export/`）→ `Json { prettyPrint = true; encodeDefaults = true }`。ドメインモデルに `@Serializable` を付けず DTO 分離（Firestore 直列化規則踏襲: enum は `.name` / 日時は文字列 / 写真はメタデータのみ）。包みは `{ exportedAt, version: 1, records: [] }`（将来互換のため version 保持）。`AppContainer.exportCoffeeRecordsUseCase` で公開
+- **`encodeDefaults = true` 必須**: 既定 false だと `version=1` や空 `tags`/`photos` が省略される（lessons の Places `Json{}` 教訓と同根のため新規 lessons は不要と判断）
+- **SKIE は `operator fun invoke` を Swift の `callAsFunction` 化しない**: iOS は `appContainer.exportCoffeeRecordsUseCase.invoke(userId:)` と明示呼び出し（`(userId:)` 糖衣不可）。他の `operator fun invoke` UseCase も同様
+- **B-6 解消（親対応）**: 15-E-2 の export テストは domain にあり、iOS 検証が backlog B-6（`FavoriteSignalsPersonaTest` の `"%.Nf".format` = JVM 専用で Native コンパイル不能）でブロックされていた。この壊れテストは domain の iOS テストを丸ごと止めており、15-E-1・15-E-2 と 2 度検証を阻害したため、親が Native 安全な `Double.fmt(digits)` ヘルパ（デバッグ/メッセージ用途のみ・アサーション条件に非関与）に全 44 箇所置換。domain の iOS テストが全 green に回復（Persona 11 / Export 4 / 他 failures=0）。以後 domain の Native テストが CI・親検証で回せる

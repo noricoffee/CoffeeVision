@@ -300,7 +300,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | kmp-engineer: `CoffeeListViewModel` にキーワードフィルタ + 月別 `MonthSection` モデル（上記確定仕様）+ commonTest | 破壊的変更（`coffees` → `sections`）。iOS 追随は次行。SQLDelight FTS 化はフェーズ 6 の既存項目（データ量で遅くなってから） |
+| [x] | kmp-engineer: `CoffeeListViewModel` にキーワードフィルタ + 月別 `MonthSection` モデル（上記確定仕様）+ commonTest | 2026-07-06 完了。commonTest 9 件 green（iosSimulatorArm64Test）/ `:androidApp:assembleDebug` 成功。破壊的変更（`coffees` → `sections`）の波及で `sharedUI/CoffeeListScreen.kt`（Android 検証画面）を親が追随（サブエージェントがセッション上限で中断→親が検証・仕上げ）。implementation_note 2026-07-06 |
 | [ ] | ios-engineer: 一覧に `.searchable`（`searchQuery` バインド）+ 月別 `Section` ヘッダ（yearMonth → "YYYY年M月" 生成）+ 空状態 2 種の出し分け | `sections` 参照へ全面追随 |
 | [ ] | 検証: 検索ヒット / 記録 0 件 / 検索ヒット 0 件の 3 状態、月跨ぎのセクション表示、検索中の FAB 挙動 | シミュレータ目視はユーザー作業 |
 

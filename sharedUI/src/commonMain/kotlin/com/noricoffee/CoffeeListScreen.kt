@@ -71,7 +71,7 @@ fun CoffeeListScreen(appContainer: AppContainer) {
                 }
             }
 
-            state.coffees.isEmpty() -> {
+            state.sections.isEmpty() -> {
                 Box(
                     modifier = Modifier.fillMaxSize(),
                     contentAlignment = Alignment.Center,
@@ -85,9 +85,19 @@ fun CoffeeListScreen(appContainer: AppContainer) {
 
             else -> {
                 LazyColumn(modifier = Modifier.fillMaxSize()) {
-                    items(state.coffees, key = { it.id }) { record ->
-                        CoffeeRecordRow(record)
-                        HorizontalDivider()
+                    state.sections.forEach { section ->
+                        item(key = "header-${section.yearMonth}") {
+                            Text(
+                                text = section.yearMonth,
+                                style = MaterialTheme.typography.titleSmall,
+                                color = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                            )
+                        }
+                        items(section.records, key = { it.id }) { record ->
+                            CoffeeRecordRow(record)
+                            HorizontalDivider()
+                        }
                     }
                 }
             }

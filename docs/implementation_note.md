@@ -762,3 +762,13 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **サジェストチップの表示条件は `!suggestedCafes.isEmpty` のみ**: 「カフェ選択でチップが消える」制御は KMP 側の状態管理に委ね、Swift 側で二重ガードしない
 - 複製起動時は `initialCafe` を渡さない（複製元カフェは KMP の `toDuplicateDraft` が設定済み）。`Duplicate` の画面タイトルは Create と同じ「コーヒーを記録」
 - **許可未決定ユーザー向けの明示入口（「近くのカフェから選ぶ」ボタン + タップ時のみ許可ダイアログ）は検討の上見送り**（2026-07-06 ユーザー判断）: サジェストは許可済みユーザー向けの補助機能と割り切る。マップで現在地を一度使えば以後は発動する
+
+### 2026-07-06: 15-C 一覧検索 + 月別グルーピング KMP 実装（サブエージェント中断→親仕上げ）
+
+- 領域: KMP / feature/coffee-list / sharedUI
+- 関連: requirements 6-1 / 2-11、tasks.md フェーズ 15-C
+
+- `CoffeeListViewModel` の `UIState.coffees: List<CoffeeRecord>` を `sections: List<MonthSection>` に置換（破壊的）+ `searchQuery` + `onSearchQueryChanged`。検索 → 月別グルーピングの順で `buildSections` に純粋関数化。yearMonth は `"YYYY-MM"` ゼロパディング、セクション降順・月内順序維持（安定フィルタ）
+- **サブエージェント（kmp-engineer）がビルド検証直前でセッション上限により中断**。実装・テストは完成状態で残っており、親が内容をレビューのうえ検証を引き継いだ
+- **破壊的変更の波及先を親が補完**: `coffees` 廃止により `sharedUI/CoffeeListScreen.kt`（Android 検証用 Compose 画面）が未追随でビルドを壊す状態だった。`sections` ベース（月別ヘッダ + 記録行）に更新。Android 検証画面は「VM が Android でも動く + Firestore observe 往復」を示す最小実装のため、検索 UI は付けず月別表示のみに留める（検索は iOS 一覧の関心事）
+- 教訓寄り: feature の `UIState` フィールドを rename/廃止する破壊的変更は、`sharedUI`（Android 検証）と `iosApp`（Bridge）の両方が波及先になる。KMP 側 dispatch 時に「`shared*` 内の参照追随（sharedUI 含む）まで」を必ずスコープに含める

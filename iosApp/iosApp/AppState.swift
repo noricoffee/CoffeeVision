@@ -86,6 +86,7 @@ final class AppState {
         let sqlDriver = DatabaseDriverFactory().create()
         let authRepo = AuthRepositoryIosImpl()
         let remoteDataSource = RemoteCoffeeDataSourceIosImpl()
+        let remoteSavedCafeDataSource = RemoteSavedCafeDataSourceIosImpl()
         // Configuration/Base.xcconfig → Info.plist の $(PLACES_API_KEY) 経由で取得する。
         // Secrets.xcconfig が存在しない場合（CI 環境等）は空文字フォールバック。
         // 空文字の場合もアプリは起動するが Places API 呼び出しは 401 を返す。
@@ -102,6 +103,7 @@ final class AppState {
         let container = AppContainer(
             sqlDriver: sqlDriver,
             remoteCoffeeDataSource: remoteDataSource,
+            remoteSavedCafeDataSource: remoteSavedCafeDataSource,
             authRepository: authRepo,
             placesApiKey: placesApiKey,
             coffeeInsightProvider: providerImpl,

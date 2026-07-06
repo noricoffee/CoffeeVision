@@ -731,3 +731,14 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **一覧シートの表示状態（isPresented）は KMP に持たせない**: sheet 表示トグルを VM 状態に持つ前例がコードベースに無く、「画面遷移は iosApp / androidApp の Navigation 層で繋ぐ」原則に従い SwiftUI の `@State` に委ねる
 - **`CafeDetailViewModel` に `error: String?` / `onErrorDismissed()` を追加**: `onSaveToggled` の失敗を握りつぶすと `MapViewModel` のエラーハンドリング規約と非対称になるため、同じパターンで対称化（依頼に明記は無かったが妥当と判断し親が承認）
 - 破壊的変更は `AppContainer` 公開コンストラクタ 3 本への `remoteSavedCafeDataSource` 追加のみ（SKIE がデフォルト引数を出さないため全オーバーロードに必須追加）。iOS 追随は ios-engineer に dispatch
+
+### 2026-07-06: 15-A SavedCafe iOS 実装 — ピンのビジュアルと表示トグルの置き場所
+
+- 領域: iOS / SwiftUI
+- 関連: `data-model.md` §1.9、tasks.md フェーズ 15-A（ios-engineer レポートより親が採録）
+
+- **行きたい店ピンのビジュアル**: `Color.indigo` + `bookmark.fill`、直径 34pt（訪問済み 36pt と検索結果 32pt の中間）。既存 3 種（訪問済み = brown/`cup.and.saucer.fill`、好み一致 = accentColor/`heart.fill`、検索結果 = blue/`mappin.and.ellipse`）との識別性を優先
+- **ピンの dedup（訪問済み > 行きたい > 検索結果）は「行きたい」フィルタチップの状態に関わらず常時適用**: 競合解決はデータ整合性の関心事で、表示切替とは独立
+- **「行きたい」フィルタチップの表示状態は Swift `@State` のみ（KMP に持たない）**: `MapViewModel` の `onShowVisitedToggled`（訪問済みトグル）とは非対称になるが、表示切替のみの関心事として View 側で完結させた。KMP 側へ寄せ直すかは他プラットフォーム実装が現実化した時に再検討
+- **一覧シートは保存日時テキストを表示しない**（savedAt 降順の並びだけで表現。Simplicity First、必要なら後付け可）
+- `CoffeeFirestoreMapper` の `toCafeMap`/`cafeFromMap` を `private` → `internal static` 化し、`SavedCafeFirestoreMapper` から再利用（cafe 直列化規則の重複実装を回避）

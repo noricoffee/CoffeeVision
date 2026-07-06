@@ -40,6 +40,9 @@ struct CafeDetailView: View {
         .navigationTitle(bridge?.cafe?.name ?? initialCafe?.name ?? String(localized: "カフェ詳細"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
+        .errorToast(message: bridge?.error) {
+            bridge?.onErrorDismissed()
+        }
         .onAppear {
             if bridge == nil, let uid = appState.uid {
                 bridge = CafeDetailViewModelBridge(
@@ -254,6 +257,22 @@ struct CafeDetailView: View {
 
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            if let bridge {
+                Button {
+                    bridge.onSaveToggled()
+                } label: {
+                    Image(systemName: bridge.isSaved ? "bookmark.fill" : "bookmark")
+                        .frame(minWidth: 44, minHeight: 44)
+                }
+                .sensoryFeedback(.selection, trigger: bridge.isSaved)
+                .accessibilityLabel(
+                    bridge.isSaved
+                        ? String(localized: "行きたい店から削除")
+                        : String(localized: "行きたい店に追加")
+                )
+            }
+        }
         ToolbarItem(placement: .topBarTrailing) {
             Button {
                 isPresentingEditor = true

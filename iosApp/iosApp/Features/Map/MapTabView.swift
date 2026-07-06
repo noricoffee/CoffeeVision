@@ -230,6 +230,15 @@ struct MapTabView: View {
     /// 好み一致ピンタップ時に推薦理由シートで表示する対象。nil = シート非表示。
     @State private var selectedRecommendedCafe: RecommendedCafe? = nil
 
+    // MARK: - 「行きたい店」関連 State（フェーズ 15-A）
+
+    /// 「行きたい」ピンの表示 / 非表示（フィルタチップ）。KMP に対応する状態を持たないため
+    /// View 側 `@State` のみで管理する（ピンの priority 解決には使わず、表示切替専用）。
+    @State private var showSavedCafes: Bool = true
+
+    /// 「行きたい店」一覧ハーフシートの表示状態。
+    @State private var isPresentingSavedCafesSheet = false
+
     // MARK: - 検索関連 State
 
     /// 検索バーのテキスト入力。
@@ -285,6 +294,24 @@ struct MapTabView: View {
                         .toolbar(.hidden, for: .navigationBar)
                         .sheet(isPresented: $isPresentingTasteFilter) {
                             TasteMapFilterSheet(bridge: bridge)
+                        }
+                        .sheet(isPresented: $isPresentingSavedCafesSheet) {
+                            SavedCafeListSheet(
+                                savedCafes: bridge.savedCafes,
+                                recordedPlaceIds: bridge.recordedPlaceIds,
+                                onSelect: { savedCafe in
+                                    isPresentingSavedCafesSheet = false
+                                    navigationPath.append(
+                                        CafeDetailRoute(
+                                            placeId: savedCafe.cafe.placeId,
+                                            initialCafe: savedCafe.cafe
+                                        )
+                                    )
+                                },
+                                onRemove: { placeId in
+                                    bridge.onSavedCafeRemoved(placeId: placeId)
+                                }
+                            )
                         }
                         .sheet(isPresented: $isPresentingTasteSearch) {
                             TasteSearchSheet { keywords in
@@ -473,10 +500,37 @@ struct MapTabView: View {
                     }
                 }
 
+                // 行きたい店ピン（indigo / bookmark.fill。フェーズ 15-A）
+                // 同一 placeId が訪問済みピンと競合する場合は訪問済みを優先するため、
+                // visitedPlaceIds(bridge) に含まれるものは除外する（優先順位: 訪問済み > 行きたい > 検索結果）。
+                if showSavedCafes {
+                    ForEach(displayedSavedCafes(bridge), id: \.cafe.placeId) { savedCafe in
+                        if let lat = savedCafe.cafe.latitude?.doubleValue,
+                           let lng = savedCafe.cafe.longitude?.doubleValue {
+                            Annotation(
+                                savedCafe.cafe.name,
+                                coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng)
+                            ) {
+                                NavigationLink(
+                                    value: CafeDetailRoute(
+                                        placeId: savedCafe.cafe.placeId,
+                                        initialCafe: savedCafe.cafe
+                                    )
+                                ) {
+                                    savedCafePin(savedCafe: savedCafe)
+                                }
+                                .buttonStyle(.plain)
+                            }
+                        }
+                    }
+                }
+
                 // 検索結果ピン（青 / mappin.and.ellipse）
                 // タップで下部カードを表示し、NavigationLink ではなく selectSearchResult を呼ぶ
+                // 同一 placeId が訪問済み / 行きたいピンと競合する場合はそちらを優先して除外する
+                // （優先順位: 訪問済み > 行きたい > 検索結果。表示切替チップの状態に関わらず適用する）
                 if !bridge.searchResultPlaces.isEmpty {
-                    ForEach(bridge.searchResultPlaces, id: \.placeId) { cafe in
+                    ForEach(displayedSearchResultPlaces(bridge), id: \.placeId) { cafe in
                         if let lat = cafe.latitude?.doubleValue,
                            let lng = cafe.longitude?.doubleValue {
                             Annotation(
@@ -542,7 +596,10 @@ struct MapTabView: View {
             // 検索モード:（パンで出現した場合）「このエリアを検索」ボタン + 検索結果ドロップダウン
             // 同一 VStack 内に流し込むことで、ドロップダウンとボタンの重なりを構造的に防ぐ。
             VStack(spacing: 8) {
-                searchBarView
+                HStack(spacing: 8) {
+                    searchBarView
+                    savedCafesSheetButton(bridge: bridge)
+                }
                 if isSearchMode {
                     if showAreaSearchButton {
                         HStack {
@@ -908,6 +965,63 @@ struct MapTabView: View {
         }
     }
 
+    // MARK: - 「行きたい店」（フェーズ 15-A）
+
+    /// 検索バー右側の「行きたい店」一覧ボタン。1 件以上あるときのみ件数バッジを表示する。
+    private func savedCafesSheetButton(bridge: MapViewModelBridge) -> some View {
+        Button {
+            isPresentingSavedCafesSheet = true
+        } label: {
+            ZStack(alignment: .topTrailing) {
+                Image(systemName: "bookmark.fill")
+                    .font(.body)
+                    .foregroundStyle(Color.indigo)
+                    .frame(width: 44, height: 44)
+                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+
+                if !bridge.savedCafes.isEmpty {
+                    let count = bridge.savedCafes.count
+                    Text(count >= 100 ? "99+" : "\(count)")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 4)
+                        .frame(minWidth: 16, minHeight: 16)
+                        .background(Circle().fill(Color.indigo))
+                        .offset(x: 4, y: -4)
+                }
+            }
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            String(localized: "行きたい店一覧、\(bridge.savedCafes.count) 件")
+        )
+    }
+
+    /// 訪問済みカフェの placeId 集合（ピン競合解決の基準。優先度最上位）。
+    private func visitedPlaceIds(_ bridge: MapViewModelBridge) -> Set<String> {
+        Set(bridge.visitedCafes.map { $0.cafe.placeId })
+    }
+
+    /// 行きたい店の placeId 集合（検索結果ピンの競合解決に使う。表示トグルの状態に関わらず全件対象）。
+    private func savedPlaceIds(_ bridge: MapViewModelBridge) -> Set<String> {
+        Set(bridge.savedCafes.map { $0.cafe.placeId })
+    }
+
+    /// 表示対象の行きたい店（訪問済みと競合するものを除外。優先順位: 訪問済み > 行きたい）。
+    private func displayedSavedCafes(_ bridge: MapViewModelBridge) -> [SavedCafe] {
+        let visited = visitedPlaceIds(bridge)
+        return bridge.savedCafes.filter { !visited.contains($0.cafe.placeId) }
+    }
+
+    /// 表示対象の検索結果ピン（訪問済み / 行きたいと競合するものを除外。優先順位: 訪問済み > 行きたい > 検索結果）。
+    private func displayedSearchResultPlaces(_ bridge: MapViewModelBridge) -> [Cafe] {
+        let visited = visitedPlaceIds(bridge)
+        let saved = savedPlaceIds(bridge)
+        return bridge.searchResultPlaces.filter {
+            !visited.contains($0.placeId) && !saved.contains($0.placeId)
+        }
+    }
+
     // MARK: - フィルタチップ行
 
     private func filterChipRow(bridge: MapViewModelBridge) -> some View {
@@ -924,6 +1038,17 @@ struct MapTabView: View {
                 // 好み一致カフェが 1 件以上あるときのみ凡例バッジを表示（インタラクションなし）
                 if !bridge.recommendedCafes.isEmpty {
                     RecommendedLegendBadge()
+                }
+
+                // 「行きたい店」ピンの表示 / 非表示トグル（1 件以上あるときのみ表示。フェーズ 15-A）
+                if !bridge.savedCafes.isEmpty {
+                    FilterChip(
+                        label: String(localized: "行きたい"),
+                        systemImage: "bookmark.fill",
+                        isOn: showSavedCafes
+                    ) {
+                        showSavedCafes.toggle()
+                    }
                 }
 
                 // Foundation Models 利用可能なとき「好みで絞り込む」チップを表示
@@ -1022,6 +1147,23 @@ struct MapTabView: View {
                 .foregroundStyle(.white)
         }
         .accessibilityLabel(String(localized: "\(cafe.name) 検索結果"))
+    }
+
+    /// 行きたい店ピン（indigo + bookmark。フェーズ 15-A）。
+    ///
+    /// 既存 3 種ピン（訪問済み=brown / 好み一致=accentColor / 検索結果=blue）と区別できる
+    /// 色（indigo）を採用し、`bookmark.fill` で「保存済み」を示す。
+    private func savedCafePin(savedCafe: SavedCafe) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.indigo)
+                .frame(width: 34, height: 34)
+                .shadow(color: Color.indigo.opacity(0.4), radius: 4, x: 0, y: 2)
+            Image(systemName: "bookmark.fill")
+                .font(.caption2)
+                .foregroundStyle(.white)
+        }
+        .accessibilityLabel(String(localized: "\(savedCafe.cafe.name) 行きたい店"))
     }
 
     /// 好み一致カフェピン（アクセントカラー + ハート）。

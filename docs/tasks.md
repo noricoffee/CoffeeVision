@@ -96,7 +96,7 @@
 |------|------|------|
 | [-] | Android アプリ実装着手（`sharedUI` の Compose Multiplatform 利用） | Phase 3.5 で `feature/visit-list` を Compose 表示する検証実装に置き換えたため取り下げ（Android はリリース対象外） |
 | [ ] | 検索（キーワード）の高速化（SQLDelight FTS） | 一覧検索そのものはフェーズ 15-C（まずはメモリ内 filter）。FTS はデータ量で遅くなったら |
-| [ ] | エクスポート（JSON）機能 | フェーズ 15-E と同件（7-4 を ○ へ引き上げ済み） |
+| [ ] | エクスポート（JSON）機能 | フェーズ 15-E-2 に統合（そちらで実施）。7-4 を ○ へ引き上げ済み |
 | [ ] | 同一カフェの集計表示 | |
 | [ ] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-06 の 15-B 実装中に kmp-engineer が発見（既存バグ・15-B スコープ外のため未修正）。次に Edit/Duplicate 周りを触るときに対応。implementation_note 2026-07-06 参照 |
 | [ ] | Widget / ホーム画面ショートカット | |
@@ -327,11 +327,37 @@
 
 ### 15-E: 中期（後回し可）【要件 9-8 / 抽出レシピ / 7-4】
 
+3 機能とも独立。着手順は **15-E-1（抽出レシピ）→ 15-E-2（エクスポート）→ 15-E-3（探索提案）**。
+
+#### 15-E-1: 抽出レシピフィールド【requirements §2 フィールド表 / 2-10】
+
+> **確定仕様（2026-07-06 親確定）**: 構造化せず**単一フリーテキスト `brewRecipe: String?`**（△ なので Simplicity-First。将来構造化が要れば別途）。data-model.md §1.1 / §2.1（migration 4.sqm）/ §3.2 に反映済み。複製（2-10）の引き継ぎ対象に含める。バリデーション: 最大 500 文字（ViewModel 層）。エディタではコーヒー属性セクションに配置、詳細画面は非 null のとき表示。
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 未経験の豆への探索提案（`FavoriteSignals` × `BeanProfile`、分析タブ） | 要件 9-8（△）。12-C 突合の応用でサーバー不要 |
-| [ ] | 抽出レシピフィールド（セルフ抽出向け） | requirements §2 フィールド表（△）。構造化 or 自由メモは着手時に判断 |
-| [ ] | データエクスポート（JSON） | 要件 7-4（○ へ引き上げ済み）。フェーズ 6 の既存項目と同件 |
+| [ ] | kmp-engineer: `CoffeeRecord.brewRecipe` + SQLDelight（migration 4.sqm + upsert 追加）+ Mapper + Android Firestore mapper + エディタ VM（入力状態 + 複製引き継ぎ + 500 文字バリデーション）| 加算的。nullable TEXT の既存パターン踏襲。DummyData があれば任意で 1〜2 件に付与 |
+| [ ] | ios-engineer: iOS Firestore mapper 追随 + エディタの入力 UI + 詳細画面表示 | 既存の cup/notes 入力と同様 |
+| [ ] | 検証: 入力→保存→round-trip、複製で引き継ぎ、既存記録（brewRecipe 無し）が migration 後も開ける | シミュレータ目視はユーザー作業。DB 列追加のため要再インストール確認 |
+
+#### 15-E-2: データエクスポート（JSON）【要件 7-4】
+
+> **確定仕様（2026-07-06 親確定）**: KMP で全 `CoffeeRecord` を JSON 文字列化する `ExportCoffeeRecordsUseCase`（`kotlinx.serialization`）。永続化フィールドのみ（写真はメタデータのみ・バイナリ含めない）。iOS は設定画面から `ShareLink` で共有シート。フェーズ 6 の「エクスポート（JSON）」項目と同件（そちらは本項目に統合）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | kmp-engineer: `ExportCoffeeRecordsUseCase`（`observeAll(uid).first()` → `@Serializable` DTO → JSON 文字列。`kotlinx-datetime` は ISO 文字列化）+ commonTest | ドメインモデルに `@Serializable` を足すか export 専用 DTO を切るかは実装判断（既存 Firestore mapper と整合する DTO 推奨）|
+| [ ] | ios-engineer: 設定画面に「データをエクスポート」→ JSON 生成 → `ShareLink` / share sheet | ファイル名は `coffeevision-export-YYYYMMDD.json` 等 |
+| [ ] | 検証: エクスポート → JSON 内容が記録と一致、0 件時の挙動 | シミュレータ目視はユーザー作業 |
+
+#### 15-E-3: 未経験の豆への探索提案【要件 9-8（△）】
+
+> **確定仕様（2026-07-06 親確定）**: KMP 決定論の `SuggestUnexploredBeansUseCase`。入力 = ユーザーの記録（記録済み `origin`/`variety` 集合）+ `BeanProfileRepository.getAll()` + `FavoriteSignals`。出力 = 好み信号（`bestOrigin` 等）に合致するが**ユーザーが未記録**の `BeanProfile` 上位数件。FM 不要（決定論。言語化は将来）。`beanProfiles` 未投入 / 信号なしなら空。分析タブに「試してみては」セクションでフレーバータグ付き表示。9-5（既訪問店の再訪）に対する新規開拓ナッジ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | kmp-engineer: `SuggestUnexploredBeansUseCase` + `AnalysisViewModel` 派生 or UIState 追加 + commonTest | 「未記録」判定は origin/variety の正規化一致（既存 buildOriginRanking と同じ正規化）。`BeanProfileRepository?` 未注入時は空 |
+| [ ] | ios-engineer: 分析タブに探索提案セクション（BeanProfile 名 + flavorNotes チップ） | beanProfiles 未投入時は非表示 |
+| [ ] | 検証: 好み信号あり + 未記録 BeanProfile で提案表示、記録済みは除外、0 件時非表示 | シミュレータ目視はユーザー作業（beanProfiles 投入前提） |
 
 ---
 

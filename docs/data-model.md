@@ -57,6 +57,7 @@ data class CoffeeRecord(
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
+    val brewRecipe: String?,              // 抽出レシピ（豆量 / 湯量 / 湯温 / 時間などの自由メモ）。フェーズ 15-E 追加。セルフ抽出向け
     val tasting: TastingScores?,          // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須
     val tags: List<String> = emptyList(), // ユーザー定義タグ（例: "ラテアート" "浅煎り"）。フェーズ 10-D 追加
     // --- メタ ---
@@ -548,6 +549,7 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
+    brew_recipe TEXT,                      -- 抽出レシピ自由メモ（フェーズ 15-E 追加、migration 4.sqm で ALTER TABLE ADD COLUMN）
     -- テイスティング 5 要素（各 1..10）。5 列は all-or-nothing（全列 NULL = tasting なし / 全列セット = tasting あり）
     sweetness INTEGER,
     body INTEGER,
@@ -636,6 +638,7 @@ DELETE FROM photo WHERE id = ?;
 - 子テーブル（photo）は別クエリで取得し、Repository でまとめる（JOIN は使わず、`Flow.combine` で結合）
 - 写真の参照配列やタグ（`tags`）など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する。`tags` は空文字（旧行）も空リストとして読む
 - `cafe_place_id` が null の行は `cafe = null` で組み立てる。非 null の行のみ `Cafe(...)` を構築する
+- **`brew_recipe`（フェーズ 15-E）**: migration `4.sqm` で `ALTER TABLE coffee_record ADD COLUMN brew_recipe TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `brew_recipe` を追加する。Mapper は他の nullable TEXT 列と同じ扱い
 
 ## 2.4 SavedCafe.sq（フェーズ 15-A）
 
@@ -764,6 +767,7 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
   "processing": "Washed",
   "roastLevel": "Medium",
   "cup": "ノリタケ",
+  "brewRecipe": "豆 15g / 湯 240ml / 92℃ / 2:30",
   "tasting": {
     "sweetness": 7,
     "body": 5,
@@ -788,7 +792,7 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
 ```
 
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
-- **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup）: null の場合はキーごと省略
+- **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。`brewRecipe` はフェーズ 15-E 追加（decode 時にキー欠如は null 扱い）
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
 - **cafe** に書くのはスナップショット 8 フィールドのみ（§1.2 の注記参照。`openNow` 等の表示用フィールドは書かない）

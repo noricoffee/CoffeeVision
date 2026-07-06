@@ -10,6 +10,8 @@ import com.noricoffee.domain.model.TastingAxis
 import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.math.abs
+import kotlin.math.pow
+import kotlin.math.round
 import kotlin.math.sqrt
 import kotlin.random.Random
 import kotlin.test.Test
@@ -890,10 +892,10 @@ class FavoriteSignalsPersonaTest {
             BuildCoffeeStatsUseCase.CORRELATION_MIN_ABS,
             BuildCoffeeStatsUseCase.CORRELATION_ABS_FLOOR_C / sqrt(recordsPerSeed.toDouble()),
         )
-        println("    = ${"%.4f".format(effectiveFloor)}")
-        println("  dominantTastingAxis 偽陽性: $tastingAxisFalsePositives / $numSeeds = ${"%.1f".format(tastingFpRate)}%")
+        println("    = ${(effectiveFloor).fmt(4)}")
+        println("  dominantTastingAxis 偽陽性: $tastingAxisFalsePositives / $numSeeds = ${(tastingFpRate).fmt(1)}%")
         println("  カテゴリ信号（bestBrewMethod/bestRoastLevel/bestOrigin いずれか非 null） 偽陽性:")
-        println("    $categorySignalFalsePositives / $numSeeds = ${"%.1f".format(categoryFpRate)}%")
+        println("    $categorySignalFalsePositives / $numSeeds = ${(categoryFpRate).fmt(1)}%")
         println("================================================================")
 
         // B-1c: B-1b（40%）からの改善を確認するアサート
@@ -901,13 +903,13 @@ class FavoriteSignalsPersonaTest {
         // catastrophic 上限を 30% に設定（c=1.97 の実測 22% を安全マージン付きで保証）
         assertTrue(
             tastingFpRate < 30.0,
-            "dominantTastingAxis 偽陽性率が上限(30%)を超えた: ${"%.1f".format(tastingFpRate)}%" +
-                "（effectiveFloor=${"%.4f".format(effectiveFloor)}。CORRELATION_ABS_FLOOR_C を増やすか n が少なすぎる）",
+            "dominantTastingAxis 偽陽性率が上限(30%)を超えた: ${(tastingFpRate).fmt(1)}%" +
+                "（effectiveFloor=${(effectiveFloor).fmt(4)}。CORRELATION_ABS_FLOOR_C を増やすか n が少なすぎる）",
         )
         // カテゴリ: 均等割当テストでは構造的に全カテゴリが minSampleSize を超えるため偽陽性率が高い。
         // 実際のユーザーデータ（不均等な分布）では大幅に低くなる。
         // catastrophic 上限のみ（100% のまま → 後段の sweep で確認）
-        println("  [INFO] カテゴリ信号の偽陽性率: ${"%.1f".format(categoryFpRate)}%（均等割当テストでは構造的に高い。実ユーザーデータでは低下。sweep D で詳細確認）")
+        println("  [INFO] カテゴリ信号の偽陽性率: ${(categoryFpRate).fmt(1)}%（均等割当テストでは構造的に高い。実ユーザーデータでは低下。sweep D で詳細確認）")
     }
 
     // =========================================================================
@@ -1009,7 +1011,7 @@ class FavoriteSignalsPersonaTest {
                 val p4s = if (p4Pass) "OK " else "NG "
                 val p7s = if (p7Pass) "OK " else "NG "
 
-                println("  ${"%.2f".format(delta)}  | ${"%.3f".format(c)} | ${"%.4f".format(effectiveFloor30)} | ${"%.1f".format(catFpRate)}%     | ${"%.1f".format(tastFpRate)}%       | $p1s $p2s $p3s $p4s $p7s")
+                println("  ${(delta).fmt(2)}  | ${(c).fmt(3)} | ${(effectiveFloor30).fmt(4)} | ${(catFpRate).fmt(1)}%     | ${(tastFpRate).fmt(1)}%       | $p1s $p2s $p3s $p4s $p7s")
 
                 // production 設定（δ≈CATEGORY_MIN_EFFECT, c≈CORRELATION_ABS_FLOOR_C）の最近傍で検出力を記録
                 if (abs(delta - productionDelta) < 0.01 && abs(c - productionC) < 0.1) {
@@ -1158,12 +1160,12 @@ class FavoriteSignalsPersonaTest {
         println("  ┌───────────────┬──────────────────┬──────────────────┬──────────────────┐")
         println("  │               │   均等割当       │   mild-skew      │   heavy-skew     │")
         println("  ├───────────────┼──────────────────┼──────────────────┼──────────────────┤")
-        println("  │ 平均候補数    │ ${"%.1f".format(uniformAvgCandidates)}            │ ${"%.1f".format(mildSkewAvgCandidates)}            │ ${"%.1f".format(heavySkewAvgCandidates)}            │")
-        println("  │ カテゴリFP率  │ ${"%.1f".format(uniformCatFpRate)}%          │ ${"%.1f".format(mildSkewCatFpRate)}%          │ ${"%.1f".format(heavySkewCatFpRate)}%          │")
+        println("  │ 平均候補数    │ ${(uniformAvgCandidates).fmt(1)}            │ ${(mildSkewAvgCandidates).fmt(1)}            │ ${(heavySkewAvgCandidates).fmt(1)}            │")
+        println("  │ カテゴリFP率  │ ${(uniformCatFpRate).fmt(1)}%          │ ${(mildSkewCatFpRate).fmt(1)}%          │ ${(heavySkewCatFpRate).fmt(1)}%          │")
         println("  ├───────────────┼──────────────────┼──────────────────┼──────────────────┤")
-        println("  │  brewMethod   │ ${"%.1f".format(uniformBrewFpRate)}%          │ ${"%.1f".format(mildBrewFpRate)}%          │ ${"%.1f".format(heavyBrewFpRate)}%          │")
-        println("  │  roastLevel   │ ${"%.1f".format(uniformRoastFpRate)}%          │ ${"%.1f".format(mildRoastFpRate)}%          │ ${"%.1f".format(heavyRoastFpRate)}%          │")
-        println("  │  origin       │ ${"%.1f".format(uniformOriginFpRate)}%          │ ${"%.1f".format(mildOriginFpRate)}%          │ ${"%.1f".format(heavyOriginFpRate)}%          │")
+        println("  │  brewMethod   │ ${(uniformBrewFpRate).fmt(1)}%          │ ${(mildBrewFpRate).fmt(1)}%          │ ${(heavyBrewFpRate).fmt(1)}%          │")
+        println("  │  roastLevel   │ ${(uniformRoastFpRate).fmt(1)}%          │ ${(mildRoastFpRate).fmt(1)}%          │ ${(heavyRoastFpRate).fmt(1)}%          │")
+        println("  │  origin       │ ${(uniformOriginFpRate).fmt(1)}%          │ ${(mildOriginFpRate).fmt(1)}%          │ ${(heavyOriginFpRate).fmt(1)}%          │")
         println("  └───────────────┴──────────────────┴──────────────────┴──────────────────┘")
         println("")
 
@@ -1171,13 +1173,13 @@ class FavoriteSignalsPersonaTest {
         val heavyReduced = heavySkewCatFpRate < uniformCatFpRate
         val mildReduced = mildSkewCatFpRate < uniformCatFpRate
         println("  【仮説検証】「不均等分布なら偽陽性率は下がる」")
-        println("    mild-skew: ${"%.1f".format(uniformCatFpRate)}% → ${"%.1f".format(mildSkewCatFpRate)}% (${if (mildReduced) "低下あり" else "低下なし"})")
-        println("    heavy-skew: ${"%.1f".format(uniformCatFpRate)}% → ${"%.1f".format(heavySkewCatFpRate)}% (${if (heavyReduced) "低下あり" else "低下なし"})")
+        println("    mild-skew: ${(uniformCatFpRate).fmt(1)}% → ${(mildSkewCatFpRate).fmt(1)}% (${if (mildReduced) "低下あり" else "低下なし"})")
+        println("    heavy-skew: ${(uniformCatFpRate).fmt(1)}% → ${(heavySkewCatFpRate).fmt(1)}% (${if (heavyReduced) "低下あり" else "低下なし"})")
         println("")
         val heavyDiff = uniformCatFpRate - heavySkewCatFpRate
         val mildDiff = uniformCatFpRate - mildSkewCatFpRate
-        println("    heavy-skew での候補カテゴリ数変化: ${"%.1f".format(uniformAvgCandidates)} → ${"%.1f".format(heavySkewAvgCandidates)}")
-        println("    heavy-skew での偽陽性率変化: ${"%.1f".format(heavyDiff)}pt (正=改善, 負=悪化)")
+        println("    heavy-skew での候補カテゴリ数変化: ${(uniformAvgCandidates).fmt(1)} → ${(heavySkewAvgCandidates).fmt(1)}")
+        println("    heavy-skew での偽陽性率変化: ${(heavyDiff).fmt(1)}pt (正=改善, 負=悪化)")
         val hypothesis = when {
             heavyDiff >= 30.0 -> "仮説 TRUE: 大幅改善 → δ=0.20 で十分な可能性が高い"
             heavyDiff >= 10.0 -> "仮説 PARTIAL: 改善あるが不十分 → n 連動ゲートの検討を推奨"
@@ -1190,20 +1192,20 @@ class FavoriteSignalsPersonaTest {
         // 全分布で 100% のままなら catastrophic とみなし fail させる
         assertTrue(
             uniformCatFpRate <= 100.0,
-            "均等割当: カテゴリ偽陽性率が 100% を超えた（計算バグ）: ${"%.1f".format(uniformCatFpRate)}%",
+            "均等割当: カテゴリ偽陽性率が 100% を超えた（計算バグ）: ${(uniformCatFpRate).fmt(1)}%",
         )
         assertTrue(
             mildSkewCatFpRate <= 100.0,
-            "mild-skew: カテゴリ偽陽性率が 100% を超えた（計算バグ）: ${"%.1f".format(mildSkewCatFpRate)}%",
+            "mild-skew: カテゴリ偽陽性率が 100% を超えた（計算バグ）: ${(mildSkewCatFpRate).fmt(1)}%",
         )
         assertTrue(
             heavySkewCatFpRate <= 100.0,
-            "heavy-skew: カテゴリ偽陽性率が 100% を超えた（計算バグ）: ${"%.1f".format(heavySkewCatFpRate)}%",
+            "heavy-skew: カテゴリ偽陽性率が 100% を超えた（計算バグ）: ${(heavySkewCatFpRate).fmt(1)}%",
         )
         // 平均候補カテゴリ数の単調減少を確認（heavy < mild < uniform が期待値）
         assertTrue(
             heavySkewAvgCandidates < uniformAvgCandidates,
-            "heavy-skew の平均候補カテゴリ数が均等割当以上: heavy=${"%.1f".format(heavySkewAvgCandidates)} >= uniform=${"%.1f".format(uniformAvgCandidates)}（分布設計バグ）",
+            "heavy-skew の平均候補カテゴリ数が均等割当以上: heavy=${(heavySkewAvgCandidates).fmt(1)} >= uniform=${(uniformAvgCandidates).fmt(1)}（分布設計バグ）",
         )
     }
 
@@ -1440,10 +1442,10 @@ class FavoriteSignalsPersonaTest {
             val p7s = if (p7Tasting) "OK " else "NG "
 
             val star = if (kotlin.math.abs(z - BuildCoffeeStatsUseCase.CATEGORY_Z) < 0.01) "★" else " "
-            println("  $star${"%.1f".format(z)} | ${"%.1f".format(uFpRate)}%     | ${"%.1f".format(mFpRate)}%     | ${"%.1f".format(hFpRate)}%     | $p2s         $p3s            $p4s           $p1s     $p7s")
+            println("  $star${(z).fmt(1)} | ${(uFpRate).fmt(1)}%     | ${(mFpRate).fmt(1)}%     | ${(hFpRate).fmt(1)}%     | $p2s         $p3s            $p4s           $p1s     $p7s")
 
             // heavy-skew 軸別詳細
-            println("       |          |          |   brew:${"%.1f".format(heavyBrewFp*100.0/numSeeds)}% roast:${"%.1f".format(heavyRoastFp*100.0/numSeeds)}% origin:${"%.1f".format(heavyOriginFp*100.0/numSeeds)}%")
+            println("       |          |          |   brew:${(heavyBrewFp*100.0/numSeeds).fmt(1)}% roast:${(heavyRoastFp*100.0/numSeeds).fmt(1)}% origin:${(heavyOriginFp*100.0/numSeeds).fmt(1)}%")
 
             // production 設定（z=CATEGORY_Z）の検出力を記録
             if (kotlin.math.abs(z - BuildCoffeeStatsUseCase.CATEGORY_Z) < 0.01) {
@@ -1468,4 +1470,21 @@ class FavoriteSignalsPersonaTest {
         assertTrue(productionP1pass, "P1（酸味党）が検出されなかった（tasting 軸なので CATEGORY_Z に無関係のはず）")
         assertTrue(productionP7pass, "P7（逆相関/Body）が検出されなかった（tasting 軸なので CATEGORY_Z に無関係のはず）")
     }
+}
+
+/**
+ * Kotlin/Native で使えない `String.format("%.Nf", x)`（JVM 専用）の代替。
+ * このテストの `.format` 呼び出しはすべて println / assertion メッセージ用（アサーション条件には非関与）のため、
+ * デバッグ表示として十分な精度でゼロ埋め小数文字列を生成する（backlog B-6 解消 / 2026-07-07）。
+ */
+private fun Double.fmt(digits: Int): String {
+    if (isNaN()) return "NaN"
+    val neg = this < 0.0
+    val factor = 10.0.pow(digits).toLong()
+    val scaled = round(abs(this) * 10.0.pow(digits)).toLong()
+    val intPart = scaled / factor
+    val fracPart = scaled % factor
+    val sign = if (neg && (intPart != 0L || fracPart != 0L)) "-" else ""
+    return if (digits == 0) "$sign$intPart"
+    else "$sign$intPart." + fracPart.toString().padStart(digits, '0')
 }

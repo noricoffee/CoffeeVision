@@ -372,7 +372,7 @@
 | [x] | B-3 | `requirements.md` の「API キーは難読化」を実態（Google Cloud 側のキー制限ベース。Info.plist / BuildConfig は平文）に修正 | 2026-07-01 完了。requirements→CoffeeRecord 全面改訂と同時に非機能要件の記述を修正 |
 | [ ] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を仕様化（`CoffeeRecord.rating` を nullable にするか 0 を明記するか）。`VisitedCafe` 集計が 0 を平均除外している | 集計まわりを次に触るとき。現状動作に実害なし。requirements §未決事項にも起票済み |
 | [ ] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 最初の PR を出すタイミングで自然解消 |
-| [ ] | B-6 | **既存テスト負債①**: `shared/domain` の `FavoriteSignalsPersonaTest.kt` が `"%.4f".format(...)`（JVM 専用 API）を多数使用し、Kotlin/Native で `Unresolved reference 'format'` → **domain の `iosSimulatorArm64Test` がコンパイル不能**（domain のドメインテストが iOS で一度も走っていない）。2026-07-07 の 15-E-1 で発覚（clean tree 再現）。修正: multiplatform 安全な小ヘルパ（`Double.fmt(digits)`）に置換。CI 導入前に対応 |
+| [x] | B-6 | **既存テスト負債①**: `shared/domain` の `FavoriteSignalsPersonaTest.kt` が `"%.4f".format(...)`（JVM 専用 API）を多数使用し、Kotlin/Native で `Unresolved reference 'format'` → domain の `iosSimulatorArm64Test` がコンパイル不能だった。→ **2026-07-07 解消**（親が Native 安全な `Double.fmt(digits)` ヘルパに全 44 箇所置換）。domain の iOS テスト全 green（Persona 11 件含む failures=0）。15-E-2 検証がブロックされていたため親が対応 |
 | [ ] | B-7 | **既存テスト負債②**: `shared/feature/account` の `AccountViewModelTest`（9 件）が `vm.clear()` を呼ばず `UncompletedCoroutinesError`。2026-07-07 の 15-E-1 で発覚（clean tree 再現、android/iOS 双方）。修正: 各テストに `vm.clear()` + iOS 向けに `advanceUntilIdle()` drain（lessons 2026-07-06）。CI 導入前に対応 |
 | [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |

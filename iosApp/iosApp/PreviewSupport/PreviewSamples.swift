@@ -361,6 +361,32 @@ enum PreviewSamples {
             originHint: "エチオピア",
             roastLevelHint: "Light",
             dominantTastingAxis: TastingAxis.acidity
-        )
+        ),
+        unexploredBeanSuggestions: [
+            UnexploredBeanSuggestion(
+                profile: BeanProfile(
+                    beanId: "sample-bean-1",
+                    name: "イルガチェフェ コチェレ",
+                    origin: "エチオピア",
+                    variety: "Heirloom",
+                    processings: [.washed],
+                    flavorNotes: ["ジャスミン", "ベルガモット", "ハチミツ"],
+                    description: nil
+                ),
+                matchedOriginLabel: "エチオピア"
+            ),
+            UnexploredBeanSuggestion(
+                profile: BeanProfile(
+                    beanId: "sample-bean-2",
+                    name: "グジ ウラガ",
+                    origin: "エチオピア",
+                    variety: nil,
+                    processings: [.natural],
+                    flavorNotes: ["ベリー", "ワイン"],
+                    description: nil
+                ),
+                matchedOriginLabel: "エチオピア"
+            ),
+        ]
     )
 }

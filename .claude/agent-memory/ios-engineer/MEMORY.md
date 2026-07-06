@@ -48,6 +48,12 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 - 一時ファイル書き出しは `FileManager.default.temporaryDirectory.appendingPathComponent(name)` + `String.write(to:atomically:encoding:)` で十分（既存 `PhotoFileStore` のような専用ストア不要。エクスポートは 1 回性の一時ファイルなので Documents 配下に永続化しない）。
 - suspend な UseCase 呼び出し（`appContainer.xxxUseCase.invoke(userId:)` 系）を View 直下の `Task` から呼ぶ既存パターンは `AccountView` 同様 `Task { @MainActor in ... }` で統一されている（Swift 5 言語モード・strict concurrency 未設定のプロジェクトでも、この書き方に揃える）。
 
+## `CoffeeStats` に加算的フィールド（`List<T>` の派生集計）を足す変更は Swift 側で Bridge・View とも無改修で通る（2026-07-07、15-E-3 探索提案で確認）
+
+- KMP 側で `CoffeeStats` に `unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList()` を追加したケースでは、`AnalysisViewModelBridge.apply(_:)` は `state.stats` を丸ごと代入するだけなので**無改修**。`AnalysisView` 側で `stats.unexploredBeanSuggestions` を新規セクションとして読むだけで済む（`preferredBeanTraits`/`readiness` の 12-C 追加と同型）。
+- ただし `CoffeeStats(...)` を直接呼んでいる箇所（`PreviewSupport/PreviewSamples.swift` の `sampleCoffeeStats` のみ、2026-07-07 時点）は positional init のため新規フィールド追加のたびに**必ず**引数を足す必要がある（`grep -rn "CoffeeStats(" iosApp --include="*.swift"` で洗い出し。`CoffeeRecord` と同型の落とし穴）。
+- SKIE Swift 名の裏取り結果: `UnexploredBeanSuggestion`（`profile: BeanProfile` + `matchedOriginLabel: String`）、`BeanProfile.init(beanId:name:origin:variety:processings:flavorNotes:description:)`。`ProcessingMethod` は Kotlin enum ながら Swift 側で `CaseIterable` な素の enum として見え、`.natural`/`.washed`/`.honey`/`.anaerobic`/`.other` の lowerCamel case でリテラル生成できる（`ProcessingMethod.allCases` / `.name` は既存コードで確立パターン）。
+
 ## SKIE sealed class の新規 case 追加は Obj-C ヘッダで型名・init シグネチャを裏取りするのが必須（2026-07-06、`Mode.Duplicate` 追加で確認）
 
 - Kotlin の `sealed interface Mode { data class Duplicate(val sourceCoffeeId: String) : Mode }` は Swift 側で `SharedLogicCoffeeEditorViewModelModeDuplicate`（`swift_name` 属性で `CoffeeEditorViewModelModeDuplicate` に短縮）になり、`init(sourceCoffeeId:)` で構築する。既存の `ModeEdit(coffeeId:)` と同じ命名パターンなので類推で書けるが、念のためヘッダで `initWith...` 属性を確認してから使う。

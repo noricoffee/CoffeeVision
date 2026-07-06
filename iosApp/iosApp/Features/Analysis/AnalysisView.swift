@@ -84,6 +84,7 @@ struct AnalysisView: View {
                 readinessProgressSection
                 favoriteSignalsSection(stats: stats)
                 preferredBeanTraitsSection(stats: stats)
+                unexploredBeanSuggestionsSection(stats: stats)
                 summarySection(stats: stats)
                 ratingHistogramSection(stats: stats)
                 tastingAveragesSection(stats: stats)
@@ -245,6 +246,22 @@ struct AnalysisView: View {
                 insightStatus: viewModel.beanTraitsInsightStatus,
                 insight: viewModel.beanTraitsInsight
             )
+        }
+    }
+
+    // MARK: - 未経験の豆への探索提案セクション（フェーズ 15-E-3 / 要件 9-8）
+
+    /// `CoffeeStats.unexploredBeanSuggestions` を表示するセクション。
+    ///
+    /// 好み信号（`FavoriteSignals.bestOrigin`）に合致するが、ユーザーがまだ記録していない
+    /// `BeanProfile` を提案する。9-5（既訪問店の再訪推薦）に対する新規開拓のナッジ。
+    ///
+    /// 表示条件: `unexploredBeanSuggestions` が非空のときのみ（BeanProfile 未投入 / 好み信号
+    /// 未確定の端末では常に空配列のため、セクションごと非表示になる）。
+    @ViewBuilder
+    private func unexploredBeanSuggestionsSection(stats: CoffeeStats) -> some View {
+        if !stats.unexploredBeanSuggestions.isEmpty {
+            UnexploredBeanSuggestionsCard(suggestions: stats.unexploredBeanSuggestions)
         }
     }
 
@@ -1443,6 +1460,114 @@ private struct PreferredBeanTraitsCard: View {
         case .flavor:      return String(localized: "風味")
         case .aftertaste:  return String(localized: "後味")
         }
+    }
+}
+
+// MARK: - UnexploredBeanSuggestionsCard
+
+/// 未経験の豆への探索提案カード（フェーズ 15-E-3 / 要件 9-8）。
+///
+/// 好み信号に合致するが、ユーザーがまだ記録していない `BeanProfile` を最大 5 件表示する
+/// （件数の上限は KMP 側 `SuggestUnexploredBeansUseCase.SUGGESTED_BEANS_LIMIT` で制御）。
+private struct UnexploredBeanSuggestionsCard: View {
+
+    let suggestions: [UnexploredBeanSuggestion]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkle.magnifyingglass")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(String(localized: "試してみては"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(suggestions.enumerated()), id: \.element.profile.beanId) { index, suggestion in
+                    UnexploredBeanSuggestionRow(suggestion: suggestion)
+                    if index < suggestions.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "試してみては: まだ飲んでいないおすすめの豆"))
+    }
+}
+
+// MARK: - UnexploredBeanSuggestionRow
+
+/// 未経験の豆への探索提案の 1 行。
+private struct UnexploredBeanSuggestionRow: View {
+    let suggestion: UnexploredBeanSuggestion
+
+    private var profile: BeanProfile { suggestion.profile }
+
+    private var reasonText: String {
+        String(localized: "好みの\(suggestion.matchedOriginLabel)に近い未体験の豆")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(profile.name)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                if let variety = profile.variety {
+                    Text("（\(variety)）")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text(reasonText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if !profile.flavorNotes.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(profile.flavorNotes, id: \.self) { note in
+                            Text(note)
+                                .font(.caption2)
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    String(localized: "フレーバーノート: \(profile.flavorNotes.joined(separator: "、"))")
+                )
+            }
+        }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(buildAccessibilityLabel())
+    }
+
+    private func buildAccessibilityLabel() -> String {
+        var label = profile.name
+        if let variety = profile.variety {
+            label += "（\(variety)）"
+        }
+        label += "、\(reasonText)"
+        if !profile.flavorNotes.isEmpty {
+            label += "、フレーバー: \(profile.flavorNotes.joined(separator: "、"))"
+        }
+        return label
     }
 }
 

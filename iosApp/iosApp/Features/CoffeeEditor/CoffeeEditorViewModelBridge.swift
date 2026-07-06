@@ -118,6 +118,10 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onCupChanged(cup: cup)
     }
 
+    func onBrewRecipeChanged(_ brewRecipe: String) {
+        kotlin.onBrewRecipeChanged(brewRecipe: brewRecipe)
+    }
+
     // MARK: - テイスティング転送（all-or-nothing）
 
     /// テイスティングを追加する。KMP 側でデフォルト値 TastingScores(5,5,5,5,5) が生成される。

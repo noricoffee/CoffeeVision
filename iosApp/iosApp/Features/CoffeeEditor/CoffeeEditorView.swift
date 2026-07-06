@@ -366,6 +366,18 @@ struct CoffeeEditorView: View {
                 )
             )
             .accessibilityLabel(String(localized: "カップ"))
+
+            TextField(
+                String(localized: "抽出レシピ（任意）"),
+                text: Binding(
+                    get: { viewModel.draft.brewRecipe },
+                    set: { viewModel.onBrewRecipeChanged($0) }
+                ),
+                prompt: Text(String(localized: "豆量 / 湯量 / 湯温 / 時間 など")),
+                axis: .vertical
+            )
+            .lineLimit(1...4)
+            .accessibilityLabel(String(localized: "抽出レシピ"))
         }
     }
 

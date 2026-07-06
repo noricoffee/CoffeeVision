@@ -157,6 +157,7 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .medium,
         cup: "ノリタケ",
+        brewRecipe: "豆 15g / 湯 240ml / 92℃ / 2:30",
         tasting: TastingScores(
             sweetness: 7,
             body: 5,
@@ -199,6 +200,7 @@ enum PreviewSamples {
         processing: .natural,
         roastLevel: .fullCity,
         cup: nil,
+        brewRecipe: nil,
         tasting: nil,
         tags: [],
         createdAt: instant(year: 2026, month: 5, day: 28),
@@ -221,6 +223,7 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .light,
         cup: nil,
+        brewRecipe: "豆 18g / 湯 300ml / 88℃ / 3:00",
         tasting: TastingScores(
             sweetness: 8,
             body: 4,

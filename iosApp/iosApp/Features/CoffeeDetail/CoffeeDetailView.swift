@@ -169,6 +169,14 @@ struct CoffeeDetailView: View {
                         Text(cup)
                     }
                 }
+
+                if let brewRecipe = coffee.brewRecipe, !brewRecipe.isEmpty {
+                    LabeledContent(String(localized: "抽出レシピ")) {
+                        Text(brewRecipe)
+                            .multilineTextAlignment(.trailing)
+                    }
+                    .accessibilityLabel(String(localized: "抽出レシピ \(brewRecipe)"))
+                }
             }
 
             // テイスティング（all-or-nothing: tasting != nil なら 5 要素すべて表示）

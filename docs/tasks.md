@@ -336,8 +336,8 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `CoffeeRecord.brewRecipe` + SQLDelight（migration 4.sqm + upsert 追加）+ Mapper + Android Firestore mapper + エディタ VM（入力状態 + 複製引き継ぎ + 500 文字バリデーション）| 2026-07-07 完了。全レイヤー追加 + DummyData 2 件。iOS テスト green（data-local 39件 / coffee-editor 16件）+ verifySqlDelightMigration OK + androidApp:assembleDebug OK。落とし穴: `Mapper.toRow()` だけでなく `LocalCoffeeRepository` の `queries.upsert(...)` named 引数にも追加要（lessons 2026-07-07）。既存バグ 2 件を発見（下記バックログ）|
-| [ ] | ios-engineer: iOS Firestore mapper 追随 + エディタの入力 UI + 詳細画面表示 | 既存の cup/notes 入力と同様 |
-| [ ] | 検証: 入力→保存→round-trip、複製で引き継ぎ、既存記録（brewRecipe 無し）が migration 後も開ける | シミュレータ目視はユーザー作業。DB 列追加のため要再インストール確認 |
+| [x] | ios-engineer: iOS Firestore mapper 追随 + エディタの入力 UI + 詳細画面表示 | 2026-07-07 完了。cup に対称な追加（Firestore mapper / Bridge `onBrewRecipeChanged` / エディタ TextField 複数行 / 詳細 LabeledContent）+ Preview 追随。BUILD SUCCEEDED・override 不使用 |
+| [ ] | 検証: 入力→保存→round-trip、複製で引き継ぎ、既存記録（brewRecipe 無し）が migration 後も開ける | **シミュレータ目視はユーザー作業。DB 列追加のため migration 4.sqm 適用の確認（既存端末は再インストール不要の想定だが要確認）** |
 
 #### 15-E-2: データエクスポート（JSON）【要件 7-4】
 

@@ -32,7 +32,7 @@ enum CoffeeFirestoreMapper {
     /// `CoffeeRecord` を Firestore ドキュメント形式に変換する。
     ///
     /// - cafe が null の場合は `cafe` キーごと省略（セルフ抽出）
-    /// - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup）は null 時キー省略
+    /// - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup / brewRecipe）は null 時キー省略
     /// - photos は埋め込み配列として書き出す
     static func toDocument(_ record: CoffeeRecord) -> [String: Any] {
         let createdAtDate = Date(
@@ -73,6 +73,7 @@ enum CoffeeFirestoreMapper {
         if let processing = record.processing { doc["processing"] = processing.name }
         if let roastLevel = record.roastLevel { doc["roastLevel"] = roastLevel.name }
         if let cup = record.cup { doc["cup"] = cup }
+        if let brewRecipe = record.brewRecipe { doc["brewRecipe"] = brewRecipe }
 
         // tasting: nil なら tasting キーを省略。非 nil なら 5 要素すべてのマップを書き出す
         if let tasting = record.tasting {
@@ -162,6 +163,7 @@ enum CoffeeFirestoreMapper {
             processing: processing,
             roastLevel: roastLevel,
             cup: data["cup"] as? String,
+            brewRecipe: data["brewRecipe"] as? String,
             tasting: tasting,
             tags: (data["tags"] as? [String]) ?? [],
             createdAt: createdAt,

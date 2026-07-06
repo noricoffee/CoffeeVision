@@ -38,6 +38,10 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 - `CafeSearchView`（ローカル @State + onChange 転送）と違い、CoffeeList は Bridge 自体に `var searchQuery: String { get { _searchQuery } set { _searchQuery = newValue; kotlin.onSearchQueryChanged(query: newValue) } }` を生やし、View 側は `Binding(get: { viewModel.searchQuery }, set: { viewModel.searchQuery = $0 })` を `.searchable(text:)` に渡す形にした。set で `_searchQuery` を即時更新してから Kotlin へ転送するため、StateFlow の非同期ラウンドトリップを待たずにキーストロークが echo される。Kotlin 側のフィルタはメモリ内同期処理なので `apply(_:)` からの書き戻しも実用上遅延なく収束する。
 - 空状態の 2 種出し分け（`sections.isEmpty && searchQuery.isEmpty` vs `sections.isEmpty && !searchQuery.isEmpty`）は `ContentUnavailableView.search(text:)` がそのまま使える（`CafeSearchView` の `emptyResultsView` と同じ部品）。
 
+## Kotlin `data class` に nullable フィールド 1 個を追加しただけでも Swift 側の全 positional 呼び出しに波及する（2026-07-07、`CoffeeRecord.brewRecipe` 追加で確認）
+
+- KMP 側で `CoffeeRecord` に新規 nullable プロパティを追加すると、SKIE 生成 Swift init は default 値を持たないため（Kotlin データクラスにデフォルト値が無い限り）、Swift 側で `CoffeeRecord(...)` を直接呼んでいる箇所（本体は `CoffeeFirestoreMapper.fromDocument` の 1 箇所だが、`PreviewSupport/PreviewSamples.swift` のサンプルデータ生成が複数箇所ある）は**すべて**コンパイルエラーになる。`grep -rn "CoffeeRecord(" iosApp --include="*.swift"` で呼び出し箇所を洗い出してから着手すると漏れがない。
+
 ## SKIE sealed class の新規 case 追加は Obj-C ヘッダで型名・init シグネチャを裏取りするのが必須（2026-07-06、`Mode.Duplicate` 追加で確認）
 
 - Kotlin の `sealed interface Mode { data class Duplicate(val sourceCoffeeId: String) : Mode }` は Swift 側で `SharedLogicCoffeeEditorViewModelModeDuplicate`（`swift_name` 属性で `CoffeeEditorViewModelModeDuplicate` に短縮）になり、`init(sourceCoffeeId:)` で構築する。既存の `ModeEdit(coffeeId:)` と同じ命名パターンなので類推で書けるが、念のためヘッダで `initWith...` 属性を確認してから使う。

@@ -306,10 +306,23 @@
 
 ### 15-D: 分析タブの空状態プログレス【要件 9-7】
 
+**確定仕様（2026-07-06 親確定）**:
+- **配置**: `AnalysisViewModel.UIState` の**派生フィールド** `readiness: AnalysisReadiness?` として導出（`CoffeeStats` は拡張しない — 「Foundation Models に渡す唯一の入力」を UI メタ情報で汚さないため）。既存の `stats: CoffeeStats?` から純粋導出
+- **`AnalysisReadiness`**（`feature/analysis` に定義）:
+  - `ratedCount: Int`（= `stats.ratedCount`。rating>=0.5）
+  - `tastedCount: Int`（= `stats.tastingAverages.ratedCount`。tasting を持つ記録数。相関母数の近似 — 厳密には rating>0 も要るが動機付け表示なので近似で可、その旨コメント）
+  - `categoryThreshold: Int`（= `FavoriteSignals().minSampleSize` を参照。ハードコードしない）
+  - `correlationThreshold: Int`（= `BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE` を参照。ハードコードしない）
+  - `hasAnySignal: Boolean`（`stats.favoriteSignals` の `bestBrewMethod` / `bestOrigin` / `bestRoastLevel` / `dominantTastingAxis` のいずれかが非 null）
+- **導出タイミング**: `readiness` は `stats != null` のとき常に算出（`totalCount==0` でも算出してよい）。null は stats 未取得（ローディング）時のみ
+- **文言は約束しすぎない**: 「傾向が見える」ではなく「傾向分析が**始まる**最小ライン」の意味。件数を満たしても z ゲート / 相関 floor で信号が出ないことがあるため（data-model.md §1.6）、UI 文言は「あと N 杯記録すると傾向分析が始まります」等に留める
+- **表示文字列は iOS 側で生成**（KMP は件数と閾値のみ。既存の "KMP 数値 / iOS 文字列" パターン踏襲）
+
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | kmp-engineer: 傾向信号までの残り件数の導出を KMP 側に追加（`CoffeeStats` 拡張 or `AnalysisViewModel`） | 閾値は `FavoriteSignals.minSampleSize`（3）/ `CORRELATION_MIN_SAMPLE`（5）を参照し二重定義しない |
-| [ ] | ios-engineer: 空状態 / データ不足時のプログレス表示 UI（「あと N 杯記録すると傾向が見えます」） | |
+| [ ] | kmp-engineer: `AnalysisViewModel.UIState` に `readiness: AnalysisReadiness?` を派生追加（上記確定仕様）+ commonTest | 加算的変更（既存フィールド不変）。閾値は `FavoriteSignals().minSampleSize` / `BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE` 参照で二重定義しない |
+| [ ] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | `totalCount==0` は既存の空状態のまま。`hasAnySignal==true` はバナー非表示 |
+| [ ] | 検証: 記録 0/1/2 件でプログレス表示 → 3 件到達でカテゴリ track の変化、信号が出たらバナー消失、Android 非対応端末（分析タブ非表示）に影響なし | シミュレータ目視はユーザー作業 |
 
 ### 15-E: 中期（後回し可）【要件 9-8 / 抽出レシピ / 7-4】
 

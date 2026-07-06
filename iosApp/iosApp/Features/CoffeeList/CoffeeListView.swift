@@ -20,6 +20,13 @@ struct CoffeeListView: View {
         content
             .navigationTitle(String(localized: "コーヒー記録"))
             .navigationBarTitleDisplayMode(.large)
+            .searchable(
+                text: Binding(
+                    get: { viewModel.searchQuery },
+                    set: { viewModel.searchQuery = $0 }
+                ),
+                prompt: String(localized: "コーヒー名・カフェ名・メモで検索")
+            )
             .task {
                 guard let uid = appState.uid else { return }
                 viewModel.onAppear(userId: uid)
@@ -37,7 +44,7 @@ struct CoffeeListView: View {
                     initialCafe: nil
                 )
             }
-            // 追加 FAB: bottom-trailing 固定配置
+            // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）
             .overlay(alignment: .bottomTrailing) {
                 addCoffeeFAB
                     .padding(.trailing, 16)
@@ -68,8 +75,11 @@ struct CoffeeListView: View {
     private var content: some View {
         if viewModel.isLoading {
             ProgressView()
-        } else if viewModel.coffees.isEmpty {
+        } else if viewModel.sections.isEmpty && viewModel.searchQuery.isEmpty {
             emptyView
+        } else if viewModel.sections.isEmpty {
+            // 検索クエリはあるがヒット 0 件
+            ContentUnavailableView.search(text: viewModel.searchQuery)
         } else {
             coffeeList
         }
@@ -87,28 +97,48 @@ struct CoffeeListView: View {
 
     private var coffeeList: some View {
         List {
-            ForEach(viewModel.coffees) { coffee in
-                NavigationLink {
-                    CoffeeDetailView(coffeeId: coffee.id, appState: appState)
-                } label: {
-                    CoffeeRow(coffee: coffee)
-                }
-                .swipeActions(edge: .trailing, allowsFullSwipe: true) {
-                    Button(role: .destructive) {
-                        viewModel.onCoffeeDeleted(
-                            id: coffee.id,
-                            photoFileNames: coffee.photos.compactMap(\.fileName)
-                        )
-                    } label: {
-                        Label(
-                            String(localized: "削除"),
-                            systemImage: "trash"
-                        )
+            ForEach(viewModel.sections) { section in
+                Section {
+                    ForEach(section.records) { coffee in
+                        NavigationLink {
+                            CoffeeDetailView(coffeeId: coffee.id, appState: appState)
+                        } label: {
+                            CoffeeRow(coffee: coffee)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                viewModel.onCoffeeDeleted(
+                                    id: coffee.id,
+                                    photoFileNames: coffee.photos.compactMap(\.fileName)
+                                )
+                            } label: {
+                                Label(
+                                    String(localized: "削除"),
+                                    systemImage: "trash"
+                                )
+                            }
+                        }
                     }
+                } header: {
+                    Text(Self.monthHeaderText(yearMonth: section.yearMonth))
+                        .accessibilityAddTraits(.isHeader)
                 }
             }
         }
         .listStyle(.plain)
+    }
+
+    // MARK: - 月ヘッダ文字列の生成
+
+    /// `"YYYY-MM"`（ゼロパディング）を `"YYYY年M月"`（月はゼロ埋めしない）へ変換する。
+    ///
+    /// 想定外のフォーマットが来た場合はそのまま `yearMonth` を返す（フォールバック）。
+    static func monthHeaderText(yearMonth: String) -> String {
+        let parts = yearMonth.split(separator: "-")
+        guard parts.count == 2, let month = Int(parts[1]) else {
+            return yearMonth
+        }
+        return String(localized: "\(parts[0])年\(month)月")
     }
 }
 
@@ -197,6 +227,38 @@ struct CoffeeRow: View {
         List {
             ForEach(PreviewSamples.sampleCoffeeRecords) { coffee in
                 CoffeeRow(coffee: coffee)
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+// MARK: - Preview (月別セクション Demo)
+
+#Preview("月別セクション Demo") {
+    let sections: [CoffeeListViewModel.MonthSection] = [
+        CoffeeListViewModel.MonthSection(
+            yearMonth: "2026-06",
+            records: [PreviewSamples.sampleCoffeeRecord, PreviewSamples.sampleCoffeeRecordSelfBrew]
+        ),
+        CoffeeListViewModel.MonthSection(
+            yearMonth: "2026-05",
+            records: [PreviewSamples.sampleCoffeeRecordWithoutPhotos]
+        ),
+    ]
+    NavigationStack {
+        List {
+            ForEach(sections) { section in
+                Section {
+                    ForEach(section.records) { coffee in
+                        CoffeeRow(coffee: coffee)
+                    }
+                } header: {
+                    Text(CoffeeListView.monthHeaderText(yearMonth: section.yearMonth))
+                        .accessibilityAddTraits(.isHeader)
+                }
             }
         }
         .listStyle(.plain)

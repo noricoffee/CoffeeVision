@@ -20,6 +20,9 @@ final class AnalysisViewModelBridge {
     private(set) var isLoading: Bool = true
     private(set) var error: String? = nil
 
+    /// 分析タブの空状態プログレス（要件 9-7）。`stats` が確定するまでは nil。
+    private(set) var readiness: AnalysisViewModel.AnalysisReadiness? = nil
+
     // MARK: - 階層3 insight 系
 
     private(set) var insight: CoffeeInsight? = nil
@@ -138,6 +141,7 @@ final class AnalysisViewModelBridge {
     private func apply(_ state: AnalysisViewModel.UIState) {
         self.stats = state.stats
         self.isLoading = state.isLoading
+        self.readiness = state.readiness
         self.insight = state.insight
         self.insightStatus = state.insightStatus
         self.beanTraitsInsight = state.beanTraitsInsight

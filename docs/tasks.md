@@ -321,8 +321,9 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `AnalysisViewModel.UIState` に `readiness: AnalysisReadiness?` を派生追加（上記確定仕様）+ commonTest | 2026-07-06 完了。新規 6 件 + QaTest 追随。**iOS テストが当初 16 件全滅（Native の cancel drain 漏れ）→ 親が `vm.clear()` 後の `advanceUntilIdle()` で修正、iOS/Android とも 16/0 green**。QaTest の fake 追随漏れ（12-C `summarizeBeanTraits`）も修正。教訓は lessons 2026-07-06、判断は implementation_note 2026-07-06。閾値は既存定数参照で二重定義なし |
-| [ ] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | `totalCount==0` は既存の空状態のまま。`hasAnySignal==true` はバナー非表示 |
-| [ ] | 検証: 記録 0/1/2 件でプログレス表示 → 3 件到達でカテゴリ track の変化、信号が出たらバナー消失、Android 非対応端末（分析タブ非表示）に影響なし | シミュレータ目視はユーザー作業 |
+| [x] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | 2026-07-06 完了。`AnalysisReadinessProgressCard`（`ProgressView` + 残り件数で文言出し分け + 相関 track は補足キャプション）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 |
+| [ ] | 検証: 記録 0/1/2 件でプログレス表示 → 3 件到達でカテゴリ track の変化、信号が出たらバナー消失、Android 非対応端末（分析タブ非表示）に影響なし | **シミュレータ目視はユーザー作業**。Location 前提は不要 |
+| [ ] | （軽微・後回し可）`favoriteSignalsSection` の `hasAnySignal` 相当判定を iOS 側再計算から `viewModel.readiness.hasAnySignal` 参照に寄せて単一ソース化 | 15-D 実装中に ios-engineer が指摘。現状は同じ `stats` から同時導出のため齟齬なしだが、将来 KMP 側判定変更時に乖離リスク。分析タブを次に触るとき |
 
 ### 15-E: 中期（後回し可）【要件 9-8 / 抽出レシピ / 7-4】
 

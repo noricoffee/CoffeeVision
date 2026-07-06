@@ -81,6 +81,7 @@ struct AnalysisView: View {
             LazyVStack(alignment: .leading, spacing: 24) {
                 insightCardSection
                 qaSection
+                readinessProgressSection
                 favoriteSignalsSection(stats: stats)
                 preferredBeanTraitsSection(stats: stats)
                 summarySection(stats: stats)
@@ -205,6 +206,21 @@ struct AnalysisView: View {
 
         if hasAnySignal {
             FavoriteSignalsCard(signals: signals)
+        }
+    }
+
+    // MARK: - 空状態プログレスセクション（要件 9-7）
+
+    /// 傾向信号がまだ出ていないときに、傾向分析が始まるまでの目安を表示するカード。
+    ///
+    /// 表示条件: `readiness` が非 nil かつ `hasAnySignal == false`。
+    /// `totalCount == 0`（記録ゼロ）のときは `readiness` 自体が算出されても
+    /// この画面には到達しない（`stats.totalCount > 0` の分岐でのみ `statisticsScrollView` が呼ばれるため）。
+    /// 既に傾向信号が出ている（`hasAnySignal == true`）ときはバナーを出さない。
+    @ViewBuilder
+    private var readinessProgressSection: some View {
+        if let readiness = viewModel.readiness, !readiness.hasAnySignal {
+            AnalysisReadinessProgressCard(readiness: readiness)
         }
     }
 
@@ -1065,6 +1081,86 @@ private struct FavoriteSignalsCard: View {
         case "Other":       return String(localized: "その他")
         default:            return name
         }
+    }
+}
+
+// MARK: - AnalysisReadinessProgressCard
+
+/// 分析タブの空状態プログレスカード（要件 9-7）。
+///
+/// カテゴリ好み信号（産地 / 焙煎度 / 抽出方法）の必要件数までの進捗を主表示にする。
+/// 件数が閾値に達しても z ゲート / 相関 floor（`data-model.md` §1.6）で信号が
+/// 出ないことがあるため、「傾向分析が**始まる**」という約束しすぎない文言に留める。
+///
+/// テイスティング相関の必要件数（`correlationThreshold`）は任意の補足情報として
+/// 小さく添える（主張しすぎない）。
+private struct AnalysisReadinessProgressCard: View {
+
+    let readiness: AnalysisViewModel.AnalysisReadiness
+
+    /// カテゴリ track の残り件数（0 未満にはならない）。
+    private var remainingForCategory: Int32 {
+        max(0, readiness.categoryThreshold - readiness.ratedCount)
+    }
+
+    /// カテゴリ track の進捗（0.0〜1.0）。
+    private var categoryProgress: Double {
+        guard readiness.categoryThreshold > 0 else { return 1.0 }
+        return min(1.0, Double(readiness.ratedCount) / Double(readiness.categoryThreshold))
+    }
+
+    /// テイスティング相関 track の残り件数（0 未満にはならない）。
+    private var remainingForCorrelation: Int32 {
+        max(0, readiness.correlationThreshold - readiness.tastedCount)
+    }
+
+    private var primaryMessage: String {
+        remainingForCategory > 0
+            ? String(localized: "あと \(remainingForCategory) 杯記録すると傾向分析が始まります")
+            : String(localized: "もう少し記録すると傾向が見えてきます")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(String(localized: "傾向分析まで"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: categoryProgress)
+                .tint(Color.accentColor)
+                .accessibilityLabel(String(localized: "傾向分析までの進捗"))
+                .accessibilityValue(
+                    String(localized: "\(readiness.ratedCount) / \(readiness.categoryThreshold) 杯")
+                )
+
+            Text(primaryMessage)
+                .font(.body)
+                .foregroundStyle(.primary)
+
+            if remainingForCorrelation > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform.path")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                    Text(String(localized: "テイスティングもあと \(remainingForCorrelation) 件入力すると味の相関も分析できます"))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
     }
 }
 

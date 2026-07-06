@@ -783,3 +783,11 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **根本原因と修正**: `vm.clear()`（`viewModelScope.cancel()`）は Native では runTest の完了チェック前にキャンセルが処理されず SupervisorJob が Active のまま残る。`finally { vm.clear() }` → `finally { vm.clear(); testScheduler.advanceUntilIdle() }` に変更して drain。iOS/Android とも 16/0 green を親が実測確認。`backgroundScope` に載せ替える案は `advanceUntilIdle()` が VM の observe を駆動せず state=null になる別の壊れ方をしたため不採用（経緯は lessons 2026-07-06）
 - **副次発見**: `AnalysisViewModelQaTest` の fake が 12-C の `summarizeBeanTraits` override を欠き、commonTest が長期間コンパイル不能なまま見過ごされていた（本体 main は green のため気付けず）。fake 追随 + drain 追加で解消
 - **プロセス教訓**: サブエージェントの「androidHostTest green」報告を VM テストの完了根拠にしない。親が必ず `iosSimulatorArm64Test` を回す（既存の親責務「iOS ターゲットのテスト実行」の具体例。CLAUDE.md 準拠）
+
+### 2026-07-06: 15-D 空状態プログレス iOS 実装
+
+- 領域: iOS / SwiftUI
+- 関連: requirements 9-7、tasks.md フェーズ 15-D
+
+- `AnalysisView` に `AnalysisReadinessProgressCard` を追加。表示条件は `readiness != null && !readiness.hasAnySignal`（`totalCount==0` は既存 emptyState 分岐に入り到達しない）。`ProgressView(value: ratedCount/categoryThreshold)` を主表示に、残り件数 = `max(0, categoryThreshold - ratedCount)` で「あと N 杯…」/「もう少し記録すると…」を出し分け。テイスティング相関 track は残数ありのとき控えめな補足キャプション（「できます」止まりで断定回避）
+- **将来リスク（tasks.md 15-D にバックログ化）**: 既存 `favoriteSignalsSection` は iOS 側で `stats.favoriteSignals` の 4 フィールドから独自に「信号あり」を再計算しており、今回の `readiness.hasAnySignal`（KMP 算出）と別経路。現状は同一 `stats` から同時導出で齟齬なしだが、KMP 側判定が変わると乖離しうる。単一ソース化は分析タブを次に触るときに寄せる

@@ -520,3 +520,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 - ユニットテスト実行タスクは `testAndroidHostTest`（`androidHostTest` はソースセット名。AGP 慣例で `test` プレフィックスが付く）。サブエージェントへの指示に検証コマンドを書くときは実在タスク名を確認してから書く
 - サブエージェントの sandbox では `xcode-select` が CommandLineTools を指し、`iosSimulatorArm64Test` 等リンク・実行を伴うタスクは `MissingXcodeException` で失敗する。フロントエンドコンパイル（`compileKotlinIosSimulatorArm64` / `compileTestKotlinIosSimulatorArm64`）は通るため構文・型検証はそれで代替し、テスト実行は親セッションで `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew ...` を付けて行う（2026-07-03 実証済み）
+
+## 2026-07-06
+
+### 無音フォールバック設計の機能は環境要因と切り分けられず「偽バグ報告」になる
+
+- **症状**: 15-B の現在地カフェサジェスト（要件 2-8）が「表示されない」とバグ報告された。実装は正常で、原因はシミュレータの **Features > Location が未設定（None）** で位置取得が失敗していたこと（Custom Location 設定で表示を確認）
+- **原因の構造**: 2-8 は「許可未決定・位置取得失敗・Nearby 失敗をすべて無音にする」仕様のため、(a) アプリの許可が未決定 (b) シミュレータの Location 未設定 (c) 検索 0 件 (d) 実装バグ、のどれでも見た目が同一（何も出ない）になる。無音フォールバックを仕様にした時点で、切り分け手段を用意しない限りあらゆる環境要因が「バグに見える」
+- **修正パターン**: 検証チェックリスト・目視依頼文に**環境前提**（シミュレータの Features > Location、アプリの位置情報許可状態）と**切り分け手順**（まずマップの現在地ボタンで許可 + 取得が生きているか確認 → 対象機能を見る）をセットで書く。tasks.md 15-B 検証行に追記済み
+- **教訓**: 「失敗を無音にする」仕様を確定させるときは、同じ変更内で検証手順に環境前提を書き下ろす（仕様確定と検証手順はセット）。親がユーザーに目視依頼を出すときも依頼文にこの前提を含める
+- **発生源**: フェーズ 15-B（`CoffeeEditorView` 現在地サジェスト、2026-07-06）
+- **横展開点検（2026-07-06）**: `grep -rn "requestLocation()" iosApp` → 位置情報利用は `CoffeeEditorView`（無音設計・今回対処済み）と `MapTabView`（`activeToast` で `locationManager.error` を可視化する設計のため無音ではない）の 2 画面のみで該当なし。他の環境ゲート系（Foundation Models = フェーズ 8 / 12-C / 13、E-1 Apple サインイン、フェーズ 14 実 Places キー）は tasks.md 検証行に「Apple Intelligence 有効実機」「実機必須」「実 Places API キー必要」の前提が明記済み → 漏れなし

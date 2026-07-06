@@ -18,6 +18,7 @@ struct CoffeeDetailView: View {
     let appState: AppState
     @State private var viewModel: CoffeeDetailViewModelBridge
     @State private var isPresentingEditor = false
+    @State private var isPresentingDuplicateEditor = false
 
     init(coffeeId: String, appState: AppState) {
         self.coffeeId = coffeeId
@@ -35,12 +36,21 @@ struct CoffeeDetailView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        isPresentingEditor = true
+                    Menu {
+                        Button {
+                            isPresentingEditor = true
+                        } label: {
+                            Label(String(localized: "編集"), systemImage: "pencil")
+                        }
+                        Button {
+                            isPresentingDuplicateEditor = true
+                        } label: {
+                            Label(String(localized: "これをもとに記録"), systemImage: "doc.on.doc")
+                        }
                     } label: {
-                        Label(String(localized: "編集"), systemImage: "pencil")
+                        Label(String(localized: "その他の操作"), systemImage: "ellipsis.circle")
                     }
-                    .accessibilityLabel(String(localized: "コーヒー記録を編集"))
+                    .accessibilityLabel(String(localized: "その他の操作"))
                 }
             }
             .task { viewModel.onAppear(coffeeId: coffeeId) }
@@ -54,6 +64,15 @@ struct CoffeeDetailView: View {
                         mode: CoffeeEditorViewModelModeEdit(coffeeId: coffeeId),
                         appState: appState,
                         initialCafe: coffee.cafe
+                    )
+                }
+            }
+            .sheet(isPresented: $isPresentingDuplicateEditor) {
+                if viewModel.coffee != nil {
+                    // 複製元の初期値（cafe 含む）は KMP 側の Mode.Duplicate が構築するため initialCafe は渡さない
+                    CoffeeEditorView(
+                        mode: CoffeeEditorViewModelModeDuplicate(sourceCoffeeId: coffeeId),
+                        appState: appState
                     )
                 }
             }

@@ -287,8 +287,8 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: エディタ VM に現在地カフェサジェスト状態（Nearby 上位 1〜3 件）+ コーヒー名デフォルト値 + 複製用の初期値生成ロジック | 2026-07-06 完了。`CoffeeEditorViewModel` に `Mode.Duplicate` + `suggestedCafes` + `onLocationAvailable` + `DEFAULT_COFFEE_NAME` を追加。新規テスト 7 件 green・override 不使用。コンストラクタに `cafeRepository` 追加（`AppContainer.makeCoffeeEditorViewModel()` 経由なら iOS 呼び出し側は無変更）。判断は implementation_note 2026-07-06 |
-| [ ] | ios-engineer: エディタのサジェストチップ UI（位置情報許可 UX 込み）+ 詳細画面「これをもとに記録」導線 | 位置情報は Places 検索時のみ利用の方針（非機能要件）を維持 |
-| [ ] | 検証: FAB → サジェストタップ → 星 + 写真だけで保存できる最短パス（目標 15 秒）、複製で visitedOn が今日になること | シミュレータ目視はユーザー作業 |
+| [x] | ios-engineer: エディタのサジェストチップ UI（位置情報許可 UX 込み）+ 詳細画面「これをもとに記録」導線 | 2026-07-06 完了。許可済みのときだけ one-shot 取得（未許可は無音・ダイアログ抑止を呼び出し側でガード）、チップは cafeSection 直下の横スクロール、詳細ツールバーは Menu 化（編集 / これをもとに記録）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 |
+| [ ] | 検証: ① 位置情報未許可でエディタを開いてもチップ・ダイアログが出ない ② 許可済みで新規作成を開くと近隣カフェがチップ表示 → タップで選択・チップ消去 ③ FAB → サジェストタップ → 星 + 写真だけで保存の最短パス ④ 詳細「…」メニュー → 「これをもとに記録」で複製初期値（引き継ぎ 9 項目 / rating・notes・photos・tasting 空 / visitedOn = 今日）⑤ 新規作成の name 初期値「本日のコーヒー」 | **シミュレータ目視はユーザー作業** |
 
 ### 15-C: 記録一覧の検索 + 月別グルーピング【要件 6-1 / 2-11】
 

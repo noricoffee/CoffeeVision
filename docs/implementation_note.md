@@ -751,3 +751,13 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **`Mode.Duplicate` の cafe は `Mode.Edit` と同一経路（`currentInitialRecord.cafe` フォールバック）で引き継ぐ**: 複製後の新記録は複製元と同一の placeId を持つ（Places 実在カフェはその ID、セルフ抽出の手入力カフェは複製元採番の UUID）。「cafe を引き継ぐ」=「同じ物理カフェへの参照を保つ」の解釈で、placeId に一意性制約は無いため矛盾しない。`VisitedCafe` 集計上も同一店としてまとまるのはむしろ意図どおり
 - **サジェストの発火条件は `draft.cafeName` が空かどうかで判定**（`selectedCafe` 変数ではなく）: `buildCafe` の「cafe = null」判定も `cafeName` ベースであり、判定基準を統一
 - **既存バグを発見（未修正・15-B スコープ外）**: `buildCafe` の Edit 分岐は `currentInitialRecord?.cafe` が null なら `return null` するため、セルフ抽出記録の編集で手動カフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき）。`Mode.Duplicate` も同分岐のため同挙動を継承。フェーズ 6 の後続タスクに起票済み。次に Edit/Duplicate のカフェ引き継ぎを触るときに修正する
+
+### 2026-07-06: 15-B iOS 実装 — 位置情報ガードの置き場所と詳細画面の Menu 化
+
+- 領域: iOS / SwiftUI
+- 関連: requirements 2-8 / 2-10、tasks.md フェーズ 15-B（ios-engineer レポートより親が採録）
+
+- **位置情報の「未許可なら無音」制御は呼び出し側（`CoffeeEditorView`）でガード**: 共有ユーティリティ `LocationManager.requestLocation()` は `.notDetermined` で許可ダイアログを出す設計（`MapTabView` の明示的な現在地ボタン向け）のため、これを変えず、エディタ側が `authorizationStatus` を事前 switch して許可済みのときだけ呼ぶ。共有ユーティリティの挙動変更による他画面への影響を回避
+- **詳細画面ツールバーを Menu 化**: 単発「編集」ボタンを `Menu`（`ellipsis.circle`）に置き換え、「編集」「これをもとに記録」の 2 アクションを内包。ツールバーのボタン数を増やさない HIG 標準の overflow パターン
+- **サジェストチップの表示条件は `!suggestedCafes.isEmpty` のみ**: 「カフェ選択でチップが消える」制御は KMP 側の状態管理に委ね、Swift 側で二重ガードしない
+- 複製起動時は `initialCafe` を渡さない（複製元カフェは KMP の `toDuplicateDraft` が設定済み）。`Duplicate` の画面タイトルは Create と同じ「コーヒーを記録」

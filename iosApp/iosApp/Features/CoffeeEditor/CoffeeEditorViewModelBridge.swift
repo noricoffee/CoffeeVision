@@ -22,6 +22,7 @@ final class CoffeeEditorViewModelBridge {
     private(set) var error: String?
     private(set) var savedCoffeeId: String?
     private(set) var tags: [String] = []
+    private(set) var suggestedCafes: [Cafe] = []
 
     // MARK: - Init
 
@@ -171,6 +172,18 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onPlacesCafeSelected(cafe: cafe)
     }
 
+    // MARK: - 現在地カフェサジェスト（要件 2-8）
+
+    /// 現在地座標が取得できたときに呼ぶ。Create モード かつ cafe 未選択のときのみ KMP 側でサジェストが反映される。
+    func onLocationAvailable(latitude: Double, longitude: Double) {
+        kotlin.onLocationAvailable(latitude: latitude, longitude: longitude)
+    }
+
+    /// サジェストチップをタップした際に呼ぶ。
+    func onSuggestedCafeSelected(cafe: Cafe) {
+        kotlin.onSuggestedCafeSelected(cafe: cafe)
+    }
+
     // MARK: - 保存 / エラー転送
 
     func onSaveTapped() {
@@ -200,5 +213,6 @@ final class CoffeeEditorViewModelBridge {
         self.error = state.error
         self.savedCoffeeId = state.savedCoffeeId
         self.tags = state.draft.tags
+        self.suggestedCafes = state.suggestedCafes
     }
 }

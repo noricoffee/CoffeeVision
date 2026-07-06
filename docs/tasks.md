@@ -346,8 +346,8 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `ExportCoffeeRecordsUseCase`（`observeAll(uid).first()` → `@Serializable` DTO → JSON 文字列。`kotlinx-datetime` は ISO 文字列化）+ commonTest | 2026-07-07 完了。export 専用 DTO（`domain/export/`）+ `{exportedAt, version:1, records[]}` 包み + `encodeDefaults=true`。`AppContainer.exportCoffeeRecordsUseCase` 公開。iOS テスト 4/0 green（B-6 解消後に実証）。Swift 呼び出しは `.invoke(userId:)`（SKIE は operator invoke を callAsFunction 化しない）|
-| [ ] | ios-engineer: 設定画面に「データをエクスポート」→ JSON 生成 → `ShareLink` / share sheet | ファイル名は `coffeevision-export-YYYYMMDD.json` 等 |
-| [ ] | 検証: エクスポート → JSON 内容が記録と一致、0 件時の挙動 | シミュレータ目視はユーザー作業 |
+| [x] | ios-engineer: 設定画面に「データをエクスポート」→ JSON 生成 → `ShareLink` / share sheet | 2026-07-07 完了。2 フェーズ UI（Button → ProgressView → `ShareLink(item:)`）、`coffeevision-export-yyyyMMdd.json` を temporaryDirectory 書き出し。BUILD SUCCEEDED・override 不使用。軽微な後続候補: ①生成完了後もう 1 タップで共有の 2 タップ導線（自動提示にするなら `UIActivityViewController`）②`.ready` 後の再エクスポート導線なし（「作り直す」ボタン）|
+| [ ] | 検証: エクスポート → JSON 内容が記録と一致、0 件時の挙動 | **シミュレータ目視はユーザー作業** |
 
 #### 15-E-3: 未経験の豆への探索提案【要件 9-8（△）】
 

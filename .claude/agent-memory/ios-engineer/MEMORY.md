@@ -42,6 +42,12 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 
 - KMP 側で `CoffeeRecord` に新規 nullable プロパティを追加すると、SKIE 生成 Swift init は default 値を持たないため（Kotlin データクラスにデフォルト値が無い限り）、Swift 側で `CoffeeRecord(...)` を直接呼んでいる箇所（本体は `CoffeeFirestoreMapper.fromDocument` の 1 箇所だが、`PreviewSupport/PreviewSamples.swift` のサンプルデータ生成が複数箇所ある）は**すべて**コンパイルエラーになる。`grep -rn "CoffeeRecord(" iosApp --include="*.swift"` で呼び出し箇所を洗い出してから着手すると漏れがない。
 
+## `ShareLink` で「生成 → 共有」の 2 フェーズ導線を作るときは enum 状態（idle/exporting/ready(URL)）で Section 内容を丸ごと差し替える（2026-07-07、設定画面データエクスポートで確認）
+
+- `ShareLink` はボタン自体をタップした瞬間にしか share sheet を出せない（値を先に非同期生成してから自動でシートを開く API はない）。「タップでエクスポート実行 → 完了したら共有」の要件は、`Button`（idle）→ `ProgressView`（exporting）→ `ShareLink(item:)`（ready）と同じ `Section` 内で `switch` して差し替える 2 段階 UI にするのが素直（`SettingsView.exportSection` 参照）。エラーは別途 `@State private var exportError: String?` + `.alert` で拾い、`ExportState` 自体は成功系（idle/exporting/ready）のみに絞ると分岐がシンプルになる。
+- 一時ファイル書き出しは `FileManager.default.temporaryDirectory.appendingPathComponent(name)` + `String.write(to:atomically:encoding:)` で十分（既存 `PhotoFileStore` のような専用ストア不要。エクスポートは 1 回性の一時ファイルなので Documents 配下に永続化しない）。
+- suspend な UseCase 呼び出し（`appContainer.xxxUseCase.invoke(userId:)` 系）を View 直下の `Task` から呼ぶ既存パターンは `AccountView` 同様 `Task { @MainActor in ... }` で統一されている（Swift 5 言語モード・strict concurrency 未設定のプロジェクトでも、この書き方に揃える）。
+
 ## SKIE sealed class の新規 case 追加は Obj-C ヘッダで型名・init シグネチャを裏取りするのが必須（2026-07-06、`Mode.Duplicate` 追加で確認）
 
 - Kotlin の `sealed interface Mode { data class Duplicate(val sourceCoffeeId: String) : Mode }` は Swift 側で `SharedLogicCoffeeEditorViewModelModeDuplicate`（`swift_name` 属性で `CoffeeEditorViewModelModeDuplicate` に短縮）になり、`init(sourceCoffeeId:)` で構築する。既存の `ModeEdit(coffeeId:)` と同じ命名パターンなので類推で書けるが、念のためヘッダで `initWith...` 属性を確認してから使う。

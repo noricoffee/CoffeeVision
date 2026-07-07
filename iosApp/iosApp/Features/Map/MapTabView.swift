@@ -1280,8 +1280,11 @@ struct MapTabView: View {
         ZStack {
             Circle()
                 .fill(Color(.secondaryLabel))
-                .frame(width: 24, height: 24)
-            Image(systemName: "cup.and.saucer")
+                .frame(width: 28, height: 28)
+                // 白フチ + 影で地図の情報密度に負けず見つけやすくする（意味ピンより一段下の強調は維持）
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
+                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
+            Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)
                 .foregroundStyle(Color(.systemBackground))
         }

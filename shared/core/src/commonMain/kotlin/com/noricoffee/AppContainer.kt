@@ -8,13 +8,18 @@ import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeRecordQuery
 import com.noricoffee.domain.model.CoffeeRecordQueryImpl
 import com.noricoffee.domain.usecase.BeanProfileMatchUseCase
+import com.noricoffee.domain.usecase.ExportCoffeeRecordsUseCase
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.BeanProfileRepository
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
 import com.noricoffee.repository.CoffeeRepositoryImpl
 import com.noricoffee.repository.LocalCoffeeRepository
+import com.noricoffee.repository.LocalSavedCafeRepository
 import com.noricoffee.repository.RemoteCoffeeDataSource
+import com.noricoffee.repository.RemoteSavedCafeDataSource
+import com.noricoffee.repository.SavedCafeRepository
+import com.noricoffee.repository.SavedCafeRepositoryImpl
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.MainScope
 
@@ -36,15 +41,16 @@ import kotlinx.coroutines.MainScope
  * 通常用途（iOS / Android のアプリ起動時）では **scope 引数なし** のセカンダリコンストラクタを
  * 使い、内部で [MainScope]（`SupervisorJob() + Dispatchers.Main`）を生成させること。
  * Android の Swift 側から見える初期化シグネチャは
- * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:)` になる。
+ * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:)` になる。
  * iOS で Foundation Models を注入する場合は
- * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:coffeeInsightProvider:)` を使う。
+ * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:coffeeInsightProvider:)` を使う。
  *
  * scope を引数で受け取るプライマリコンストラクタは **テスト用途専用**（TestDispatcher の差し替え等）。
  */
 class AppContainer(
     sqlDriver: SqlDriver,
     private val remoteCoffeeDataSource: RemoteCoffeeDataSource,
+    private val remoteSavedCafeDataSource: RemoteSavedCafeDataSource,
     val authRepository: AuthRepository,
     val placesApiKey: String,
     val coffeeInsightProvider: CoffeeInsightProvider?,
@@ -59,7 +65,7 @@ class AppContainer(
      * コンストラクタに委譲する。Swift からはこのシグネチャを使うこと。
      *
      * Swift 側の呼び出しシグネチャ:
-     * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:coffeeInsightProvider:)`
+     * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:coffeeInsightProvider:beanProfileRepository:)`
      *
      * ## iOS での使い方
      * - Phase A-4 まで: `coffeeInsightProvider: nil` を渡す（分析タブは統計のみ表示）
@@ -77,6 +83,7 @@ class AppContainer(
     constructor(
         sqlDriver: SqlDriver,
         remoteCoffeeDataSource: RemoteCoffeeDataSource,
+        remoteSavedCafeDataSource: RemoteSavedCafeDataSource,
         authRepository: AuthRepository,
         placesApiKey: String,
         coffeeInsightProvider: CoffeeInsightProvider?,
@@ -84,6 +91,7 @@ class AppContainer(
     ) : this(
         sqlDriver = sqlDriver,
         remoteCoffeeDataSource = remoteCoffeeDataSource,
+        remoteSavedCafeDataSource = remoteSavedCafeDataSource,
         authRepository = authRepository,
         placesApiKey = placesApiKey,
         coffeeInsightProvider = coffeeInsightProvider,
@@ -98,20 +106,22 @@ class AppContainer(
      * 引数変更なしでコンパイルを通せるよう `coffeeInsightProvider` を省略可能にしている。
      *
      * Swift 側の呼び出しシグネチャ:
-     * `init(sqlDriver:remoteCoffeeDataSource:authRepository:placesApiKey:)`
+     * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:beanProfileRepository:)`
      *
      * iOS では Phase A-4 以降に `CoffeeInsightProvider` 実装を注入するため、
-     * iOS の `AppState.swift` では上の 5 引数セカンダリコンストラクタを使うこと。
+     * iOS の `AppState.swift` では上の 7 引数セカンダリコンストラクタを使うこと。
      */
     constructor(
         sqlDriver: SqlDriver,
         remoteCoffeeDataSource: RemoteCoffeeDataSource,
+        remoteSavedCafeDataSource: RemoteSavedCafeDataSource,
         authRepository: AuthRepository,
         placesApiKey: String,
         beanProfileRepository: BeanProfileRepository,
     ) : this(
         sqlDriver = sqlDriver,
         remoteCoffeeDataSource = remoteCoffeeDataSource,
+        remoteSavedCafeDataSource = remoteSavedCafeDataSource,
         authRepository = authRepository,
         placesApiKey = placesApiKey,
         coffeeInsightProvider = null,
@@ -131,6 +141,16 @@ class AppContainer(
         remote = remoteCoffeeDataSource,
     )
 
+    private val localSavedCafeRepository: LocalSavedCafeRepository = LocalSavedCafeRepository(db)
+
+    /**
+     * 「行きたい店」リポジトリ（フェーズ 15-A）。[coffeeRepository] と同じ 2 段構成。
+     */
+    val savedCafeRepository: SavedCafeRepository = SavedCafeRepositoryImpl(
+        local = localSavedCafeRepository,
+        remote = remoteSavedCafeDataSource,
+    )
+
     /**
      * iOS の Foundation Models `Tool`（function calling）から呼ばれる生レコード照会 API（Phase B-3 / 9-4b）。
      *
@@ -147,6 +167,17 @@ class AppContainer(
     val cafeRepository: CafeRepository = createCafeRepository(apiKey = placesApiKey)
 
     /**
+     * データエクスポート（要件 §7-4 / フェーズ 15-E-2）。全 [CoffeeRecord][com.noricoffee.domain.CoffeeRecord]
+     * を JSON 文字列化する。[coffeeRepository] のみに依存する純粋な UseCase なので内部で生成する。
+     *
+     * Swift からの呼び出しシグネチャ（`.swiftinterface` で裏取り済み）:
+     * `appContainer.exportCoffeeRecordsUseCase.invoke(userId: String) async throws -> String`
+     */
+    val exportCoffeeRecordsUseCase: ExportCoffeeRecordsUseCase = ExportCoffeeRecordsUseCase(
+        coffeeRepository = coffeeRepository,
+    )
+
+    /**
      * 匿名サインインを起こし、確定した uid でリモート → ローカルの同期購読を開始する。
      *
      * 戻り値の uid を呼び出し元（iOS / Android のアプリ層）が保持し、UI からの参照や
@@ -158,6 +189,7 @@ class AppContainer(
     suspend fun startInitialSync(): String {
         val uid = authRepository.signInAnonymouslyIfNeeded()
         (coffeeRepository as CoffeeRepositoryImpl).startSync(uid, scope)
+        (savedCafeRepository as SavedCafeRepositoryImpl).startSync(uid, scope)
         return uid
     }
 

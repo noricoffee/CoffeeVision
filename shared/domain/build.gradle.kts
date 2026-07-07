@@ -1,5 +1,6 @@
 plugins {
     id("kmp.library")
+    alias(libs.plugins.kotlinSerialization)
 }
 
 kotlin {
@@ -11,6 +12,7 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutines.core)
             implementation(libs.kotlinx.datetime)
+            implementation(libs.kotlinx.serialization.json)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)

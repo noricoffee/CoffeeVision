@@ -16,7 +16,8 @@ import kotlinx.coroutines.launch
 /**
  * コーヒー記録一覧画面の ViewModel。
  *
- * - [CoffeeRepository.observeAll] を購読して [UIState.coffees] を更新する
+ * - [CoffeeRepository.observeAll] を購読して [UIState.sections] を更新する
+ * - キーワード検索（[onSearchQueryChanged]）と月別グルーピングをメモリ内で適用する（要件 6-1 / 2-11）
  * - 削除失敗は [UIState.error] に流し、UI 側はエラー解除を [onErrorDismissed] で通知する
  * - [scope] は外部（[com.noricoffee.AppContainer] のファクトリメソッド）から注入する
  *
@@ -36,14 +37,27 @@ class CoffeeListViewModel(
     )
 
     /**
+     * 月別にグルーピングされたコーヒー記録のセクション。
+     *
+     * @property yearMonth "YYYY-MM"（ゼロパディング）。表示用の文字列（例: "2026年7月"）への変換は UI 側の責務
+     * @property records このセクションに属する記録。[CoffeeRepository.observeAll] の順序（visited_on DESC, created_at DESC）を維持する
+     */
+    data class MonthSection(
+        val yearMonth: String,
+        val records: List<CoffeeRecord>,
+    )
+
+    /**
      * コーヒー記録一覧画面の UI 状態。
      *
-     * @property coffees 表示するコーヒー記録の一覧
+     * @property sections 検索フィルタ適用後・月別グルーピング済みのセクション一覧（yearMonth 降順）
+     * @property searchQuery 現在の検索クエリ（表示用の生値。正規化はフィルタ内部で行う）
      * @property isLoading 初回読み込み中かどうか
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
      */
     data class UIState(
-        val coffees: List<CoffeeRecord> = emptyList(),
+        val sections: List<MonthSection> = emptyList(),
+        val searchQuery: String = "",
         val isLoading: Boolean = false,
         val error: String? = null,
     )
@@ -57,6 +71,9 @@ class CoffeeListViewModel(
     // onAppear で受け取った userId を保持し、onCoffeeDeleted 内で使う。
     private var currentUserId: String? = null
 
+    // observeAll の購読で得た全件（フィルタ前）。searchQuery 変更時の再導出に使う。
+    private var allCoffees: List<CoffeeRecord> = emptyList()
+
     /**
      * 画面表示時に呼ぶ。[userId] を使ってコーヒー記録の購読を開始する。
      *
@@ -68,9 +85,22 @@ class CoffeeListViewModel(
         observeJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             coffeeRepository.observeAll(userId).collect { coffees ->
-                _state.update { it.copy(coffees = coffees, isLoading = false) }
+                allCoffees = coffees
+                _state.update {
+                    it.copy(sections = buildSections(coffees, it.searchQuery), isLoading = false)
+                }
             }
         }
+    }
+
+    /**
+     * 検索クエリの変更を受けて [UIState.searchQuery] と [UIState.sections] を更新する。
+     *
+     * クエリは `trim().lowercase()` で正規化し、[CoffeeRecord.name] / [com.noricoffee.domain.Cafe.name]
+     * / [CoffeeRecord.notes] のいずれかに部分一致（大小無視）すればヒットとする（要件 6-1）。
+     */
+    fun onSearchQueryChanged(query: String) {
+        _state.update { it.copy(searchQuery = query, sections = buildSections(allCoffees, query)) }
     }
 
     /**
@@ -109,5 +139,35 @@ class CoffeeListViewModel(
      */
     fun clear() {
         viewModelScope.cancel()
+    }
+
+    /**
+     * [all] に検索フィルタ（[query]）を適用したうえで月別にグルーピングする。
+     *
+     * 検索 → グルーピングの順で適用し、フィルタ後も [all] の元の順序（visited_on DESC, created_at DESC）を
+     * セクション内で維持する（安定フィルタ）。セクションは yearMonth 降順。
+     */
+    private fun buildSections(all: List<CoffeeRecord>, query: String): List<MonthSection> {
+        val filtered = filterByQuery(all, query)
+        return filtered
+            .groupBy { it.yearMonth() }
+            .map { (yearMonth, records) -> MonthSection(yearMonth = yearMonth, records = records) }
+            .sortedByDescending { it.yearMonth }
+    }
+
+    private fun filterByQuery(all: List<CoffeeRecord>, query: String): List<CoffeeRecord> {
+        val normalized = query.trim().lowercase()
+        if (normalized.isEmpty()) return all
+        return all.filter { record ->
+            record.name.lowercase().contains(normalized) ||
+                record.cafe?.name?.lowercase()?.contains(normalized) == true ||
+                record.notes.lowercase().contains(normalized)
+        }
+    }
+
+    private fun CoffeeRecord.yearMonth(): String {
+        val year = visitedOn.year.toString().padStart(4, '0')
+        val month = visitedOn.monthNumber.toString().padStart(2, '0')
+        return "$year-$month"
     }
 }

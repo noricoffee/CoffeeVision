@@ -85,6 +85,7 @@ class DeleteAccountUseCaseTest {
         processing = null,
         roastLevel = null,
         cup = null,
+        brewRecipe = null,
         tasting = null,
         createdAt = Instant.fromEpochSeconds(0),
         updatedAt = Instant.fromEpochSeconds(0),

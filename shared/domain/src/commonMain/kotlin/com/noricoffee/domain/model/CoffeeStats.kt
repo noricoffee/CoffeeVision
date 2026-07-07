@@ -29,6 +29,7 @@ data class CoffeeStats(
     val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
     val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
     val preferredBeanTraits: PreferredBeanTraits? = null, // 階層2+: 好みの産地 × BeanProfile 突合結果（Phase 12-C）
+    val unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList(), // 好みに合致するが未経験の BeanProfile 提案（フェーズ 15-E-3 / 要件 9-8）
 )
 
 /**

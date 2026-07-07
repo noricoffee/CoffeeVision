@@ -119,7 +119,8 @@ class BuildCoffeeStatsUseCase {
      * [records] から [CoffeeStats] を算出する。
      *
      * @param records 集計対象のコーヒー記録一覧
-     * @param beanProfiles 突合に使う [BeanProfile] リスト。空リストの場合は [CoffeeStats.preferredBeanTraits] を null にする
+     * @param beanProfiles 突合に使う [BeanProfile] リスト。空リストの場合は [CoffeeStats.preferredBeanTraits] を null、
+     *   [CoffeeStats.unexploredBeanSuggestions] を空リストにする
      * @return 集計結果
      */
     operator fun invoke(
@@ -133,6 +134,12 @@ class BuildCoffeeStatsUseCase {
             PreferredBeanTraitsUseCase()(beanProfiles, favoriteSignals)
         } else {
             null
+        }
+
+        val unexploredBeanSuggestions = if (beanProfiles.isNotEmpty()) {
+            SuggestUnexploredBeansUseCase()(records, beanProfiles, favoriteSignals)
+        } else {
+            emptyList()
         }
 
         return CoffeeStats(
@@ -150,6 +157,7 @@ class BuildCoffeeStatsUseCase {
             favoriteSignals = favoriteSignals,
             tastingAverages = buildTastingAverages(records),
             preferredBeanTraits = preferredBeanTraits,
+            unexploredBeanSuggestions = unexploredBeanSuggestions,
         )
     }
 

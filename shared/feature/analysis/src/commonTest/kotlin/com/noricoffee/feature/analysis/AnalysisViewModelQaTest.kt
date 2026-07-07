@@ -6,6 +6,7 @@ import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.CoffeeInsight
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeStats
+import com.noricoffee.domain.model.PreferredBeanTraits
 import com.noricoffee.domain.usecase.ObserveCoffeeStatsUseCase
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +32,12 @@ import kotlin.test.assertNull
  * - 失敗パス: [AnalysisViewModel.QaStatus.Asking] → [AnalysisViewModel.QaStatus.Failed] + error
  * - [AnalysisViewModel.onQaCleared] で Idle に戻る
  * - [AnalysisViewModel.QaStatus.Unsupported] 時に onQaCleared は no-op
+ *
+ * ## scope と vm.clear() の注意
+ *
+ * [AnalysisViewModel.onAppear] は viewModelScope 上で無期限に統計を購読し続けるため、
+ * 各テストの最後に `vm.clear()` を呼ばないと `runTest` が `UncompletedCoroutinesError` を報告する。
+ * テンプレート: `try { ... } finally { vm.clear() }` を各テストで使用する。
  */
 class AnalysisViewModelQaTest {
 
@@ -70,6 +77,8 @@ class AnalysisViewModelQaTest {
             answerError?.let { throw it }
             return answerResult ?: error("answerResult must be non-null when answerError is null")
         }
+
+        override suspend fun summarizeBeanTraits(traits: PreferredBeanTraits): CoffeeInsight? = null
     }
 
     // --- ヘルパ ---
@@ -90,6 +99,7 @@ class AnalysisViewModelQaTest {
         processing = null,
         roastLevel = null,
         cup = null,
+        brewRecipe = null,
         tasting = null,
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),
@@ -132,8 +142,12 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-
-        assertEquals(AnalysisViewModel.QaStatus.Unsupported, vm.state.value.qaStatus)
+        try {
+            assertEquals(AnalysisViewModel.QaStatus.Unsupported, vm.state.value.qaStatus)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -144,8 +158,12 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-
-        assertEquals(AnalysisViewModel.QaStatus.Idle, vm.state.value.qaStatus)
+        try {
+            assertEquals(AnalysisViewModel.QaStatus.Idle, vm.state.value.qaStatus)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -156,14 +174,19 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQuestionAsked("   ")
-        testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("   ")
+            testScheduler.advanceUntilIdle()
 
-        assertEquals(AnalysisViewModel.QaStatus.Idle, vm.state.value.qaStatus)
-        assertNull(vm.state.value.qaQuestion)
+            assertEquals(AnalysisViewModel.QaStatus.Idle, vm.state.value.qaStatus)
+            assertNull(vm.state.value.qaQuestion)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -174,14 +197,19 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQuestionAsked("好きな産地は？")
-        testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("好きな産地は？")
+            testScheduler.advanceUntilIdle()
 
-        assertEquals(AnalysisViewModel.QaStatus.Unsupported, vm.state.value.qaStatus)
-        assertNull(vm.state.value.qaQuestion)
+            assertEquals(AnalysisViewModel.QaStatus.Unsupported, vm.state.value.qaStatus)
+            assertNull(vm.state.value.qaQuestion)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -193,14 +221,19 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQuestionAsked("好きな産地は？")
-        testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("好きな産地は？")
+            testScheduler.advanceUntilIdle()
 
-        assertEquals(AnalysisViewModel.QaStatus.Idle, vm.state.value.qaStatus)
-        assertNull(vm.state.value.qaQuestion)
+            assertEquals(AnalysisViewModel.QaStatus.Idle, vm.state.value.qaStatus)
+            assertNull(vm.state.value.qaQuestion)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -212,17 +245,22 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQuestionAsked("好きな産地は？")
-        testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("好きな産地は？")
+            testScheduler.advanceUntilIdle()
 
-        val state = vm.state.value
-        assertEquals(AnalysisViewModel.QaStatus.Answered, state.qaStatus)
-        assertEquals("好きな産地は？", state.qaQuestion)
-        assertEquals(expectedAnswer, state.qaAnswer)
-        assertNull(state.error)
+            val state = vm.state.value
+            assertEquals(AnalysisViewModel.QaStatus.Answered, state.qaStatus)
+            assertEquals("好きな産地は？", state.qaQuestion)
+            assertEquals(expectedAnswer, state.qaAnswer)
+            assertNull(state.error)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -236,17 +274,22 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQuestionAsked("よく行くカフェは？")
-        testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("よく行くカフェは？")
+            testScheduler.advanceUntilIdle()
 
-        val state = vm.state.value
-        assertEquals(AnalysisViewModel.QaStatus.Failed, state.qaStatus)
-        assertEquals("よく行くカフェは？", state.qaQuestion)
-        assertNull(state.qaAnswer)
-        assertEquals("Model unavailable", state.error)
+            val state = vm.state.value
+            assertEquals(AnalysisViewModel.QaStatus.Failed, state.qaStatus)
+            assertEquals("よく行くカフェは？", state.qaQuestion)
+            assertNull(state.qaAnswer)
+            assertEquals("Model unavailable", state.error)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -257,18 +300,23 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
-        vm.onQuestionAsked("一番高評価だったコーヒーは？")
-        testScheduler.advanceUntilIdle()
-        assertEquals(AnalysisViewModel.QaStatus.Answered, vm.state.value.qaStatus)
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("一番高評価だったコーヒーは？")
+            testScheduler.advanceUntilIdle()
+            assertEquals(AnalysisViewModel.QaStatus.Answered, vm.state.value.qaStatus)
 
-        vm.onQaCleared()
+            vm.onQaCleared()
 
-        val state = vm.state.value
-        assertEquals(AnalysisViewModel.QaStatus.Idle, state.qaStatus)
-        assertNull(state.qaQuestion)
-        assertNull(state.qaAnswer)
+            val state = vm.state.value
+            assertEquals(AnalysisViewModel.QaStatus.Idle, state.qaStatus)
+            assertNull(state.qaQuestion)
+            assertNull(state.qaAnswer)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -279,10 +327,14 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
+        try {
+            vm.onQaCleared()
 
-        vm.onQaCleared()
-
-        assertEquals(AnalysisViewModel.QaStatus.Unsupported, vm.state.value.qaStatus)
+            assertEquals(AnalysisViewModel.QaStatus.Unsupported, vm.state.value.qaStatus)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 
     @Test
@@ -293,12 +345,17 @@ class AnalysisViewModelQaTest {
             userId = "user-1",
             scope = this,
         )
-        vm.onAppear()
-        testScheduler.advanceUntilIdle()
+        try {
+            vm.onAppear()
+            testScheduler.advanceUntilIdle()
 
-        vm.onQuestionAsked("  好きな産地は？  ")
-        testScheduler.advanceUntilIdle()
+            vm.onQuestionAsked("  好きな産地は？  ")
+            testScheduler.advanceUntilIdle()
 
-        assertEquals("好きな産地は？", vm.state.value.qaQuestion)
+            assertEquals("好きな産地は？", vm.state.value.qaQuestion)
+        } finally {
+            vm.clear()
+            testScheduler.advanceUntilIdle()
+        }
     }
 }

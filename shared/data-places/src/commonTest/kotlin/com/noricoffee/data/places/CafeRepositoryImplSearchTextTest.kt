@@ -62,6 +62,12 @@ class CafeRepositoryImplSearchTextTest {
                 websiteUri = null,
                 googleMapsUri = null,
                 photoNames = emptyList(),
+                openNow = null,
+                weekdayDescriptions = emptyList(),
+                phoneNumber = null,
+                priceLevel = null,
+                googleRating = null,
+                userRatingCount = null,
             )
 
         override suspend fun photoMediaUrl(
@@ -114,6 +120,12 @@ class CafeRepositoryImplSearchTextTest {
                 websiteUri = "https://bluebottlecoffee.com",
                 googleMapsUri = "https://maps.google.com/?cid=001",
                 photoNames = listOf("places/ChIJtest001/photos/ref1"),
+                openNow = null,
+                weekdayDescriptions = emptyList(),
+                phoneNumber = null,
+                priceLevel = null,
+                googleRating = null,
+                userRatingCount = 128,
             )
         )
 
@@ -127,6 +139,7 @@ class CafeRepositoryImplSearchTextTest {
         assertEquals(35.658, cafe.latitude)
         assertEquals(139.701, cafe.longitude)
         assertEquals(listOf("places/ChIJtest001/photos/ref1"), cafe.photoReferences)
+        assertEquals(128, cafe.userRatingCount)
     }
 
     @Test

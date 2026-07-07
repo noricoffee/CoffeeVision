@@ -85,6 +85,7 @@ class ObserveVisitedCafesUseCaseTest {
         processing = null,
         roastLevel = null,
         cup = null,
+        brewRecipe = null,
         tasting = null,
         createdAt = Instant.fromEpochMilliseconds(0),
         updatedAt = Instant.fromEpochMilliseconds(0),

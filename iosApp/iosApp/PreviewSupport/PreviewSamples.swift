@@ -59,7 +59,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
         Cafe(
             placeId: "ChIJsampleSteamers",
@@ -74,7 +75,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
         Cafe(
             placeId: "ChIJsampleFuglen",
@@ -89,7 +91,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
     ]
 
@@ -137,14 +140,15 @@ enum PreviewSamples {
             address: "東京都世田谷区太子堂4-1-22",
             latitude: KotlinDouble(value: 35.6448),
             longitude: KotlinDouble(value: 139.6694),
-            photoReferences: [],
+            photoReferences: ["places/ChIJsampleBluBottle/photos/Aap_sample1"],
             websiteUrl: "https://bluebottlecoffee.jp/",
             mapsUrl: "https://maps.google.com/?cid=sample",
-            openNow: nil,
+            openNow: KotlinBoolean(value: true),
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: KotlinDouble(value: 4.5),
+            userRatingCount: KotlinInt(value: 128)
         ),
         visitedOn: localDate(year: 2026, month: 6, day: 2),
         rating: 4.5,
@@ -157,6 +161,7 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .medium,
         cup: "ノリタケ",
+        brewRecipe: "豆 15g / 湯 240ml / 92℃ / 2:30",
         tasting: TastingScores(
             sweetness: 7,
             body: 5,
@@ -186,7 +191,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
         visitedOn: localDate(year: 2026, month: 5, day: 28),
         rating: 3.0,
@@ -199,6 +205,7 @@ enum PreviewSamples {
         processing: .natural,
         roastLevel: .fullCity,
         cup: nil,
+        brewRecipe: nil,
         tasting: nil,
         tags: [],
         createdAt: instant(year: 2026, month: 5, day: 28),
@@ -221,6 +228,7 @@ enum PreviewSamples {
         processing: .washed,
         roastLevel: .light,
         cup: nil,
+        brewRecipe: "豆 18g / 湯 300ml / 88℃ / 3:00",
         tasting: TastingScores(
             sweetness: 8,
             body: 4,
@@ -258,7 +266,8 @@ enum PreviewSamples {
                 weekdayDescriptions: [],
                 phoneNumber: nil,
                 priceLevel: nil,
-                googleRating: nil
+                googleRating: nil,
+                userRatingCount: nil
             ),
             matches: [
                 RecommendationReasonTasteProfileMatch(
@@ -358,6 +367,32 @@ enum PreviewSamples {
             originHint: "エチオピア",
             roastLevelHint: "Light",
             dominantTastingAxis: TastingAxis.acidity
-        )
+        ),
+        unexploredBeanSuggestions: [
+            UnexploredBeanSuggestion(
+                profile: BeanProfile(
+                    beanId: "sample-bean-1",
+                    name: "イルガチェフェ コチェレ",
+                    origin: "エチオピア",
+                    variety: "Heirloom",
+                    processings: [.washed],
+                    flavorNotes: ["ジャスミン", "ベルガモット", "ハチミツ"],
+                    description: nil
+                ),
+                matchedOriginLabel: "エチオピア"
+            ),
+            UnexploredBeanSuggestion(
+                profile: BeanProfile(
+                    beanId: "sample-bean-2",
+                    name: "グジ ウラガ",
+                    origin: "エチオピア",
+                    variety: nil,
+                    processings: [.natural],
+                    flavorNotes: ["ベリー", "ワイン"],
+                    description: nil
+                ),
+                matchedOriginLabel: "エチオピア"
+            ),
+        ]
     )
 }

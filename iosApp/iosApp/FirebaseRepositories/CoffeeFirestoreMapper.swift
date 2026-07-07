@@ -32,7 +32,7 @@ enum CoffeeFirestoreMapper {
     /// `CoffeeRecord` を Firestore ドキュメント形式に変換する。
     ///
     /// - cafe が null の場合は `cafe` キーごと省略（セルフ抽出）
-    /// - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup）は null 時キー省略
+    /// - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup / brewRecipe）は null 時キー省略
     /// - photos は埋め込み配列として書き出す
     static func toDocument(_ record: CoffeeRecord) -> [String: Any] {
         let createdAtDate = Date(
@@ -73,6 +73,7 @@ enum CoffeeFirestoreMapper {
         if let processing = record.processing { doc["processing"] = processing.name }
         if let roastLevel = record.roastLevel { doc["roastLevel"] = roastLevel.name }
         if let cup = record.cup { doc["cup"] = cup }
+        if let brewRecipe = record.brewRecipe { doc["brewRecipe"] = brewRecipe }
 
         // tasting: nil なら tasting キーを省略。非 nil なら 5 要素すべてのマップを書き出す
         if let tasting = record.tasting {
@@ -162,6 +163,7 @@ enum CoffeeFirestoreMapper {
             processing: processing,
             roastLevel: roastLevel,
             cup: data["cup"] as? String,
+            brewRecipe: data["brewRecipe"] as? String,
             tasting: tasting,
             tags: (data["tags"] as? [String]) ?? [],
             createdAt: createdAt,
@@ -171,7 +173,11 @@ enum CoffeeFirestoreMapper {
 
     // MARK: - Cafe Map
 
-    private static func toCafeMap(_ cafe: Cafe) -> [String: Any] {
+    /// カフェスナップショット 8 フィールドを Firestore マップに変換する。
+    ///
+    /// `coffees.cafe` / `savedCafes.cafe`（`SavedCafeFirestoreMapper`）の両方から共有する
+    /// （`docs/data-model.md` §3.2 / §1.9 で同一の直列化規則と規定されているため）。
+    static func toCafeMap(_ cafe: Cafe) -> [String: Any] {
         var dict: [String: Any] = [
             "placeId": cafe.placeId,
             "name": cafe.name,
@@ -185,7 +191,8 @@ enum CoffeeFirestoreMapper {
         return dict
     }
 
-    private static func cafeFromMap(_ dict: [String: Any]) -> Cafe? {
+    /// カフェスナップショット 8 フィールドを Firestore マップから復元する。`toCafeMap` の逆変換。
+    static func cafeFromMap(_ dict: [String: Any]) -> Cafe? {
         guard
             let placeId = dict["placeId"] as? String,
             let name = dict["name"] as? String
@@ -212,7 +219,8 @@ enum CoffeeFirestoreMapper {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         )
     }
 

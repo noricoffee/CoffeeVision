@@ -18,6 +18,19 @@ struct SettingsView: View {
     /// `AppRootView` の `preferredColorScheme` と同じキーで同期する。
     @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.system.rawValue
 
+    /// データエクスポートの進行状態。
+    @State private var exportState: ExportState = .idle
+
+    /// エクスポート失敗時のエラーメッセージ（`.alert` 表示用）。
+    @State private var exportError: String?
+
+    /// `exportState` が取りうる状態。
+    private enum ExportState {
+        case idle
+        case exporting
+        case ready(URL)
+    }
+
     // MARK: - バージョン情報
 
     private var appVersion: String {
@@ -35,12 +48,24 @@ struct SettingsView: View {
             Form {
                 accountSection
                 consentSection
+                exportSection
                 themeSection
                 appInfoSection
                 licensesSection
             }
             .navigationTitle(String(localized: "設定"))
             .navigationBarTitleDisplayMode(.inline)
+            .alert(
+                String(localized: "エクスポートに失敗しました"),
+                isPresented: Binding(
+                    get: { exportError != nil },
+                    set: { if !$0 { exportError = nil } }
+                )
+            ) {
+                Button(String(localized: "OK")) { exportError = nil }
+            } message: {
+                Text(exportError ?? "")
+            }
         }
     }
 
@@ -89,6 +114,48 @@ struct SettingsView: View {
         }
     }
 
+    /// データエクスポートセクション。
+    ///
+    /// KMP `ExportCoffeeRecordsUseCase` で全記録を JSON 文字列化し、一時ファイルに書き出して
+    /// `ShareLink` で共有シートを提示する。写真本体はクラウド同期対象外のため含まれない。
+    @ViewBuilder
+    private var exportSection: some View {
+        Section {
+            switch exportState {
+            case .idle:
+                Button {
+                    startExport()
+                } label: {
+                    Label(String(localized: "データをエクスポート"), systemImage: "square.and.arrow.up")
+                }
+                .frame(minHeight: 44)
+                .accessibilityLabel(String(localized: "データをエクスポート"))
+
+            case .exporting:
+                HStack(spacing: 12) {
+                    ProgressView()
+                    Text(String(localized: "エクスポート中..."))
+                        .foregroundStyle(.secondary)
+                }
+                .frame(minHeight: 44)
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(String(localized: "エクスポート中"))
+
+            case .ready(let url):
+                ShareLink(item: url) {
+                    Label(String(localized: "エクスポートファイルを共有"), systemImage: "square.and.arrow.up")
+                }
+                .frame(minHeight: 44)
+                .accessibilityLabel(String(localized: "エクスポートファイルを共有"))
+            }
+        } header: {
+            Text(String(localized: "データのエクスポート"))
+        } footer: {
+            Text(String(localized: "コーヒー記録を JSON 形式で書き出します。写真本体は含まれません。"))
+                .font(.caption)
+        }
+    }
+
     /// 表示テーマ切替セクション。
     private var themeSection: some View {
         Section(String(localized: "表示テーマ")) {
@@ -123,6 +190,39 @@ struct SettingsView: View {
             }
             .accessibilityLabel(String(localized: "ライセンス一覧を開く"))
         }
+    }
+
+    // MARK: - データエクスポート
+
+    /// エクスポートを開始する。
+    ///
+    /// `uid` が未確定（bootstrap 前）の場合は何もしない
+    /// （設定画面はアカウント確定後にしか表示されないため通常到達しない）。
+    private func startExport() {
+        guard let uid = appState.uid else { return }
+        exportState = .exporting
+        Task { @MainActor in
+            do {
+                let json = try await appState.container.exportCoffeeRecordsUseCase.invoke(userId: uid)
+                let url = try writeExportFile(json: json)
+                exportState = .ready(url)
+            } catch {
+                exportState = .idle
+                exportError = error.localizedDescription
+            }
+        }
+    }
+
+    /// JSON 文字列を一時ディレクトリのファイルへ書き出す。
+    ///
+    /// ファイル名は `coffeevision-export-YYYYMMDD.json`。
+    private func writeExportFile(json: String) throws -> URL {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd"
+        let fileName = "coffeevision-export-\(formatter.string(from: Date())).json"
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)
+        try json.write(to: url, atomically: true, encoding: .utf8)
+        return url
     }
 }
 

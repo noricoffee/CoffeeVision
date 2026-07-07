@@ -1,6 +1,7 @@
 import SwiftUI
 import SharedLogic
 import PhotosUI
+import CoreLocation
 
 // MARK: - CoffeeEditorView
 
@@ -24,6 +25,9 @@ struct CoffeeEditorView: View {
 
     @State private var isCafeSearchPresented: Bool = false
     @State private var newTagText: String = ""
+
+    /// 現在地カフェサジェスト用の位置情報（新規作成モードのみ・許可済みのときだけ利用）。
+    @State private var locationManager = LocationManager()
 
     /// 新規追加分の写真データ（photoId → JPEG Data）。保存ボタン押下時に Documents に書き出す。
     @State private var pendingImageData: [String: Data] = [:]
@@ -76,9 +80,26 @@ struct CoffeeEditorView: View {
                 if let cafe = initialCafe {
                     viewModel.onPlacesCafeSelected(cafe: cafe)
                 }
+                // 現在地カフェサジェスト（要件 2-8）: 新規作成モードかつ許可済みのときだけ取得する。
+                // 許可ダイアログは出さない・未許可/未決定は何もしない・取得失敗も無音。
+                if mode is CoffeeEditorViewModelModeCreate {
+                    switch locationManager.authorizationStatus {
+                    case .authorizedWhenInUse, .authorizedAlways:
+                        locationManager.requestLocation()
+                    case .notDetermined, .denied, .restricted:
+                        break
+                    @unknown default:
+                        break
+                    }
+                }
             }
             .onDisappear {
                 viewModel.onDisappear()
+            }
+            .onChange(of: locationManager.lastLocation?.latitude) { _, _ in
+                guard mode is CoffeeEditorViewModelModeCreate,
+                      let coordinate = locationManager.lastLocation else { return }
+                viewModel.onLocationAvailable(latitude: coordinate.latitude, longitude: coordinate.longitude)
             }
             .alert(
                 String(localized: "エラー"),
@@ -174,6 +195,27 @@ struct CoffeeEditorView: View {
                 )
             }
             .accessibilityLabel(String(localized: "カフェを検索"))
+
+            // 現在地カフェサジェスト（要件 2-8）: 新規作成モードで許可済み・cafe 未選択のときだけ
+            // KMP 側から反映される。カフェ選択後は自動で空になる。
+            if !viewModel.suggestedCafes.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(viewModel.suggestedCafes, id: \.placeId) { cafe in
+                            Button {
+                                viewModel.onSuggestedCafeSelected(cafe: cafe)
+                            } label: {
+                                Label(cafe.name, systemImage: "location.fill")
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(String(localized: "近くのカフェ: \(cafe.name)"))
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+            }
 
             // カフェ選択済みの場合は名前・住所を表示
             if !viewModel.draft.cafeName.isEmpty {
@@ -324,6 +366,18 @@ struct CoffeeEditorView: View {
                 )
             )
             .accessibilityLabel(String(localized: "カップ"))
+
+            TextField(
+                String(localized: "抽出レシピ（任意）"),
+                text: Binding(
+                    get: { viewModel.draft.brewRecipe },
+                    set: { viewModel.onBrewRecipeChanged($0) }
+                ),
+                prompt: Text(String(localized: "豆量 / 湯量 / 湯温 / 時間 など")),
+                axis: .vertical
+            )
+            .lineLimit(1...4)
+            .accessibilityLabel(String(localized: "抽出レシピ"))
         }
     }
 
@@ -645,11 +699,12 @@ struct CoffeeEditorView: View {
 
     // MARK: - ナビゲーションタイトル
 
+    /// 複製（Duplicate）は「初期値が違う新規作成」として Create と同じ扱いにする。
     private var navigationTitle: String {
-        if mode is CoffeeEditorViewModelModeCreate {
-            return String(localized: "コーヒーを記録")
-        } else {
+        if mode is CoffeeEditorViewModelModeEdit {
             return String(localized: "記録を編集")
+        } else {
+            return String(localized: "コーヒーを記録")
         }
     }
 

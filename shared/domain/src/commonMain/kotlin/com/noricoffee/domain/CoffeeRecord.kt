@@ -19,6 +19,7 @@ data class CoffeeRecord(
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
+    val brewRecipe: String?,              // 抽出レシピ（豆量 / 湯量 / 湯温 / 時間などの自由メモ）。フェーズ 15-E 追加。セルフ抽出向け
     val tasting: TastingScores?,           // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須（all-or-nothing）
     val tags: List<String> = emptyList(),  // ユーザー定義タグ（例: "ラテアート", "浅煎り"）
     // --- メタ ---

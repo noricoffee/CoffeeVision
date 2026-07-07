@@ -7,9 +7,10 @@ CoffeeVision のドメインモデルを **Kotlin（ドメイン）/ SQLDelight�
 エンティティ一覧:
 
 - `CoffeeRecord`（コーヒー記録。集約ルート）
-- `Cafe`（カフェ情報。`CoffeeRecord` に埋め込み、任意）
+- `Cafe`（カフェ情報。`CoffeeRecord` / `SavedCafe` に埋め込み）
 - `Photo`（写真。`CoffeeRecord` の子）
 - `BeanProfile`（豆ナレッジ。Firestore グローバルコレクション / サービス管理データ）
+- `SavedCafe`（行きたい店。ウィッシュリスト / フェーズ 15-A）
 
 ---
 
@@ -18,9 +19,12 @@ CoffeeVision のドメインモデルを **Kotlin（ドメイン）/ SQLDelight�
 ```
 User (Firebase Auth uid)
   │
-  └── CoffeeRecord (1..N)
-        ├── Cafe              (0..1, 埋め込み / null = セルフ抽出)
-        └── Photo             (0..N)
+  ├── CoffeeRecord (0..N)
+  │     ├── Cafe              (0..1, 埋め込み / null = セルフ抽出)
+  │     └── Photo             (0..N)
+  │
+  └── SavedCafe (0..N)         行きたい店（placeId ごとに最大 1 件）
+        └── Cafe              (1, 埋め込みスナップショット)
 ```
 
 ---
@@ -53,6 +57,7 @@ data class CoffeeRecord(
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
     val cup: String?,                     // カップの種類 / ブランドメモ
+    val brewRecipe: String?,              // 抽出レシピ（豆量 / 湯量 / 湯温 / 時間などの自由メモ）。フェーズ 15-E 追加。セルフ抽出向け
     val tasting: TastingScores?,          // テイスティング 5 要素。null = 未記入。記入する場合は 5 要素すべて必須
     val tags: List<String> = emptyList(), // ユーザー定義タグ（例: "ラテアート" "浅煎り"）。フェーズ 10-D 追加
     // --- メタ ---
@@ -100,12 +105,13 @@ data class Cafe(
     val phoneNumber: String? = null,                     // 電話番号（nationalPhoneNumber）
     val priceLevel: String? = null,                      // 価格帯（PRICE_LEVEL_* 文字列）
     val googleRating: Double? = null,                    // Google 上の評価
+    val userRatingCount: Int? = null,                    // Google 上の評価件数（フェーズ 16 追加）
 )
 ```
 
 > `CoffeeRecord.cafe` が null の場合はカフェに紐づかないセルフ抽出を表す。
 
-> **永続化されるのは先頭 8 フィールドのみ**: フェーズ 10-B で追加した 5 フィールド（`openNow`〜`googleRating`）は Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面の表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
+> **永続化されるのは先頭 8 フィールドのみ**: フェーズ 10-B で追加した 5 フィールド（`openNow`〜`googleRating`）とフェーズ 16 で追加した `userRatingCount` の計 6 フィールドは Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面・マップ下部カードの表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
 
 > **写真について**: Places API の写真は `photo_reference` をキーに **都度取得** する規約。
 > ローカルに永続キャッシュしないこと（規約違反になる場合がある）。
@@ -197,6 +203,7 @@ data class CoffeeStats(
     val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
     val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
     val preferredBeanTraits: PreferredBeanTraits? = null, // 階層2+: 好みの産地 × BeanProfile 突合結果（フェーズ 12-C。BeanProfile 未提供時は null）
+    val unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList(), // 好み合致 × 未記録の BeanProfile 提案（フェーズ 15-E-3。BeanProfile 未提供 / 信号なしは空）
 )
 
 data class TastingAverages(
@@ -441,6 +448,40 @@ interface CafeRecommendationProvider {
 
 ---
 
+## 1.7a UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8・フェーズ 15-E-3）
+
+好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計（永続化しない）。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
+
+```kotlin
+data class UnexploredBeanSuggestion(
+    val profile: BeanProfile,             // 提案する豆
+    val matchedOriginLabel: String,       // マッチ理由の表示用ラベル（FavoriteSignals.bestOrigin 由来）
+)
+```
+
+**`SuggestUnexploredBeansUseCase`**（`shared/domain/.../usecase/`、決定論）:
+
+```kotlin
+class SuggestUnexploredBeansUseCase(
+    private val beanProfileMatchUseCase: BeanProfileMatchUseCase = BeanProfileMatchUseCase(),
+) {
+    operator fun invoke(
+        records: List<CoffeeRecord>,
+        profiles: List<BeanProfile>,
+        signals: FavoriteSignals,
+    ): List<UnexploredBeanSuggestion>   // 上位 SUGGESTED_BEANS_LIMIT 件
+    companion object { const val SUGGESTED_BEANS_LIMIT = 5 }
+}
+```
+
+- **好み合致**: `signals.bestOrigin`（非 null のとき）に対し、既存 `BeanProfileMatchUseCase`（§1.8 の origin ファジーマッチ・スコアリング）を再利用して候補を選定・並べる（DRY）。`bestRoastLevel` / `bestBrewMethod` は `BeanProfile` に対応フィールドが無いため使わない（origin 主軸）
+- **「未経験」判定 = (origin, variety) ペア**: `BeanProfile.variety != null` の候補は `(origin正規化, variety正規化)` ペアがユーザーの記録に無ければ未経験（同産地でも品種違いは別体験として提案）。`variety == null` の候補は origin のみで判定（その産地を一度でも記録済みなら経験済み扱い）。正規化は `trim().lowercase()`（`buildOriginRanking` と同じ）
+- **空になる条件**: `signals.bestOrigin == null`（好み未確定）/ `profiles` 空（BeanProfile 未投入）
+- **配線**: `BuildCoffeeStatsUseCase.invoke(records, beanProfiles)` 内で `beanProfiles.isNotEmpty()` のときだけ計算し `CoffeeStats.unexploredBeanSuggestions` に格納（`preferredBeanTraits` = 12-C と同じ流儀。`ObserveCoffeeStatsUseCase` に `BeanProfileRepository?` を注入した端末でのみ非空）。`readiness`（UI メタ）と違い**ドメイン実質のある派生値**なので `CoffeeStats` 内に置く
+- **LLM 非混入**: iOS の `buildPrompt(from: stats)` はフィールドを選択的に読む実装のため、本フィールドを buildPrompt に足さない限り Foundation Models の digest には入らない（分析タブ UI 表示専用）
+
+---
+
 ## 1.8 BeanProfile（豆ナレッジ / フェーズ 12-B）
 
 > サービス管理のコーヒー豆知識データ。ユーザーの `CoffeeRecord` と `beanProfileId` では**紐付けしない**。`origin`（trim/lowercase）+ `processings`（enum 名）でファジーマッチし、記録入力時のサジェストや将来の分析強化（12-C）に活用する。
@@ -483,6 +524,33 @@ interface BeanProfileRepository {
 
 ---
 
+## 1.9 SavedCafe（行きたい店 / フェーズ 15-A）
+
+> 「探す → 保存 → 訪問 → 記録」のループを閉じるウィッシュリスト（[`requirements.md`](./requirements.md) §10）。記録（訪問済み）とは独立した「これから行く店」の管理。
+
+**配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/SavedCafe.kt`
+
+```kotlin
+data class SavedCafe(
+    val userId: String,                   // Firebase Auth uid
+    val cafe: Cafe,                       // Places 由来のスナップショット（保存時点。永続化は 8 フィールドのみ = §1.2 と同じ）
+    val note: String,                     // 任意メモ（「◯◯さんおすすめ」等）。空文字可
+    val savedAt: Instant,                 // 保存日時（一覧の並び順キー、降順）
+)
+```
+
+### 設計上の決め事
+
+- **キーは `cafe.placeId`（自然キー。UUID を持たない）**: 同じカフェを二重に「行きたい」登録する意味がないため、`(userId, placeId)` で一意とする。§5 の「ID は UUID v4」ルールの**意図的な例外**（保存/解除がトグルとして冪等になり、二重登録の防御ロジックが不要になる）。Places の place_id は英数字 + `-`/`_` で構成され `/` を含まないため、Firestore ドキュメント ID にそのまま使える
+- **記録作成時の自動解除はしない（データは独立）**: 記録保存フローに `SavedCafeRepository` への書き込みを結合させない（Simplicity First / ユーザーの意図しないデータ消失を避ける。「また行きたい」用途でリストに残す使い方も許容）。重複感は**表示側で解決**する:
+  - マップのピンは同一 placeId が競合したら **訪問済み（+ 好み一致）> 行きたい > 検索結果** の優先順位で 1 本だけ出す
+  - 行きたい一覧では、記録が既にある店に「記録あり」バッジを表示し、手動解除を促す
+- **一覧の導線はマップ画面内**: マップのツールバー（またはフィルタチップ列）のブックマークボタン → ハーフシートで `SavedCafe` 一覧（`savedAt` 降順、タップでカフェ詳細 push、スワイプで解除）。**新規 feature モジュールは作らない**（シートはマップ画面の一部。状態は `MapViewModel` に持たせ、1 画面 = 1 モジュール原則のカウント外とする）
+- **カフェ詳細のトグル状態**: `CafeDetailViewModel` が `observeByPlaceId` を購読して「行きたい」ボタンの ON/OFF を表示。保存時は表示中の `Cafe`（Places Details 取得済み）からスナップショットを作る
+- **スナップショットの鮮度**: 保存時点の 8 フィールドを固定保存。営業時間等の揮発情報はカフェ詳細画面が都度 Places Details を取得する既存挙動（§1.2）に委ねる
+
+---
+
 # 2. SQLDelight スキーマ
 
 ローカル DB は **検索・オフライン参照の高速化** が目的。Firestore のキャッシュとは別途に持つ。
@@ -517,6 +585,7 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
+    brew_recipe TEXT,                      -- 抽出レシピ自由メモ（フェーズ 15-E 追加、migration 4.sqm で ALTER TABLE ADD COLUMN）
     -- テイスティング 5 要素（各 1..10）。5 列は all-or-nothing（全列 NULL = tasting なし / 全列セット = tasting あり）
     sweetness INTEGER,
     body INTEGER,
@@ -605,6 +674,49 @@ DELETE FROM photo WHERE id = ?;
 - 子テーブル（photo）は別クエリで取得し、Repository でまとめる（JOIN は使わず、`Flow.combine` で結合）
 - 写真の参照配列やタグ（`tags`）など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する。`tags` は空文字（旧行）も空リストとして読む
 - `cafe_place_id` が null の行は `cafe = null` で組み立てる。非 null の行のみ `Cafe(...)` を構築する
+- **`brew_recipe`（フェーズ 15-E）**: migration `4.sqm` で `ALTER TABLE coffee_record ADD COLUMN brew_recipe TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `brew_recipe` を追加する。Mapper は他の nullable TEXT 列と同じ扱い
+
+## 2.4 SavedCafe.sq（フェーズ 15-A）
+
+```sql
+CREATE TABLE saved_cafe (
+    place_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    -- Cafe スナップショット（place_id 以外の 7 フィールド。coffee_record の cafe_* と同じ直列化規則）
+    cafe_name TEXT NOT NULL,
+    cafe_address TEXT,
+    cafe_latitude REAL,
+    cafe_longitude REAL,
+    cafe_photo_references TEXT,            -- JSON 配列
+    cafe_website_url TEXT,
+    cafe_maps_url TEXT,
+    note TEXT NOT NULL DEFAULT '',
+    saved_at INTEGER NOT NULL,             -- epoch millis
+    PRIMARY KEY (place_id, user_id)
+);
+
+CREATE INDEX saved_cafe_by_user ON saved_cafe (user_id, saved_at DESC);
+
+selectAll:
+SELECT * FROM saved_cafe WHERE user_id = ? ORDER BY saved_at DESC;
+
+selectByPlaceId:
+SELECT * FROM saved_cafe WHERE user_id = ? AND place_id = ?;
+
+upsert:
+INSERT OR REPLACE INTO saved_cafe (
+    place_id, user_id, cafe_name, cafe_address,
+    cafe_latitude, cafe_longitude, cafe_photo_references,
+    cafe_website_url, cafe_maps_url,
+    note, saved_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteByPlaceId:
+DELETE FROM saved_cafe WHERE user_id = ? AND place_id = ?;
+```
+
+> - **migration**: 既存インストールへのテーブル追加のため `migrations/3.sqm`（`CREATE TABLE` + `CREATE INDEX`）を書く（フェーズ 7 のクリーンブレイク以後はリリース前でも migration を書く運用）
+> - 行 ↔ ドメイン変換は `db/Mapper.kt` に追加。`cafe_*` 列の直列化規則（photo_references の JSON 化等）は `coffee_record` と共通化する
 
 ---
 
@@ -615,6 +727,7 @@ DELETE FROM photo WHERE id = ?;
 ```
 users/{uid}                               # ユーザープロフィール（analyticsConsent フラグ等）
   coffees/{coffeeId}                      # CoffeeRecord 本体（Cafe 埋め込み / 評価 / メモ / photos 配列）
+  savedCafes/{placeId}                    # 行きたい店（フェーズ 15-A。ドキュメント ID = Places の place_id）
 
 beanProfiles/{beanId}                     # 豆ナレッジベース（サービス管理 / 全認証ユーザーが read-only）
 ```
@@ -690,6 +803,7 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
   "processing": "Washed",
   "roastLevel": "Medium",
   "cup": "ノリタケ",
+  "brewRecipe": "豆 15g / 湯 240ml / 92℃ / 2:30",
   "tasting": {
     "sweetness": 7,
     "body": 5,
@@ -714,12 +828,35 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
 ```
 
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
-- **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup）: null の場合はキーごと省略
+- **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。`brewRecipe` はフェーズ 15-E 追加（decode 時にキー欠如は null 扱い）
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
 - **cafe** に書くのはスナップショット 8 フィールドのみ（§1.2 の注記参照。`openNow` 等の表示用フィールドは書かない）
 - **photos**: 埋め込み配列。`localPath` は端末固有値のため Firestore には書かない。`remoteUrl` も書かない（Storage 採用見送り）。`sortOrder` は配列 index を upload 時に採番、decode 時はソート用途で破棄
 - `visitedOn` は `"YYYY-MM-DD"` 文字列、`createdAt` / `updatedAt` は Firestore `Timestamp`
+
+### `users/{uid}/savedCafes/{placeId}`（行きたい店 / フェーズ 15-A）
+
+```json
+{
+  "cafe": {
+    "placeId": "ChIJ...",
+    "name": "Blue Bottle 三軒茶屋",
+    "address": "東京都世田谷区...",
+    "latitude": 35.6448,
+    "longitude": 139.6694,
+    "photoReferences": ["AcJnMu..."],
+    "websiteUrl": "https://bluebottlecoffee.jp/",
+    "mapsUrl": "https://maps.google.com/?cid=..."
+  },
+  "note": "",
+  "savedAt": "<Timestamp>"
+}
+```
+
+- ドキュメント ID = `cafe.placeId`（§1.9 の自然キー方針）。保存 = `set`（上書き）、解除 = `delete` の冪等トグル
+- `cafe` マップは `coffees` と同じスナップショット 8 フィールドのみ（揮発フィールドは書かない）。nullable フィールドは null 時にキー省略（`coffees` と同じ直列化規則）
+- Security Rules は既存の `users/{uid}` 配下ワイルドカード（`match /{document=**}`）でカバーされるため**変更不要**
 
 ---
 
@@ -841,6 +978,31 @@ class CoffeeRepositoryImpl(
 
 > iOS / Android が実装するのは `RemoteCoffeeDataSource`（Firestore SDK 直叩き）だけ。photos を埋め込み配列にしたため、observe は `coffees` リスナ 1 本で完結（子の都度取得は不要）、upload は単一ドキュメント `set`、remove は単一ドキュメント `delete` で済む。
 
+## 4.3 SavedCafeRepository（フェーズ 15-A）
+
+`CoffeeRepository` と同じ 2 段構成をそのまま踏襲する（新パターンは持ち込まない）。
+
+```kotlin
+// shared/domain — UI から見える API
+interface SavedCafeRepository {
+    fun observeAll(userId: String): Flow<List<SavedCafe>>                       // マップピン / 一覧シート用
+    fun observeByPlaceId(userId: String, placeId: String): Flow<SavedCafe?>     // カフェ詳細のトグル状態用
+    suspend fun save(savedCafe: SavedCafe)                                      // 保存（同一 placeId は上書き）
+    suspend fun delete(userId: String, placeId: String)                         // 解除
+}
+
+// shared/domain — プラットフォーム別に実装する薄いリモートアダプタ
+interface RemoteSavedCafeDataSource {
+    fun observeChanges(userId: String): Flow<List<SavedCafe>>
+    suspend fun upload(savedCafe: SavedCafe)
+    suspend fun remove(userId: String, placeId: String)
+}
+```
+
+- 合成クラス `SavedCafeRepositoryImpl`（`shared/core`）: 読み取りは SQLDelight を Single Source、書き込みはローカル → リモート順、`WritePolicy` 共用、`startSync` は **coffees と同じスナップショット reconciliation**（スナップショットに無い place_id のローカル行を削除。dev ダミーデータのような除外対象は無し）
+- 実装先: Android = `shared/data-firebase/androidMain`、iOS = `iosApp` 側 Swift（`FirebaseRepositories/` の既存 `RemoteCoffeeDataSource` 実装と同居）
+- ViewModel 配線（公開 API は加算的変更のみ）: `MapViewModel` に `savedCafes` の購読 + ピン用状態 + 一覧シート状態、`CafeDetailViewModel` に `isSaved` トグル状態と save/delete アクション
+
 ---
 
 # 5. ID 採番
@@ -848,6 +1010,7 @@ class CoffeeRepositoryImpl(
 - すべてのエンティティ ID は **クライアント側で UUID v4 を採番** する
 - Firestore のドキュメント ID もこの UUID を使う（auto-id は使わない）
 - 端末オフラインでも採番できる、複数端末間で衝突しない、SQLDelight と Firestore で同じ ID を使えるメリットがある
+- **例外: `SavedCafe` は `cafe.placeId` を自然キーにする**（§1.9。同一カフェの二重登録を型レベルで防ぎ、保存 / 解除を冪等トグルにするため。UUID は持たない）
 
 ---
 

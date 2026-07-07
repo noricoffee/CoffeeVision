@@ -113,6 +113,7 @@ internal data class PlaceDto(
     val nationalPhoneNumber: String? = null,
     val priceLevel: String? = null,   // "PRICE_LEVEL_INEXPENSIVE" 等
     val rating: Double? = null,        // Google Maps 評価 (1.0–5.0)
+    val userRatingCount: Int? = null,  // Google Maps 評価件数
 )
 
 /** `displayName` オブジェクト。API は `{"text": "...", "languageCode": "ja"}` 形式。 */

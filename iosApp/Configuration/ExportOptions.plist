@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- App Store Connect 提出用。destination=upload により xcodebuild -exportArchive が
+	     エクスポートと同時に ASC へアップロードする（release-testflight.yml から使用）。 -->
+	<key>method</key>
+	<string>app-store-connect</string>
+	<key>destination</key>
+	<string>upload</string>
+	<key>signingStyle</key>
+	<string>automatic</string>
+	<key>teamID</key>
+	<string>HL5AQP4983</string>
+	<!-- ビルド番号は CI が CURRENT_PROJECT_VERSION=github.run_number で注入するため Apple 側の自動採番は使わない -->
+	<key>manageAppVersionAndBuildNumber</key>
+	<false/>
+</dict>
+</plist>

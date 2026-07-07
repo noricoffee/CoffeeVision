@@ -520,3 +520,54 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 - ユニットテスト実行タスクは `testAndroidHostTest`（`androidHostTest` はソースセット名。AGP 慣例で `test` プレフィックスが付く）。サブエージェントへの指示に検証コマンドを書くときは実在タスク名を確認してから書く
 - サブエージェントの sandbox では `xcode-select` が CommandLineTools を指し、`iosSimulatorArm64Test` 等リンク・実行を伴うタスクは `MissingXcodeException` で失敗する。フロントエンドコンパイル（`compileKotlinIosSimulatorArm64` / `compileTestKotlinIosSimulatorArm64`）は通るため構文・型検証はそれで代替し、テスト実行は親セッションで `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew ...` を付けて行う（2026-07-03 実証済み）
+
+## 2026-07-06
+
+### 無音フォールバック設計の機能は環境要因と切り分けられず「偽バグ報告」になる
+
+- **症状**: 15-B の現在地カフェサジェスト（要件 2-8）が「表示されない」とバグ報告された。実装は正常で、原因はシミュレータの **Features > Location が未設定（None）** で位置取得が失敗していたこと（Custom Location 設定で表示を確認）
+- **原因の構造**: 2-8 は「許可未決定・位置取得失敗・Nearby 失敗をすべて無音にする」仕様のため、(a) アプリの許可が未決定 (b) シミュレータの Location 未設定 (c) 検索 0 件 (d) 実装バグ、のどれでも見た目が同一（何も出ない）になる。無音フォールバックを仕様にした時点で、切り分け手段を用意しない限りあらゆる環境要因が「バグに見える」
+- **修正パターン**: 検証チェックリスト・目視依頼文に**環境前提**（シミュレータの Features > Location、アプリの位置情報許可状態）と**切り分け手順**（まずマップの現在地ボタンで許可 + 取得が生きているか確認 → 対象機能を見る）をセットで書く。tasks.md 15-B 検証行に追記済み
+- **教訓**: 「失敗を無音にする」仕様を確定させるときは、同じ変更内で検証手順に環境前提を書き下ろす（仕様確定と検証手順はセット）。親がユーザーに目視依頼を出すときも依頼文にこの前提を含める
+- **発生源**: フェーズ 15-B（`CoffeeEditorView` 現在地サジェスト、2026-07-06）
+- **横展開点検（2026-07-06）**: `grep -rn "requestLocation()" iosApp` → 位置情報利用は `CoffeeEditorView`（無音設計・今回対処済み）と `MapTabView`（`activeToast` で `locationManager.error` を可視化する設計のため無音ではない）の 2 画面のみで該当なし。他の環境ゲート系（Foundation Models = フェーズ 8 / 12-C / 13、E-1 Apple サインイン、フェーズ 14 実 Places キー）は tasks.md 検証行に「Apple Intelligence 有効実機」「実機必須」「実 Places API キー必要」の前提が明記済み → 漏れなし
+
+### VM テストの `vm.clear()` は iOS/Native では直後に `advanceUntilIdle()` で drain が要る
+
+- **症状**: 15-D で `AnalysisViewModelReadinessTest` / `AnalysisViewModelQaTest` が **iosSimulatorArm64Test だけ 16 件全滅**（`UncompletedCoroutinesError: After waiting for 1m, there were active child jobs: [SupervisorJobImpl{Active}]`、各 60 秒）。`testAndroidHostTest` は全 green。各テストは `try { … } finally { vm.clear() }` を既に持っていた
+- **原因の構造**: `vm.clear()`＝`viewModelScope.cancel()` は**キャンセルをスケジュールするだけ**。Kotlin/Native の `runTest` は完了チェックがこのキャンセル処理より先に走るため、VM の `SupervisorJob` が `Active` のまま残り timeout する。JVM（androidHostTest）は runTest の最終 drain がキャンセルを処理するため顕在化しない
+- **修正パターン**: `finally { vm.clear() }` を **`finally { vm.clear(); testScheduler.advanceUntilIdle() }`** にする（キャンセルを test body 内で drain し、runTest の完了チェック前に SupervisorJob を finalize させる）。`backgroundScope` に VM を載せる案は「`advanceUntilIdle()` が VM の observe を駆動せず state が null になりアサーション失敗」という別の壊れ方をしたため不採用
+- **教訓**:
+  1. **VM テストは必ず `iosSimulatorArm64Test` でも実行する**（親作業。`testAndroidHostTest` の green はコルーチン後始末の Native 差を検出できない。既存教訓「commonTest は iosSimulatorArm64Test でも回す」の具体例）
+  2. 独自 `viewModelScope`（`SupervisorJob(scope[Job])`）を持つ VM のテストで iOS だけ `UncompletedCoroutinesError` が出たら、まず clear 後の `advanceUntilIdle()` を疑う
+- **発生源**: フェーズ 15-D（`shared/feature/analysis` の VM テスト、2026-07-06）
+- **横展開点検（2026-07-06）**: `grep -rln "\.clear()" shared --include="*Test.kt"` で全 VM テスト 8 ファイルを点検。clear 後 drain を入れたのは analysis の 2 ファイルのみ。他 6（coffee-editor / coffee-list / map×2 / cafe-detail / cafe-search）は**現状 clear 後 drain 無しでも iOS green**（Map×2 / CoffeeList / CafeDetail / CoffeeEditor は本フェーズまでに iosSimulatorArm64Test 実測 green を確認済み）。＝現時点で壊れているのは analysis のみで修正済み。他は「同型リスクはあるが未発症」のためフラジャイルだが変更しない（Minimal Impact）。将来いずれかが iOS で同エラーを出したら 1 行（clear 後 drain）で直せる
+
+### interface にメソッドを足したら、その interface を実装する**テスト用 fake** の追随漏れで commonTest が長期間コンパイル不能になりうる
+
+- **症状**: 15-D 着手時、`AnalysisViewModelQaTest` の `FakeCoffeeInsightProvider` が `CoffeeInsightProvider.summarizeBeanTraits`（フェーズ 12-C で追加）を override しておらず、`compileTestKotlinIosSimulatorArm64` / `testAndroidHostTest` が**ずっと FAILED のまま見過ごされていた**（本体の `compileKotlinIosSimulatorArm64` は green なので気づけない）
+- **原因の構造**: 本体（main）のコンパイルが通っても、同一モジュールの commonTest が別原因（interface 拡張時の fake 追随漏れ等）でコンパイル不能なまま放置されうる。テストが「存在するが一度も実行できていない」状態は、実行ログを見ないと本体ビルドの green に紛れて見えない
+- **修正パターン**: `interface` に abstract メソッドを追加したら、その場で `grep -rln ": <InterfaceName>" shared --include="*Test.kt"` でテスト fake を洗い出し、`compileTestKotlin*` / `testAndroidHostTest` / `iosSimulatorArm64Test` まで通ることを確認する
+- **教訓**: 既存 VM / interface に手を入れる際は「その commonTest が実際に**実行**できているか」を疑う（未着手 VM のテスト有無だけでなく、着手済みテストが実行可能かも）。CI 導入時は `iosSimulatorArm64Test` を必須ターゲットに含める（これが無いと Native のコンパイル/実行の破れが素通りする）
+- **発生源**: フェーズ 12-C の `summarizeBeanTraits` 追加時（fake 追随漏れ）→ 15-D で発覚・修正（2026-07-06）
+- **横展開点検（2026-07-06）**: `CoffeeInsightProvider` を実装する fake は `AnalysisViewModelQaTest`（修正済み）のみ（`grep -rn "CoffeeInsightProvider" shared --include="*Test.kt"`）。他 interface（`CoffeeRepository` / `RemoteCoffeeDataSource` / `CafeRepository` 等）の test fake は、直近フェーズ（15-A〜C）で各モジュールの `iosSimulatorArm64Test` が実測 green のため追随漏れ無しと確認
+
+## 2026-07-07
+
+### SQLDelight で列を追加したら `Mapper.toRow()` だけでなく Repository の `queries.upsert(...)` 呼び出しにも手で足す
+
+- **症状**: 15-E-1 で `coffee_record` に `brew_recipe` 列を追加。`.sq` の `upsert` 文と `Mapper.toRow()` を直しても、`LocalCoffeeRepository.save()` 内の `coffeeRecordQueries.upsert(...)` は **named パラメータで各値を明示的に渡している**ため、新列の引数が漏れて `compileKotlinIosSimulatorArm64` が `No value passed for parameter 'brew_recipe'` で FAILED
+- **原因の構造**: SQLDelight の生成 `upsert(...)` 関数は列ごとの引数を取る。`Mapper.toRow()` が `Coffee_record` 行オブジェクトを作っても、Repository が行オブジェクトを丸ごと渡さず個別引数で呼んでいると自動反映されない（`row.brew_recipe` を明示的に渡す 1 行が要る）
+- **修正パターン**: 列追加時のチェックリスト = ①`.sq`（CREATE + upsert 文）②`migrations/N.sqm`（ALTER ADD COLUMN）③`Mapper.toRow()`/`toDomain()` ④**`LocalXxxRepository` の `queries.upsert(...)` 呼び出し** ⑤Firestore mapper（android/ios 両方）⑥ドメイン model。コンパイラが ④ の漏れを `No value passed for parameter` で必ず捕まえるので、`compileKotlinIosSimulatorArm64` まで通して確認する
+- **教訓**: SQLDelight の列追加は「.sq と Mapper を直せば終わり」ではない。Repository の named-parameter upsert 呼び出しが単一の見落としポイント。列追加時は上記 6 点セットで grep 点検する
+- **発生源**: フェーズ 15-E-1（`brew_recipe` 追加、2026-07-07）
+- **横展開点検（2026-07-07）**: 現状 `queries.upsert(` を named 引数で呼ぶ Repository は `LocalCoffeeRepository` / `LocalSavedCafeRepository` の 2 箇所。今回の追加で `LocalCoffeeRepository` は修正済み。`LocalSavedCafeRepository`（saved_cafe）は今回の列追加対象外で漏れなし
+
+### 「JVM green・iOS だけテストコンパイル不能」の具体形 2 種（stdlib assert / data class フィールド追加のテスト側未追随）
+
+- **症状**: フェーズ 16 の `Cafe.userRatingCount` 追加時、`testAndroidHostTest` は全 green なのに `compileTestKotlinIosSimulatorArm64` が data-places で FAILED。原因は今回の変更ではなく、①`PlacesClientImplPhotoMediaTest` が Kotlin stdlib の `assert(...)` を使用（Native では `ExperimentalNativeApi` opt-in が必要でコンパイル不能。JVM では `-ea` なしだと実行すらされず素通り）、②`CafeRepositoryImplSearchTextTest` の `PlaceSummary(...)` 構築がフェーズ 10-a/b のフィールド追加（openNow〜googleRating の 5 個）に未追随のまま放置されていたこと
+- **原因の構造**: 2026-07-06 の「interface 拡張時の fake 追随漏れ」と同根 —「本体は green、テストは存在するが iOS でコンパイルすらできていない」状態は実行ログを見ないと気づけない。今回の 2 形はどちらも **JVM では無害なので `testAndroidHostTest` が検出できない**（stdlib `assert` は JVM で no-op、②は JVM テストも壊れるはずだが該当テストが iOS 専用経路でしか顕在化しない位置にあった）。壊れたまま数フェーズ潜伏し、無関係な変更（今回のフィールド追加）の検証で発覚する
+- **修正パターン**: ① テストのアサーションは常に `kotlin.test` の `assertTrue` / `assertEquals` を使う（stdlib `assert` 禁止）。② `data class` にフィールドを追加したら `grep -rn "<ClassName>(" shared --include="*Test.kt"` でテスト側の直接構築箇所を洗い出して追随する（デフォルト値があっても named 引数でない構築は壊れる）
+- **教訓**: shared のフィールド/メソッド追加時は、対象モジュールだけでなく **`./gradlew compileTestKotlinIosSimulatorArm64`（全モジュール）** を回すと潜伏中の破れも一緒に検出できる（3 秒で終わる安価な sweep）。サブエージェントには compile まで、実行は親（verify-kmp-ios の分担どおり）
+- **発生源**: フェーズ 16（`Cafe.userRatingCount` 追加の検証中に発覚、2026-07-07。修正は kmp-engineer が同フェーズ内で実施）
+- **横展開点検（2026-07-07）**: ① `grep -rnE '(^|[^a-zA-Z.])assert\(' shared --include='*.kt'`（assertTrue/assertEquals 除外）→ 該当なし（今回の置換で全滅）。② 全 shared モジュールで `compileTestKotlinIosSimulatorArm64` → BUILD SUCCESSFUL（他モジュールに潜伏中の未追随なし）

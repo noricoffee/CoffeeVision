@@ -22,6 +22,7 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
+    brew_recipe TEXT,                      -- 抽出レシピ自由メモ（フェーズ 15-E 追加、migration 4.sqm で ALTER TABLE ADD COLUMN）
     -- テイスティング 5 要素（各 1..10、null = 未設定）
     sweetness INTEGER,
     body INTEGER,
@@ -52,11 +53,11 @@ INSERT OR REPLACE INTO coffee_record (
     cafe_latitude, cafe_longitude, cafe_photo_references,
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
-    name, brew_method, origin, variety, processing, roast_level, cup,
+    name, brew_method, origin, variety, processing, roast_level, cup, brew_recipe,
     sweetness, body, acidity, flavor, aftertaste,
     tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;

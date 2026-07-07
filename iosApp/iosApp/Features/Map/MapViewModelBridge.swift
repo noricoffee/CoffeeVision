@@ -36,6 +36,10 @@ final class MapViewModelBridge {
     private(set) var activeTastingMin: TastingScores? = nil
     /// アクティブなテイストフィルタ上限（nil = 未設定）。
     private(set) var activeTastingMax: TastingScores? = nil
+    /// 「行きたい店」（savedAt 降順。フェーズ 15-A）。マップピン / 一覧シート用。
+    private(set) var savedCafes: [SavedCafe] = []
+    /// 記録済み（コーヒー記録が 1 件以上ある）カフェの placeId 集合。一覧シートの「記録あり」バッジ用。
+    private(set) var recordedPlaceIds: Set<String> = []
 
     // MARK: - POI ルックアップ状態
 
@@ -123,6 +127,19 @@ final class MapViewModelBridge {
         kotlin.onTagFilterCleared()
     }
 
+    // MARK: - 「行きたい店」アクション（フェーズ 15-A）
+
+    /// 一覧シートでのスワイプ解除操作を受ける。
+    func onSavedCafeRemoved(placeId: String) {
+        kotlin.onSavedCafeRemoved(placeId: placeId)
+    }
+
+    /// マップ下部カードの保存トグルボタンから呼ぶ（フェーズ 16）。
+    /// 保存済みなら解除、未保存なら保存する（Kotlin 側で判定）。
+    func onCafeSaveToggled(cafe: Cafe) {
+        kotlin.onCafeSaveToggled(cafe: cafe)
+    }
+
     // MARK: - Private
 
     private func startObservation() {
@@ -154,5 +171,7 @@ final class MapViewModelBridge {
         self.tasteMatchedPlaceIds = state.tasteMatchedPlaceIds
         self.activeTastingMin = state.activeTastingMin
         self.activeTastingMax = state.activeTastingMax
+        self.savedCafes = state.savedCafes
+        self.recordedPlaceIds = state.recordedPlaceIds
     }
 }

@@ -10,6 +10,7 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 /**
  * [PlacesClientImpl.photoMediaUrl] の MockEngine テスト。
@@ -71,9 +72,10 @@ class PlacesClientImplPhotoMediaTest {
         )
 
         // URL に photoName の path が含まれる
-        assert(capturedUrl.contains("places/ChIJtest001/photos/AUacShiRef1/media")) {
-            "Expected URL to contain photo path, but was: $capturedUrl"
-        }
+        assertTrue(
+            capturedUrl.contains("places/ChIJtest001/photos/AUacShiRef1/media"),
+            "Expected URL to contain photo path, but was: $capturedUrl",
+        )
         // skipHttpRedirect=true が付く
         assertEquals(listOf("true"), capturedParams["skipHttpRedirect"])
         // maxWidthPx=200 が付く

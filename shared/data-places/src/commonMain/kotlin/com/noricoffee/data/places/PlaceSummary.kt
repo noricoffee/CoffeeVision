@@ -23,4 +23,5 @@ data class PlaceSummary(
     val phoneNumber: String?,
     val priceLevel: String?,
     val googleRating: Double?,
+    val userRatingCount: Int?,
 )

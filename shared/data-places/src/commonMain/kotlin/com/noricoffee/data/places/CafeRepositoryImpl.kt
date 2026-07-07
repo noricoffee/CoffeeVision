@@ -56,5 +56,6 @@ class CafeRepositoryImpl(
         phoneNumber = phoneNumber,
         priceLevel = priceLevel,
         googleRating = googleRating,
+        userRatingCount = userRatingCount,
     )
 }

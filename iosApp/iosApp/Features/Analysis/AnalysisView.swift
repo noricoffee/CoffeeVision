@@ -81,8 +81,10 @@ struct AnalysisView: View {
             LazyVStack(alignment: .leading, spacing: 24) {
                 insightCardSection
                 qaSection
+                readinessProgressSection
                 favoriteSignalsSection(stats: stats)
                 preferredBeanTraitsSection(stats: stats)
+                unexploredBeanSuggestionsSection(stats: stats)
                 summarySection(stats: stats)
                 ratingHistogramSection(stats: stats)
                 tastingAveragesSection(stats: stats)
@@ -208,6 +210,21 @@ struct AnalysisView: View {
         }
     }
 
+    // MARK: - 空状態プログレスセクション（要件 9-7）
+
+    /// 傾向信号がまだ出ていないときに、傾向分析が始まるまでの目安を表示するカード。
+    ///
+    /// 表示条件: `readiness` が非 nil かつ `hasAnySignal == false`。
+    /// `totalCount == 0`（記録ゼロ）のときは `readiness` 自体が算出されても
+    /// この画面には到達しない（`stats.totalCount > 0` の分岐でのみ `statisticsScrollView` が呼ばれるため）。
+    /// 既に傾向信号が出ている（`hasAnySignal == true`）ときはバナーを出さない。
+    @ViewBuilder
+    private var readinessProgressSection: some View {
+        if let readiness = viewModel.readiness, !readiness.hasAnySignal {
+            AnalysisReadinessProgressCard(readiness: readiness)
+        }
+    }
+
     // MARK: - 好みの豆の傾向セクション（Phase 12-C）
 
     /// `CoffeeStats.preferredBeanTraits` を表示するセクション。
@@ -229,6 +246,22 @@ struct AnalysisView: View {
                 insightStatus: viewModel.beanTraitsInsightStatus,
                 insight: viewModel.beanTraitsInsight
             )
+        }
+    }
+
+    // MARK: - 未経験の豆への探索提案セクション（フェーズ 15-E-3 / 要件 9-8）
+
+    /// `CoffeeStats.unexploredBeanSuggestions` を表示するセクション。
+    ///
+    /// 好み信号（`FavoriteSignals.bestOrigin`）に合致するが、ユーザーがまだ記録していない
+    /// `BeanProfile` を提案する。9-5（既訪問店の再訪推薦）に対する新規開拓のナッジ。
+    ///
+    /// 表示条件: `unexploredBeanSuggestions` が非空のときのみ（BeanProfile 未投入 / 好み信号
+    /// 未確定の端末では常に空配列のため、セクションごと非表示になる）。
+    @ViewBuilder
+    private func unexploredBeanSuggestionsSection(stats: CoffeeStats) -> some View {
+        if !stats.unexploredBeanSuggestions.isEmpty {
+            UnexploredBeanSuggestionsCard(suggestions: stats.unexploredBeanSuggestions)
         }
     }
 
@@ -1068,6 +1101,86 @@ private struct FavoriteSignalsCard: View {
     }
 }
 
+// MARK: - AnalysisReadinessProgressCard
+
+/// 分析タブの空状態プログレスカード（要件 9-7）。
+///
+/// カテゴリ好み信号（産地 / 焙煎度 / 抽出方法）の必要件数までの進捗を主表示にする。
+/// 件数が閾値に達しても z ゲート / 相関 floor（`data-model.md` §1.6）で信号が
+/// 出ないことがあるため、「傾向分析が**始まる**」という約束しすぎない文言に留める。
+///
+/// テイスティング相関の必要件数（`correlationThreshold`）は任意の補足情報として
+/// 小さく添える（主張しすぎない）。
+private struct AnalysisReadinessProgressCard: View {
+
+    let readiness: AnalysisViewModel.AnalysisReadiness
+
+    /// カテゴリ track の残り件数（0 未満にはならない）。
+    private var remainingForCategory: Int32 {
+        max(0, readiness.categoryThreshold - readiness.ratedCount)
+    }
+
+    /// カテゴリ track の進捗（0.0〜1.0）。
+    private var categoryProgress: Double {
+        guard readiness.categoryThreshold > 0 else { return 1.0 }
+        return min(1.0, Double(readiness.ratedCount) / Double(readiness.categoryThreshold))
+    }
+
+    /// テイスティング相関 track の残り件数（0 未満にはならない）。
+    private var remainingForCorrelation: Int32 {
+        max(0, readiness.correlationThreshold - readiness.tastedCount)
+    }
+
+    private var primaryMessage: String {
+        remainingForCategory > 0
+            ? String(localized: "あと \(remainingForCategory) 杯記録すると傾向分析が始まります")
+            : String(localized: "もう少し記録すると傾向が見えてきます")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "chart.line.uptrend.xyaxis")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(String(localized: "傾向分析まで"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            ProgressView(value: categoryProgress)
+                .tint(Color.accentColor)
+                .accessibilityLabel(String(localized: "傾向分析までの進捗"))
+                .accessibilityValue(
+                    String(localized: "\(readiness.ratedCount) / \(readiness.categoryThreshold) 杯")
+                )
+
+            Text(primaryMessage)
+                .font(.body)
+                .foregroundStyle(.primary)
+
+            if remainingForCorrelation > 0 {
+                HStack(spacing: 4) {
+                    Image(systemName: "waveform.path")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                        .accessibilityHidden(true)
+                    Text(String(localized: "テイスティングもあと \(remainingForCorrelation) 件入力すると味の相関も分析できます"))
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                }
+                .accessibilityElement(children: .combine)
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+    }
+}
+
 // MARK: - FavoriteSignalRow
 
 /// 好み信号の 1 行（産地 / 焙煎度 / 抽出方法）。
@@ -1347,6 +1460,114 @@ private struct PreferredBeanTraitsCard: View {
         case .flavor:      return String(localized: "風味")
         case .aftertaste:  return String(localized: "後味")
         }
+    }
+}
+
+// MARK: - UnexploredBeanSuggestionsCard
+
+/// 未経験の豆への探索提案カード（フェーズ 15-E-3 / 要件 9-8）。
+///
+/// 好み信号に合致するが、ユーザーがまだ記録していない `BeanProfile` を最大 5 件表示する
+/// （件数の上限は KMP 側 `SuggestUnexploredBeansUseCase.SUGGESTED_BEANS_LIMIT` で制御）。
+private struct UnexploredBeanSuggestionsCard: View {
+
+    let suggestions: [UnexploredBeanSuggestion]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 6) {
+                Image(systemName: "sparkle.magnifyingglass")
+                    .font(.subheadline)
+                    .foregroundStyle(Color.accentColor)
+                    .accessibilityHidden(true)
+                Text(String(localized: "試してみては"))
+                    .font(.subheadline)
+                    .fontWeight(.semibold)
+                    .foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 12) {
+                ForEach(Array(suggestions.enumerated()), id: \.element.profile.beanId) { index, suggestion in
+                    UnexploredBeanSuggestionRow(suggestion: suggestion)
+                    if index < suggestions.count - 1 {
+                        Divider()
+                    }
+                }
+            }
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
+        .accessibilityElement(children: .contain)
+        .accessibilityLabel(String(localized: "試してみては: まだ飲んでいないおすすめの豆"))
+    }
+}
+
+// MARK: - UnexploredBeanSuggestionRow
+
+/// 未経験の豆への探索提案の 1 行。
+private struct UnexploredBeanSuggestionRow: View {
+    let suggestion: UnexploredBeanSuggestion
+
+    private var profile: BeanProfile { suggestion.profile }
+
+    private var reasonText: String {
+        String(localized: "好みの\(suggestion.matchedOriginLabel)に近い未体験の豆")
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(profile.name)
+                    .font(.body)
+                    .fontWeight(.medium)
+                    .foregroundStyle(.primary)
+                if let variety = profile.variety {
+                    Text("（\(variety)）")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            Text(reasonText)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+
+            if !profile.flavorNotes.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(profile.flavorNotes, id: \.self) { note in
+                            Text(note)
+                                .font(.caption2)
+                                .foregroundStyle(Color.accentColor)
+                                .padding(.horizontal, 10)
+                                .padding(.vertical, 4)
+                                .background(Color.accentColor.opacity(0.12), in: Capsule())
+                                .accessibilityHidden(true)
+                        }
+                    }
+                }
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(
+                    String(localized: "フレーバーノート: \(profile.flavorNotes.joined(separator: "、"))")
+                )
+            }
+        }
+        .frame(minHeight: 44)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(buildAccessibilityLabel())
+    }
+
+    private func buildAccessibilityLabel() -> String {
+        var label = profile.name
+        if let variety = profile.variety {
+            label += "（\(variety)）"
+        }
+        label += "、\(reasonText)"
+        if !profile.flavorNotes.isEmpty {
+            label += "、フレーバー: \(profile.flavorNotes.joined(separator: "、"))"
+        }
+        return label
     }
 }
 

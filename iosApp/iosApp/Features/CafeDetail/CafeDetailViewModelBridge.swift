@@ -20,6 +20,10 @@ final class CafeDetailViewModelBridge {
     /// Kotlin の `List<CoffeeRecord>` は SKIE 経由で Swift では `[CoffeeRecord]` 型
     private(set) var coffees: [CoffeeRecord] = []
     private(set) var isLoading: Bool = true
+    /// 「行きたい店」として保存済みか（フェーズ 15-A）。ブックマークボタンの ON/OFF 表示用。
+    private(set) var isSaved: Bool = false
+    /// 保存 / 解除操作で発生したエラーメッセージ。`onErrorDismissed()` で nil に戻る。
+    private(set) var error: String?
 
     // MARK: - Init
 
@@ -30,6 +34,18 @@ final class CafeDetailViewModelBridge {
 
     deinit {
         kotlin.clear()
+    }
+
+    // MARK: - ユーザーアクション
+
+    /// 「行きたい」ブックマークボタンのトグル操作を受ける。
+    func onSaveToggled() {
+        kotlin.onSaveToggled()
+    }
+
+    /// エラートーストを閉じたときに呼ぶ。
+    func onErrorDismissed() {
+        kotlin.onErrorDismissed()
     }
 
     // MARK: - Private
@@ -49,5 +65,7 @@ final class CafeDetailViewModelBridge {
         self.cafe = state.cafe
         self.coffees = state.coffees
         self.isLoading = state.isLoading
+        self.isSaved = state.isSaved
+        self.error = state.error
     }
 }

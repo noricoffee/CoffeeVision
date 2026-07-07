@@ -40,6 +40,9 @@ struct CafeDetailView: View {
         .navigationTitle(bridge?.cafe?.name ?? initialCafe?.name ?? String(localized: "カフェ詳細"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }
+        .errorToast(message: bridge?.error) {
+            bridge?.onErrorDismissed()
+        }
         .onAppear {
             if bridge == nil, let uid = appState.uid {
                 bridge = CafeDetailViewModelBridge(
@@ -64,6 +67,9 @@ struct CafeDetailView: View {
 
     private func cafeDetailList(bridge: CafeDetailViewModelBridge) -> some View {
         List {
+            if let cafe = bridge.cafe ?? initialCafe {
+                headerSection(cafe: cafe, bridge: bridge)
+            }
             cafeInfoSection(bridge: bridge)
             if let cafe = bridge.cafe ?? initialCafe {
                 cafeLinksSection(cafe: cafe)
@@ -74,17 +80,107 @@ struct CafeDetailView: View {
         .listStyle(.insetGrouped)
     }
 
+    // MARK: - 視覚ヘッダー（写真帯 + 店名 + 評価 / 営業状態 / 価格帯 + 保存ボタン）
+
+    @ViewBuilder
+    private func headerSection(cafe: Cafe, bridge: CafeDetailViewModelBridge) -> some View {
+        let photoHeader = CafePhotoHeader(
+            cafe: cafe,
+            coffees: bridge.coffees,
+            photoLoader: appState.placePhotoLoader
+        )
+
+        Section {
+            if !photoHeader.isEmpty {
+                photoHeader
+                    .listRowInsets(EdgeInsets())
+                    .listRowSeparator(.hidden)
+            }
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(cafe.name)
+                    .font(.title2.bold())
+                headerInfoRow(cafe: cafe)
+            }
+
+            saveButton(bridge: bridge)
+        }
+    }
+
+    /// 「★4.5 (128件)」+ 営業状態 + 価格帯を 1 行にまとめた行。
+    private func headerInfoRow(cafe: Cafe) -> some View {
+        HStack(spacing: 8) {
+            if let openNow = cafe.openNow?.boolValue {
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(openNow ? Color.green : Color.red)
+                        .frame(width: 8, height: 8)
+                    Text(openNow ? String(localized: "営業中") : String(localized: "営業時間外"))
+                        .foregroundStyle(openNow ? .green : .red)
+                }
+            }
+
+            if let rating = cafe.googleRating?.doubleValue {
+                HStack(spacing: 4) {
+                    Image(systemName: "star.fill")
+                        .foregroundStyle(.yellow)
+                    Text(ratingText(rating: rating, count: cafe.userRatingCount?.intValue))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            if let level = cafe.priceLevel, let text = priceLevelText(for: level) {
+                Text(text)
+                    .foregroundStyle(.secondary)
+            }
+        }
+        .font(.subheadline)
+        .accessibilityElement(children: .combine)
+    }
+
+    /// 「★4.5 (128件)」形式の評価テキスト。件数が nil または 0 のときは括弧を省略する。
+    private func ratingText(rating: Double, count: Int?) -> String {
+        let ratingStr = String(format: "%.1f", rating)
+        if let count, count > 0 {
+            return "\(ratingStr) (\(count)件)"
+        }
+        return ratingStr
+    }
+
+    /// 写真帯直下の全幅保存ボタン。未保存 = 「保存する」（bordered）、保存済み = 「保存済み」
+    /// （borderedProminent + indigo）。旧ツールバーの bookmark トグルから移設（フェーズ 16）。
+    @ViewBuilder
+    private func saveButton(bridge: CafeDetailViewModelBridge) -> some View {
+        let label = Label(
+            bridge.isSaved ? String(localized: "保存済み") : String(localized: "保存する"),
+            systemImage: bridge.isSaved ? "bookmark.fill" : "bookmark"
+        )
+        .frame(maxWidth: .infinity)
+
+        Group {
+            if bridge.isSaved {
+                Button(action: bridge.onSaveToggled) { label }
+                    .buttonStyle(.borderedProminent)
+                    .tint(.indigo)
+            } else {
+                Button(action: bridge.onSaveToggled) { label }
+                    .buttonStyle(.bordered)
+            }
+        }
+        .controlSize(.large)
+        .sensoryFeedback(.selection, trigger: bridge.isSaved)
+        .accessibilityLabel(
+            bridge.isSaved
+                ? String(localized: "行きたい店から削除")
+                : String(localized: "行きたい店に追加")
+        )
+    }
+
     // MARK: - カフェ情報セクション
 
     private func cafeInfoSection(bridge: CafeDetailViewModelBridge) -> some View {
         Section(String(localized: "カフェ情報")) {
             if let cafe = bridge.cafe ?? initialCafe {
-                LabeledContent(String(localized: "名前")) {
-                    Text(cafe.name)
-                        .multilineTextAlignment(.trailing)
-                }
-                .accessibilityLabel(String(localized: "カフェ名 \(cafe.name)"))
-
                 if let address = cafe.address, !address.isEmpty {
                     LabeledContent(String(localized: "住所")) {
                         Text(address)
@@ -92,44 +188,6 @@ struct CafeDetailView: View {
                             .foregroundStyle(.secondary)
                     }
                     .accessibilityLabel(String(localized: "住所 \(address)"))
-                }
-
-                if let openNow = cafe.openNow?.boolValue {
-                    LabeledContent(String(localized: "営業状態")) {
-                        HStack(spacing: 4) {
-                            Circle()
-                                .fill(openNow ? Color.green : Color.red)
-                                .frame(width: 8, height: 8)
-                            Text(openNow ? String(localized: "営業中") : String(localized: "営業時間外"))
-                                .foregroundStyle(openNow ? .green : .red)
-                        }
-                    }
-                    .accessibilityLabel(
-                        String(localized: "営業状態: \(openNow ? "営業中" : "営業時間外")")
-                    )
-                }
-
-                if let rating = cafe.googleRating?.doubleValue {
-                    LabeledContent(String(localized: "Google 評価")) {
-                        HStack(spacing: 4) {
-                            Image(systemName: "star.fill")
-                                .foregroundStyle(.yellow)
-                                .font(.caption)
-                            Text(String(format: "%.1f", rating))
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                    .accessibilityLabel(
-                        String(localized: "Google 評価 \(String(format: "%.1f", rating))")
-                    )
-                }
-
-                if let level = cafe.priceLevel, let text = priceLevelText(for: level) {
-                    LabeledContent(String(localized: "価格帯")) {
-                        Text(text)
-                            .foregroundStyle(.secondary)
-                    }
-                    .accessibilityLabel(String(localized: "価格帯 \(text)"))
                 }
 
                 if let phone = cafe.phoneNumber,

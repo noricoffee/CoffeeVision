@@ -801,3 +801,14 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **`encodeDefaults = true` 必須**: 既定 false だと `version=1` や空 `tags`/`photos` が省略される（lessons の Places `Json{}` 教訓と同根のため新規 lessons は不要と判断）
 - **SKIE は `operator fun invoke` を Swift の `callAsFunction` 化しない**: iOS は `appContainer.exportCoffeeRecordsUseCase.invoke(userId:)` と明示呼び出し（`(userId:)` 糖衣不可）。他の `operator fun invoke` UseCase も同様
 - **B-6 解消（親対応）**: 15-E-2 の export テストは domain にあり、iOS 検証が backlog B-6（`FavoriteSignalsPersonaTest` の `"%.Nf".format` = JVM 専用で Native コンパイル不能）でブロックされていた。この壊れテストは domain の iOS テストを丸ごと止めており、15-E-1・15-E-2 と 2 度検証を阻害したため、親が Native 安全な `Double.fmt(digits)` ヘルパ（デバッグ/メッセージ用途のみ・アサーション条件に非関与）に全 44 箇所置換。domain の iOS テストが全 green に回復（Persona 11 / Export 4 / 他 failures=0）。以後 domain の Native テストが CI・親検証で回せる
+
+### 2026-07-07: 外部 Skill 導入（mattpocock/skills → grilling / diagnosing-bugs / writing-great-skills）
+
+- 領域: .claude/skills / ワークフロー
+- 出典: [mattpocock/skills](https://github.com/mattpocock/skills)（MIT License。各 SKILL.md 末尾に出典明記）
+
+- 全 20 個弱のうち 3 つを選定して日本語化 + 本プロジェクト調整で移植。**丸ごと導入（`npx skills add`）は不採用** — issue トラッカー前提のワークフロー系（triage / to-issues / to-prd）は docs/tasks.md + 親統制と競合し、code-review / handoff は Claude Code 組み込みと重複するため
+- **`grilling`**: 実装前の 1 問ずつ徹底インタビュー（事実は調べる / 意思決定だけ問う）。Plan Mode Default を補完。完了条件を本プロジェクト流（確定仕様を docs に固定してから dispatch）に接続
+- **`diagnosing-bugs`**: 「仮説より先に red-capable な tight フィードバックループを作る」6 フェーズの診断規律。フィードバックループ手段の一覧を KMP / iOS スタック（commonTest / iosSimulatorArm64Test の親実行 / xcrun simctl / HITL スクリプト）に置換。Phase 6 ポストモーテムを record-lesson skill・implementation_note・tasks.md バックログに接続。CLAUDE.md の Autonomous Bug Fixing / Plan Mode Default に参照 1 行ずつ追記
+- **`writing-great-skills`**: skill 設計原則のリファレンス（invocation の 2 択と 2 つの load、情報階層、leading word、no-op テスト、negation の害）。**原典は user-invoked だが model-invoked に変更** — 本プロジェクトでは親が record-lesson からの昇格等で skill を書く頻度が高く、自律到達の価値が context load を上回ると判断。GLOSSARY.md（201 行）は用語定義の精度維持のため原文英語のまま同梱
+- **見送り**: `domain-modeling` / CONTEXT.md（用語集の正本が data-model.md と割れるため。`_Avoid_` 付き用語集のフォーマットだけ将来 data-model.md 内セクションとして借りる案は任意バックログ）、`codebase-design`（architecture.md と役割重複。deep module / seam の語彙は読み物として有用）

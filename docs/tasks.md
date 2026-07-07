@@ -361,6 +361,19 @@
 
 ---
 
+## 外部 Skill の導入（2026-07-07）
+
+> [mattpocock/skills](https://github.com/mattpocock/skills)（MIT）から 3 Skill を選定し、日本語化 + 本プロジェクト調整で `.claude/skills/` に移植する。選定・調整の判断は implementation_note 2026-07-07 エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | `grilling` 移植（実装前の 1 問ずつ徹底インタビュー） | 2026-07-07 完了。Plan Mode Default を補完 |
+| [x] | `diagnosing-bugs` 移植（フィードバックループ先行のバグ診断ループ + HITL テンプレート） | 2026-07-07 完了。Phase 6 を record-lesson に接続 |
+| [x] | `writing-great-skills` 移植（Skill 設計原則リファレンス。GLOSSARY.md は原文同梱） | 2026-07-07 完了。model-invoked に変更（原典は user-invoked） |
+| [x] | CLAUDE.md への最小追記（grilling / diagnosing-bugs の参照）+ implementation_note 記録 | 2026-07-07 完了 |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

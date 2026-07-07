@@ -88,20 +88,28 @@ class PlacesClientImpl(
     override suspend fun searchText(query: String, locationBias: LocationBias): List<PlaceSummary> =
         searchTextInternal(
             query = query,
-            locationBias = LocationBiasDto(
-                circle = CircleDto(
-                    center = LatLngDto(
-                        latitude = locationBias.latitude,
-                        longitude = locationBias.longitude,
-                    ),
-                    radius = locationBias.radiusMeters,
-                )
-            ),
+            locationBias = locationBias.toDto(),
         )
+
+    override suspend fun searchByNameNear(query: String, locationBias: LocationBias): List<PlaceSummary> =
+        searchTextInternal(
+            query = query,
+            locationBias = locationBias.toDto(),
+            // 型フィルタを外す（Apple↔Google の型分類差で cafe から漏れる店も名前+位置で拾う）
+            includedType = null,
+        )
+
+    private fun LocationBias.toDto(): LocationBiasDto = LocationBiasDto(
+        circle = CircleDto(
+            center = LatLngDto(latitude = latitude, longitude = longitude),
+            radius = radiusMeters,
+        )
+    )
 
     private suspend fun searchTextInternal(
         query: String,
         locationBias: LocationBiasDto?,
+        includedType: String? = "cafe",
     ): List<PlaceSummary> {
         val response: PlacesListResponse = client.post(SEARCH_TEXT_URL) {
             contentType(ContentType.Application.Json)
@@ -110,7 +118,7 @@ class PlacesClientImpl(
             setBody(
                 SearchTextRequest(
                     textQuery = query,
-                    includedType = "cafe",
+                    includedType = includedType,
                     languageCode = "ja",
                     locationBias = locationBias,
                 )

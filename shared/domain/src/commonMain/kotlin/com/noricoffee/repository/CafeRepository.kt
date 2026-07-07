@@ -39,6 +39,21 @@ interface CafeRepository {
     suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe>
 
     /**
+     * 名前 + 位置バイアスで**型フィルタなし**のテキスト検索を行う（Apple Maps POI タップ解決専用）。
+     *
+     * [searchText] は `includedType=cafe` を強制するため、Apple が cafe 分類する店でも Google Places で
+     * `cafe`/`coffee_shop` 型でない店（ランドリー併設カフェ・食事カフェ等）は結果に出ない。POI タップの
+     * ように名前と座標が分かっている解決では、型フィルタを外して名前と位置で拾う（フェーズ 17-D）。
+     *
+     * @param query 検索キーワード（POI の表示名）
+     * @param locationBias 検索結果を優先するエリア（中心座標 + 半径）
+     * @return 検索結果の [Cafe] リスト。0 件の場合は空リスト
+     * @throws Exception API 呼び出し失敗時
+     */
+    @Throws(Exception::class)
+    suspend fun searchByNameNear(query: String, locationBias: LocationBias): List<Cafe>
+
+    /**
      * 現在地の周辺にあるカフェを検索する。
      *
      * @param latitude 検索中心点の緯度

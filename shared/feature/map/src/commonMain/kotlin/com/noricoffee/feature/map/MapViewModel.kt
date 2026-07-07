@@ -2,6 +2,7 @@ package com.noricoffee.feature.map
 
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.CafeRecommendationProvider
 import com.noricoffee.domain.model.RecommendedCafe
@@ -23,6 +24,8 @@ import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
+import kotlin.math.PI
+import kotlin.math.cos
 
 /**
  * マップ画面の ViewModel。
@@ -319,31 +322,30 @@ class MapViewModel(
     /**
      * Apple Maps の POI（地図上のカフェ / 飲食店アイコン等）をタップした際に呼ぶ。
      *
-     * [CafeRepository.searchNearby] を座標アンカーで呼び出し、その近傍候補の中から [name] と
-     * 名前が一致する候補を優先して [UIState.poiLookupResult] にセットする。名前一致が無ければ
-     * 最近傍（DISTANCE ランク済の先頭）にフォールバックする。
+     * [CafeRepository.searchByNameNear] を [name] + 位置バイアスで呼び出し、返った候補の中から
+     * タップ座標に最も近いもの（[name] 一致を優先）を [UIState.poiLookupResult] にセットする。
      * 連打された場合は前回の Job をキャンセルして新しい Job を起動する（`searchJob` 再起動パターン）。
      *
-     * 座標アンカーの近傍検索を採用しているのは、[CafeRepository.searchText] の `includedType=cafe` ハード
-     * フィルタが Apple↔Google の表示名差や `coffee_shop` プライマリ型（チェーン店に多い）の店で空振りしやすく、
-     * 見えているピンをタップしても解決できない不整合を起こしていたため（フェーズ 17-B）。
+     * ## なぜ型フィルタなしの名前+位置検索か（フェーズ 17-B → 17-C → 17-D）
+     * - 17-B: `searchText` の `includedType=cafe` フィルタは Apple↔Google の表示名差や `coffee_shop`
+     *   型（チェーン店に多い）で空振りしやすく、見えるピンがタップで解決できなかった。
+     * - 17-C: 代替に `searchNearby([cafe, coffee_shop])` の最近傍を採ったが、座標ズレ・近接複数店で別店を拾った。
+     * - 17-D: さらに Apple が cafe 分類する店でも Google では `cafe`/`coffee_shop` 型でない店（ランドリー併設・
+     *   食事カフェ等）は `searchNearby` の候補に入らず、近傍の唯一の cafe 型の店に**全部フォールバック**して
+     *   しまう不具合が判明。真因は型フィルタそのもの。そこで型フィルタを外した名前+位置検索
+     *   （[CafeRepository.searchByNameNear]）に切り替え、候補からタップ座標最近傍（名前一致優先）を選ぶ。
      *
-     * ただし最近傍のみを採ると、Apple の POI 座標が Google の同一店座標と数十 m ズレる場合や
-     * 150m 内に複数カフェが存在する場合に、タップした店ではなく近くの別店を拾ってしまう
-     * （フェーズ 17-C）。そのため位置で候補を絞ったあとに [name] による曖昧性解消を行う。
-     * これは [CafeRepository.searchText] のように名前を主クエリにするテキスト検索とは別の問題であり、
-     * あくまで座標近傍候補内での順位付けに使う。
+     * 見つからない場合は近傍の別店にフォールバックせず「該当なし」にする（自信満々に別店を開く挙動の排除）。
      *
      * ## 状態遷移
      * 1. `isLookingUpPoi = true`, `poiLookupError = null`
-     * 2. `cafeRepository.searchNearby(latitude, longitude, radiusMeters = 150.0)` を呼ぶ（DISTANCE ランク済）
+     * 2. `cafeRepository.searchByNameNear(name, LocationBias(latitude, longitude, 200m))` を呼ぶ
      * 3. 結果が空 → `poiLookupError = "該当するカフェが見つかりませんでした"`
-     * 4. 結果あり → [name] と [namesMatch] する候補のうち最も近いもの（`firstOrNull`）を採用し、
-     *    無ければ最近傍（`results.first()`）にフォールバックして `poiLookupResult` にセットする
+     * 4. 結果あり → [selectBestPoiMatch] でタップ座標最近傍（[name] 一致優先）を選び `poiLookupResult` にセット
      * 5. 例外 → `poiLookupError = e.message ?: "カフェ情報の取得に失敗しました"`
      * 6. `isLookingUpPoi = false`
      *
-     * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）。座標近傍候補内での
+     * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）。検索クエリ兼、候補内の
      *   曖昧性解消（[namesMatch]）に使う
      * @param latitude POI の緯度
      * @param longitude POI の経度
@@ -353,10 +355,13 @@ class MapViewModel(
         poiLookupJob = viewModelScope.launch {
             _state.update { it.copy(isLookingUpPoi = true, poiLookupError = null) }
             try {
-                val results = cafeRepository.searchNearby(
-                    latitude = latitude,
-                    longitude = longitude,
-                    radiusMeters = 150.0,
+                val results = cafeRepository.searchByNameNear(
+                    query = name,
+                    locationBias = LocationBias(
+                        latitude = latitude,
+                        longitude = longitude,
+                        radiusMeters = 200.0,
+                    ),
                 )
                 if (results.isEmpty()) {
                     _state.update {
@@ -366,8 +371,7 @@ class MapViewModel(
                         )
                     }
                 } else {
-                    val resolved = results.firstOrNull { namesMatch(it.name, name) }
-                        ?: results.first()
+                    val resolved = selectBestPoiMatch(results, name, latitude, longitude)
                     _state.update {
                         it.copy(
                             isLookingUpPoi = false,
@@ -517,4 +521,39 @@ private fun namesMatch(candidateName: String, tappedName: String): Boolean {
     if (normalizedCandidate.isEmpty()) return false
 
     return normalizedCandidate.contains(normalizedTapped) || normalizedTapped.contains(normalizedCandidate)
+}
+
+/**
+ * POI タップ解決の候補から最適な 1 件を選ぶ。
+ *
+ * [tappedName] と名前一致（[namesMatch]）する候補があればその集合、無ければ全候補を対象に、
+ * タップ座標 ([latitude], [longitude]) に最も近いものを返す。座標を持たない候補は距離比較から除外し、
+ * 対象がすべて座標を持たない場合のみ対象集合の先頭にフォールバックする。
+ *
+ * [candidates] は非空前提（呼び出し側で空チェック済み）。
+ */
+private fun selectBestPoiMatch(
+    candidates: List<Cafe>,
+    tappedName: String,
+    latitude: Double,
+    longitude: Double,
+): Cafe {
+    val nameMatched = candidates.filter { namesMatch(it.name, tappedName) }
+    val pool = nameMatched.ifEmpty { candidates }
+    return pool
+        .filter { it.latitude != null && it.longitude != null }
+        .minByOrNull { squaredGeoDistance(latitude, longitude, it.latitude!!, it.longitude!!) }
+        ?: pool.first()
+}
+
+/**
+ * 2 点間の距離の相対比較用の二乗距離（equirectangular 近似）。
+ *
+ * 経度差は緯度に応じて `cos(lat)` で補正する。厳密なメートル単位ではないが、
+ * 局所的な候補同士の「どれが最も近いか」を比較するには十分。
+ */
+private fun squaredGeoDistance(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+    val dLat = lat2 - lat1
+    val dLon = (lon2 - lon1) * cos(lat1 * PI / 180.0)
+    return dLat * dLat + dLon * dLon
 }

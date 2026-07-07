@@ -26,6 +26,9 @@ class CafeRepositoryImpl(
     override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> =
         placesClient.searchText(query, locationBias).map { it.toCafe() }
 
+    override suspend fun searchByNameNear(query: String, locationBias: LocationBias): List<Cafe> =
+        placesClient.searchByNameNear(query, locationBias).map { it.toCafe() }
+
     override suspend fun searchNearby(
         latitude: Double,
         longitude: Double,

@@ -464,7 +464,21 @@
 |------|------|------|
 | [x] | kmp-engineer: `onPoiTapped` に name 曖昧性解消を実装（近傍候補 → 名前一致優先 → 無ければ最近傍）。KDoc 更新。`MapViewModelPoiLookupTest` に「最近傍と別の名前一致候補を選ぶ / 一致なしは最近傍」ケース追加 | 2026-07-07 完了。`MapViewModel.kt` + `MapViewModelPoiLookupTest.kt` のみ。JVM test green（9/9）。`namesMatch` = 正規化（lowercase+空白除去）双方向 contains、タップ名 2 文字未満はスキップ。公開 API 不変 |
 | [x] | 親: iosSimulatorArm64Test（override 無し）| 2026-07-07 完了。`:shared:feature:map:iosSimulatorArm64Test` override 無し BUILD SUCCESSFUL（新規 2 含む 9/9）|
-| [ ] | 親: 目視促し + commit | 目視: チェーン近接（隣接スタバ等）や座標ズレでも正しい店が開くこと |
+| [x] | 親: iosSimulatorArm64Test（override 無し）+ 目視促し + commit | commit `0fca1af`。→ ただし目視で 17-D の別真因が発覚（下記） |
+
+### 17-D: タップが全部同じ店になる不具合の真因修正（Apple↔Google 型分類の食い違い）
+
+**症状（ユーザー目視・スクショ）**: 「夢やカフェ」「ふわランドリー&カフェ」「ごはんカフェ くるま」の 3 ピンが、どれをタップしても「夢やカフェ」の詳細を開く。
+
+**真因**: 17-B/17-C の解決は `searchNearby(includedPrimaryTypes=[cafe, coffee_shop])` に依存。しかし Apple が cafe 分類する店（ランドリー併設・食事カフェ等）は **Google では `cafe`/`coffee_shop` 型でない**ことがあり、その場合**近傍候補にすら入らない** → 近傍で唯一の cafe 型「夢やカフェ」に全部フォールバックする（名前一致も候補に無いので効かない）。前 2 回は「cafe 型候補の中の選択」という同系統の調整で、真因は**型フィルタそのもの**（同系統 2 回失敗 → プランモードで再調査、lessons 参照）。
+
+**方針**: 型フィルタを外し、**名前 + 位置バイアスのテキスト検索**（`includedType` 省略）で候補を取得 → タップ座標に**最も近いもの**を採る（名前一致を優先。同名チェーンは距離で解消）。見つからなければ「該当なし」（近傍の別店を自信満々に開く旧挙動を排除）。JSON は `explicitNulls=false`+`encodeDefaults=true` のため `includedType: String? = "cafe"` に変え null 渡しで省略可能。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | (1) data-places 型フィルタなし検索追加 `searchByNameNear`（`includedType` nullable 化 + null 省略）(2) `onPoiTapped` を `searchByNameNear(name, bias 200m)` → タップ座標最近傍（名前一致優先）へ (3) 全 `CafeRepository` 実装/Fake 追随（6 Fake + 1 PlacesClient Fake）(4) テスト更新 | 2026-07-08 親が直接実装（kmp-engineer がセッション上限で中断のため引き継ぎ）。domain + data-places + feature/map 横断。距離解決の新テスト 2 件追加 |
+| [x] | 親: JVM test（全影響モジュール）+ iosSimulatorArm64Test + 統合ビルド再検証（override 無し）| 2026-07-08 完了。JVM: data-places/map/cafe-search/cafe-detail/coffee-editor 全 green。`:shared:feature:map:iosSimulatorArm64Test` green（新規距離テスト含む）。統合 xcodebuild override 無し `** BUILD SUCCEEDED **` |
+| [ ] | 親: 目視促し + commit + lesson 記録 | 目視: 3 ピン（夢やカフェ/ふわランドリー&カフェ/ごはんカフェ くるま）がそれぞれ別の正しい店を開くこと。波及: 型フィルタ解除で bakery も解決可能に → iOS `.cafe` 限定と `MapTabView.swift:1383` コメントは再検討候補（今回は据え置き） |
 
 ---
 

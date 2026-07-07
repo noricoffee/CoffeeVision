@@ -46,6 +46,16 @@ class CafeRepositoryImplSearchTextTest {
             return stubbedResults
         }
 
+        override suspend fun searchByNameNear(
+            query: String,
+            locationBias: LocationBias,
+        ): List<PlaceSummary> {
+            searchTextCallCount++
+            lastSearchTextQuery = query
+            lastSearchTextLocationBias = locationBias
+            return stubbedResults
+        }
+
         override suspend fun searchNearby(
             latitude: Double,
             longitude: Double,

@@ -15,7 +15,9 @@ import kotlinx.serialization.Serializable
 @Serializable
 internal data class SearchTextRequest(
     val textQuery: String,
-    val includedType: String = "cafe",
+    // null のとき（`explicitNulls = false` により）JSON から省略され、型フィルタなし検索になる。
+    // POI タップ解決（`searchByNameNear`）では Apple↔Google の型分類差で cafe から漏れる店も拾うため null を渡す。
+    val includedType: String? = "cafe",
     val languageCode: String = "ja",
     val locationBias: LocationBiasDto? = null,
 )

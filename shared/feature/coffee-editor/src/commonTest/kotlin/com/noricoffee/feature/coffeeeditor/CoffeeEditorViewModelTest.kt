@@ -139,6 +139,8 @@ class CoffeeEditorViewModelTest {
 
         override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> = emptyList()
 
+        override suspend fun searchByNameNear(query: String, locationBias: LocationBias): List<Cafe> = emptyList()
+
         override suspend fun searchNearby(
             latitude: Double,
             longitude: Double,

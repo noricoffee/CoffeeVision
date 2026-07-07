@@ -65,6 +65,12 @@ class CafeSearchViewModelTest {
             return searchTextResult
         }
 
+        override suspend fun searchByNameNear(query: String, locationBias: LocationBias): List<Cafe> {
+            lastLocationBias = locationBias
+            searchTextError?.let { throw it }
+            return searchTextResult
+        }
+
         override suspend fun searchNearby(
             latitude: Double,
             longitude: Double,

@@ -588,9 +588,9 @@ struct MapTabView: View {
                 }
 
             }
-            // 自前の周辺カフェピン（Apple 検索由来）との二重表示を防ぐため、標準 cafe/bakery ラベルは
-            // 消す（他カテゴリの地図コンテキストは残す）。
-            .mapStyle(.standard(pointsOfInterest: .excluding([.cafe, .bakery])))
+            // 標準 POI ラベルは全カテゴリ非表示にする。自前の周辺カフェピン（Apple 検索由来）との
+            // 二重表示を防ぎ、ズーム時のラベル氾濫で自前ピンが見にくくなるのを避けるため。
+            .mapStyle(.standard(pointsOfInterest: .excludingAll))
             // 上端（ステータスバー）と左右はフルブリードにしつつ、下端のセーフエリアは保持する。
             // これにより MapKit が Legal/帰属表記を配置する基準が TabBar 上端になり、
             // Legal が TabBar の裏に隠れなくなる。

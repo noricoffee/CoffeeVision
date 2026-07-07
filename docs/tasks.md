@@ -450,7 +450,21 @@
 | [x] | kmp-engineer: `MapViewModel.onPoiTapped` の解決を `searchText(name, bias)` → `searchNearby(lat, lng, 150m)` に変更。`.first()` 採用（DISTANCE ランク済）。空→既存エラー / 例外ハンドリング維持。`name` 引数は bridge 安定のため残すが query には未使用（KDoc に理由記載）。`MapViewModelPoiLookupTest` を `searchNearby` スタブへ更新 | 2026-07-07 完了。JVM test green。公開 API 不変。親が `PlacesClientImpl.kt:81` の陳腐化コメント（POI タップはもう searchText 不使用）も同時修正 |
 | [x] | ios-engineer: Apple POI 取得フィルタを `[.cafe, .bakery]` → `[.cafe]` に変更（表示＝解決可能を揃える）。関連コメント追随 | 2026-07-07 完了。override 無し BUILD SUCCEEDED。`.mapStyle` の excluding は cafe/bakery 両方のまま維持（標準ラベル二重表示防止） |
 | [x] | 親: iosSimulatorArm64Test（override 無し）+ ビルド再検証 | 2026-07-07 完了。`:shared:feature:map:iosSimulatorArm64Test` override 無し BUILD SUCCESSFUL / 統合 xcodebuild override 無し `** BUILD SUCCEEDED **`（framework linkDebug UP-TO-DATE = KMP 変更取り込み済） |
-| [ ] | 親: 目視促し + commit | 目視: coffee_shop 系（スタバ等）タップ→詳細遷移すること / ベーカリーピンが出ないこと。目視 OK 後にフェーズ 17 全体を commit |
+| [x] | 親: 目視促し + commit | 2026-07-07 完了。commit `c6b0e90`。後続で `db4cee3`（標準 POI ラベル全非表示 `.excludingAll`）/ `cbe3032`（自前ピン視認性向上）も対応 |
+
+### 17-C: タップが「近くの別店」に解決される不具合の修正（目視で発覚）
+
+**症状**: 自前ピンをタップすると、たまにタップした店ではなく近くの別のカフェの詳細が開く。
+
+**原因**: `MapViewModel.onPoiTapped` が `searchNearby(lat, lng, 150m)` の結果を**距離順の先頭（最近傍）で採る**だけで、タップした POI の `name` を使っていない。Apple の POI 座標が Google の同一店座標と数十 m ズレる / 150m 内に複数カフェがある場合、最近傍＝別店を拾う。17-B で `name` を「bridge 安定のため残すが query 未使用」としたが、位置で候補を絞った後の**曖昧性解消（disambiguation）**には name が有効（名前を主クエリにするテキスト検索とは別問題）。
+
+**方針**: `searchNearby` で近傍候補を取得 → **タップ名と一致する候補を優先**、無ければ最近傍にフォールバック（＝現行挙動）。名前正規化は commonMain 完結（`lowercase()` + 空白除去）で双方向 `contains`。正規化後のタップ名が短すぎる（< 2 文字）場合は名前一致をスキップして最近傍。API シグネチャ・iOS 変更なし。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `onPoiTapped` に name 曖昧性解消を実装（近傍候補 → 名前一致優先 → 無ければ最近傍）。KDoc 更新。`MapViewModelPoiLookupTest` に「最近傍と別の名前一致候補を選ぶ / 一致なしは最近傍」ケース追加 | 2026-07-07 完了。`MapViewModel.kt` + `MapViewModelPoiLookupTest.kt` のみ。JVM test green（9/9）。`namesMatch` = 正規化（lowercase+空白除去）双方向 contains、タップ名 2 文字未満はスキップ。公開 API 不変 |
+| [x] | 親: iosSimulatorArm64Test（override 無し）| 2026-07-07 完了。`:shared:feature:map:iosSimulatorArm64Test` override 無し BUILD SUCCESSFUL（新規 2 含む 9/9）|
+| [ ] | 親: 目視促し + commit | 目視: チェーン近接（隣接スタバ等）や座標ズレでも正しい店が開くこと |
 
 ---
 

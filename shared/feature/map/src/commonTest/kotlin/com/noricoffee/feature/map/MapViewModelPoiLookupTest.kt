@@ -281,6 +281,60 @@ class MapViewModelPoiLookupTest {
     }
 
     @Test
+    fun onPoiTapped_multipleNearbyCandidates_prefersNameMatchOverNearest() = runTest {
+        val nearestButDifferentName = makeCafe("nearest-different-name").copy(name = "別のカフェ")
+        val nameMatchedButFarther = makeCafe("name-matched").copy(name = "スターバックス コーヒー 渋谷店")
+        fakeCafeRepo.searchNearbyResult = listOf(nearestButDifferentName, nameMatchedButFarther)
+
+        val vm = MapViewModel(
+            observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
+            cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
+            userId = "user-01",
+            scope = this,
+        )
+
+        vm.onPoiTapped(name = "スターバックス", latitude = 35.658, longitude = 139.701)
+        testScheduler.advanceUntilIdle()
+
+        val state = vm.state.value
+        assertFalse(state.isLookingUpPoi)
+        assertEquals(nameMatchedButFarther, state.poiLookupResult)
+        assertNull(state.poiLookupError)
+
+        vm.clear()
+    }
+
+    @Test
+    fun onPoiTapped_noNameMatch_fallsBackToNearest() = runTest {
+        val nearest = makeCafe("nearest").copy(name = "全く違う店名のカフェ")
+        val second = makeCafe("second").copy(name = "これも違う店名")
+        fakeCafeRepo.searchNearbyResult = listOf(nearest, second)
+
+        val vm = MapViewModel(
+            observeVisitedCafesUseCase = useCase,
+            cafeRecommendationProvider = fakeRecommendationProvider,
+            cafeRepository = fakeCafeRepo,
+            coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
+            userId = "user-01",
+            scope = this,
+        )
+
+        vm.onPoiTapped(name = "タップしたカフェ", latitude = 35.658, longitude = 139.701)
+        testScheduler.advanceUntilIdle()
+
+        val state = vm.state.value
+        assertFalse(state.isLookingUpPoi)
+        assertEquals(nearest, state.poiLookupResult)
+        assertNull(state.poiLookupError)
+
+        vm.clear()
+    }
+
+    @Test
     fun onPoiTapped_retainsVisitedCafes() = runTest {
         fakeCafeRepo.searchNearbyResult = listOf(makeCafe("poi-001"))
 

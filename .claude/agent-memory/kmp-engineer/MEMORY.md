@@ -12,3 +12,4 @@
 - [CoffeeStats 派生 UseCase 追加パターン](coffeestats_derived_usecase_addition.md) — BeanProfile 突合系の新集計は `BuildCoffeeStatsUseCase.invoke()` 内で計算し `CoffeeStats` に直生やしする（VM 配線不要）。`BeanProfileMatchUseCase` の再利用ポイント
 - [Cafe 揮発フィールド追加パターン](cafe_volatile_places_field_addition.md) — FieldMask/DTO/PlaceSummary/Mapper の 5 箇所 + `CafeDetailViewModel` の条件付き Details リフレッシュ設計（`googleRating` を鮮度センチネルに使う）
 - [VM の Repository メソッド差し替えパターン](vm_repository_method_swap_pattern.md) — searchText→searchNearby 等の呼び出し先変更時の KDoc 更新箇所 3 つ + Fake テストのリネーム手順 + 他 feature への影響 grep
+- [POI 近傍曖昧性解消パターン](poi_nearby_disambiguation_pattern.md) — searchNearby 結果から単一候補を`.first()`だけで選ぶと別店を拾う。名前一致優先+フォールバックの実装場所

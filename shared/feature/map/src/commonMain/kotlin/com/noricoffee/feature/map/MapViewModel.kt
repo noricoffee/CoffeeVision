@@ -29,7 +29,7 @@ import kotlinx.datetime.Clock
  *
  * - [ObserveVisitedCafesUseCase] を常時購読し、訪問済みカフェのピンを [UIState.visitedCafes] で管理
  * - [CafeRecommendationProvider] を常時購読し、好み一致カフェのピン強調を [UIState.recommendedCafes] で管理
- * - [onPoiTapped] で Apple Maps POI タップ時に Places 解決（searchNearby 経路）を実行する
+ * - [onPoiTapped] で Apple Maps POI タップ時に Places 解決（searchNearby 経路 + 名前による曖昧性解消）を実行する
  * - [onShowVisitedToggled] でマップ上の訪問済みピン表示 / 非表示を切り替える
  *
  * ## CoroutineScope の注意
@@ -319,23 +319,32 @@ class MapViewModel(
     /**
      * Apple Maps の POI（地図上のカフェ / 飲食店アイコン等）をタップした際に呼ぶ。
      *
-     * [CafeRepository.searchNearby] を座標アンカーで呼び出し、最も近い候補を [UIState.poiLookupResult] にセットする。
+     * [CafeRepository.searchNearby] を座標アンカーで呼び出し、その近傍候補の中から [name] と
+     * 名前が一致する候補を優先して [UIState.poiLookupResult] にセットする。名前一致が無ければ
+     * 最近傍（DISTANCE ランク済の先頭）にフォールバックする。
      * 連打された場合は前回の Job をキャンセルして新しい Job を起動する（`searchJob` 再起動パターン）。
      *
      * 座標アンカーの近傍検索を採用しているのは、[CafeRepository.searchText] の `includedType=cafe` ハード
      * フィルタが Apple↔Google の表示名差や `coffee_shop` プライマリ型（チェーン店に多い）の店で空振りしやすく、
      * 見えているピンをタップしても解決できない不整合を起こしていたため（フェーズ 17-B）。
      *
+     * ただし最近傍のみを採ると、Apple の POI 座標が Google の同一店座標と数十 m ズレる場合や
+     * 150m 内に複数カフェが存在する場合に、タップした店ではなく近くの別店を拾ってしまう
+     * （フェーズ 17-C）。そのため位置で候補を絞ったあとに [name] による曖昧性解消を行う。
+     * これは [CafeRepository.searchText] のように名前を主クエリにするテキスト検索とは別の問題であり、
+     * あくまで座標近傍候補内での順位付けに使う。
+     *
      * ## 状態遷移
      * 1. `isLookingUpPoi = true`, `poiLookupError = null`
-     * 2. `cafeRepository.searchNearby(latitude, longitude, radiusMeters = 150.0)` を呼ぶ（DISTANCE ランク済のため `.first()` を採用）
+     * 2. `cafeRepository.searchNearby(latitude, longitude, radiusMeters = 150.0)` を呼ぶ（DISTANCE ランク済）
      * 3. 結果が空 → `poiLookupError = "該当するカフェが見つかりませんでした"`
-     * 4. 結果あり → `poiLookupResult = results.first()`
+     * 4. 結果あり → [name] と [namesMatch] する候補のうち最も近いもの（`firstOrNull`）を採用し、
+     *    無ければ最近傍（`results.first()`）にフォールバックして `poiLookupResult` にセットする
      * 5. 例外 → `poiLookupError = e.message ?: "カフェ情報の取得に失敗しました"`
      * 6. `isLookingUpPoi = false`
      *
-     * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）。座標解決のため検索クエリには使わないが、
-     *   呼び出し元（iOS Bridge）のシグネチャ安定のため引数として残す
+     * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）。座標近傍候補内での
+     *   曖昧性解消（[namesMatch]）に使う
      * @param latitude POI の緯度
      * @param longitude POI の経度
      */
@@ -357,10 +366,12 @@ class MapViewModel(
                         )
                     }
                 } else {
+                    val resolved = results.firstOrNull { namesMatch(it.name, name) }
+                        ?: results.first()
                     _state.update {
                         it.copy(
                             isLookingUpPoi = false,
-                            poiLookupResult = results.first(),
+                            poiLookupResult = resolved,
                         )
                     }
                 }
@@ -482,4 +493,28 @@ class MapViewModel(
     fun clear() {
         viewModelScope.cancel()
     }
+}
+
+/**
+ * [MapViewModel.onPoiTapped] の座標近傍候補内での曖昧性解消に使う、緩い名前一致判定。
+ *
+ * 双方を小文字化して空白を除去したうえで、どちらかが他方を包含していれば一致とみなす
+ * （例: Apple "スターバックス" と Google "スターバックス コーヒー 渋谷店" は一致）。
+ * ローカライズや表記ゆれで完全一致は期待できないための緩和だが、緩めすぎると短い
+ * generic な名前（"カフェ" 等。iOS 側は POI 名が nil のときこれを渡す）が無関係な
+ * 候補と誤マッチするため、正規化後の [tappedName] が 2 文字未満のときは常に false を返す。
+ *
+ * @param candidateName 近傍検索結果側のカフェ名
+ * @param tappedName タップした POI の表示名
+ */
+private fun namesMatch(candidateName: String, tappedName: String): Boolean {
+    fun normalize(value: String): String = value.lowercase().filterNot { it.isWhitespace() }
+
+    val normalizedTapped = normalize(tappedName)
+    if (normalizedTapped.length < 2) return false
+
+    val normalizedCandidate = normalize(candidateName)
+    if (normalizedCandidate.isEmpty()) return false
+
+    return normalizedCandidate.contains(normalizedTapped) || normalizedTapped.contains(normalizedCandidate)
 }

@@ -9,6 +9,7 @@
 | `Config.xcconfig` | する | TEAM_ID / バンドル ID / その他ビルド設定 |
 | `Base.xcconfig` | する | API キー変数宣言 + Secrets.xcconfig の optional include |
 | `Secrets.xcconfig` | しない | ローカル開発用 API キー（.gitignore 済） |
+| `ExportOptions.plist` | する | App Store Connect 提出用エクスポート設定（`release-testflight.yml` から使用） |
 
 ## Places API キーの設定手順
 
@@ -24,6 +25,8 @@
 ## 注意事項
 
 - `Secrets.xcconfig` は `.gitignore` に登録済みのためコミットされない
-- CI 環境（GitHub Actions 等）では `Secrets.xcconfig` が存在しないため `PLACES_API_KEY` が空文字になる
+- 検証用 CI（`ci.yml`）では `Secrets.xcconfig` が存在しないため `PLACES_API_KEY` が空文字になる
   アプリはビルドできるが、Places API 呼び出しは 401 エラーになる
+- リリースワークフロー（`release-testflight.yml`）は GitHub Secrets の `PLACES_API_KEY` から
+  `Secrets.xcconfig` を、`GOOGLE_SERVICE_INFO_PLIST_BASE64` から `GoogleService-Info.plist` を復元してビルドする
 - API キーの管理・ローテーション・利用制限については Google Cloud Console のドキュメントを参照

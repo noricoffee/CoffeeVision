@@ -26,7 +26,9 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [~] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 初回追加、Phase 2.5 PR3 で現行コマンド（サマリ参照）に差し替え済。ローカル両ジョブ成功確認済。**初回 PR で workflow グリーン確認後 [x]**（バックログ B-5 と同件） |
-| [ ] | `local.properties` での API キー管理を整える（Places / Firebase） | Places 側は Phase 4 スライス 1（2026-06-11）で整備済。残は CI での Firebase 設定ファイル復元手段の検討（リリース準備時） |
+| [x] | `local.properties` での API キー管理を整える（Places / Firebase） | Places 側は Phase 4 スライス 1（2026-06-11）で整備済。CI での Firebase 設定ファイル復元は 2026-07-07 の TestFlight ワークフローで解消（Secrets → `GoogleService-Info.plist` / `Secrets.xcconfig` 復元） |
+| [x] | App Store Connect アップロードワークフロー（`release-testflight.yml`）| 2026-07-07 完了。workflow_dispatch 手動起動 / ASC API キー + cloud signing / ビルド番号 = `github.run_number`。判断は implementation_note 2026-07-07 エントリ |
+| [ ] | **（ユーザー作業）** TestFlight ワークフローの Secrets 5 件登録 + 初回実行確認 | `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_PRIVATE_KEY`（.p8 の中身・**App Manager 以上のロール必須**）/ `GOOGLE_SERVICE_INFO_PLIST_BASE64` / `PLACES_API_KEY`。登録後 Actions から手動実行し TestFlight にビルドが現れることを確認 |
 
 ---
 

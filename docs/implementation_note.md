@@ -824,3 +824,16 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **`TasteMapFilterSheet` / `TasteSearchSheet` / sparkles 系の accentColor は pink 化対象外**: 「好みで絞り込む」（フィルタ操作 UI）と「好み一致」（推薦結果のセマンティクス）を別概念と整理。pink は推薦結果（recommendedCafePin・凡例・RecommendationMatchSheet の軸アイコン）のみ
 - **TagChip の count バッジ配色**: 選択時 = 白背景 + accentColor 文字、非選択時 = accentColor 背景 + 白文字（旧右上ボタンの indigo バッジ意匠を選択状態で反転させる形。仕様未記載のため実装判断）
 - **後続候補**: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きのまま孤立（visitedCafePin の brown→accentColor 化に未追随。SavedCafeListSheet.swift:78）。次にこのファイルを触るとき accentColor へ揃える
+
+### 2026-07-07: App Store Connect アップロードワークフロー（release-testflight.yml）
+
+- 領域: Build / CI
+- 関連: `.github/workflows/release-testflight.yml`、`iosApp/Configuration/ExportOptions.plist`、`iosApp/iosApp.xcodeproj`（Run Script）
+
+TestFlight へのアップロードを GitHub Actions（`workflow_dispatch` 手動起動のみ）で行う。主要判断:
+
+- **署名は ASC API キー + cloud signing**（`xcodebuild -allowProvisioningUpdates` + `-authenticationKey*`）。Secrets は .p8 の中身だけで済み、p12 のエクスポート・期限管理が不要。API キーは **App Manager 以上のロール必須**（Distribution 証明書を Apple 側が自動作成するため）。不採用: p12 + プロファイルの Secrets 登録（証明書更新のたびに Secrets 更新）/ fastlane（Ruby 依存が増える。スクリーンショット自動化等が必要になったら再検討）
+- **アップロードは `-exportArchive` 1 コマンド**: `ExportOptions.plist` の `destination=upload` でエクスポートと同時に ASC へ送る（altool は deprecated、Transporter 別立ても不要）
+- **ビルド番号 = `github.run_number`** を `CURRENT_PROJECT_VERSION` としてアーカイブ時に注入（コミット不要で単調増加）。`manageAppVersionAndBuildNumber=false` で Apple 側自動採番と競合させない。MARKETING_VERSION は `Config.xcconfig` の値を使う
+- **Run Script（Compile Kotlin Framework）の JAVA_HOME を条件分岐化**: 旧実装は Android Studio の JBR を無条件 export しており CI ランナーで壊れるため、ディレクトリ存在時のみ export に変更（CI では setup-java の JAVA_HOME を継承）
+- 影響: gitignore 済み秘匿ファイル（`GoogleService-Info.plist` / `Secrets.xcconfig`）は Secrets から復元する運用が確立。ランナーは deployment target iOS 26.0 の制約で `macos-26`（Xcode 26 系を `xcode-select` で選択）。Konan キャッシュは ci.yml と同一キーで共有

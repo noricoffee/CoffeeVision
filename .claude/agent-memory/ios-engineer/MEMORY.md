@@ -54,6 +54,18 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 - ただし `CoffeeStats(...)` を直接呼んでいる箇所（`PreviewSupport/PreviewSamples.swift` の `sampleCoffeeStats` のみ、2026-07-07 時点）は positional init のため新規フィールド追加のたびに**必ず**引数を足す必要がある（`grep -rn "CoffeeStats(" iosApp --include="*.swift"` で洗い出し。`CoffeeRecord` と同型の落とし穴）。
 - SKIE Swift 名の裏取り結果: `UnexploredBeanSuggestion`（`profile: BeanProfile` + `matchedOriginLabel: String`）、`BeanProfile.init(beanId:name:origin:variety:processings:flavorNotes:description:)`。`ProcessingMethod` は Kotlin enum ながら Swift 側で `CaseIterable` な素の enum として見え、`.natural`/`.washed`/`.honey`/`.anaerobic`/`.other` の lowerCamel case でリテラル生成できる（`ProcessingMethod.allCases` / `.name` は既存コードで確立パターン）。
 
+## `.buttonStyle(condition ? .borderedProminent : .bordered)` は型不一致でビルドエラー（2026-07-07、フェーズ 16 保存ボタン切替で確認）
+
+- `BorderedProminentButtonStyle` と `BorderedButtonStyle` は別の具象型のため、三項演算子で `some ButtonStyle` に代入しようとすると `type 'ButtonStyle' has no member 'borderedProminent'/'bordered'` になる（`.buttonStyle(_:)` は generic over concrete `S: ButtonStyle` であり、分岐で型推論できない）。見た目だけ変える（tint 切替）なら 1 つの style + `.tint(condition ? .indigo : nil)` で済ませるのが簡単。**style 自体を切り替える必要がある場合**（例: 未保存=`.bordered` / 保存済み=`.borderedProminent` の要件）は `@ViewBuilder` 関数にして `if condition { Button(...).buttonStyle(.borderedProminent) } else { Button(...).buttonStyle(.bordered) }` と分岐ごと丸ごと書き分ける（`CafeDetailView.saveButton` 参照。ラベル View は `let label = Label(...)` で 1 箇所に共通化できる）。
+
+## Xcode AccentColor（カスタムカラー）の Contents.json は hex バイト文字列（`"0x8B"`）形式（2026-07-07、フェーズ 16 で確認）
+
+- `Assets.xcassets/*.colorset/Contents.json` の `components` は 10 進小数（`"1.000"`）ではなく `red`/`green`/`blue` それぞれ `"0xRR"` 形式の 8bit hex 文字列で書く（`alpha` のみ `"1.000"` 形式）。ダーク対応は `colors` 配列に `"appearances": [{"appearance": "luminosity", "value": "dark"}]` を付けた 2 つ目のエントリを追加する（`idiom: universal` のまま）。手書きで問題なくビルドに反映される（Xcode Asset Catalog Compiler がこの形式を読む）。
+
+## 共通 `TagChip` コンポーネント（フェーズ 16 で新設、`Components/TagChip.swift`）
+
+- マップ / 一覧で使う「選択トグル可能なチップ」は `TagChip`（`label:systemImage:isOn:count:action:`、選択時 accentColor 塗り、`count` 指定で右上に件数バッジ）と、非インタラクティブな凡例表示用 `TagLegendChip`（`label:systemImage:tint:`）の 2 種に共通化済み。新しいフィルタ/凡例 UI が必要になったらここに追加する（画面ごとに private struct を再実装しない）。
+
 ## SKIE sealed class の新規 case 追加は Obj-C ヘッダで型名・init シグネチャを裏取りするのが必須（2026-07-06、`Mode.Duplicate` 追加で確認）
 
 - Kotlin の `sealed interface Mode { data class Duplicate(val sourceCoffeeId: String) : Mode }` は Swift 側で `SharedLogicCoffeeEditorViewModelModeDuplicate`（`swift_name` 属性で `CoffeeEditorViewModelModeDuplicate` に短縮）になり、`init(sourceCoffeeId:)` で構築する。既存の `ModeEdit(coffeeId:)` と同じ命名パターンなので類推で書けるが、念のためヘッダで `initWith...` 属性を確認してから使う。

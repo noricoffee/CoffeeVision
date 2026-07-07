@@ -219,7 +219,8 @@ enum CoffeeFirestoreMapper {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         )
     }
 

@@ -59,7 +59,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
         Cafe(
             placeId: "ChIJsampleSteamers",
@@ -74,7 +75,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
         Cafe(
             placeId: "ChIJsampleFuglen",
@@ -89,7 +91,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
     ]
 
@@ -137,14 +140,15 @@ enum PreviewSamples {
             address: "東京都世田谷区太子堂4-1-22",
             latitude: KotlinDouble(value: 35.6448),
             longitude: KotlinDouble(value: 139.6694),
-            photoReferences: [],
+            photoReferences: ["places/ChIJsampleBluBottle/photos/Aap_sample1"],
             websiteUrl: "https://bluebottlecoffee.jp/",
             mapsUrl: "https://maps.google.com/?cid=sample",
-            openNow: nil,
+            openNow: KotlinBoolean(value: true),
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: KotlinDouble(value: 4.5),
+            userRatingCount: KotlinInt(value: 128)
         ),
         visitedOn: localDate(year: 2026, month: 6, day: 2),
         rating: 4.5,
@@ -187,7 +191,8 @@ enum PreviewSamples {
             weekdayDescriptions: [],
             phoneNumber: nil,
             priceLevel: nil,
-            googleRating: nil
+            googleRating: nil,
+            userRatingCount: nil
         ),
         visitedOn: localDate(year: 2026, month: 5, day: 28),
         rating: 3.0,
@@ -261,7 +266,8 @@ enum PreviewSamples {
                 weekdayDescriptions: [],
                 phoneNumber: nil,
                 priceLevel: nil,
-                googleRating: nil
+                googleRating: nil,
+                userRatingCount: nil
             ),
             matches: [
                 RecommendationReasonTasteProfileMatch(

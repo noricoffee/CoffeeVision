@@ -134,6 +134,12 @@ final class MapViewModelBridge {
         kotlin.onSavedCafeRemoved(placeId: placeId)
     }
 
+    /// マップ下部カードの保存トグルボタンから呼ぶ（フェーズ 16）。
+    /// 保存済みなら解除、未保存なら保存する（Kotlin 側で判定）。
+    func onCafeSaveToggled(cafe: Cafe) {
+        kotlin.onCafeSaveToggled(cafe: cafe)
+    }
+
     // MARK: - Private
 
     private func startObservation() {

@@ -10,3 +10,4 @@
 - [Edit ツールの全角文字ミスマッチ](edit_tool_fullwidth_char_gotcha.md) — 日本語コメントの全角括弧等で Edit が繰り返し失敗するときは python3 スクリプト置換に切り替える
 - [kotlinx-serialization export DTO の罠](kotlinx_serialization_export_gotchas.md) — `encodeDefaults` 既定 false でデフォルト値フィールドが消える / `JsonNull` は非 null / SKIE は `invoke` を `callAsFunction` 化しない / DEVELOPER_DIR での XCFramework 検証再確認
 - [CoffeeStats 派生 UseCase 追加パターン](coffeestats_derived_usecase_addition.md) — BeanProfile 突合系の新集計は `BuildCoffeeStatsUseCase.invoke()` 内で計算し `CoffeeStats` に直生やしする（VM 配線不要）。`BeanProfileMatchUseCase` の再利用ポイント
+- [Cafe 揮発フィールド追加パターン](cafe_volatile_places_field_addition.md) — FieldMask/DTO/PlaceSummary/Mapper の 5 箇所 + `CafeDetailViewModel` の条件付き Details リフレッシュ設計（`googleRating` を鮮度センチネルに使う）

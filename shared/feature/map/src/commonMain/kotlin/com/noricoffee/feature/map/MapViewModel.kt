@@ -23,6 +23,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
 
 /**
  * マップ画面の ViewModel。
@@ -433,6 +434,40 @@ class MapViewModel(
                 throw e
             } catch (e: Exception) {
                 _state.update { it.copy(error = e.message ?: "行きたい店の解除に失敗しました") }
+            }
+        }
+    }
+
+    /**
+     * マップ上のフィルタチップ / ピン等から「行きたい店」の保存 / 解除をトグルする（フェーズ 16）。
+     *
+     * [UIState.savedCafes] に [cafe] の `placeId` が含まれていれば [SavedCafeRepository.delete] で解除し、
+     * 含まれていなければ [cafe] のスナップショットから [SavedCafe] を作って [SavedCafeRepository.save] する。
+     * どちらも成功すれば [UIState.savedCafes] の購読が自動で更新される（明示的な _state.update は不要）。
+     * `note` は v1 では常に空文字（[com.noricoffee.feature.cafedetail.CafeDetailViewModel.onSaveToggled] と同じ扱い）。
+     *
+     * @param cafe トグル対象のカフェ（マップピン / 検索結果 / 一覧シート等から渡される Cafe スナップショット）
+     */
+    fun onCafeSaveToggled(cafe: Cafe) {
+        val isSaved = _state.value.savedCafes.any { it.cafe.placeId == cafe.placeId }
+        viewModelScope.launch {
+            try {
+                if (isSaved) {
+                    savedCafeRepository.delete(userId, cafe.placeId)
+                } else {
+                    savedCafeRepository.save(
+                        SavedCafe(
+                            userId = userId,
+                            cafe = cafe,
+                            note = "",
+                            savedAt = Clock.System.now(),
+                        )
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(error = e.message ?: "行きたい店の保存 / 解除に失敗しました") }
             }
         }
     }

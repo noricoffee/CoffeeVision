@@ -128,6 +128,7 @@ fun AppContainer.makeCafeDetailViewModel(
 ): CafeDetailViewModel =
     CafeDetailViewModel(
         coffeeRepository = coffeeRepository,
+        cafeRepository = cafeRepository,
         savedCafeRepository = savedCafeRepository,
         placeId = placeId,
         initialCafe = initialCafe,

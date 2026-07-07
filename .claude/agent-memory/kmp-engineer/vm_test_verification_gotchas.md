@@ -17,6 +17,16 @@ metadata:
 （`-u` を付けないと新規ファイルが残ってしまい誤診断になる）。既存の別バグと確認できたら、
 自分のタスクを検証可能にするための最小修正として直してよい（スコープ内 commonTest ファイルの trivial fix）。
 
+**2026-07-07 の別インスタンス**: `shared/data-places` で `Cafe.userRatingCount` を追加しただけで
+`compileTestKotlinIosSimulatorArm64` が `CafeRepositoryImplSearchTextTest.kt` の
+`PlaceSummary(...)` 構築（openNow 以降のフィールドを省略）で `No value passed for parameter` 多発。
+`PlaceSummary` はフィールドにデフォルト値がない data class なので、5 フィールド分（openNow〜googleRating）
+が phase 10-a/b 追加時からずっと未追随だった既存債務。同時に同モジュールの
+`PlacesClientImplPhotoMediaTest.kt` が Kotlin stdlib の `assert(...)`（`kotlin.test.assertTrue` ではなく）を
+使っており `ExperimentalNativeApi` 未 opt-in で iOS ターゲットのみコンパイル不能だった
+（JVM `testAndroidHostTest` は通っていたため見過ごされていた）。どちらも「JVM は green だが iOS だけ死んでいる」
+典型パターン。`assert(cond) { msg }` → `assertTrue(cond, msg)` に置換すれば opt-in 不要で解決する。
+
 ## 罠2: `UncompletedCoroutinesError`（vm.clear() 忘れ）
 
 `viewModelScope = CoroutineScope(scope.coroutineContext + SupervisorJob(...))` パターンの VM は、

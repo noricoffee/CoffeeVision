@@ -14,4 +14,5 @@ data class Cafe(
     val phoneNumber: String? = null,
     val priceLevel: String? = null,
     val googleRating: Double? = null,
+    val userRatingCount: Int? = null,
 )

@@ -2,7 +2,9 @@ package com.noricoffee.feature.cafedetail
 
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.model.SavedCafe
+import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
 import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.flow.Flow
@@ -31,6 +33,30 @@ class CafeDetailViewModelSavedCafeTest {
         override fun observeByCafe(userId: String, placeId: String): Flow<List<CoffeeRecord>> = flowOf(emptyList())
         override suspend fun save(record: CoffeeRecord) = Unit
         override suspend fun delete(userId: String, id: String) = Unit
+    }
+
+    /**
+     * [CafeDetailViewModel] の details リフレッシュ用フェイク（フェーズ 16）。
+     *
+     * デフォルトでは [makeCafe] と同じスナップショットを返す（このテスト群は details の内容自体は検証しない）。
+     */
+    private class FakeCafeRepository(
+        private val detailsResult: Cafe = makeCafe(),
+    ) : CafeRepository {
+        override suspend fun searchText(query: String): List<Cafe> = emptyList()
+        override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> = emptyList()
+        override suspend fun searchNearby(
+            latitude: Double,
+            longitude: Double,
+            radiusMeters: Double,
+        ): List<Cafe> = emptyList()
+
+        override suspend fun getDetails(placeId: String): Cafe = detailsResult
+        override suspend fun photoMediaUrl(
+            photoName: String,
+            maxWidthPx: Int?,
+            maxHeightPx: Int?,
+        ): String = "https://fake.example.com/photo"
     }
 
     private class FakeSavedCafeRepository(
@@ -88,6 +114,7 @@ class CafeDetailViewModelSavedCafeTest {
 
         val vm = CafeDetailViewModel(
             coffeeRepository = FakeCoffeeRepository(),
+            cafeRepository = FakeCafeRepository(),
             savedCafeRepository = fakeSavedCafeRepo,
             placeId = PLACE_ID,
             initialCafe = makeCafe(),
@@ -107,6 +134,7 @@ class CafeDetailViewModelSavedCafeTest {
 
         val vm = CafeDetailViewModel(
             coffeeRepository = FakeCoffeeRepository(),
+            cafeRepository = FakeCafeRepository(),
             savedCafeRepository = fakeSavedCafeRepo,
             placeId = PLACE_ID,
             initialCafe = makeCafe(),
@@ -139,6 +167,7 @@ class CafeDetailViewModelSavedCafeTest {
 
         val vm = CafeDetailViewModel(
             coffeeRepository = FakeCoffeeRepository(),
+            cafeRepository = FakeCafeRepository(),
             savedCafeRepository = fakeSavedCafeRepo,
             placeId = PLACE_ID,
             initialCafe = makeCafe(),
@@ -164,6 +193,7 @@ class CafeDetailViewModelSavedCafeTest {
 
         val vm = CafeDetailViewModel(
             coffeeRepository = FakeCoffeeRepository(),
+            cafeRepository = FakeCafeRepository(),
             savedCafeRepository = fakeSavedCafeRepo,
             placeId = PLACE_ID,
             initialCafe = makeCafe(),

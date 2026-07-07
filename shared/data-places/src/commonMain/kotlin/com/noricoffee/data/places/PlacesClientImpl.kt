@@ -205,6 +205,7 @@ class PlacesClientImpl(
         phoneNumber = nationalPhoneNumber,
         priceLevel = priceLevel,
         googleRating = rating,
+        userRatingCount = userRatingCount,
     )
 
     private companion object {
@@ -233,7 +234,8 @@ class PlacesClientImpl(
         const val FIELD_MASK =
             "places.id,places.displayName,places.formattedAddress," +
                 "places.location,places.websiteUri,places.googleMapsUri,places.photos," +
-                "places.currentOpeningHours,places.nationalPhoneNumber,places.priceLevel,places.rating"
+                "places.currentOpeningHours,places.nationalPhoneNumber,places.priceLevel,places.rating," +
+                "places.userRatingCount"
 
         /**
          * Place Details 用 FieldMask（接頭辞 `places.` なし）。
@@ -243,7 +245,7 @@ class PlacesClientImpl(
          */
         const val DETAILS_FIELD_MASK =
             "id,displayName,formattedAddress,location,websiteUri,googleMapsUri,photos," +
-                "currentOpeningHours,nationalPhoneNumber,priceLevel,rating"
+                "currentOpeningHours,nationalPhoneNumber,priceLevel,rating,userRatingCount"
     }
 }
 

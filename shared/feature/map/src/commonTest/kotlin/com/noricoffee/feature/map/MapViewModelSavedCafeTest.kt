@@ -18,6 +18,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -65,11 +66,19 @@ class MapViewModelSavedCafeTest {
     ) : SavedCafeRepository {
         val savedCafesFlow = MutableStateFlow(initial)
         val deleted = mutableListOf<Pair<String, String>>()
+        val saved = mutableListOf<SavedCafe>()
+        var failSave = false
+        var failDelete = false
 
         override fun observeAll(userId: String): Flow<List<SavedCafe>> = savedCafesFlow
         override fun observeByPlaceId(userId: String, placeId: String): Flow<SavedCafe?> = flowOf(null)
-        override suspend fun save(savedCafe: SavedCafe) = Unit
+        override suspend fun save(savedCafe: SavedCafe) {
+            if (failSave) throw RuntimeException("save failed")
+            saved.add(savedCafe)
+            savedCafesFlow.value = savedCafesFlow.value + savedCafe
+        }
         override suspend fun delete(userId: String, placeId: String) {
+            if (failDelete) throw RuntimeException("delete failed")
             deleted.add(userId to placeId)
             savedCafesFlow.value = savedCafesFlow.value.filterNot { it.cafe.placeId == placeId }
         }
@@ -183,6 +192,94 @@ class MapViewModelSavedCafeTest {
         testScheduler.advanceUntilIdle()
 
         assertEquals(setOf("place-recorded"), vm.state.value.recordedPlaceIds)
+
+        vm.clear()
+    }
+
+    // -----------------------------------------------------------------------
+    // onCafeSaveToggled（フェーズ 16）
+    // -----------------------------------------------------------------------
+
+    @Test
+    fun onCafeSaveToggled_saves_when_not_saved() = runTest {
+        val fakeSavedCafeRepo = FakeSavedCafeRepository()
+        val fakeCoffeeRepo = FakeCoffeeRepository()
+        val cafe = makeCafe("place-1")
+
+        val vm = MapViewModel(
+            observeVisitedCafesUseCase = ObserveVisitedCafesUseCase(fakeCoffeeRepo),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
+            cafeRepository = FakeCafeRepository(),
+            coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
+            userId = "user-01",
+            scope = this,
+        )
+        testScheduler.advanceUntilIdle()
+        assertTrue(vm.state.value.savedCafes.isEmpty())
+
+        vm.onCafeSaveToggled(cafe)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(1, fakeSavedCafeRepo.saved.size)
+        assertEquals("place-1", fakeSavedCafeRepo.saved.first().cafe.placeId)
+        assertEquals("", fakeSavedCafeRepo.saved.first().note)
+        assertEquals(listOf("place-1"), vm.state.value.savedCafes.map { it.cafe.placeId })
+
+        vm.clear()
+    }
+
+    @Test
+    fun onCafeSaveToggled_deletes_when_already_saved() = runTest {
+        val savedCafe = makeSavedCafe("place-1", Instant.fromEpochMilliseconds(1_750_000_000_000))
+        val fakeSavedCafeRepo = FakeSavedCafeRepository(initial = listOf(savedCafe))
+        val fakeCoffeeRepo = FakeCoffeeRepository()
+        val cafe = makeCafe("place-1")
+
+        val vm = MapViewModel(
+            observeVisitedCafesUseCase = ObserveVisitedCafesUseCase(fakeCoffeeRepo),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
+            cafeRepository = FakeCafeRepository(),
+            coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
+            userId = "user-01",
+            scope = this,
+        )
+        testScheduler.advanceUntilIdle()
+        assertEquals(1, vm.state.value.savedCafes.size)
+
+        vm.onCafeSaveToggled(cafe)
+        testScheduler.advanceUntilIdle()
+
+        assertEquals(listOf("user-01" to "place-1"), fakeSavedCafeRepo.deleted)
+        assertTrue(vm.state.value.savedCafes.isEmpty())
+
+        vm.clear()
+    }
+
+    @Test
+    fun onCafeSaveToggled_save_failure_sets_error() = runTest {
+        val fakeSavedCafeRepo = FakeSavedCafeRepository()
+        fakeSavedCafeRepo.failSave = true
+        val fakeCoffeeRepo = FakeCoffeeRepository()
+        val cafe = makeCafe("place-1")
+
+        val vm = MapViewModel(
+            observeVisitedCafesUseCase = ObserveVisitedCafesUseCase(fakeCoffeeRepo),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
+            cafeRepository = FakeCafeRepository(),
+            coffeeRepository = fakeCoffeeRepo,
+            savedCafeRepository = fakeSavedCafeRepo,
+            userId = "user-01",
+            scope = this,
+        )
+        testScheduler.advanceUntilIdle()
+
+        vm.onCafeSaveToggled(cafe)
+        testScheduler.advanceUntilIdle()
+
+        assertNotNull(vm.state.value.error)
+        assertTrue(vm.state.value.savedCafes.isEmpty())
 
         vm.clear()
     }

@@ -3,6 +3,7 @@ package com.noricoffee.feature.cafedetail
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.model.SavedCafe
+import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
 import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.CancellationException
@@ -26,6 +27,9 @@ import kotlinx.datetime.Clock
  * - 過去記録がある場合は最新の `record.cafe` を [UIState.cafe] に採用する
  * - 過去記録がない場合（未訪問カフェ）は [initialCafe] を [UIState.cafe] に採用する
  *   （マップピンや検索結果からタップしたとき）
+ * - [initialCafe] が null、または DB スナップショット由来で `googleRating` が未取得（= 鮮度が低い）の場合は
+ *   [cafeRepository] から Places Details を 1 回取得し、[latestDetails] として保持する。
+ *   取得できたらそれ以降の cafe 採用は常に [latestDetails] を最優先にする（フェーズ 16）
  *
  * ## CoroutineScope の注意
  *
@@ -33,6 +37,7 @@ import kotlinx.datetime.Clock
  * スコープは呼び出し元が管理し、画面 push ごとに新規生成・pop で破棄すること。
  *
  * @param coffeeRepository [CoffeeRecord] の観測に使うリポジトリ
+ * @param cafeRepository カフェ詳細の条件付きリフレッシュ（Places Details 取得）に使うリポジトリ（フェーズ 16）
  * @param savedCafeRepository 「行きたい店」の保存状態観測 / トグルに使うリポジトリ（フェーズ 15-A）
  * @param placeId 対象カフェの Google Places ID
  * @param initialCafe マップピン / 検索結果から渡される Cafe スナップショット（未訪問カフェ用）。
@@ -42,6 +47,7 @@ import kotlinx.datetime.Clock
  */
 class CafeDetailViewModel(
     private val coffeeRepository: CoffeeRepository,
+    private val cafeRepository: CafeRepository,
     private val savedCafeRepository: SavedCafeRepository,
     private val placeId: String,
     private val initialCafe: Cafe?,
@@ -52,6 +58,14 @@ class CafeDetailViewModel(
     private val viewModelScope = CoroutineScope(
         scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
     )
+
+    /**
+     * [cafeRepository] から取得できた最新の Places Details。
+     *
+     * 取得後は records の再 emit があっても、cafe 採用時にこの値を最優先にする
+     * （DB スナップショットへの巻き戻りを防ぐ）。
+     */
+    private var latestDetails: Cafe? = null
 
     /**
      * カフェ詳細画面の UI 状態。
@@ -86,7 +100,7 @@ class CafeDetailViewModel(
                         .sortedByDescending { it.visitedOn }
                 }
                 .collect { filteredRecords ->
-                    val cafeSnapshot = filteredRecords.firstOrNull()?.cafe ?: initialCafe
+                    val cafeSnapshot = latestDetails ?: filteredRecords.firstOrNull()?.cafe ?: initialCafe
                     _state.update {
                         it.copy(
                             cafe = cafeSnapshot,
@@ -101,6 +115,22 @@ class CafeDetailViewModel(
         viewModelScope.launch {
             savedCafeRepository.observeByPlaceId(userId, placeId).collect { savedCafe ->
                 _state.update { it.copy(isSaved = savedCafe != null) }
+            }
+        }
+
+        // DB スナップショット由来（googleRating 未取得 = 鮮度が低い）の場合のみ Places Details を 1 回取得する
+        // （フェーズ 16）。検索 / POI 由来の新鮮な initialCafe（googleRating != null）では API を叩かない。
+        if (initialCafe == null || initialCafe.googleRating == null) {
+            viewModelScope.launch {
+                try {
+                    val details = cafeRepository.getDetails(placeId)
+                    latestDetails = details
+                    _state.update { it.copy(cafe = details) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // サイレントフォールバック: スナップショット表示を維持し、error は汚さない
+                }
             }
         }
     }

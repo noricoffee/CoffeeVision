@@ -65,6 +65,11 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 ## 共通 `TagChip` コンポーネント（フェーズ 16 で新設、`Components/TagChip.swift`）
 
 - マップ / 一覧で使う「選択トグル可能なチップ」は `TagChip`（`label:systemImage:isOn:count:action:`、選択時 accentColor 塗り、`count` 指定で右上に件数バッジ）と、非インタラクティブな凡例表示用 `TagLegendChip`（`label:systemImage:tint:`）の 2 種に共通化済み。新しいフィルタ/凡例 UI が必要になったらここに追加する（画面ごとに private struct を再実装しない）。
+- **`.offset(x:y:)` でバッジ等をはみ出させる実装は、`ScrollView` 内では上/右端がクリップされる**（`offset` は描画位置だけ動かし、親へ伝わるレイアウトサイズには寄与しないため）。対策は「はみ出す量ぶんの padding をコンポーネント自身に対称に確保する」パターン: 上下は `isOn` 状態に関わらず同じ padding（0 or 対称値）にして、はみ出す辺（上・右）は非対称に、対辺（下・左）はゼロのままにする。これにより `HStack` の `.center` 揃えでカプセル本体の垂直中心が他要素と揃ったまま保たれる（左右は中心揃えの対象ではないので trailing だけ広げても隣接要素との間隔が単に広がるだけで済む）。実例: `TagChip` の `badgeReservedInsets`（`count` があるときだけ `top:6, trailing:6, bottom:6` を確保）。
+
+## xcodebuild のシミュレータ destination 名は `xcrun simctl list devices available` で確認する（2026-07-07 確認）
+
+環境によって「iPhone 16」等の型番が存在しないことがある（この環境では iPhone 17 系のみインストール済み）。`-destination 'platform=iOS Simulator,name=iPhone 16'` は `Unable to find a device matching...` で即失敗するので、事前に `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcrun simctl list devices available | grep iPhone` で存在する名前を確認してから `-destination` を組み立てる。
 
 ## SKIE sealed class の新規 case 追加は Obj-C ヘッダで型名・init シグネチャを裏取りするのが必須（2026-07-06、`Mode.Duplicate` 追加で確認）
 

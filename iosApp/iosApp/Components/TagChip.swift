@@ -35,10 +35,21 @@ struct TagChip: View {
                         .offset(x: 6, y: -6)
                 }
             }
+            // バッジは上・右に 6pt はみ出して描画されるため、そのぶんを自身のレイアウト境界内に
+            // 確保する。上下を対称に確保することでカプセル本体の垂直中心はバッジ有無に関わらず
+            // 揃ったまま維持され、水平方向は右側だけ広げれば次のチップとの間隔が単に広がるだけで
+            // 済む。これにより ScrollView にクリップされず、他チップとの中央揃えも崩れない。
+            .padding(badgeReservedInsets)
         }
         .buttonStyle(.plain)
         .accessibilityLabel(accessibilityText)
         .accessibilityAddTraits(isOn ? [.isSelected] : [])
+    }
+
+    /// バッジのはみ出し分（上 6pt・右 6pt）を確保する padding。バッジを表示しないときは 0。
+    private var badgeReservedInsets: EdgeInsets {
+        guard let count, count > 0 else { return EdgeInsets() }
+        return EdgeInsets(top: 6, leading: 0, bottom: 6, trailing: 6)
     }
 
     // MARK: - 件数バッジ
@@ -100,6 +111,28 @@ struct TagLegendChip: View {
         HStack(spacing: 8) {
             TagLegendChip(label: "好み一致", systemImage: "heart.fill", tint: .pink)
         }
+    }
+    .padding()
+    .background(Color(.systemGroupedBackground))
+}
+
+/// `MapTabView.filterChipRow` と同じ「横スクロール内に並ぶチップ」を再現した Preview。
+///
+/// 修正前はここでバッジの上・右側が `ScrollView` の境界でクリップされ、数字の上半分が
+/// 途切れて見えていた。修正後は `TagChip` が自身のレイアウト境界内にバッジのはみ出し分を
+/// 確保するため、`ScrollView` 内でも欠けずに全体が表示される。
+#Preview("TagChip in ScrollView（クリップ確認用）") {
+    ScrollView(.horizontal, showsIndicators: false) {
+        HStack(spacing: 8) {
+            TagChip(label: "訪問済み", systemImage: "cup.and.saucer.fill", isOn: true) {}
+            TagLegendChip(label: "好み一致", systemImage: "heart.fill", tint: .pink)
+            // 非選択 + 選択の両状態でバッジが欠けないことを確認
+            TagChip(label: "保存済み", systemImage: "bookmark.fill", isOn: false, count: 3) {}
+            TagChip(label: "保存済み", systemImage: "bookmark.fill", isOn: true, count: 128) {}
+            // 右端に来るケース（トレイリング側のクリップ確認）
+            TagChip(label: "右端バッジ", systemImage: "star.fill", isOn: false, count: 9) {}
+        }
+        .padding(.horizontal, 2)
     }
     .padding()
     .background(Color(.systemGroupedBackground))

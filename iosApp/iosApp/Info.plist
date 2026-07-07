@@ -6,6 +6,8 @@
 	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>CoffeeVision</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>近くのカフェを検索するために、現在地を一時的に使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>

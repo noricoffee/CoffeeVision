@@ -224,7 +224,7 @@ CoffeeVision を初めてリリースしました。
 - [ ] App のプライバシー（§6）を申告
 - [ ] 年齢制限アンケート（§7）を回答
 - [ ] 価格・配信地域の設定（無料 / 配信国）
-- [ ] 輸出コンプライアンス（暗号化）: HTTPS 標準利用のみ → 「該当する暗号化を含むが免除対象」を選択想定。要確認
+- [x] 輸出コンプライアンス（暗号化）: 標準 HTTPS + Apple 標準の SHA256 nonce のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済み → App Store Connect の暗号化アンケートは自動スキップされる
 
 ### ビルド / 技術
 - [ ] `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` が App Store Connect のバージョンと一致
@@ -235,7 +235,7 @@ CoffeeVision を初めてリリースしました。
 - [ ] App Icon（light / dark / tinted）が全サイズ揃っている
 - [ ] アーカイブ（Archive）→ App Store Connect へアップロード成功
 
-> 輸出コンプライアンスは、通信が標準的な HTTPS のみであれば `ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定して申告を簡略化できる。要否はリリース時に確認。
+> 輸出コンプライアンス: 本アプリの暗号利用は標準 HTTPS（Firebase / Google Places）と Sign in with Apple の nonce ハッシュ（CryptoKit SHA256 = Apple 標準・ハッシュは暗号化に非該当）のみで、いずれも免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済みのため、提出のたびの暗号化アンケートは不要になる。
 
 ---
 

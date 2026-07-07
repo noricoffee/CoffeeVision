@@ -374,6 +374,39 @@
 
 ---
 
+## フェーズ 16: マップ / タブ UI/UX 改善（2026-07-07 起票）
+
+> **確定仕様（2026-07-07 親確定・ユーザー合意済み）**: ユーザー指摘 3 課題（保存済みボタンが右上で遠い / タグの統一感なし / カフェ情報が弱く決定感に欠ける）への対応。方針 = ①保存済み導線をフィルタチップ行に統合（右上 `savedCafesSheetButton` 廃止、チップタップでピン強調 + 一覧シート）、②マップ下部カード + `CafeDetailView` の両方で写真・評価・営業状態の表示強化、③共通 `TagChip` 新設 + 色セマンティクス体系化 + AccentColor #8B5A2B 設定、④追加: `userRatingCount`（評価件数）/ 記録写真を詳細写真帯に混在表示 / 詳細の保存ボタンを目立たせる。スコープ外: 営業状態インジケータ共通化・ボトムシート常駐化。
+
+### 16 インターフェース合意書（commonMain 公開 API 変更）
+
+- **`Cafe`**: 末尾に `val userRatingCount: Int? = null` を追加。**揮発フィールド（6 個目）** — SQLDelight / Firestore には書かない（§1.2 の 8 フィールド永続化原則を維持。マイグレーション不要）
+- **`CafeDetailViewModel`**: コンストラクタに `cafeRepository: CafeRepository` を追加（`AppContainer` factory 内で配線、Swift から見た factory シグネチャ不変）。init で条件付き Places Details リフレッシュ:
+  - 発火条件 = `initialCafe == null || initialCafe.googleRating == null`（DB スナップショット由来のみ。検索 / POI 由来の新鮮な Cafe では API を叩かない）
+  - `latestDetails: Cafe?` を保持し、cafe 採用順 = `latestDetails ?: 最新記録の cafe ?: initialCafe`（records 再 emit による巻き戻り防止）
+  - 失敗時はサイレントフォールバック（スナップショット表示維持、`error` は汚さない。`CancellationException` は再スロー）
+  - **UIState 型は不変**
+- **`MapViewModel`**: `fun onCafeSaveToggled(cafe: Cafe)` を追加（`savedCafes` に placeId があれば delete、なければ `save(SavedCafe(userId, cafe, "", now))`。エラーは既存 `error` へ）。**UIState 不変** — 保存済み「強調」は純プレゼンテーション状態のため iOS ローカル `@State savedEmphasisActive` で管理する。`showVisited`（UIState）との非対称は意味の違い: 訪問済みは表示 ON/OFF のドメイン設定、保存済み強調は一時的なプレゼンテーション状態（保存済みピン自体は常時表示に変更）
+
+### 16 色セマンティクス（ui-ux-guidelines.md へ反映済みが正）
+
+| 概念 | 色 | 使用箇所 |
+|------|----|---------|
+| ブランド / 訪問済み | AccentColor **#8B5A2B**（dark: #C08552 目安） | visitedCafePin（brown→accent）、TagChip 選択フィル、tint 全般 |
+| 保存済み（行きたい） | `Color.indigo`（維持） | savedCafePin、保存ボタン / バッジ |
+| 好み一致 | `Color.pink`（accentColor 参照から**明示変更** — AccentColor 茶色化の必須随伴修正） | recommendedCafePin、凡例チップ |
+| 検索結果 | `Color.blue`（維持） | searchResultPin、検索 UI |
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `Cafe.userRatingCount`（揮発）+ Places FieldMask / DTO / マッピング + `CafeDetailViewModel` details リフレッシュ + `MapViewModel.onCafeSaveToggled` + commonTest | 2026-07-07 完了。JVM 全 green + 新規テスト（FieldMask 5 / DetailsRefresh 5 / SaveToggle 追加）。既存テスト負債 2 件も同時解消（stdlib assert / PlaceSummary 未追随 → lessons 2026-07-07）|
+| [x] | 親: iosSimulatorArm64Test 中間検証 | 2026-07-07 完了。4 モジュール green + XCFramework assemble OK |
+| [x] | ios-engineer: Swift `Cafe` 呼び出し修正 + AccentColor 設定 + `Components/TagChip.swift` + MapTabView（チップ統合・ピン色・下部カード刷新）+ CafeDetailView（写真帯・視覚ヘッダー・保存ボタン移設） | 2026-07-07 完了。BUILD SUCCEEDED・override 不使用。accentColor 全数目視済（TasteMapFilterSheet 系は「好み一致」と別概念のため pink 化対象外 → implementation_note）。後続候補: SavedCafeListSheet「記録あり」バッジの brown 孤立 |
+| [x] | 親: verify-kmp-ios + docs 反映（data-model §1.2 / ui-ux-guidelines 色表 / implementation_note）+ commit | 2026-07-07 完了。親再検証: testAndroidHostTest（B-7 既知負債除き green）/ xcodebuild override 無し BUILD SUCCEEDED / 全モジュール compileTestKotlinIosSimulatorArm64 sweep green |
+| [ ] | 検証: シミュレータ目視（下部カード / 詳細写真帯 / 保存済みチップ強調 / 保存トグル双方向 / 機内モード / ダークモード） | **シミュレータ目視はユーザー作業** |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

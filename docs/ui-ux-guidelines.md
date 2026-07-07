@@ -28,10 +28,23 @@ Apple HIG が掲げる 3 つの原則をプロジェクト全体で遵守しま�
 CoffeeVision のアクセントカラーは **コーヒー由来のブラウン系** とします。
 ただし、テキスト・背景・ボーダーなどシステム標準で十分な箇所には独自カラーを当てません。
 
-| 役割 | 色（仮） | 備考 |
+| 役割 | 色 | 備考 |
 |------|---------|------|
-| アクセント | `Color("AccentBrown")`（例: `#8B5A2B`） | `Assets.xcassets` の AccentColor として設定 |
+| アクセント | AccentColor **#8B5A2B**（dark: **#C08552**） | `Assets.xcassets` の AccentColor に設定済み（フェーズ 16） |
 | 評価の星 | `.yellow`（システム） | アクセシビリティ対応のため標準色を使用 |
+
+### マップ概念の色セマンティクス（フェーズ 16 確定）
+
+マップのピン・チップ・バッジは以下の 4 概念の色割り当てを正とする。新しい UI を足すときもこの表に従う（勝手に色を増やさない）。
+
+| 概念 | 色 | 使用箇所 |
+|------|----|---------|
+| ブランド / 訪問済み | `Color.accentColor`（#8B5A2B） | visitedCafePin、`TagChip` 選択フィル、tint 全般 |
+| 保存済み（行きたい） | `Color.indigo` | savedCafePin、保存ボタン / バッジ |
+| 好み一致 | `Color.pink` | recommendedCafePin、凡例チップ（**`accentColor` を「好み」の意味で使わない**） |
+| 検索結果 | `Color.blue` | searchResultPin、検索 UI |
+
+共通チップ部品は `Components/TagChip.swift`（インタラクティブ `TagChip` + 凡例用 `TagLegendChip`）。画面ローカルにチップを再実装しない。
 
 ---
 

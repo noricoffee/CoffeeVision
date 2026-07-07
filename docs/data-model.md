@@ -105,12 +105,13 @@ data class Cafe(
     val phoneNumber: String? = null,                     // 電話番号（nationalPhoneNumber）
     val priceLevel: String? = null,                      // 価格帯（PRICE_LEVEL_* 文字列）
     val googleRating: Double? = null,                    // Google 上の評価
+    val userRatingCount: Int? = null,                    // Google 上の評価件数（フェーズ 16 追加）
 )
 ```
 
 > `CoffeeRecord.cafe` が null の場合はカフェに紐づかないセルフ抽出を表す。
 
-> **永続化されるのは先頭 8 フィールドのみ**: フェーズ 10-B で追加した 5 フィールド（`openNow`〜`googleRating`）は Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面の表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
+> **永続化されるのは先頭 8 フィールドのみ**: フェーズ 10-B で追加した 5 フィールド（`openNow`〜`googleRating`）とフェーズ 16 で追加した `userRatingCount` の計 6 フィールドは Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面・マップ下部カードの表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
 
 > **写真について**: Places API の写真は `photo_reference` をキーに **都度取得** する規約。
 > ローカルに永続キャッシュしないこと（規約違反になる場合がある）。

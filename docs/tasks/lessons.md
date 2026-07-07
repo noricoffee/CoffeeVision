@@ -562,3 +562,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: SQLDelight の列追加は「.sq と Mapper を直せば終わり」ではない。Repository の named-parameter upsert 呼び出しが単一の見落としポイント。列追加時は上記 6 点セットで grep 点検する
 - **発生源**: フェーズ 15-E-1（`brew_recipe` 追加、2026-07-07）
 - **横展開点検（2026-07-07）**: 現状 `queries.upsert(` を named 引数で呼ぶ Repository は `LocalCoffeeRepository` / `LocalSavedCafeRepository` の 2 箇所。今回の追加で `LocalCoffeeRepository` は修正済み。`LocalSavedCafeRepository`（saved_cafe）は今回の列追加対象外で漏れなし
+
+### 「JVM green・iOS だけテストコンパイル不能」の具体形 2 種（stdlib assert / data class フィールド追加のテスト側未追随）
+
+- **症状**: フェーズ 16 の `Cafe.userRatingCount` 追加時、`testAndroidHostTest` は全 green なのに `compileTestKotlinIosSimulatorArm64` が data-places で FAILED。原因は今回の変更ではなく、①`PlacesClientImplPhotoMediaTest` が Kotlin stdlib の `assert(...)` を使用（Native では `ExperimentalNativeApi` opt-in が必要でコンパイル不能。JVM では `-ea` なしだと実行すらされず素通り）、②`CafeRepositoryImplSearchTextTest` の `PlaceSummary(...)` 構築がフェーズ 10-a/b のフィールド追加（openNow〜googleRating の 5 個）に未追随のまま放置されていたこと
+- **原因の構造**: 2026-07-06 の「interface 拡張時の fake 追随漏れ」と同根 —「本体は green、テストは存在するが iOS でコンパイルすらできていない」状態は実行ログを見ないと気づけない。今回の 2 形はどちらも **JVM では無害なので `testAndroidHostTest` が検出できない**（stdlib `assert` は JVM で no-op、②は JVM テストも壊れるはずだが該当テストが iOS 専用経路でしか顕在化しない位置にあった）。壊れたまま数フェーズ潜伏し、無関係な変更（今回のフィールド追加）の検証で発覚する
+- **修正パターン**: ① テストのアサーションは常に `kotlin.test` の `assertTrue` / `assertEquals` を使う（stdlib `assert` 禁止）。② `data class` にフィールドを追加したら `grep -rn "<ClassName>(" shared --include="*Test.kt"` でテスト側の直接構築箇所を洗い出して追随する（デフォルト値があっても named 引数でない構築は壊れる）
+- **教訓**: shared のフィールド/メソッド追加時は、対象モジュールだけでなく **`./gradlew compileTestKotlinIosSimulatorArm64`（全モジュール）** を回すと潜伏中の破れも一緒に検出できる（3 秒で終わる安価な sweep）。サブエージェントには compile まで、実行は親（verify-kmp-ios の分担どおり）
+- **発生源**: フェーズ 16（`Cafe.userRatingCount` 追加の検証中に発覚、2026-07-07。修正は kmp-engineer が同フェーズ内で実施）
+- **横展開点検（2026-07-07）**: ① `grep -rnE '(^|[^a-zA-Z.])assert\(' shared --include='*.kt'`（assertTrue/assertEquals 除外）→ 該当なし（今回の置換で全滅）。② 全 shared モジュールで `compileTestKotlinIosSimulatorArm64` → BUILD SUCCESSFUL（他モジュールに潜伏中の未追随なし）

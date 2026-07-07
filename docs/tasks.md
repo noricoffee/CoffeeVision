@@ -403,7 +403,7 @@
 | [x] | 親: iosSimulatorArm64Test 中間検証 | 2026-07-07 完了。4 モジュール green + XCFramework assemble OK |
 | [x] | ios-engineer: Swift `Cafe` 呼び出し修正 + AccentColor 設定 + `Components/TagChip.swift` + MapTabView（チップ統合・ピン色・下部カード刷新）+ CafeDetailView（写真帯・視覚ヘッダー・保存ボタン移設） | 2026-07-07 完了。BUILD SUCCEEDED・override 不使用。accentColor 全数目視済（TasteMapFilterSheet 系は「好み一致」と別概念のため pink 化対象外 → implementation_note）。後続候補: SavedCafeListSheet「記録あり」バッジの brown 孤立 |
 | [x] | 親: verify-kmp-ios + docs 反映（data-model §1.2 / ui-ux-guidelines 色表 / implementation_note）+ commit | 2026-07-07 完了。親再検証: testAndroidHostTest（B-7 既知負債除き green）/ xcodebuild override 無し BUILD SUCCEEDED / 全モジュール compileTestKotlinIosSimulatorArm64 sweep green |
-| [ ] | 検証: シミュレータ目視（下部カード / 詳細写真帯 / 保存済みチップ強調 / 保存トグル双方向 / 機内モード / ダークモード） | **シミュレータ目視はユーザー作業** |
+| [x] | 検証: シミュレータ目視（下部カード / 詳細写真帯 / 保存済みチップ強調 / 保存トグル双方向 / 機内モード / ダークモード） | 2026-07-07 ユーザー確認済み。フェーズ 16 完了 |
 
 ---
 

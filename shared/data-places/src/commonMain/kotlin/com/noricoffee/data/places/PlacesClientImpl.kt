@@ -78,7 +78,7 @@ class PlacesClientImpl(
      * そのため、カフェ語を含まないクエリには末尾に " カフェ" を補完してから API に送る。
      *
      * カフェ語を既に含む場合（例: "コーヒー", "渋谷 カフェ"）は補完しない（二重付与・既存挙動を維持）。
-     * `searchText(query, locationBias)` は POI タップ経由のため補完対象外。
+     * `searchText(query, locationBias)` はカフェ検索タブの位置バイアス付き検索専用のため補完対象外。
      *
      * @see ensureCafeKeyword
      */

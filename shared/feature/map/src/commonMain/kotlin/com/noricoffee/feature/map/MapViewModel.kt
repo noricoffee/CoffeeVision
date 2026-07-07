@@ -2,7 +2,6 @@ package com.noricoffee.feature.map
 
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
-import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.CafeRecommendationProvider
 import com.noricoffee.domain.model.RecommendedCafe
@@ -30,7 +29,7 @@ import kotlinx.datetime.Clock
  *
  * - [ObserveVisitedCafesUseCase] を常時購読し、訪問済みカフェのピンを [UIState.visitedCafes] で管理
  * - [CafeRecommendationProvider] を常時購読し、好み一致カフェのピン強調を [UIState.recommendedCafes] で管理
- * - [onPoiTapped] で Apple Maps POI タップ時に Places 解決（searchText 経路）を実行する
+ * - [onPoiTapped] で Apple Maps POI タップ時に Places 解決（searchNearby 経路）を実行する
  * - [onShowVisitedToggled] でマップ上の訪問済みピン表示 / 非表示を切り替える
  *
  * ## CoroutineScope の注意
@@ -40,7 +39,7 @@ import kotlinx.datetime.Clock
  *
  * @param observeVisitedCafesUseCase 訪問済みカフェ集計の UseCase
  * @param cafeRecommendationProvider 好み一致カフェの推薦プロバイダ（v1 = [com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase]）
- * @param cafeRepository POI タップ時の Places テキスト検索を担うリポジトリ
+ * @param cafeRepository POI タップ時の Places 座標近傍検索を担うリポジトリ
  * @param coffeeRepository タグフィルタ用のコーヒー記録リポジトリ
  * @param savedCafeRepository 「行きたい店」の購読 / 解除を担うリポジトリ（フェーズ 15-A）
  * @param userId 現在サインイン中のユーザー ID
@@ -320,18 +319,23 @@ class MapViewModel(
     /**
      * Apple Maps の POI（地図上のカフェ / 飲食店アイコン等）をタップした際に呼ぶ。
      *
-     * [CafeRepository.searchText] を位置バイアス付きで呼び出し、最も近い候補を [UIState.poiLookupResult] にセットする。
+     * [CafeRepository.searchNearby] を座標アンカーで呼び出し、最も近い候補を [UIState.poiLookupResult] にセットする。
      * 連打された場合は前回の Job をキャンセルして新しい Job を起動する（`searchJob` 再起動パターン）。
+     *
+     * 座標アンカーの近傍検索を採用しているのは、[CafeRepository.searchText] の `includedType=cafe` ハード
+     * フィルタが Apple↔Google の表示名差や `coffee_shop` プライマリ型（チェーン店に多い）の店で空振りしやすく、
+     * 見えているピンをタップしても解決できない不整合を起こしていたため（フェーズ 17-B）。
      *
      * ## 状態遷移
      * 1. `isLookingUpPoi = true`, `poiLookupError = null`
-     * 2. `cafeRepository.searchText(name, LocationBias(lat, lng, 500.0))` を呼ぶ
+     * 2. `cafeRepository.searchNearby(latitude, longitude, radiusMeters = 150.0)` を呼ぶ（DISTANCE ランク済のため `.first()` を採用）
      * 3. 結果が空 → `poiLookupError = "該当するカフェが見つかりませんでした"`
      * 4. 結果あり → `poiLookupResult = results.first()`
      * 5. 例外 → `poiLookupError = e.message ?: "カフェ情報の取得に失敗しました"`
      * 6. `isLookingUpPoi = false`
      *
-     * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）
+     * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）。座標解決のため検索クエリには使わないが、
+     *   呼び出し元（iOS Bridge）のシグネチャ安定のため引数として残す
      * @param latitude POI の緯度
      * @param longitude POI の経度
      */
@@ -340,13 +344,10 @@ class MapViewModel(
         poiLookupJob = viewModelScope.launch {
             _state.update { it.copy(isLookingUpPoi = true, poiLookupError = null) }
             try {
-                val results = cafeRepository.searchText(
-                    query = name,
-                    locationBias = LocationBias(
-                        latitude = latitude,
-                        longitude = longitude,
-                        radiusMeters = 500.0,
-                    ),
+                val results = cafeRepository.searchNearby(
+                    latitude = latitude,
+                    longitude = longitude,
+                    radiusMeters = 150.0,
                 )
                 if (results.isEmpty()) {
                     _state.update {

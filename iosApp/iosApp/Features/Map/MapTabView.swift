@@ -187,6 +187,18 @@ struct CafeDetailRoute: Hashable {
     }
 }
 
+// MARK: - ApplePoiCafe
+
+/// Apple 検索（`MKLocalPointsOfInterestRequest`）由来の周辺カフェ。
+///
+/// まだ記録も保存もしていない「周辺の店」を示す低強調ピンの表示専用モデル。
+/// Google `placeId` を持たないため座標文字列を `id` として使う（フェーズ 17）。
+private struct ApplePoiCafe: Identifiable {
+    let id: String
+    let name: String
+    let coordinate: CLLocationCoordinate2D
+}
+
 // MARK: - MapTabView
 
 /// マップタブのルート画面。
@@ -199,7 +211,9 @@ struct CafeDetailRoute: Hashable {
 /// - 検索結果タップで下部カードを表示し、「詳細を見る」で `CafeDetailView` へ push する
 /// - フィルタトグルで各種ピンの表示 / 非表示を切り替える（ブラウズモード時のみ表示）
 /// - カスタムピンタップで `CafeDetailView` へ push する（`NavigationLink(value:)` 経由）
-/// - Apple Maps 標準 POI タップ → Places ルックアップ → `CafeDetailView` プログラマティック push
+/// - 周辺カフェ（Apple 検索由来・低強調ピン）は `MKLocalPointsOfInterestRequest` で表示範囲内を
+///   常時取得する（ズーム依存の標準 POI ラベルに代わる自前ピン。フェーズ 17）。タップ →
+///   Places ルックアップ → `CafeDetailView` プログラマティック push
 /// - 自身が `NavigationStack(path: $navigationPath)` を保持するため RootTabView 側の NavigationStack は不要
 /// - 現在地取得は `LocationManager` 経由
 /// - 現在地 FAB は bottom-trailing 固定配置でタップで地図中心を現在地・ズーム 1000m にリセットする
@@ -210,9 +224,6 @@ struct MapTabView: View {
     @State private var cameraPosition: MapCameraPosition = .automatic
     @State private var locationManager = LocationManager()
     @State private var didSetInitialCamera = false
-
-    /// Apple Maps 標準 POI タップ検知用の選択状態。
-    @State private var mapFeatureSelection: MapFeature? = nil
 
     /// POI ルックアップ結果などのプログラマティック push 用 NavigationPath。
     @State private var navigationPath = NavigationPath()
@@ -272,6 +283,17 @@ struct MapTabView: View {
 
     /// エリア検索が 0 件だったときの軽量案内メッセージ。`errorToast` 経由で表示する。
     @State private var areaSearchEmptyMessage: String? = nil
+
+    // MARK: - 周辺カフェ（Apple 検索由来）関連 State（フェーズ 17）
+
+    /// `MKLocalPointsOfInterestRequest` で取得した周辺カフェ（低強調ピン用）。
+    @State private var appleNearbyCafes: [ApplePoiCafe] = []
+
+    /// 直近の Apple 検索 fetch Task（デバウンス / キャンセル用）。
+    @State private var appleFetchTask: Task<Void, Never>? = nil
+
+    /// ズームゲートしきい値（この可視半径[m]を超えたら fetch せず既存ピンをクリアする）。
+    private static let applePoiZoomGateRadiusMeters: Double = 3000
 
     // MARK: - 検索モード
 
@@ -368,16 +390,12 @@ struct MapTabView: View {
                                 }
                             }
                         }
-                        .onChange(of: mapFeatureSelection) { _, newSelection in
-                            poiSelectionChanged(newSelection, bridge: bridge)
-                        }
                         .onChange(of: bridge.poiLookupResult) { _, result in
                             if let cafe = result {
                                 navigationPath.append(
                                     CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
                                 )
                                 bridge.onPoiLookupConsumed()
-                                mapFeatureSelection = nil
                             }
                         }
                         // 検索完了（テキスト検索 / エリア検索の両方）を検知して全件ピン反映する
@@ -447,7 +465,25 @@ struct MapTabView: View {
     @ViewBuilder
     private func mapContent(bridge: MapViewModelBridge) -> some View {
         ZStack(alignment: .top) {
-            Map(position: $cameraPosition, selection: $mapFeatureSelection) {
+            Map(position: $cameraPosition) {
+                // 周辺カフェ（Apple 検索由来 / 低強調）ピン。既存 4 種と座標近接（約 40m 以内）の
+                // ものは重複排除済み（displayedAppleNearbyCafes）。最初に描画して他ピンの背面に回す。
+                ForEach(displayedAppleNearbyCafes(bridge)) { cafe in
+                    Annotation(cafe.name, coordinate: cafe.coordinate) {
+                        Button {
+                            bridge.onPoiTapped(
+                                name: cafe.name,
+                                latitude: cafe.coordinate.latitude,
+                                longitude: cafe.coordinate.longitude
+                            )
+                        } label: {
+                            appleNearbyCafePin(cafe: cafe)
+                        }
+                        .buttonStyle(.plain)
+                        .opacity(appleNearbyPinOpacity(bridge))
+                    }
+                }
+
                 // 訪問済みカフェピン（通常: ブラウン / 好み一致: アクセントカラー+ハート）
                 if bridge.showVisited {
                     ForEach(bridge.visitedCafes, id: \.cafe.placeId) { visitedCafe in
@@ -552,7 +588,9 @@ struct MapTabView: View {
                 }
 
             }
-            .mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))
+            // 自前の周辺カフェピン（Apple 検索由来）との二重表示を防ぐため、標準 cafe/bakery ラベルは
+            // 消す（他カテゴリの地図コンテキストは残す）。
+            .mapStyle(.standard(pointsOfInterest: .excluding([.cafe, .bakery])))
             // 上端（ステータスバー）と左右はフルブリードにしつつ、下端のセーフエリアは保持する。
             // これにより MapKit が Legal/帰属表記を配置する基準が TabBar 上端になり、
             // Legal が TabBar の裏に隠れなくなる。
@@ -586,6 +624,9 @@ struct MapTabView: View {
                 } else {
                     lastAreaSearchCenter = newCenter
                 }
+
+                // 周辺カフェ（Apple 検索由来）ピンの再取得をスケジュールする。
+                scheduleAppleNearbyFetch(center: newCenter)
             }
             .safeAreaInset(edge: .bottom) {
                 if let cafe = selectedSearchCafe {
@@ -1231,6 +1272,22 @@ struct MapTabView: View {
         )
     }
 
+    /// 周辺カフェ（Apple 検索由来）ピン。まだ記録も保存もしていない店を示す低強調ピン。
+    ///
+    /// 既存 4 種ピン（訪問済み=accentColor / 保存済み=indigo / 検索結果=blue / 好み一致=pink）より
+    /// 明確に控えめな意匠（小径 24pt + ミュートしたセカンダリ配色）にする（フェーズ 17）。
+    private func appleNearbyCafePin(cafe: ApplePoiCafe) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color(.secondaryLabel))
+                .frame(width: 24, height: 24)
+            Image(systemName: "cup.and.saucer")
+                .font(.caption2)
+                .foregroundStyle(Color(.systemBackground))
+        }
+        .accessibilityLabel(String(localized: "\(cafe.name)、周辺のカフェ"))
+    }
+
     // MARK: - 現在地 FAB
 
     /// bottom-trailing 固定の「現在地に戻る」FAB。
@@ -1296,32 +1353,102 @@ struct MapTabView: View {
         }
     }
 
-    // MARK: - POI 選択ハンドラ
+    // MARK: - 周辺カフェ（Apple 検索由来）フェッチ（フェーズ 17）
 
-    /// Apple Maps 標準 POI タップ時に呼ばれる。
-    /// `.cafe` / `.restaurant` / `.bakery` のみ受け入れ、それ以外は selection を nil リセット。
-    private func poiSelectionChanged(_ selection: MapFeature?, bridge: MapViewModelBridge) {
-        guard let feature = selection else { return }
-        guard feature.kind == .pointOfInterest else {
-            mapFeatureSelection = nil
+    /// カメラ移動確定ごとに Apple 検索由来の周辺カフェ fetch をスケジュールする。
+    ///
+    /// 直近の fetch Task をキャンセルしてから 300ms 待機し、連続パンを 1 回の検索へまとめる。
+    /// 可視半径がしきい値（`applePoiZoomGateRadiusMeters`）を超える場合は fetch せず既存ピンを
+    /// クリアする（都市スケールでの氾濫防止。しきい値以下では全ズーム域でピンが出る）。
+    private func scheduleAppleNearbyFetch(center: MapSearchCenter) {
+        appleFetchTask?.cancel()
+        guard center.radiusMeters <= Self.applePoiZoomGateRadiusMeters else {
+            appleNearbyCafes = []
             return
         }
-        guard let category = feature.pointOfInterestCategory else {
-            mapFeatureSelection = nil
-            return
+        appleFetchTask = Task {
+            try? await Task.sleep(nanoseconds: 300_000_000)
+            guard !Task.isCancelled else { return }
+            await fetchAppleNearbyCafes(center: center)
         }
+    }
 
-        let allowedCategories: Set<MKPointOfInterestCategory> = [.cafe, .bakery]
-        guard allowedCategories.contains(category) else {
-            mapFeatureSelection = nil
-            return
-        }
-
-        bridge.onPoiTapped(
-            name: feature.title ?? "",
-            latitude: feature.coordinate.latitude,
-            longitude: feature.coordinate.longitude
+    /// `MKLocalPointsOfInterestRequest`（`MKLocalSearch` 経由）で表示範囲内のカフェを
+    /// Apple 地図データから取得する。失敗時は低優先度の補助表示のため静かにクリアするのみで、
+    /// トースト等のユーザー通知は出さない。
+    /// ベーカリー（`.bakery`）は Google Places 側の解決（`onPoiTapped` → `searchNearby`、
+    /// `includedPrimaryTypes=[cafe, coffee_shop]`）に一致せずタップ解決できないため取得対象から
+    /// 除外している（「表示＝解決可能」を揃える。フェーズ 17-B）。
+    private func fetchAppleNearbyCafes(center: MapSearchCenter) async {
+        let request = MKLocalPointsOfInterestRequest(
+            center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
+            radius: center.radiusMeters
         )
+        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.cafe])
+        do {
+            let response = try await MKLocalSearch(request: request).start()
+            guard !Task.isCancelled else { return }
+            appleNearbyCafes = response.mapItems.map { item in
+                let coordinate = item.location.coordinate
+                return ApplePoiCafe(
+                    id: "\(coordinate.latitude)_\(coordinate.longitude)",
+                    name: item.name ?? String(localized: "カフェ"),
+                    coordinate: coordinate
+                )
+            }
+        } catch {
+            guard !Task.isCancelled else { return }
+            appleNearbyCafes = []
+        }
+    }
+
+    /// 既存 4 種ピンの座標一覧（表示トグルの状態に関わらず全件。Apple ピンの重複排除に使う）。
+    private func existingPinCoordinates(_ bridge: MapViewModelBridge) -> [CLLocationCoordinate2D] {
+        let visited = bridge.visitedCafes.compactMap { vc -> CLLocationCoordinate2D? in
+            guard let lat = vc.cafe.latitude?.doubleValue, let lng = vc.cafe.longitude?.doubleValue else {
+                return nil
+            }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        }
+        let saved = bridge.savedCafes.compactMap { sc -> CLLocationCoordinate2D? in
+            guard let lat = sc.cafe.latitude?.doubleValue, let lng = sc.cafe.longitude?.doubleValue else {
+                return nil
+            }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        }
+        let searched = bridge.searchResultPlaces.compactMap { cafe -> CLLocationCoordinate2D? in
+            guard let lat = cafe.latitude?.doubleValue, let lng = cafe.longitude?.doubleValue else {
+                return nil
+            }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        }
+        return visited + saved + searched
+    }
+
+    /// 表示対象の Apple 検索由来カフェ。
+    ///
+    /// 既存 4 種ピンのいずれかと座標近接（約 40m 以内）のものを除外する
+    /// （優先順位: 訪問済み > 保存済み > 検索結果 > Apple 検索由来。名前一致はローカライズで
+    /// 不安定なため使わない）。
+    private func displayedAppleNearbyCafes(_ bridge: MapViewModelBridge) -> [ApplePoiCafe] {
+        let proximityThresholdMeters: CLLocationDistance = 40
+        let existingLocations = existingPinCoordinates(bridge).map {
+            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
+        }
+        return appleNearbyCafes.filter { cafe in
+            let location = CLLocation(latitude: cafe.coordinate.latitude, longitude: cafe.coordinate.longitude)
+            return !existingLocations.contains { $0.distance(from: location) <= proximityThresholdMeters }
+        }
+    }
+
+    /// Apple 検索由来ピンの不透明度。
+    ///
+    /// 既存 4 種より明確に低強調な意匠に加え、「保存済み」チップ強調中は 0.4、
+    /// テイストフィルタ有効時（Apple 由来は常に非マッチ扱い）は 0.25 まで減光する。
+    private func appleNearbyPinOpacity(_ bridge: MapViewModelBridge) -> Double {
+        if savedEmphasisActive { return 0.4 }
+        if !bridge.tasteMatchedPlaceIds.isEmpty { return 0.25 }
+        return 1.0
     }
 
     // MARK: - 位置情報セットアップ

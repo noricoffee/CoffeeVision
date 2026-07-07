@@ -29,7 +29,8 @@ import kotlin.test.assertTrue
  * - `onPoiTapped` → 例外 → `poiLookupError` にエラーメッセージがセットされる
  * - `onPoiLookupConsumed` → `poiLookupResult` が null に戻る
  * - `onPoiLookupErrorDismissed` → `poiLookupError` が null に戻る
- * - `locationBias` の引数が CafeRepository に正しく渡されている
+ * - 座標 / 半径の引数が `CafeRepository.searchNearby` に正しく渡されている（フェーズ 17-B: `searchText` から
+ *   `searchNearby` へ切替。Apple↔Google の名称差・`coffee_shop` 型の取りこぼしを避けるため座標アンカー解決にした）
  *
  * ## scope と vm.clear() の注意
  *
@@ -53,33 +54,30 @@ class MapViewModelPoiLookupTest {
 
     private class FakeCafeRepository : CafeRepository {
 
-        // searchText(query, locationBias) の最後の呼び出し引数を記録
-        var lastSearchTextQuery: String? = null
-        var lastSearchTextLocationBias: LocationBias? = null
+        // searchNearby(latitude, longitude, radiusMeters) の最後の呼び出し引数を記録
+        var lastSearchNearbyLatitude: Double? = null
+        var lastSearchNearbyLongitude: Double? = null
+        var lastSearchNearbyRadiusMeters: Double? = null
 
         // stub 用の戻り値（`null` のときは例外を投げる）
-        var searchTextResult: List<Cafe>? = emptyList()
-        var searchTextError: Exception? = null
+        var searchNearbyResult: List<Cafe>? = emptyList()
+        var searchNearbyError: Exception? = null
 
-        override suspend fun searchText(query: String): List<Cafe> {
-            lastSearchTextQuery = query
-            lastSearchTextLocationBias = null
-            searchTextError?.let { throw it }
-            return searchTextResult ?: emptyList()
-        }
+        override suspend fun searchText(query: String): List<Cafe> = emptyList()
 
-        override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> {
-            lastSearchTextQuery = query
-            lastSearchTextLocationBias = locationBias
-            searchTextError?.let { throw it }
-            return searchTextResult ?: emptyList()
-        }
+        override suspend fun searchText(query: String, locationBias: LocationBias): List<Cafe> = emptyList()
 
         override suspend fun searchNearby(
             latitude: Double,
             longitude: Double,
             radiusMeters: Double,
-        ): List<Cafe> = emptyList()
+        ): List<Cafe> {
+            lastSearchNearbyLatitude = latitude
+            lastSearchNearbyLongitude = longitude
+            lastSearchNearbyRadiusMeters = radiusMeters
+            searchNearbyError?.let { throw it }
+            return searchNearbyResult ?: emptyList()
+        }
 
         override suspend fun getDetails(placeId: String): Cafe = Cafe(
             placeId = placeId,
@@ -135,7 +133,7 @@ class MapViewModelPoiLookupTest {
     @Test
     fun onPoiTapped_withResults_setsPoiLookupResult() = runTest {
         val cafe = makeCafe("ChIJ001")
-        fakeCafeRepo.searchTextResult = listOf(cafe)
+        fakeCafeRepo.searchNearbyResult = listOf(cafe)
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
@@ -159,8 +157,8 @@ class MapViewModelPoiLookupTest {
     }
 
     @Test
-    fun onPoiTapped_withResults_passesLocationBiasToRepository() = runTest {
-        fakeCafeRepo.searchTextResult = listOf(makeCafe())
+    fun onPoiTapped_withResults_passesCoordinatesToSearchNearby() = runTest {
+        fakeCafeRepo.searchNearbyResult = listOf(makeCafe())
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
@@ -175,19 +173,16 @@ class MapViewModelPoiLookupTest {
         vm.onPoiTapped(name = "Blue Bottle", latitude = 35.658, longitude = 139.701)
         testScheduler.advanceUntilIdle()
 
-        assertEquals("Blue Bottle", fakeCafeRepo.lastSearchTextQuery)
-        val bias = fakeCafeRepo.lastSearchTextLocationBias
-        assertNotNull(bias)
-        assertEquals(35.658, bias.latitude)
-        assertEquals(139.701, bias.longitude)
-        assertEquals(500.0, bias.radiusMeters)
+        assertEquals(35.658, fakeCafeRepo.lastSearchNearbyLatitude)
+        assertEquals(139.701, fakeCafeRepo.lastSearchNearbyLongitude)
+        assertEquals(150.0, fakeCafeRepo.lastSearchNearbyRadiusMeters)
 
         vm.clear()
     }
 
     @Test
     fun onPoiTapped_emptyResults_setsPoiLookupError() = runTest {
-        fakeCafeRepo.searchTextResult = emptyList()
+        fakeCafeRepo.searchNearbyResult = emptyList()
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
@@ -212,7 +207,7 @@ class MapViewModelPoiLookupTest {
 
     @Test
     fun onPoiTapped_throwsException_setsPoiLookupError() = runTest {
-        fakeCafeRepo.searchTextError = Exception("Network timeout")
+        fakeCafeRepo.searchNearbyError = Exception("Network timeout")
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
@@ -237,7 +232,7 @@ class MapViewModelPoiLookupTest {
 
     @Test
     fun onPoiLookupConsumed_clearsPoiLookupResult() = runTest {
-        fakeCafeRepo.searchTextResult = listOf(makeCafe())
+        fakeCafeRepo.searchNearbyResult = listOf(makeCafe())
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
@@ -262,7 +257,7 @@ class MapViewModelPoiLookupTest {
 
     @Test
     fun onPoiLookupErrorDismissed_clearsPoiLookupError() = runTest {
-        fakeCafeRepo.searchTextResult = emptyList()
+        fakeCafeRepo.searchNearbyResult = emptyList()
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,
@@ -287,7 +282,7 @@ class MapViewModelPoiLookupTest {
 
     @Test
     fun onPoiTapped_retainsVisitedCafes() = runTest {
-        fakeCafeRepo.searchTextResult = listOf(makeCafe("poi-001"))
+        fakeCafeRepo.searchNearbyResult = listOf(makeCafe("poi-001"))
 
         val vm = MapViewModel(
             observeVisitedCafesUseCase = useCase,

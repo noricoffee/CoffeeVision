@@ -71,6 +71,22 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 
 環境によって「iPhone 16」等の型番が存在しないことがある（この環境では iPhone 17 系のみインストール済み）。`-destination 'platform=iOS Simulator,name=iPhone 16'` は `Unable to find a device matching...` で即失敗するので、事前に `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcrun simctl list devices available | grep iPhone` で存在する名前を確認してから `-destination` を組み立てる。
 
+## `xcodebuild -project ... -list` の出力は末尾までスクロールしないと `Schemes:` セクションが見えないことがある（2026-07-07 確認）
+
+`| head -30` 等で先頭だけ見ると `Targets:` / `Build Configurations:` までしか映らず「共有スキームが無い」と誤認しがち（実際は package 解決ログが長く `Schemes:` セクションはさらに下）。`xcshareddata/xcschemes/*.xcscheme` の有無を先に `find` で確認するか、`-list` は全文（`tail` 併用）で見ること。ビルドは `-target` ではなく `-scheme`（+ 必要なら `-derivedDataPath`）を使う（`-derivedDataPath` 指定時は `-scheme` が必須で `-target` だと `error: The flag -scheme... is required` になる）。
+
+## `iosApp` の `IPHONEOS_DEPLOYMENT_TARGET` は 26.0（2026-07-07、フェーズ 17 確認）
+
+最小デプロイターゲットが 26.0 のため、`API_AVAILABLE(ios(26.0))` の新 API を無条件で使ってよい（可用性チェック不要）。例: `MKMapItem.placemark` は ios 26.0 で deprecated（`API_DEPRECATED(..., ios(6.0, 26.0))`）になっており、代わりの `MKMapItem.location`（`CLLocation`, `API_AVAILABLE(ios(26.0))`）が確実に使える。`.placemark.coordinate` ではなく `.location.coordinate` を使うことでビルド警告 (`DeprecatedDeclaration`) を避けられる。同様のパターン（旧 API が ios 26.0 で deprecated、新 API が ios 26.0 available）は他の SDK API でも今後遭遇し得るので、warning が出たら新 API への置換をまず検討する。
+
+## `MKLocalPointsOfInterestRequest` + `MKLocalSearch` で「常時見えるカフェピン」を実装するパターン（フェーズ 17、周辺カフェ自前ピン化で確認）
+
+- `MKLocalPointsOfInterestRequest(center:radius:)` の Swift シグネチャは ObjC ヘッダの `initWithCenterCoordinate:radius:` から素直に導出できる（`.swiftinterface` 確認不要、Apple 公式 SDK ヘッダ `MapKit.framework/Headers/MKLocalPointsOfInterestRequest.h` を直接読めばよい。KMP ブリッジと違い純正 Apple API なので裏取り先が異なる）。
+- `MKLocalSearch(request:)` → `try await .start()` は completion handler ベースの ObjC API に対する Apple 公式 Swift async overlay（ヘッダには載らない）。広く使われる確立パターンなので信頼してよい。
+- `MKPointOfInterestFilter(including:)` は SwiftUI `MapStyle` の `PointOfInterestFilter.including(_:)`（`.mapStyle(.standard(pointsOfInterest:))` に渡す方）とは**別の型**（`MKPointOfInterestFilter`、MapKit の ObjC 型）。名前が同じ `including` で紛らわしいので取り違えに注意。
+- デバウンス+キャンセルは `Task` を `@State` に保持し、新規スケジュール時に前回を `cancel()` → `Task.sleep` → `Task.isCancelled` チェック、が定番。ズームゲート（半径がしきい値超なら fetch せずクリア）は `scheduleAppleNearbyFetch` の入口でガードするだけで十分（View 側で「見えている」/「見えていない」の切替が要らない単純ケース）。
+- 座標近接による重複排除は `CLLocation.distance(from:)`（メートル単位）で十分。既存ピンの座標一覧はトグル（`bridge.showVisited` 等）の状態に関わらず**全件**から作る（表示トグルは見た目の間引き、dedup はトグル非依存という既存パターンを踏襲）。
+
 ## SKIE sealed class の新規 case 追加は Obj-C ヘッダで型名・init シグネチャを裏取りするのが必須（2026-07-06、`Mode.Duplicate` 追加で確認）
 
 - Kotlin の `sealed interface Mode { data class Duplicate(val sourceCoffeeId: String) : Mode }` は Swift 側で `SharedLogicCoffeeEditorViewModelModeDuplicate`（`swift_name` 属性で `CoffeeEditorViewModelModeDuplicate` に短縮）になり、`init(sourceCoffeeId:)` で構築する。既存の `ModeEdit(coffeeId:)` と同じ命名パターンなので類推で書けるが、念のためヘッダで `initWith...` 属性を確認してから使う。

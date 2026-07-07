@@ -825,6 +825,18 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **TagChip の count バッジ配色**: 選択時 = 白背景 + accentColor 文字、非選択時 = accentColor 背景 + 白文字（旧右上ボタンの indigo バッジ意匠を選択状態で反転させる形。仕様未記載のため実装判断）
 - **後続候補**: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きのまま孤立（visitedCafePin の brown→accentColor 化に未追随。SavedCafeListSheet.swift:78）。次にこのファイルを触るとき accentColor へ揃える
 
+### 2026-07-07: 周辺カフェを Apple 検索由来の自前ピンに（フェーズ 17）
+
+- 領域: iOS / SwiftUI / MapKit（`iosApp/iosApp/Features/Map/MapTabView.swift`）。KMP 変更なし
+- 関連: tasks.md フェーズ 17
+
+- **なぜ Apple 標準 POI ラベル頼みをやめたか**: 標準マップの POI ラベル表示密度は Apple のレンダリングエンジンがズームレベルで内部決定し、SwiftUI `MapStyle` にも UIKit `MKMapView` にも「広域で POI を出す」密度・閾値の公開 API が無い（`.including([.cafe,.bakery])` はカテゴリ取捨のみで出現ズームは変えられない）。よって「かなりズームしないとカフェが出ない」は POI ラベル依存設計では原理的に直せず、カフェを自前ピンとして描く方向へ転換した
+- **データソースに `MKLocalPointsOfInterestRequest`（Apple）を選び Google Places 自動検索を採らなかった判断**: 「このエリアを検索」を手動ボタンにしたのは Places 課金・quota を抑えるため（フェーズ以前の設計意図）。パンのたびに自動で Places を叩くとその意図に反する。Apple 検索は Apple Maps quota で Google Places 課金に無関係、かつカフェ座標を region 単位で取得できるため、常時表示ピンの供給源として最適。ピンタップ時のみ既存 `onPoiTapped` → Places ルックアップを通すので、詳細取得の課金は「ユーザーが実際に開いた店」に限定されたまま
+- **ピン競合は座標近接（約 40m）で解決**: Apple の `MKMapItem` は Google placeId を持たないため、既存 4 種ピン（placeId ベース）との重複排除は placeId 一致ではなく座標近接で行う。名前一致はローカライズ差で不安定
+- **標準 cafe/bakery ラベルを `.excluding` で消す随伴変更**: 自前ピンと Apple ラベルの二重表示を避けるため。結果として cafe/bakery の `MapFeature` 選択機構（`mapFeatureSelection` / `poiSelectionChanged`）が死にコード化するので一式除去した。`onPoiTapped` の下流（ルックアップ→push→トースト）は不変で、呼び出し元が自前ピンに替わるだけ
+- **Apple 検索 fetch 失敗時はサイレントクリア**: `MKLocalSearch` 失敗時は `appleNearbyCafes = []` にするのみでトースト等の通知を出さない。周辺カフェピンは低優先度の補助表示であり、失敗を都度通知するとブラウズ中のノイズになるため。既存 `poiLookupError` トースト（ピンタップ後の Places ルックアップ失敗）とは別レイヤーの扱い
+- **`.location.coordinate` を採用**: `MKMapItem.placemark` は iOS 26.0 で deprecated。deployment target が 26.0 のため `item.location.coordinate` を無条件使用
+
 ### 2026-07-07: App Store Connect アップロードワークフロー（release-testflight.yml）
 
 - 領域: Build / CI

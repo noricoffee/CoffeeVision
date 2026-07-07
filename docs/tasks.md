@@ -409,6 +409,51 @@
 
 ---
 
+## フェーズ 17: 周辺カフェを自前ピン化（Apple 検索由来・ズーム依存の解消）
+
+**背景**: マップが Apple 標準 POI ラベルのタップに依存しており、そのラベル密度は MapKit のレンダリングエンジンがズームレベルで内部決定するため公開 API では制御不能（`MapStyle` / `MKMapView` いずれにも密度・閾値ノブ無し）。「かなりズームしないとカフェ POI が出てこない」というユーザー体験の根本原因。
+
+**方針**（ユーザー承認済み 2026-07-07）: Apple 標準 POI ラベル頼みをやめ、`MKLocalPointsOfInterestRequest`（`MKLocalSearch` 経由）で表示範囲内のカフェを **Apple 地図データ**から取得し、**常時見える自前ピン**として描く。Google Places 課金なし（Apple Maps quota）。ピンタップは既存の `onPoiTapped(name:latitude:longitude:)` → Places ルックアップ → 詳細 push フローをそのまま再利用（KMP 変更ゼロ）。iOS 単独で完結。
+
+### インターフェース合意書（KMP 変更なし）
+
+- 追加も変更もしない。`MapViewModelBridge.onPoiTapped(name:latitude:longitude:)` / `poiLookupResult` / `isLookingUpPoi` / `poiLookupError` を現状のまま流用する。Apple 検索由来ピンは iOS ローカルの純プレゼンテーション状態（ドメイン化しない）。
+
+### 仕様（ios-engineer 向け）
+
+- **取得**: `MKLocalPointsOfInterestRequest(center:radius:)` + `pointOfInterestFilter = MKPointOfInterestFilter(including: [.cafe, .bakery])` を `MKLocalSearch` で実行。既存 `.onMapCameraChange(frequency: .onEnd)` で算出済みの region/radius を再利用してトリガする。
+- **デバウンス / キャンセル**: 直近の fetch Task を `@State` で保持し、camera settle ごとに前回をキャンセル → 300ms 程度スリープしてから実行（連続パンの合体）。
+- **ズームゲート**: 可視半径がしきい値（既定 3000m、定数で調整可）を超えたら fetch せず既存の Apple 検索ピンを **クリア**（都市スケールでの氾濫防止）。しきい値以下では全ズーム域でピンが出る＝ユーザーの不満（ズームしないと出ない）を解消。
+- **重複排除**（優先順位: 訪問済み > 保存済み > 検索結果 > Apple 検索由来）: Apple 由来カフェは placeId を持たないため座標近接（約 40m 以内）で既存 4 種ピンのいずれかと重なるものを除外する。名前一致はローカライズで不安定なため使わない。
+- **ピン意匠**: 既存 4 種（訪問済み=accent / 保存済み=indigo / 検索結果=blue / 好み一致=pink）より明確に低強調。小さめ（≤30px）+ ミュートしたセカンダリ系配色 + `cup.and.saucer` SF Symbol。「まだ記録も保存もしていない周辺の店」を示す。`savedEmphasisActive` 時は 0.4、テイストフィルタ有効時（`!tasteMatchedPlaceIds.isEmpty`、Apple 由来は常に非マッチ）は 0.25 に減光。アクセシビリティラベル必須。
+- **タップ**: `bridge.onPoiTapped(name:latitude:longitude:)` を呼ぶ（ローディングは既存 `isLookingUpPoi` オーバーレイ、結果 push は既存 `.onChange(of: bridge.poiLookupResult)`、失敗は既存 `poiLookupError` トーストで処理済み）。
+- **標準 POI ラベルと `MapFeature` 選択の扱い**: `.mapStyle` を `.standard(pointsOfInterest: .excluding([.cafe, .bakery]))` に変更し、Apple の cafe/bakery ラベルを消して自前ピンとの二重表示を防ぐ（他カテゴリの地図コンテキストは残す）。これにより cafe/bakery の `MapFeature` は発火しなくなるため、`selection: $mapFeatureSelection` / `mapFeatureSelection` State / `poiSelectionChanged` / `.onChange(of: mapFeatureSelection)` の cafe 用 POI 選択機構は死にコード化する → 一式除去する（Simplicity）。`onPoiTapped` の呼び出し元が自前ピンに置き換わるだけで、下流フローは不変。
+
+### タスク
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: Apple 検索ピン層の追加（fetch/デバウンス/ゲート/重複排除/意匠/タップ）+ `.mapStyle` excluding 化 + `mapFeatureSelection` 機構の除去 + ビルド検証 | 2026-07-07 完了。`MapTabView.swift` のみ。override 不使用で BUILD SUCCEEDED。意匠: 24pt + `.secondaryLabel` + `cup.and.saucer`（非塗り）。重複排除 40m 測地距離。ゲート 3000m。KMP 変更なし |
+| [x] | 親: override 無し再検証 | 2026-07-07 完了。`xcodebuild ... -destination iPhone 17` override 無しで `** BUILD SUCCEEDED **`、`No such module 'SharedLogic'` は framework 未インデックス時の SourceKit 誤検知（フルビルドで解消）|
+| [ ] | 親: シミュレータ目視促し + docs 反映 + commit | 目視観点: 広域〜中域でカフェピンが常時出る / 既存 4 種との二重表示なし / タップ→詳細 / しきい値超でクリア / ダークモードでのミュート配色視認性。目視 OK 後に commit |
+
+### 17-B: 「見えるのにタップで『該当カフェなし』」不整合の修正（目視で発覚）
+
+**症状**: 自前ピンは正しく出るが、タップすると `poiLookupError`「該当するカフェが見つかりませんでした」になる。
+
+**原因**: 表示（Apple `[.cafe, .bakery]`）と解決（`MapViewModel.onPoiTapped` → `CafeRepository.searchText(name, LocationBias 500m)` は `includedType=cafe` ハードフィルタ付きの**名前テキスト検索**）で対象集合が食い違う。①`coffee_shop` 型（スタバ・ブルーボトル等チェーンの多く）が `cafe` フィルタで除外 ②ベーカリーは `cafe` に不一致で常に 0 件 ③Apple 表示名↔Google テキストマッチのズレ。座標が正確に分かっている POI 解決に名前テキスト検索を使うのが誤り（この不整合はフェーズ 16 以前から潜在。POI が滅多に出なかったため露見していなかった）。
+
+**方針**: 座標アンカー解決へ切替。名前テキスト検索をやめ、既存 `CafeRepository.searchNearby(lat, lng, radiusMeters)`（`includedPrimaryTypes=[cafe, coffee_shop]` + `rankPreference=DISTANCE`）を使い最近傍を採る（①③根治）。②はベーカリーを iOS 取得対象から外し「表示＝解決可能」を揃える。KMP API シグネチャ変更なし（`searchNearby` 再利用、`onPoiTapped` の bridge シグネチャも不変）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `MapViewModel.onPoiTapped` の解決を `searchText(name, bias)` → `searchNearby(lat, lng, 150m)` に変更。`.first()` 採用（DISTANCE ランク済）。空→既存エラー / 例外ハンドリング維持。`name` 引数は bridge 安定のため残すが query には未使用（KDoc に理由記載）。`MapViewModelPoiLookupTest` を `searchNearby` スタブへ更新 | 2026-07-07 完了。JVM test green。公開 API 不変。親が `PlacesClientImpl.kt:81` の陳腐化コメント（POI タップはもう searchText 不使用）も同時修正 |
+| [x] | ios-engineer: Apple POI 取得フィルタを `[.cafe, .bakery]` → `[.cafe]` に変更（表示＝解決可能を揃える）。関連コメント追随 | 2026-07-07 完了。override 無し BUILD SUCCEEDED。`.mapStyle` の excluding は cafe/bakery 両方のまま維持（標準ラベル二重表示防止） |
+| [x] | 親: iosSimulatorArm64Test（override 無し）+ ビルド再検証 | 2026-07-07 完了。`:shared:feature:map:iosSimulatorArm64Test` override 無し BUILD SUCCESSFUL / 統合 xcodebuild override 無し `** BUILD SUCCEEDED **`（framework linkDebug UP-TO-DATE = KMP 変更取り込み済） |
+| [ ] | 親: 目視促し + commit | 目視: coffee_shop 系（スタバ等）タップ→詳細遷移すること / ベーカリーピンが出ないこと。目視 OK 後にフェーズ 17 全体を commit |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

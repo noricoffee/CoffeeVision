@@ -163,7 +163,7 @@
 
 ### 12-B: コーヒー豆ナレッジベース（サーバー管理データ）
 
-> 完了（2026-06-30）: `BeanProfile`（サーバ管理 read-only、ID 紐付けせず origin/processings ファジーマッチ）+ `BeanProfileRepository`（Android Kotlin / iOS Swift、one-shot get + メモリキャッシュ）+ エディタの origin サジェスト UI。仕様は `data-model.md` §1.8。**Firestore `beanProfiles` への初期データ投入はユーザー作業**。
+> 完了（2026-06-30）: `BeanProfile`（サーバ管理 read-only、ID 紐付けせず origin/processings ファジーマッチ）+ `BeanProfileRepository`（Android Kotlin / iOS Swift、one-shot get + メモリキャッシュ）+ エディタの origin サジェスト UI。仕様は `data-model.md` §1.8。**初期データは seed 整備済み（2026-07-08、`scripts/seed/`。下記「BeanProfile 初期データ整備」）。Firestore への投入実行はユーザー作業**。
 
 ### 12-C: 個人好みと豆ナレッジの突合・言語化
 
@@ -451,6 +451,17 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `buildCafe` の Edit/Duplicate self-extract 分岐を修正（引き継ぎ元 cafe なし → 手入力カフェとして新規 UUID 採番）+ mode 分岐の畳み込み + commonTest | 2026-07-08 完了。cafe 採用を状態ベース 3 段判定に一本化し `mode` 引数削除。回帰テスト 2 件追加。`testAndroidHostTest` 20 件 green / 親が `iosSimulatorArm64Test` を override 無しで green。implementation_note / lessons 2026-07-08 記録 |
+---
+
+## BeanProfile 初期データ整備（2026-07-08）
+
+> **確定仕様（grilling 2026-07-08 親確定）**: 現行スキーマのまま（拡張なし）/ 主要産地網羅 38 件 / **日本語表記に統一**（`processings` は enum 名、`beanId` は ASCII kebab-case）/ `flavorNotes` は統一語彙 42 語（正本 `data-model.md` §3.2）/ seed JSON + Admin SDK スクリプト（`scripts/seed/`）で冪等 upsert。SCAJ カッピング評価観点（酸の質 / 甘さ / 質感 / クリーンカップ / 余韻 / 調和）は description の記述観点と語彙に反映、Blue Bottle 等ロースターはラインナップ参考のみ（description は自作・転載禁止）。経緯は implementation_note 2026-07-08 エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: seed データ `scripts/seed/bean-profiles.json`（38 件）+ 投入スクリプト `seed-bean-profiles.mjs`（バリデーション + 冪等 upsert）+ README + .gitignore（サービスアカウント鍵） | 2026-07-08 完了。`--dry-run` でバリデーション 38 件全通過 |
+| [x] | 親: docs 反映（data-model.md §1.8 / §3.2 の日本語表記規約 + flavorNotes 語彙リスト + seed 手順参照、implementation_note 経緯記録） | 2026-07-08 完了 |
+| [ ] | ユーザー: サービスアカウント鍵取得 → `node seed-bean-profiles.mjs` で本番投入（`coffeevision-a54aa`）→ 実機確認（分析タブ「好みの豆の傾向」/「試してみては」/ エディタ産地サジェスト。verification-checklist 15-E-3） | 手順は `scripts/seed/README.md`。投入後はアプリ再起動（メモリキャッシュのため） |
 ---
 
 ## docs / 設計判断バックログ（後回し可）

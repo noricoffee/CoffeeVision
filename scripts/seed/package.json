@@ -1,0 +1,9 @@
+{
+  "name": "coffeevision-bean-profiles-seed",
+  "private": true,
+  "type": "module",
+  "description": "Firestore beanProfiles への初期データ投入スクリプト",
+  "dependencies": {
+    "firebase-admin": "^13.4.0"
+  }
+}

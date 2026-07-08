@@ -490,12 +490,12 @@ class SuggestUnexploredBeansUseCase(
 
 ```kotlin
 data class BeanProfile(
-    val beanId: String,                        // Firestore ドキュメント ID
-    val name: String,                          // 豆名（表示用）
-    val origin: String,                        // 産地（"Ethiopia" "Colombia" 等）
-    val variety: String?,                      // 品種（"Geisha" "Bourbon" 等）
+    val beanId: String,                        // Firestore ドキュメント ID（ASCII kebab-case）
+    val name: String,                          // 豆名（表示用。「エチオピア ゲイシャ ナチュラル」等）
+    val origin: String,                        // 産地（「エチオピア」「コロンビア」等。日本語表記 = §3.2 表記規約）
+    val variety: String?,                      // 品種（「ゲイシャ」「ブルボン」等）
     val processings: List<ProcessingMethod>,   // 精製方法（複数可）
-    val flavorNotes: List<String>,             // フレーバーノート（"Chocolate" "Citrus" 等）
+    val flavorNotes: List<String>,             // フレーバーノート（「チョコレート」「シトラス」等。統一語彙 = §3.2）
     val description: String?,                  // 12-C LLM インプット用説明
 )
 ```
@@ -763,19 +763,28 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
 
 ```json
 {
-  "beanId": "ethiopia-yirgacheffe-geisha-washed",
-  "name": "エチオピア イルガチェフェ ゲイシャ ウォッシュト",
-  "origin": "Ethiopia",
-  "variety": "Geisha",
-  "processings": ["Washed"],
-  "flavorNotes": ["Jasmine", "Bergamot", "Citrus", "BlackTea"],
-  "description": "エチオピア南部イルガチェフェ産のゲイシャ種。ジャスミンや柑橘系の繊細な香りが特徴。"
+  "beanId": "ethiopia-geisha-natural",
+  "name": "エチオピア ゲイシャ ナチュラル",
+  "origin": "エチオピア",
+  "variety": "ゲイシャ",
+  "processings": ["Natural"],
+  "flavorNotes": ["ジャスミン", "ライチ", "ピーチ", "ローズ"],
+  "description": "ゲイシャ種発祥の地エチオピアのナチュラル精製。華やかな香りとライチのようなみずみずしい甘さが際立つ。"
 }
 ```
 
-- `processings` は `ProcessingMethod.name`（`"Washed"` / `"Natural"` 等）の配列
+**表記規約（2026-07-08 確定）**:
+
+- **日本語表記に統一**: `name` / `origin`（「エチオピア」）/ `variety`（「ゲイシャ」）/ `flavorNotes`（「ジャスミン」）/ `description` は日本語。好み突合（12-C）はユーザーが記録に入力した産地文字列との trim + lowercase 部分一致のため、日本語 UI の手入力・サジェスト表示と表記を揃える
+- **`processings` は `ProcessingMethod.name`（`"Washed"` / `"Natural"` / `"Honey"` / `"Anaerobic"` / `"Other"`）の配列**: 表示文字列ではなく enum 識別子。Mapper が enum 名で逆引きするため日本語化しない
+- **`beanId` は ASCII kebab-case**（例: `ethiopia-geisha-natural`）: Firestore ドキュメント ID として安全な形を維持
+- **`flavorNotes` は下記の統一語彙から選ぶ（自由記述禁止）**: `PreferredBeanTraitsUseCase` の頻度集計（top-5）が表記ゆれで割れるのを防ぐ。語彙は SCA フレーバーホイール + SCAJ カッピング評価語彙由来の日本語 42 語。機械検証は seed スクリプトのバリデーションが行う
+
+  > ジャスミン / ローズ / フローラル / シトラス / ベルガモット / レモン / オレンジ / グレープフルーツ / アップル / 洋梨 / ピーチ / アプリコット / チェリー / ストロベリー / ブルーベリー / ラズベリー / カシス / ライチ / マンゴー / パッションフルーツ / パイナップル / トロピカルフルーツ / レーズン / プルーン / ハチミツ / キャラメル / ブラウンシュガー / 黒糖 / バニラ / メープルシロップ / チョコレート / ダークチョコレート / アーモンド / ヘーゼルナッツ / ナッツ / シナモン / スパイス / 紅茶 / ワイン / ハーブ / アーシー / スモーキー
+
+- **`description` は自作テキスト**（ロースター各社サイトからの転載禁止）。SCAJ カッピングの評価観点（酸の質 / 甘さ / 質感 / クリーンカップ / 余韻 / 調和）を記述観点に使う
 - サービス管理データのため、ユーザーは read-only。write は Admin SDK または Firebase Console から
-- 初期データ投入はユーザー作業（Firebase Console または Admin SDK スクリプト）
+- **初期データ**: `scripts/seed/bean-profiles.json`（主要産地網羅 38 件）を `scripts/seed/seed-bean-profiles.mjs`（Admin SDK / ドキュメント ID = beanId の冪等 upsert / 投入前バリデーション）で投入する。手順は `scripts/seed/README.md`。実行はユーザー作業（サービスアカウント鍵が必要、鍵は非コミット）
 
 ### `users/{uid}/coffees/{coffeeId}`
 

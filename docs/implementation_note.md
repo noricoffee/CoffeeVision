@@ -888,3 +888,17 @@ TestFlight へのアップロードを GitHub Actions（`workflow_dispatch` 手�
 - **なぜ mode 不要か**: `Mode.Create` は `load()` で `currentInitialRecord = null` を明示設定するため、③の判定が Create では常に false → ④に落ちる = 従来の Create 挙動（UUID 採番）と一致。よって「引き継ぎ元 cafe の有無」の一点で 3 モードを統一でき、Create 挙動は不変
 - **検証**: 回帰テスト 2 件（Edit / Duplicate のセルフ抽出 × 手動カフェ名）追加。`testAndroidHostTest` 20 件 green / `iosSimulatorArm64Test` 親が override 無しで green
 - **iOS 影響なし**: `buildCafe` は private。公開 API（`Mode` / `UIState` / public メソッド）不変で Bridge 追随不要
+
+### 2026-07-08: BeanProfile 初期データの表記・データソース方針（seed 整備）
+
+- 領域: Docs / Data
+- 関連: `scripts/seed/bean-profiles.json` / `scripts/seed/seed-bean-profiles.mjs`
+
+Firestore `beanProfiles` が空のまま残っていた初期データ投入（12-B 起票時から「ユーザー作業」扱い）を、seed JSON + Admin SDK スクリプトとして整備した。grilling で確定した仕様と、その理由:
+
+- **スキーマ拡張は見送り**: ユーザー要望の「SCAJ の評価」は 8 項目カッピングスコアの構造化保持ではなく、**description の記述観点（酸の質 / 甘さ / 質感 / クリーンカップ / 余韻 / 調和）と flavorNotes の語彙への反映**で吸収。現行 6 フィールドのまま実装済みの 12-B / 12-C / 15-E-3 が即動く最小コスト案を採用
+- **日本語表記に統一**（origin「エチオピア」/ variety「ゲイシャ」/ flavorNotes「ジャスミン」）: 好み突合はユーザーが記録に入力した産地文字列との trim + lowercase 部分一致であり、日本語 UI での手入力（「エチオピア」と書く可能性が高い）とマッチさせるため。data-model.md の英語サンプルは日本語例に改訂済み。`processings` だけは enum 識別子（`"Washed"` 等）のため英語のまま
+- **flavorNotes は統一語彙 42 語に固定**（自由記述禁止。正本 data-model.md §3.2）: `PreferredBeanTraitsUseCase` の頻度集計が表記ゆれ（「チョコ」「チョコレート」）で割れるのを防ぐ。seed スクリプトのバリデーションで機械強制
+- **著作権**: Blue Bottle 等ロースターのラインナップは「どの産地・品種・精製を揃えるか」の参考にのみ使い、description は一般知識ベースの自作テキスト。転載はしない
+- **投入**: doc ID = beanId の `set()` で冪等 upsert（削除はしない。JSON から消した項目は Console で手動削除）。dry-run はバリデーションのみで firebase-admin 不要。サービスアカウント鍵は `.gitignore`（`*service-account*.json`）
+- 影響: 投入後、分析タブ「好みの豆の傾向」/「試してみては」/ エディタ産地サジェストが実データで動く（verification-checklist 15-E-3 の実機確認が可能になる）。アプリはメモリキャッシュ（one-shot get）のため投入反映には再起動が必要

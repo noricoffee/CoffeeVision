@@ -145,10 +145,11 @@ class SuggestUnexploredBeansUseCaseTest {
 
     @Test
     fun `origin が部分一致のみの BeanProfile も候補に含まれる`() {
+        // 入力・プロファイルとも OriginNormalizer の辞書外の語（素通しの contains 判定を検証する）
         val records = emptyList<CoffeeRecord>()
-        val profiles = listOf(profile("b1", origin = "Ethiopia Yirgacheffe", variety = "Heirloom"))
+        val profiles = listOf(profile("b1", origin = "ケニア ニエリ", variety = "SL28"))
 
-        val result = useCase(records, profiles, signalsWithOrigin("Yirgacheffe"))
+        val result = useCase(records, profiles, signalsWithOrigin("ニエリ"))
 
         assertEquals(1, result.size)
         assertEquals("b1", result.first().profile.beanId)

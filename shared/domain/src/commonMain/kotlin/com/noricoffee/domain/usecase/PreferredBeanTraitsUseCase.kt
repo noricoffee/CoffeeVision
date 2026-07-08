@@ -1,13 +1,14 @@
 package com.noricoffee.domain.usecase
 
 import com.noricoffee.domain.BeanProfile
+import com.noricoffee.domain.OriginNormalizer
 import com.noricoffee.domain.model.FavoriteSignals
 import com.noricoffee.domain.model.PreferredBeanTraits
 
 /**
  * [FavoriteSignals] と [BeanProfile] リストを突合し、ユーザーが好みやすい豆の特徴を導出する UseCase。
  *
- * - origin の突合は [BeanProfileMatchUseCase] と同じ trim/lowercase 部分一致ロジックを採用する
+ * - origin の突合は [OriginNormalizer] で正規化した文字列同士の部分一致ロジックを採用する
  * - flavorNotes の頻度集計はマッチしたプロファイルのみを対象にする
  * - 純粋関数（IO なし）のため、テストが容易
  *
@@ -25,9 +26,9 @@ class PreferredBeanTraitsUseCase {
         val originLabel = signals.bestOrigin?.label
 
         val matched = if (originLabel != null) {
-            val needle = originLabel.trim().lowercase()
+            val needle = OriginNormalizer.normalize(originLabel)
             profiles.filter { profile ->
-                val hay = profile.origin.trim().lowercase()
+                val hay = OriginNormalizer.normalize(profile.origin)
                 hay == needle || hay.contains(needle) || needle.contains(hay)
             }
         } else {

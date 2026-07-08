@@ -338,6 +338,22 @@ class BuildCoffeeStatsUseCaseTest {
     }
 
     @Test
+    fun originRanking_synonymNormalizationGroupsEthiopiaVariants() {
+        // "Ethiopia"（英語国名シノニム）と "エチオピア"（正規形そのもの）は
+        // OriginNormalizer の名寄せにより同一グループとして集計される
+        val records = listOf(
+            record("r1", origin = "Ethiopia"),
+            record("r2", origin = "エチオピア"),
+            record("r3", origin = "  Ethiopia  "),
+        )
+
+        val stats = useCase(records)
+
+        assertEquals(1, stats.originRanking.size)
+        assertEquals(3, stats.originRanking.first().count)
+    }
+
+    @Test
     fun originRanking_sortedByCountDescending() {
         val records = listOf(
             record("r1", origin = "ケニア"),
@@ -711,6 +727,30 @@ class BuildCoffeeStatsUseCaseTest {
             record("r1", rating = 4.5, origin = "Ethiopia"),
             record("r2", rating = 4.5, origin = "ethiopia"),    // 正規化で Ethiopia と同グループ
             record("r3", rating = 4.5, origin = " Ethiopia "), // 正規化で Ethiopia と同グループ
+        ) + (4..10).map { i ->
+            record("r$i", rating = 4.5, origin = "Ethiopia")
+        }
+        val brazilRecords = (1..10).map { i ->
+            record("rb$i", rating = 2.0, origin = "Brazil")
+        }
+        val records = ethioRecords + brazilRecords
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.bestOrigin)
+        // 表示ラベルは最初の元表記の trim()
+        assertEquals("Ethiopia", stats.favoriteSignals.bestOrigin!!.label)
+        assertEquals(10, stats.favoriteSignals.bestOrigin!!.count)
+    }
+
+    @Test
+    fun favoriteSignals_bestOrigin_synonymNormalizationGroupsVariants() {
+        // "Ethiopia"（英語国名シノニム）と "エチオピア"（正規形）は OriginNormalizer の名寄せで
+        // 同一グループとして集計される（データ設計は favoriteSignals_bestOrigin_normalizationGroupsVariants と同じ）
+        val ethioRecords = listOf(
+            record("r1", rating = 4.5, origin = "Ethiopia"),
+            record("r2", rating = 4.5, origin = "エチオピア"),   // シノニムで Ethiopia と同グループ
+            record("r3", rating = 4.5, origin = "  Ethiopia "),
         ) + (4..10).map { i ->
             record("r$i", rating = 4.5, origin = "Ethiopia")
         }

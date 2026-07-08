@@ -2,6 +2,7 @@ package com.noricoffee.domain.usecase
 
 import com.noricoffee.domain.BeanProfile
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.OriginNormalizer
 import com.noricoffee.domain.model.FavoriteSignals
 import com.noricoffee.domain.model.UnexploredBeanSuggestion
 
@@ -18,6 +19,8 @@ import com.noricoffee.domain.model.UnexploredBeanSuggestion
  *     （ユーザーがその産地を一度でも記録していれば経験済み扱い。品種情報が無いので、これ以上絞り込めない）
  *   - [BeanProfile.variety] が非 null の候補は (origin, variety) の正規化ペアで判定する
  *     （同じ産地でも品種違いは別の体験として残す。産地だけ一致していても未経験として提案対象になり得る）
+ * - **origin は [OriginNormalizer] で正規化し、variety は従来どおり trim + lowercase のみ**
+ *   （品種のシノニム名寄せは対象外）
  * - 純粋関数（IO なし）のため、テストが容易
  *
  * @see [BeanProfileMatchUseCase] origin マッチ・スコアリングの参照実装
@@ -45,7 +48,7 @@ class SuggestUnexploredBeansUseCase(
         val recordedPairs = mutableSetOf<Pair<String, String?>>()
         val recordedOrigins = mutableSetOf<String>()
         for (record in records) {
-            val normalizedOrigin = record.origin?.trim()?.lowercase() ?: continue
+            val normalizedOrigin = record.origin?.let { OriginNormalizer.normalize(it) } ?: continue
             val normalizedVariety = record.variety?.trim()?.lowercase()
             recordedOrigins.add(normalizedOrigin)
             recordedPairs.add(normalizedOrigin to normalizedVariety)
@@ -68,7 +71,7 @@ class SuggestUnexploredBeansUseCase(
         recordedPairs: Set<Pair<String, String?>>,
         recordedOrigins: Set<String>,
     ): Boolean {
-        val normalizedOrigin = profile.origin.trim().lowercase()
+        val normalizedOrigin = OriginNormalizer.normalize(profile.origin)
         val normalizedVariety = profile.variety?.trim()?.lowercase()
         return if (normalizedVariety == null) {
             normalizedOrigin !in recordedOrigins

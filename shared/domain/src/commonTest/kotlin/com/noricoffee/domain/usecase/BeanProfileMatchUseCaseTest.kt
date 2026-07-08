@@ -55,19 +55,38 @@ class BeanProfileMatchUseCaseTest {
 
     /**
      * TC-2: origin 部分一致（contains）→ score 1 で返却される。
-     * 入力 "Yirgacheffe" が profile.origin "Ethiopia Yirgacheffe" に含まれるケース。
+     * 入力 "ニエリ" が profile.origin "ケニア ニエリ" に含まれるケース。
+     * （どちらも OriginNormalizer のシノニム辞書外なので素通しの contains 判定になる。
+     * 辞書に載っている語は正規形へ変換されるため、このテストは意図的に辞書外の語を使う）
      */
     @Test
     fun `origin 部分一致（contains）のプロファイルが score 1 で返る`() {
         val profiles = listOf(
-            profile("a", origin = "Ethiopia Yirgacheffe"),
+            profile("a", origin = "ケニア ニエリ"),
             profile("b", origin = "Colombia"),
+        )
+
+        val result = useCase(profiles, origin = "ニエリ", processing = null)
+
+        assertEquals(1, result.size)
+        assertEquals("a", result.first().beanId)
+    }
+
+    /**
+     * TC-2b: シノニム辞書による名寄せ → サブ地域の英語綴り "Yirgacheffe" が
+     * 正規形「エチオピア」へ変換され、origin "エチオピア" のプロファイルに完全一致（+2）する。
+     * contains 一致（+1）のプロファイルより上位に来ることでスコア差も検証する。
+     */
+    @Test
+    fun `シノニム辞書で Yirgacheffe がエチオピアのプロファイルに完全一致する`() {
+        val profiles = listOf(
+            profile("partial", origin = "エチオピア シャキッソ"),  // contains 一致 +1
+            profile("exact", origin = "エチオピア"),               // 辞書正規化後に完全一致 +2
         )
 
         val result = useCase(profiles, origin = "Yirgacheffe", processing = null)
 
-        assertEquals(1, result.size)
-        assertEquals("a", result.first().beanId)
+        assertEquals(listOf("exact", "partial"), result.map { it.beanId })
     }
 
     /**

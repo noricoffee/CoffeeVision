@@ -2,6 +2,7 @@ package com.noricoffee.domain.usecase
 
 import com.noricoffee.domain.BeanProfile
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.OriginNormalizer
 import com.noricoffee.domain.model.CafeStat
 import com.noricoffee.domain.model.CategoryStat
 import com.noricoffee.domain.model.CoffeeStats
@@ -25,7 +26,7 @@ import kotlin.math.sqrt
  * - **`ratingHistogram`**: 0.5 刻みの存在するバケットのみ、rating 昇順
  * - **`byBrewMethod` / `byRoastLevel` / `byProcessing`**: label = enum.name、件数降順
  * - **`byProcessing` / `byRoastLevel`**: nullable。null の record は当該軸の集計から除外
- * - **`originRanking`**: 産地（自由文字列）を軽く正規化（前後空白除去 + lowercase）、件数降順、上位 [ORIGIN_RANKING_LIMIT] 件
+ * - **`originRanking`**: 産地（自由文字列）を [OriginNormalizer] で正規化（trim + lowercase ＋ シノニム名寄せ）、件数降順、上位 [ORIGIN_RANKING_LIMIT] 件
  * - **`monthlyTrend`**: `visitedOn` の "YYYY-MM" 別、年月昇順
  * - **`topCafes`**: `cafe != null` のみを `cafe.placeId` でグループ化、件数降順、上位 [TOP_CAFES_LIMIT] 件
  * - **`recentHighlights`**: 高評価（rating >= 4.0）かつ直近の上位 [RECENT_HIGHLIGHTS_LIMIT] 件
@@ -239,14 +240,14 @@ class BuildCoffeeStatsUseCase {
     /**
      * 産地別のランキングを構築する。
      *
-     * 産地文字列を **軽く正規化**（前後空白除去 + lowercase）してからグループ化する。
-     * 完全な表記ゆれ名寄せ（エチオピア vs Ethiopia 等）は将来課題。
+     * 産地文字列を [OriginNormalizer] で正規化（trim + lowercase ＋ シノニム辞書名寄せ）してから
+     * グループ化する（「Ethiopia」「イルガチェフェ」は「エチオピア」と同一グループになる）。
      * `origin == null` のレコードは除外。件数降順、上位 [ORIGIN_RANKING_LIMIT] 件。
      */
     private fun buildOriginRanking(records: List<CoffeeRecord>): List<CategoryStat> {
         return records
             .filter { it.origin != null }
-            .groupBy { it.origin!!.trim().lowercase() }
+            .groupBy { OriginNormalizer.normalize(it.origin!!) }
             .map { (normalizedOrigin, group) ->
                 // 表示ラベルはグループ内最初のレコードの元の表記を使用（trim のみ）
                 val displayLabel = group.first().origin!!.trim()
@@ -516,7 +517,7 @@ class BuildCoffeeStatsUseCase {
     /**
      * 産地軸の bestOrigin を選定する。
      *
-     * 産地は自由文字列のため `buildOriginRanking` と同じ正規化（`trim().lowercase()` でグループ化、
+     * 産地は自由文字列のため `buildOriginRanking` と同じ正規化（[OriginNormalizer] でグループ化、
      * 表示ラベルはグループ内最初に出現した元表記の `trim()` のみ）を適用してから
      * [selectBestCategory] と同じ選定ロジック（収縮 + z ゲート + δ AND）を適用する。
      *
@@ -531,10 +532,10 @@ class BuildCoffeeStatsUseCase {
         globalStd: Double,
         minSampleSize: Int,
     ): CategoryStat? {
-        // 正規化キーでグループ化（trim().lowercase()）
+        // 正規化キーでグループ化（OriginNormalizer: trim + lowercase + シノニム名寄せ）
         val normalizedGroups: Map<String, List<CoffeeRecord>> = ratedRecords
             .filter { it.origin != null }
-            .groupBy { it.origin!!.trim().lowercase() }
+            .groupBy { OriginNormalizer.normalize(it.origin!!) }
 
         if (normalizedGroups.isEmpty()) return null
 

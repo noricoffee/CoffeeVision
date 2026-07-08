@@ -369,6 +369,40 @@ class ObserveTasteMatchedCafesUseCaseTest {
         assertNotNull(recommended, "Should match despite surrounding spaces in origin")
     }
 
+    @Test
+    fun originSynonym_matchesAcrossEthiopiaAndYirgacheffeLabels() = runTest {
+        // 高評価群を "Ethiopia" と "イルガチェフェ"（OriginNormalizer のシノニム）で分けても
+        // 同一の bestOrigin グループとして集計され、カフェの一致判定でも正規化後の比較でヒットする
+        val highRated = (1..6).map { i ->
+            record(
+                id = "h$i",
+                placeId = "cafe-yirg",
+                visitedOn = LocalDate(2026, 6, i),
+                rating = 4.5,
+                origin = if (i <= 3) "Ethiopia" else "イルガチェフェ",
+            )
+        }
+        val lowRated = (1..6).map { i ->
+            record(
+                id = "l$i",
+                placeId = "other",
+                visitedOn = LocalDate(2026, 1, i),
+                rating = 1.5,
+                origin = "Kenya",
+            )
+        }
+        val useCase = makeUseCase(highRated + lowRated)
+
+        val result = useCase.observeRecommendedCafes("user-1").first()
+
+        val recommended = result.find { it.cafe.placeId == "cafe-yirg" }
+        assertNotNull(recommended, "cafe-yirg should be recommended via origin synonym match")
+        val originMatch = recommended.matches
+            .filterIsInstance<RecommendationReason.TasteProfileMatch>()
+            .firstOrNull { it.axis == PreferenceMatchAxis.Origin }
+        assertNotNull(originMatch, "Origin axis match should be present despite synonym label variety")
+    }
+
     // ============================================================
     // 複数軸一致と代表記録の選定
     // ============================================================

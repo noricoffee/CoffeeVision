@@ -288,7 +288,7 @@ data class PreferredBeanTraits(
   - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
   - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（カテゴリ z ゲート係数 ≈95% 信頼区間。B-1d sweep で確定。heavy-skew 偽陽性 9.3%・検出力 P2–P4 維持。`globalStd==0` は z ゲートをスキップしδ下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20`（z ゲートと AND する絶対下限）/ テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_MIN_ABS = 0.3` と `CORRELATION_ABS_FLOOR_C = 1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。値は `FavoriteSignalsPersonaTest` の sweep（150 シード）で検出力 P1–P4・P7 維持を確認して確定。
   - **既知の限界 / 経緯**: tasting 軸の偽陽性は 40%→22%（c 連動 floor、B-1c）。カテゴリ信号は固定 δ では下がらず（均等 100% / heavy-skew 86.7%、B-1d 前段実測）、**n 連動 z ゲートで根治**（B-1d 本体）。winner's curse は固定オフセットでなくばらつき連動の閾値で抑えるのが要点。詳細経緯は実装ノート 2026-06-22 B-1b〜B-1d。
-- **産地（自由文字列）**: グループキーは `trim() + lowercase()` の正規化値、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重。表記ゆれの完全名寄せは将来課題）。
+- **産地（自由文字列）**: グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`、2026-07-08 導入）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
@@ -431,7 +431,7 @@ interface CafeRecommendationProvider {
 
 1. `rating >= HIGHLIGHTS_MIN_RATING`（= 4.0。`recentHighlights` と統一）
 2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` のうち **非 null のもの**）のいずれかに一致:
-   - `origin`: `trim().lowercase()` 正規化で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
+   - `origin`: `OriginNormalizer.normalize`（trim + lowercase + シノニム辞書）で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
    - `roastLevel`: enum 一致（`bestRoastLevel.label == record.roastLevel?.name`）
    - `brewMethod`: enum 一致（`bestBrewMethod.label == record.brewMethod.name`）
 
@@ -475,7 +475,7 @@ class SuggestUnexploredBeansUseCase(
 ```
 
 - **好み合致**: `signals.bestOrigin`（非 null のとき）に対し、既存 `BeanProfileMatchUseCase`（§1.8 の origin ファジーマッチ・スコアリング）を再利用して候補を選定・並べる（DRY）。`bestRoastLevel` / `bestBrewMethod` は `BeanProfile` に対応フィールドが無いため使わない（origin 主軸）
-- **「未経験」判定 = (origin, variety) ペア**: `BeanProfile.variety != null` の候補は `(origin正規化, variety正規化)` ペアがユーザーの記録に無ければ未経験（同産地でも品種違いは別体験として提案）。`variety == null` の候補は origin のみで判定（その産地を一度でも記録済みなら経験済み扱い）。正規化は `trim().lowercase()`（`buildOriginRanking` と同じ）
+- **「未経験」判定 = (origin, variety) ペア**: `BeanProfile.variety != null` の候補は `(origin正規化, variety正規化)` ペアがユーザーの記録に無ければ未経験（同産地でも品種違いは別体験として提案）。`variety == null` の候補は origin のみで判定（その産地を一度でも記録済みなら経験済み扱い）。正規化は origin が `OriginNormalizer.normalize`（`buildOriginRanking` と同じ）、variety が `trim().lowercase()`（品種シノニムは対象外の非対称）
 - **空になる条件**: `signals.bestOrigin == null`（好み未確定）/ `profiles` 空（BeanProfile 未投入）
 - **配線**: `BuildCoffeeStatsUseCase.invoke(records, beanProfiles)` 内で `beanProfiles.isNotEmpty()` のときだけ計算し `CoffeeStats.unexploredBeanSuggestions` に格納（`preferredBeanTraits` = 12-C と同じ流儀。`ObserveCoffeeStatsUseCase` に `BeanProfileRepository?` を注入した端末でのみ非空）。`readiness`（UI メタ）と違い**ドメイン実質のある派生値**なので `CoffeeStats` 内に置く
 - **LLM 非混入**: iOS の `buildPrompt(from: stats)` はフィールドを選択的に読む実装のため、本フィールドを buildPrompt に足さない限り Foundation Models の digest には入らない（分析タブ UI 表示専用）
@@ -504,8 +504,8 @@ data class BeanProfile(
 
 | フィールド | マッチ方式 | スコア |
 |---|---|---|
-| `origin` | trim + lowercase 完全一致 | +2 |
-| `origin` | trim + lowercase contains | +1 |
+| `origin` | `OriginNormalizer.normalize`（trim + lowercase + シノニム辞書）後の完全一致 | +2 |
+| `origin` | 同正規化後の双方向 contains | +1 |
 | `processings` | `ProcessingMethod.name` 完全一致 | +1 |
 
 - score > 0 のもののみ、降順でソートして返す

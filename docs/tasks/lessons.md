@@ -609,3 +609,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: `when (mode)` を書く前に「本当に mode 依存か、内部状態（null か否か等）の有無で足りるか」を疑う。特に `?: return null` / `?: return` のような早期 return を特定モード分岐の中に置くと、想定外のモード×状態の組み合わせで値が無言で消える。**分岐軸が実体（状態）とズレていると、網羅的な `when` でも「網羅されていない組み合わせ」が生まれる**（2026-07-08 の「表示と解決で対象集合がズレる」と同型 — 判定軸の取り違え）
 - **発生源**: フェーズ 6 既知バグ（2026-07-06 の 15-B 実装中に kmp-engineer が発見・スコープ外で保留）→ 2026-07-08 修正
 - **横展開点検（2026-07-08）**: `grep -rln "currentInitialRecord" shared/feature/*/src/commonMain` → `CoffeeEditorViewModel.kt` 1 ファイルのみ（同型の値握りつぶし波及なし）。残る mode 束ね分岐は `buildRecord` の id/createdAt 採番 1 箇所のみで、`?: return` のような早期 return を含まず本パターンに非該当
+
+### 正規化辞書（完全キー一致の名寄せ）を contains ベースの部分一致に導入すると、変換された文字列と素通しの複合語がすれ違う
+
+- **症状**: `OriginNormalizer`（「yirgacheffe」→「エチオピア」の辞書名寄せ）導入後、既存テスト 2 件が fail。入力 "Yirgacheffe" が profile.origin "Ethiopia Yirgacheffe" に contains 一致するはずのシナリオで、一致が 0 件になった
+- **原因の構造**: 辞書は**単語単位の完全キー一致**でしか変換しないため、単語入力 "Yirgacheffe" は「エチオピア」へ変換される一方、複合語 "Ethiopia Yirgacheffe" は辞書キーに一致せず素通し（"ethiopia yirgacheffe"）のまま残る。**片方だけ変換された結果、変換前なら成立していた contains 関係が消える**。「両辺に同じ正規化関数を通しているから対称で安全」と考えがちだが、辞書変換は写像先が跳ぶため部分文字列関係を保存しない（trim/lowercase は保存する — ここが従来の正規化との質的な違い）
+- **修正パターン**: 導入時に (a) 実データで複合語が発生するか確認（今回 bean-profiles.json 38 件は全て単一国名 origin → 非対応と割り切り）、(b) contains カバレッジ自体は**辞書外の語**（「ニエリ」等）でテストを再構成して維持、(c) 辞書の主目的（単語 → 正規形の一致）を固定する回帰テストを追加。複合語対応が本当に必要ならトークン分割マッチングだが、Simplicity First で必要になるまで入れない
+- **教訓**: 名寄せ辞書・エイリアス変換を既存マッチングパイプラインに差し込むときは、**contains / startsWith 等の部分一致を使う箇所とその既存テストを必ず洗い出して実行**する。fail した既存テストは「壊れた」ではなく「新仕様との境界が露出した」なので、直す前に実データでの発生可能性から仕様判断する
+- **発生源**: OriginNormalizer 導入（2026-07-08、kmp-engineer が検出し親が仕様判断）。経緯詳細は implementation_note 2026-07-08 OriginNormalizer エントリ
+- **横展開点検（2026-07-08）**: ① `grep -rn "OriginNormalizer.normalize" shared`（非テスト）→ 全使用箇所（5 UseCase 7 呼び出し）とも比較の**両辺**に normalize 適用済みで、片側だけ正規化して contains する混在なし。② `grep -rn "\.contains(" shared/domain/.../usecase/ + CoffeeRecordQuery.kt` → contains 使用は BeanProfileMatch / PreferredBeanTraits（両辺正規化済み）と CoffeeRecordQuery（正規化対象外の生 ignoreCase、混在なし）のみ。③ 辞書語を複合語で使う残存テスト grep（Yirgacheffe / イルガチェフェ / キリマンジャロ等）→ CoffeeRecordQueryImplTest の「エチオピア イルガチェフェ」（対象外機能のため影響なし）と意図的な新テストのみ。**該当なし**

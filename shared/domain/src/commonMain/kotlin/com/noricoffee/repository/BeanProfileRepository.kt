@@ -33,6 +33,11 @@ interface BeanProfileRepository {
      * 指定産地（trim/lowercase 完全一致）の豆プロファイルを取得する。
      *
      * [getAll] の結果を `origin.trim().lowercase()` でフィルタして返す（クライアントサイド）。
+     *
+     * **シノニム正規化（[com.noricoffee.domain.OriginNormalizer]）は非対応**: 本メソッドは
+     * trim/lowercase の完全一致のみで、「Ethiopia」→「エチオピア」等の名寄せは行わない。
+     * 本番コードに呼び出し元が無いため実害はないが、新規に呼び出す場合は呼び出し側で
+     * `OriginNormalizer.normalize` を適用したうえでフィルタするか、本メソッドの実装刷新を検討すること。
      */
     @Throws(Exception::class)
     suspend fun getByOrigin(origin: String): List<BeanProfile>

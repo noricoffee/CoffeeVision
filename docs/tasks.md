@@ -464,6 +464,17 @@
 | [ ] | ユーザー: サービスアカウント鍵取得 → `node seed-bean-profiles.mjs` で本番投入（`coffeevision-a54aa`）→ 実機確認（分析タブ「好みの豆の傾向」/「試してみては」/ エディタ産地サジェスト。verification-checklist 15-E-3） | 手順は `scripts/seed/README.md`。投入後はアプリ再起動（メモリキャッシュのため） |
 ---
 
+## 産地シノニム正規化 OriginNormalizer（2026-07-08 着手）
+
+> **確定仕様（2026-07-08 親確定）**: 「Ethiopia」「イルガチェフェ」→「エチオピア」の名寄せを決定論のまま実現する（ベクトル検索は現アーキテクチャに過剰と判断し見送り）。`shared/domain` にトップレベル `object OriginNormalizer`（`normalize = trim → lowercase → シノニム辞書完全キー一致、辞書外は素通し`。辞書の正本はコード）。適用範囲は**全 origin 正規化ポイント**（BeanProfile 突合 3 UseCase + 統計グルーピング 2 箇所 + 9-5）。free-text 検索（`CoffeeRecordQuery`）と `getByOrigin`（本番呼び出し元ゼロ）は対象外。data-model.md 集計ルールの「表記ゆれの完全名寄せは将来課題」の解消。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `OriginNormalizer` 新設 + 5 箇所置換（BeanProfileMatch / BuildCoffeeStats ×2 / ObserveTasteMatchedCafes / PreferredBeanTraits / SuggestUnexploredBeans）+ commonTest | 2026-07-08 完了。エージェントがセッション上限で中断したため、複合語 contains 既存テスト 2 件の再構成（辞書外の語で維持）+ 名寄せ回帰テスト 1 件は親が引き継ぎ。`:shared:domain:testAndroidHostTest` 170 件 green。複合語×辞書のすれ違いは lessons 2026-07-08 に記録・sweep 済み |
+| [x] | 親: iosSimulatorArm64Test + 統合ビルド再検証 | 2026-07-08 完了。`:shared:domain:iosSimulatorArm64Test` 170 件 green（XML で実走確認）/ `assembleSharedLogicXCFramework` 成功 / xcodebuild override 無し `** BUILD SUCCEEDED **`。JVM 全モジュールは account の既知負債 B-7（9 件）以外 green |
+| [x] | 親: docs 反映（data-model.md 正規化記述の改訂・将来課題消し込み、implementation_note 経緯）+ commit | 2026-07-08 完了。data-model.md §1.6/§1.7/§1.7a/§1.8 を OriginNormalizer 準拠に改訂、implementation_note（ベクトル検索見送りの経緯）、lessons（辞書×contains のすれ違い + sweep）記録 |
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。

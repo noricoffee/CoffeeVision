@@ -1,6 +1,7 @@
 package com.noricoffee.domain.usecase
 
 import com.noricoffee.domain.BeanProfile
+import com.noricoffee.domain.OriginNormalizer
 import com.noricoffee.domain.ProcessingMethod
 
 /**
@@ -9,8 +10,8 @@ import com.noricoffee.domain.ProcessingMethod
  * ## スコアリング
  * | フィールド | マッチ方式 | スコア |
  * |---|---|---|
- * | `origin` | trim + lowercase 完全一致 | +2 |
- * | `origin` | trim + lowercase contains（どちらかが他方を含む） | +1 |
+ * | `origin` | [OriginNormalizer.normalize] 後の完全一致 | +2 |
+ * | `origin` | 正規化後の contains（どちらかが他方を含む） | +1 |
  * | `processings` | enum 完全一致（いずれか 1 件） | +1 |
  *
  * - 完全一致と部分一致はどちらか一方のみ（完全一致優先、else ブランチで部分一致チェック）
@@ -50,8 +51,8 @@ class BeanProfileMatchUseCase {
 
         // origin スコアリング（完全一致 +2、部分一致 +1）
         if (origin != null) {
-            val normalizedInput = origin.trim().lowercase()
-            val normalizedProfile = profile.origin.trim().lowercase()
+            val normalizedInput = OriginNormalizer.normalize(origin)
+            val normalizedProfile = OriginNormalizer.normalize(profile.origin)
             score += when {
                 normalizedProfile == normalizedInput -> 2
                 normalizedProfile.contains(normalizedInput) ||

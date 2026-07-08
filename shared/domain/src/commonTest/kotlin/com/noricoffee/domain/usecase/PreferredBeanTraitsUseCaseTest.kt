@@ -106,4 +106,18 @@ class PreferredBeanTraitsUseCaseTest {
         assertEquals(1, result.matchedProfiles.size)
         assertEquals("e3", result.matchedProfiles.first().beanId)
     }
+
+    @Test
+    fun `bestOrigin が Ethiopia のとき origin エチオピア の BeanProfile とシノニム名寄せでマッチする`() {
+        val signals = FavoriteSignals(
+            bestOrigin = CategoryStat(label = "Ethiopia", count = 5, averageRating = 4.2),
+        )
+        val japaneseOriginProfile = profile("e4", "エチオピア", listOf("Floral"))
+        val profiles = listOf(japaneseOriginProfile, colombiaProfile)
+
+        val result = useCase(profiles, signals)
+
+        assertEquals(1, result.matchedProfiles.size)
+        assertEquals("e4", result.matchedProfiles.first().beanId)
+    }
 }

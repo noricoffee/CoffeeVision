@@ -1,6 +1,7 @@
 package com.noricoffee.domain.usecase
 
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.OriginNormalizer
 import com.noricoffee.domain.model.CafeRecommendationProvider
 import com.noricoffee.domain.model.FavoriteSignals
 import com.noricoffee.domain.model.PreferenceMatchAxis
@@ -23,7 +24,7 @@ import kotlinx.coroutines.flow.map
  * - カフェは `cafe != null` を `cafe.placeId` でグループ化（セルフ抽出は対象外）
  * - あるカフェに `rating >= RECOMMEND_MIN_RATING` かつ [FavoriteSignals] のカテゴリ好みの
  *   いずれかに一致する記録が 1 件以上あれば [RecommendedCafe] として返す
- *   - **origin**: `trim().lowercase()` 正規化で `bestOrigin.label.trim().lowercase()` と一致
+ *   - **origin**: [OriginNormalizer] 正規化で `bestOrigin.label` の正規化結果と一致
  *   - **roastLevel**: enum 名一致（`bestRoastLevel.label == record.roastLevel?.name`）
  *   - **brewMethod**: enum 名一致（`bestBrewMethod.label == record.brewMethod.name`）
  * - [RecommendedCafe.cafe] は最新記録（visitedOn 最大）のカフェスナップショット
@@ -135,9 +136,9 @@ class ObserveTasteMatchedCafesUseCase(
         // --- origin 軸 ---
         val bestOriginLabel = signals.bestOrigin?.label
         if (bestOriginLabel != null) {
-            val originNormalized = bestOriginLabel.trim().lowercase()
+            val originNormalized = OriginNormalizer.normalize(bestOriginLabel)
             val matchingRecords = highRatedRecords.filter {
-                it.origin?.trim()?.lowercase() == originNormalized
+                it.origin?.let { origin -> OriginNormalizer.normalize(origin) } == originNormalized
             }
             buildBestMatch(
                 axis = PreferenceMatchAxis.Origin,

@@ -914,3 +914,15 @@ Firestore `beanProfiles` が空のまま残っていた初期データ投入（1
 - **設計**: `object OriginNormalizer.normalize = trim → lowercase → シノニム辞書の完全キー一致（辞書外は素通し）`。辞書はコードが正本（英語国名 20 ヶ国 + サブ地域・通称。「モカ」は多義のため不収録）。適用は全 origin 正規化ポイント 5 箇所（BeanProfileMatch / BuildCoffeeStats の originRanking・bestOrigin / ObserveTasteMatchedCafes / PreferredBeanTraits / SuggestUnexploredBeans。variety は従来の trim+lowercase のまま非対称）。`CoffeeRecordQuery` の free-text と `getByOrigin`（本番呼び出し元ゼロ）は対象外
 - **複合語 contains マッチとの非両立（既知の限界）**: 辞書は単語単位の完全キー一致のみで、複合語（「Ethiopia Yirgacheffe」）へのシノニム適用は行わない。入力「Yirgacheffe」は「エチオピア」へ変換されるため、**変換後文字列と未変換の複合語が contains ですれ違う**。この形の既存テスト 2 件（合成シナリオ）が fail → 実データ（bean-profiles.json 38 件は全て単一国名 origin）で再現しないため**非対応と割り切り、辞書外の語（「ニエリ」）でテストを再構成**した（トークン分割拡張は Simplicity First で不採用。将来複合語 origin を投入するなら再検討）
 - 経緯: kmp-engineer が実装（セッション上限で中断し、テスト再構成 2 件 + 名寄せ回帰テスト 1 件は親が引き継ぎ完了）
+
+### 2026-07-08: beanProfiles の取得方式 — Remote Config によるバージョン管理は見送り（現状維持）
+
+- 領域: Shared / data-firebase / Docs
+- 関連: `BeanProfileRepositoryAndroidImpl.kt` / `BeanProfileRepositoryIosImpl.swift`
+
+ユーザーから「めったに更新されないデータなので、Firebase Remote Config などで更新シグナルが来るまでローカル保持し続ける方針はどうか」の提案。**現状維持（見送り）と判断**。
+
+- **現状の取得方式**: プロセスごとに one-shot `get()`（38 件一括）+ メモリキャッシュ。Firestore SDK のオフライン永続化が効くため圏外でもキャッシュから読める。通信・課金は起動あたり 38 reads + 1 往復が上限で、無料枠（5 万 reads/日）に対して誤差
+- **Remote Config 見送りの理由**: ①公式プラットフォーム別 SDK 方針のため RC も Swift/Kotlin 二重実装 + KMP 抽象が必要（豆データ 1 種には過重）②「保持し続ける」にはローカル永続層（SQLDelight or ファイル）の新設が必要 ③**seed 投入（Firestore）と RC バージョン更新が別システムの手作業 2 段になり、上げ忘れで静かに壊れる**（「片側変更 → 対向未追随」ファミリーと同構造の同期ポイントを増やす）
+- **将来やる場合の採用案 = `_meta` ドキュメント方式**: `beanProfiles/_meta { version }` を seed スクリプトが投入時に自動インクリメント。起動時は `_meta` 1 read → ローカル保存済みバージョンと一致なら 38 件取得をスキップ。**バージョンがデータと同じ場所に住む**ため 1 回の投入で両方更新され、上げ忘れが構造的に起きない。新 SDK 不要
+- **再検討の損益分岐**: 豆データが数百件規模に成長、またはユーザー数増で beanProfiles の reads が課金圏に入ったとき

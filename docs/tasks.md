@@ -100,7 +100,7 @@
 | [ ] | 検索（キーワード）の高速化（SQLDelight FTS） | 一覧検索そのものはフェーズ 15-C（まずはメモリ内 filter）。FTS はデータ量で遅くなったら |
 | [ ] | エクスポート（JSON）機能 | フェーズ 15-E-2 に統合（そちらで実施）。7-4 を ○ へ引き上げ済み |
 | [ ] | 同一カフェの集計表示 | |
-| [ ] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-06 の 15-B 実装中に kmp-engineer が発見（既存バグ・15-B スコープ外のため未修正）。次に Edit/Duplicate 周りを触るときに対応。implementation_note 2026-07-06 参照 |
+| [~] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-06 の 15-B 実装中に kmp-engineer が発見（既存バグ・15-B スコープ外のため未修正）。**2026-07-08 着手**（専用セクション「フェーズ 6 既知バグ」に移管）。implementation_note 2026-07-06 参照 |
 | [ ] | Widget / ホーム画面ショートカット | |
 
 ---
@@ -478,7 +478,23 @@
 |------|------|------|
 | [x] | (1) data-places 型フィルタなし検索追加 `searchByNameNear`（`includedType` nullable 化 + null 省略）(2) `onPoiTapped` を `searchByNameNear(name, bias 200m)` → タップ座標最近傍（名前一致優先）へ (3) 全 `CafeRepository` 実装/Fake 追随（6 Fake + 1 PlacesClient Fake）(4) テスト更新 | 2026-07-08 親が直接実装（kmp-engineer がセッション上限で中断のため引き継ぎ）。domain + data-places + feature/map 横断。距離解決の新テスト 2 件追加 |
 | [x] | 親: JVM test（全影響モジュール）+ iosSimulatorArm64Test + 統合ビルド再検証（override 無し）| 2026-07-08 完了。JVM: data-places/map/cafe-search/cafe-detail/coffee-editor 全 green。`:shared:feature:map:iosSimulatorArm64Test` green（新規距離テスト含む）。統合 xcodebuild override 無し `** BUILD SUCCEEDED **` |
-| [ ] | 親: 目視促し + commit + lesson 記録 | 目視: 3 ピン（夢やカフェ/ふわランドリー&カフェ/ごはんカフェ くるま）がそれぞれ別の正しい店を開くこと。波及: 型フィルタ解除で bakery も解決可能に → iOS `.cafe` 限定と `MapTabView.swift:1383` コメントは再検討候補（今回は据え置き） |
+| [~] | 親: 目視促し + commit + lesson 記録 | 2026-07-08: commit `e087980` / lessons（「表示と解決で対象集合がズレると誤同定」）記録済み。**目視のみユーザー待ち**。目視: 3 ピン（夢やカフェ/ふわランドリー&カフェ/ごはんカフェ くるま）がそれぞれ別の正しい店を開くこと。波及: 型フィルタ解除で bakery も解決可能に → iOS `.cafe` 限定と `MapTabView.swift:1383` コメントは再検討候補（今回は据え置き） |
+
+---
+
+## コードレビュー指摘対応（2026-07-08）
+
+> 完了（2026-07-08、commit `f6a322b`）: コードレビューで検出した高優先 2 件を修正 — ① iOS `CoffeeFirestoreMapper.toDocument` が `tags` を書き出さず、iOS で付けたタグが同期で永久消失（Kotlin 側は書き込み・両側 `fromDocument` は読む非対称）→ Swift 側 doc 辞書に `tags` 追加で対称化。② ローカル DB `Coffee_record.toDomain` が enum 復元に `valueOf` を使い、未知 enum 文字列を含む行が 1 件でもあると `observeAll` Flow 全体が全損（リスト/マップ/分析が同時に死ぬ）→ `entries.firstOrNull` + フォールバック（brewMethod→Other、processing/roastLevel→null）に変更、回帰テスト 3 本追加。両パターンと横断点検は lessons.md 2026-07-08 に記録。
+
+---
+
+## フェーズ 6 既知バグ: エディタ buildCafe の Edit/Duplicate 分岐（2026-07-08 着手）
+
+> セルフ抽出記録（元 cafe = null）を編集/複製して手動でカフェ名を入力しても、`buildCafe` の `currentInitialRecord?.cafe ?: return null`（`CoffeeEditorViewModel.kt:744`）で null 返却され、入力したカフェ名が無言で捨てられていた。`Mode.Create` は `currentInitialRecord = null` を明示設定するため、mode 分岐を「引き継ぎ元 cafe の有無」の一点に畳んでバグ修正 + 簡素化を同時に達成（commonMain 完結・公開 API 変更なし）。フェーズ 6 バックログの当該行と同件。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [~] | kmp-engineer: `buildCafe` の Edit/Duplicate self-extract 分岐を修正（引き継ぎ元 cafe なし → 手入力カフェとして新規 UUID 採番）+ mode 分岐の畳み込み + commonTest | 2026-07-08 着手 |
 
 ---
 

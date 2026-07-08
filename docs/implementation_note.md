@@ -77,6 +77,7 @@
 - iOS のルートは **4 タブ（マップ / コーヒー / 分析 / 設定）**。検索タブは廃止（iOS 27 で `Tab(role: .search)` の右端固定が廃止されたため）し、**マップ上部の埋め込み検索バー**（テキスト検索はマップ中心の位置バイアス付き）+「このエリアを検索」ボタン + 検索モードに移行。コーヒー記録の作成はコーヒータブの FAB とカフェ詳細の「コーヒーを記録」の 2 導線
 - Places API は **New v1** + `X-Goog-FieldMask` で取得フィールド明示。API キーは `AppContainer` コンストラクタ注入（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Nearby は `includedPrimaryTypes = [cafe, coffee_shop]`・1 回最大 20 件。Places 写真は永続キャッシュ禁止（規約）で都度取得
 - iOS の xcconfig は `Base.xcconfig`（base）→ 先頭 `#include "Config.xcconfig"`（必須）+ `#include? "Secrets.xcconfig"`（任意・gitignore 済）の 3 段構造。**フォールバック宣言（`PLACES_API_KEY =` 等）は `#include?` より前に置く**（後ろだと実キーを空で上書き）
+- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ
 - 分析は 3 階層分離: 階層1・2 は KMP で決定論（`CoffeeStats` / `FavoriteSignals`。収縮平均 + n 連動 z ゲート `CATEGORY_Z = 2.0` + 相関 floor で「弱い傾向」だけを信号化、断定しない）、階層3 は iOS Foundation Models（`CoffeeInsightProvider`。可否は注入時判定、null = 非対応端末で graceful degradation）。Q&A は v1 = `CoffeeStats` digest 注入（単発・ステートレス）/ v2 = `Tool` から `CoffeeRecordQuery.searchRecords`（計算は KMP・LLM は解釈と整形のみ）
 - `BeanProfile`（12-B）はサーバ管理 read-only の豆ナレッジ。`CoffeeRecord` と ID 紐付けせず origin / processings のファジーマッチ。取得は one-shot get + メモリキャッシュ。12-C で `FavoriteSignals` と突合した `preferredBeanTraits` を `CoffeeStats` に付加し、Foundation Models で言語化
 - データ利用同意（12-A）: `users/{uid}.analyticsConsent`。初回起動オンボーディングで取得し設定トグルで変更可。ドキュメント不在は false 扱い
@@ -849,3 +850,28 @@ TestFlight へのアップロードを GitHub Actions（`workflow_dispatch` 手�
 - **ビルド番号 = `github.run_number`** を `CURRENT_PROJECT_VERSION` としてアーカイブ時に注入（コミット不要で単調増加）。`manageAppVersionAndBuildNumber=false` で Apple 側自動採番と競合させない。MARKETING_VERSION は `Config.xcconfig` の値を使う
 - **Run Script（Compile Kotlin Framework）の JAVA_HOME を条件分岐化**: 旧実装は Android Studio の JBR を無条件 export しており CI ランナーで壊れるため、ディレクトリ存在時のみ export に変更（CI では setup-java の JAVA_HOME を継承）
 - 影響: gitignore 済み秘匿ファイル（`GoogleService-Info.plist` / `Secrets.xcconfig`）は Secrets から復元する運用が確立。ランナーは deployment target iOS 26.0 の制約で `macos-26`（Xcode 26 系を `xcode-select` で選択）。Konan キャッシュは ci.yml と同一キーで共有
+
+### 2026-07-08: Places API キーのクライアント埋め込みリスクとバンドル ID 制限の実効性
+
+- 領域: iOS / Shared / Security
+- 関連: `shared/data-places/src/iosMain/kotlin/com/noricoffee/data/places/PlacesHttpClient.ios.kt`、`iosApp/Configuration/Base.xcconfig`、`iosApp/iosApp/AppState.swift`
+
+「Places API キーがアプリに埋め込まれているのは安全か」という問いへの整理。結論: **キーの抽出は避けられず、現状のバンドル ID 制限は実効的な防御になっていない**。
+
+- **git 漏洩は無し**: `Secrets.xcconfig` は未追跡・`.gitignore` 済・履歴にもキー文字列なし（`git log -S` で確認済み）。ここは問題ない
+- **抽出は不可避**: キーは xcconfig → Info.plist → アプリバイナリ（`.ipa`）に平文で入る。`Bundle.main.object(forInfoDictionaryKey:)` で読む以上、逆に言えば誰でも `.ipa` から抜ける。これはクライアント埋め込みキーの原理的性質で回避不能
+- **バンドル ID 制限はなりすまし可能（本エントリの主眼）**: `PlacesHttpClient.ios.kt` は `X-Ios-Bundle-Identifier` ヘッダを付与しているが、Google のサーバはこの**ヘッダ文字列を照合するだけ**で暗号署名・証明書検証は無い。キーを抜いた攻撃者は `curl` に `X-Ios-Bundle-Identifier: com.noricoffee.coffeevision` を足すだけで正規アプリと区別がつかず、課金の踏み台にできる。「鍵」と「本人証明」の両方をクライアントが握り、本人証明が平文文字列という構図
+  - 補足: Google Maps **SDK** 経路は追加署名で生 REST より突破しづらいが完全な attestation ではない。CoffeeVision は Ktor 生 REST なのでその“少しマシ”な経路すら使っていない
+  - `PlacesHttpClient.ios.kt` のコメント（403 を防ぐため付与）は「事故防止（他アプリ流用の遮断）」としては正しいが、悪意ある第三者の課金踏み台化は防げない。**この制限を実効的セキュリティと誤認しないこと**
+
+- **防げること / 防げないこと**:
+  - ✅ 防ぐ: キーが別アプリ・別プロジェクトに流用される事故
+  - ❌ 防げない: キー抽出後、バンドル ID を騙った課金の踏み台化
+
+- **推奨対策（優先順）**:
+  1. Google Cloud で**予算アラート + 日次クォータ上限**（最優先・被害額に天井。クライアント側で完結する唯一の現実的な守り）
+  2. API 制限を **Places API (New) 限定**に（権限最小化。実設定が README 手順どおりか要確認）
+  3. 本命: **バックエンドプロキシ**でキーをサーバ側に隔離しクライアントから排除（個人開発・カフェ記録アプリには重い。規模とコスト次第）
+  4. プロキシに **App Attest（DeviceCheck）** を足して正規アプリのみ通す（ここまでで実効的防御）
+
+- **現時点の判断**: リリース初期の個人開発規模なら **1 + 2 で現実的リスクは十分抑制**。3・4 はユーザー数増加で課金額が無視できなくなってから。Places 従量課金なので抜かれると自分の請求に跳ねる点を忘れない

@@ -4,6 +4,7 @@
 完了したタスクは `[x]` でチェックし、完了日とコミット / PR を備考列に追記してください。
 
 > 細かい WIP メモは `docs/tasks/lessons.md`（自己改善ループ用）に書き出します。
+> **実機 / シミュレータの目視・手動検証（プロダクト QA）は [`docs/tasks/verification-checklist.md`](./verification-checklist.md) に分離**（2026-07-08）。tasks.md には実装・設計タスクのみを残す。
 > **フェーズが完了したら、セクションの中身は「完了サマリ（数行）+ 未完行のみの表」に縮約する**（2026-07-04 運用開始。行単位の作業記録は git 履歴、設計判断は `implementation_note.md` が正）。セクション見出しは他 doc からの参照アンカーのため削除しない。
 
 ---
@@ -25,7 +26,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [~] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 初回追加、Phase 2.5 PR3 で現行コマンド（サマリ参照）に差し替え済。ローカル両ジョブ成功確認済。**初回 PR で workflow グリーン確認後 [x]**（バックログ B-5 と同件） |
+| [x] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 初回追加、Phase 2.5 PR3 で現行コマンドに差し替え済。**2026-07-08 ユーザーが CI グリーンを確認**（B-5 と同時解消）|
 | [x] | `local.properties` での API キー管理を整える（Places / Firebase） | Places 側は Phase 4 スライス 1（2026-06-11）で整備済。CI での Firebase 設定ファイル復元は 2026-07-07 の TestFlight ワークフローで解消（Secrets → `GoogleService-Info.plist` / `Secrets.xcconfig` 復元） |
 | [x] | App Store Connect アップロードワークフロー（`release-testflight.yml`）| 2026-07-07 完了。workflow_dispatch 手動起動 / ASC API キー + cloud signing / ビルド番号 = `github.run_number`。判断は implementation_note 2026-07-07 エントリ |
 | [ ] | **（ユーザー作業）** TestFlight ワークフローの Secrets 5 件登録 + 初回実行確認 | `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_PRIVATE_KEY`（.p8 の中身・**App Manager 以上のロール必須**）/ `GOOGLE_SERVICE_INFO_PLIST_BASE64` / `PLACES_API_KEY`。登録後 Actions から手動実行し TestFlight にビルドが現れることを確認 |
@@ -60,10 +61,6 @@
 
 > 完了分（2026-06-08〜06-11）: `shared/framework` 作成・feature モジュール切り出し（visit-list / detail / editor、後の coffee-*）・androidApp での Compose 1 画面検証実装（`CoffeeListScreen`）。
 
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [~] | Android 側で `data-firebase` の `observe` 経由 Firestore 読み取りが動くことを確認 | 2026-06-11 / `:androidApp:assembleDebug` 成功。**エミュレータ / 実機での実動作 + Firestore Console での読み取り目視確認はユーザー作業** |
-
 ---
 
 ## フェーズ 4: Places API（カフェ検索）
@@ -75,10 +72,6 @@
 ## フェーズ 5: 仕上げ
 
 > 完了分（2026-06-16〜06-17）: 設定画面（テーマ / ライセンス）・アカウント機能一式（Apple アップグレード / サインアウト / 削除）・エラートースト共通化・App Icon / Launch Screen・App Store メタデータ下書き（`app-store-metadata.md`）。判断は implementation_note 2026-06-16 / 06-17 エントリ。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [ ] | アクセシビリティ通し検証（VoiceOver / Dynamic Type / Reduce Motion） | |
 
 ---
 
@@ -98,7 +91,7 @@
 |------|------|------|
 | [-] | Android アプリ実装着手（`sharedUI` の Compose Multiplatform 利用） | Phase 3.5 で `feature/visit-list` を Compose 表示する検証実装に置き換えたため取り下げ（Android はリリース対象外） |
 | [ ] | 検索（キーワード）の高速化（SQLDelight FTS） | 一覧検索そのものはフェーズ 15-C（まずはメモリ内 filter）。FTS はデータ量で遅くなったら |
-| [ ] | エクスポート（JSON）機能 | フェーズ 15-E-2 に統合（そちらで実施）。7-4 を ○ へ引き上げ済み |
+| [-] | エクスポート（JSON）機能 | **フェーズ 15-E-2 で実装完了**（2026-07-07、行 350-351）。本行は重複のため取り下げ |
 | [ ] | 同一カフェの集計表示 | |
 | [x] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-08 完了（専用セクション「フェーズ 6 既知バグ」参照）。目視のみユーザー待ち。implementation_note 2026-07-08 参照 |
 | [ ] | Widget / ホーム画面ショートカット | |
@@ -108,10 +101,6 @@
 ## フェーズ 7: コーヒー記録主体への再設計（Visit → CoffeeRecord）
 
 > 完了（2026-06-19）: 集約ルートを `Visit` → `CoffeeRecord` へ転換（クリーンブレイク・データ移行なし）。docs 全面改訂 → KMP（domain / core / data-local / feature リネーム / framework）→ data-firebase Android → iOS UI の 3 段 dispatch で完遂。確定仕様は `data-model.md`、経緯は implementation_note 2026-06-19 エントリ。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [~] | 検証: シミュレータ手動確認（FAB→セルフ抽出保存→一覧 / カフェ詳細→記録 / マップピン / 詳細編集削除 / Firestore coffees） | 2026-06-19 / `xcodebuild` BUILD SUCCEEDED（親が override フラグ無しで再確認済）。**目視はユーザー作業。DB 作り直しのためアプリ削除→再インストール必須** |
 
 ---
 
@@ -126,7 +115,6 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [~] | 検証（A-3 / A-4 / B-2 / B-4 の残り）: シミュレータ目視（タブ / グラフ / 空状態 / 一致ピン / 理由シート / VoiceOver）+ Apple Intelligence 有効実機での要約・Q&A round-trip | ビルドはすべて BUILD SUCCEEDED 済。**目視・実機確認はユーザー作業** |
 | [ ] | （将来 9-6）協調フィルタリング: `CafeRecommendationProvider` のサーバ（GCP）リモート実装。横断データ基盤＋同意フローが本体 | Future Direction（implementation_note 2026-06-22）。フェーズ 12-D と同件 |
 
 ---
@@ -135,19 +123,11 @@
 
 > 完了（2026-06-19）: 専用 Scheme「iosApp (Dummy Data)」（env `SEED_DUMMY_DATA=1`）でローカル DB のみに固定 ID 30 件を冪等 seed / 通常 Scheme で clear。設計判断は implementation_note 2026-06-19 エントリ。
 
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [~] | 検証: ダミー Scheme で 30 件・通常 Scheme で 0 件のシミュレータ目視 | 2026-06-19 / 両 Scheme とも BUILD SUCCEEDED。**目視はユーザー作業** |
-
 ---
 
 ## フェーズ 9: テイスティング 5 要素（甘味/ボディ/酸味/風味/後味）
 
 > 完了（2026-06-20）: `CoffeeRecord.tasting` を全レイヤー（domain / data-local / core / feature / data-firebase / iOS UI / 分析）に追加。当初の各要素独立 nullable はフェーズ 9.1 で all-or-nothing に即日変更。統合経緯は implementation_note 2026-06-20 エントリ。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [~] | 検証: シミュレータ目視（入力 / 追加・削除切替 / 詳細 / 分析グラフ / round-trip / VoiceOver） | 2026-06-20 / BUILD SUCCEEDED。**目視はユーザー作業。DB 列追加のためアプリ削除→再インストール必須** |
 
 ---
 
@@ -211,10 +191,6 @@
 
 > 完了分（2026-07-01）: 「このエリアを検索」ボタン方式（自動再検索なし）+ テキスト検索の全件ピン + 検索モード化（フィルタチップ非表示・結果リストを検索バー直下に統合）。しきい値（中心移動 30% / 半径比 1.5x）等の判断は implementation_note 2026-07-01 フェーズ 14 エントリ。Places New は 1 回最大 20 件の仕様上限あり。
 
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [ ] | 実機/シミュレータで「このエリアを検索」→ 複数ピン、パン後のボタン再出現、テキスト検索の全件ピン + リストを目視確認 | **ユーザー作業**（実 Places API キー必要） |
-
 ---
 
 ## docs 棚卸し（2026-07-02）
@@ -229,19 +205,11 @@
 
 > 完了分（2026-07-03）: 高優先 5 件を修正 — #1 CafeDetail の `onDisappear` observation 停止 / #2 アカウント処理完了待ちの二相ポーリング化 / #3 `bootstrap()` 再入ガード / #4 同意オンボーディングの timing バグ（観測される状態の公開を最後に）/ #5 写真物理削除の順序逆転。判断は implementation_note 2026-07-03 iosApp エントリ、教訓は lessons.md 2026-07-03。
 
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [ ] | 実機 / シミュレータで目視確認: CafeDetail push→pop 後の一覧更新、サインアウト/削除時のオーバーレイと完了処理、初回同意シート表示、スワイプ削除失敗時の写真残存 | **ユーザー作業**。ビルドは 2026-07-03 に BUILD SUCCEEDED 済（新規 warning ゼロ） |
-
 ---
 
 ## shared コードレビュー指摘対応（2026-07-03）
 
 > 完了分（2026-07-03）: 高優先 3 件を修正 — #1 `startSync` のスナップショット reconciliation（リモート削除のローカル伝播）/ #2 エディタの `selectedCafe` 保持（座標・photoReferences 引き継ぎ）/ #3 FOREIGN KEY の本番有効化 + 掃除 migration（iOS テストの赤→緑で実証）。判断は implementation_note 2026-07-03 shared エントリ。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [ ] | シミュレータ / 実機で目視確認: 記録作成 → マップに訪問済みピンが立つ / Firestore コンソールで記録削除 → ローカル一覧から消える | **ユーザー作業** |
 
 ---
 
@@ -290,8 +258,6 @@
 |------|------|------|
 | [x] | kmp-engineer: エディタ VM に現在地カフェサジェスト状態（Nearby 上位 1〜3 件）+ コーヒー名デフォルト値 + 複製用の初期値生成ロジック | 2026-07-06 完了。`CoffeeEditorViewModel` に `Mode.Duplicate` + `suggestedCafes` + `onLocationAvailable` + `DEFAULT_COFFEE_NAME` を追加。新規テスト 7 件 green・override 不使用。コンストラクタに `cafeRepository` 追加（`AppContainer.makeCoffeeEditorViewModel()` 経由なら iOS 呼び出し側は無変更）。判断は implementation_note 2026-07-06 |
 | [x] | ios-engineer: エディタのサジェストチップ UI（位置情報許可 UX 込み）+ 詳細画面「これをもとに記録」導線 | 2026-07-06 完了。許可済みのときだけ one-shot 取得（未許可は無音・ダイアログ抑止を呼び出し側でガード）、チップは cafeSection 直下の横スクロール、詳細ツールバーは Menu 化（編集 / これをもとに記録）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 |
-| [~] | 検証: ① 位置情報未許可でエディタを開いてもチップ・ダイアログが出ない ② 許可済みで新規作成を開くと近隣カフェがチップ表示 → タップで選択・チップ消去 ③ FAB → サジェストタップ → 星 + 写真だけで保存の最短パス ④ 詳細「…」メニュー → 「これをもとに記録」で複製初期値（引き継ぎ 9 項目 / rating・notes・photos・tasting 空 / visitedOn = 今日）⑤ 新規作成の name 初期値「本日のコーヒー」 | ② は 2026-07-06 ユーザー確認済み（チップ非表示の初報はシミュレータの Features > Location 未設定が原因。Custom Location 設定で表示）。**①③④⑤ の目視はユーザー作業**。シミュレータ検証時は Location 設定が前提（下記 lessons 参照） |
-
 ### 15-C: 記録一覧の検索 + 月別グルーピング【要件 6-1 / 2-11】
 
 **確定仕様（2026-07-06 親確定）**:
@@ -304,8 +270,6 @@
 |------|------|------|
 | [x] | kmp-engineer: `CoffeeListViewModel` にキーワードフィルタ + 月別 `MonthSection` モデル（上記確定仕様）+ commonTest | 2026-07-06 完了。commonTest 9 件 green（iosSimulatorArm64Test）/ `:androidApp:assembleDebug` 成功。破壊的変更（`coffees` → `sections`）の波及で `sharedUI/CoffeeListScreen.kt`（Android 検証画面）を親が追随（サブエージェントがセッション上限で中断→親が検証・仕上げ）。implementation_note 2026-07-06 |
 | [x] | ios-engineer: 一覧に `.searchable`（`searchQuery` バインド）+ 月別 `Section` ヘッダ（yearMonth → "YYYY年M月" 生成）+ 空状態 2 種の出し分け | 2026-07-06 完了。Bridge の `coffees` → `sections` 全面追随、空 3 分岐（未検索空 / 検索 0 件は `ContentUnavailableView.search` / 一覧）、ヘッダに `.isHeader`。BUILD SUCCEEDED・override 不使用。`.searchable` は Bridge get/set で完結（メモリ内 filter で高速なため `@State` 分離不要と判断）|
-| [ ] | 検証: 検索ヒット / 記録 0 件 / 検索ヒット 0 件の 3 状態、月跨ぎのセクション表示、検索中の FAB 挙動、VoiceOver でのヘッダ読み上げ | **シミュレータ目視はユーザー作業**。Location 前提は不要（位置情報非依存） |
-
 ### 15-D: 分析タブの空状態プログレス【要件 9-7】
 
 **確定仕様（2026-07-06 親確定）**:
@@ -323,9 +287,7 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `AnalysisViewModel.UIState` に `readiness: AnalysisReadiness?` を派生追加（上記確定仕様）+ commonTest | 2026-07-06 完了。新規 6 件 + QaTest 追随。**iOS テストが当初 16 件全滅（Native の cancel drain 漏れ）→ 親が `vm.clear()` 後の `advanceUntilIdle()` で修正、iOS/Android とも 16/0 green**。QaTest の fake 追随漏れ（12-C `summarizeBeanTraits`）も修正。教訓は lessons 2026-07-06、判断は implementation_note 2026-07-06。閾値は既存定数参照で二重定義なし |
-| [x] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | 2026-07-06 完了。`AnalysisReadinessProgressCard`（`ProgressView` + 残り件数で文言出し分け + 相関 track は補足キャプション）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 |
-| [ ] | 検証: 記録 0/1/2 件でプログレス表示 → 3 件到達でカテゴリ track の変化、信号が出たらバナー消失、Android 非対応端末（分析タブ非表示）に影響なし | **シミュレータ目視はユーザー作業**。Location 前提は不要 |
-| [ ] | （軽微・後回し可）`favoriteSignalsSection` の `hasAnySignal` 相当判定を iOS 側再計算から `viewModel.readiness.hasAnySignal` 参照に寄せて単一ソース化 | 15-D 実装中に ios-engineer が指摘。現状は同じ `stats` から同時導出のため齟齬なしだが、将来 KMP 側判定変更時に乖離リスク。分析タブを次に触るとき |
+| [x] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | 2026-07-06 完了。`AnalysisReadinessProgressCard`（`ProgressView` + 残り件数で文言出し分け + 相関 track は補足キャプション）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 || [ ] | （軽微・後回し可）`favoriteSignalsSection` の `hasAnySignal` 相当判定を iOS 側再計算から `viewModel.readiness.hasAnySignal` 参照に寄せて単一ソース化 | 15-D 実装中に ios-engineer が指摘。現状は同じ `stats` から同時導出のため齟齬なしだが、将来 KMP 側判定変更時に乖離リスク。分析タブを次に触るとき |
 
 ### 15-E: 中期（後回し可）【要件 9-8 / 抽出レシピ / 7-4】
 
@@ -339,8 +301,6 @@
 |------|------|------|
 | [x] | kmp-engineer: `CoffeeRecord.brewRecipe` + SQLDelight（migration 4.sqm + upsert 追加）+ Mapper + Android Firestore mapper + エディタ VM（入力状態 + 複製引き継ぎ + 500 文字バリデーション）| 2026-07-07 完了。全レイヤー追加 + DummyData 2 件。iOS テスト green（data-local 39件 / coffee-editor 16件）+ verifySqlDelightMigration OK + androidApp:assembleDebug OK。落とし穴: `Mapper.toRow()` だけでなく `LocalCoffeeRepository` の `queries.upsert(...)` named 引数にも追加要（lessons 2026-07-07）。既存バグ 2 件を発見（下記バックログ）|
 | [x] | ios-engineer: iOS Firestore mapper 追随 + エディタの入力 UI + 詳細画面表示 | 2026-07-07 完了。cup に対称な追加（Firestore mapper / Bridge `onBrewRecipeChanged` / エディタ TextField 複数行 / 詳細 LabeledContent）+ Preview 追随。BUILD SUCCEEDED・override 不使用 |
-| [ ] | 検証: 入力→保存→round-trip、複製で引き継ぎ、既存記録（brewRecipe 無し）が migration 後も開ける | **シミュレータ目視はユーザー作業。DB 列追加のため migration 4.sqm 適用の確認（既存端末は再インストール不要の想定だが要確認）** |
-
 #### 15-E-2: データエクスポート（JSON）【要件 7-4】
 
 > **確定仕様（2026-07-06 親確定）**: KMP で全 `CoffeeRecord` を JSON 文字列化する `ExportCoffeeRecordsUseCase`（`kotlinx.serialization`）。永続化フィールドのみ（写真はメタデータのみ・バイナリ含めない）。iOS は設定画面から `ShareLink` で共有シート。フェーズ 6 の「エクスポート（JSON）」項目と同件（そちらは本項目に統合）。
@@ -349,8 +309,6 @@
 |------|------|------|
 | [x] | kmp-engineer: `ExportCoffeeRecordsUseCase`（`observeAll(uid).first()` → `@Serializable` DTO → JSON 文字列。`kotlinx-datetime` は ISO 文字列化）+ commonTest | 2026-07-07 完了。export 専用 DTO（`domain/export/`）+ `{exportedAt, version:1, records[]}` 包み + `encodeDefaults=true`。`AppContainer.exportCoffeeRecordsUseCase` 公開。iOS テスト 4/0 green（B-6 解消後に実証）。Swift 呼び出しは `.invoke(userId:)`（SKIE は operator invoke を callAsFunction 化しない）|
 | [x] | ios-engineer: 設定画面に「データをエクスポート」→ JSON 生成 → `ShareLink` / share sheet | 2026-07-07 完了。2 フェーズ UI（Button → ProgressView → `ShareLink(item:)`）、`coffeevision-export-yyyyMMdd.json` を temporaryDirectory 書き出し。BUILD SUCCEEDED・override 不使用。軽微な後続候補: ①生成完了後もう 1 タップで共有の 2 タップ導線（自動提示にするなら `UIActivityViewController`）②`.ready` 後の再エクスポート導線なし（「作り直す」ボタン）|
-| [ ] | 検証: エクスポート → JSON 内容が記録と一致、0 件時の挙動 | **シミュレータ目視はユーザー作業** |
-
 #### 15-E-3: 未経験の豆への探索提案【要件 9-8（△）】
 
 > **確定仕様（2026-07-06 親確定）**: KMP 決定論の `SuggestUnexploredBeansUseCase`。入力 = ユーザーの記録（記録済み `origin`/`variety` 集合）+ `BeanProfileRepository.getAll()` + `FavoriteSignals`。出力 = 好み信号（`bestOrigin` 等）に合致するが**ユーザーが未記録**の `BeanProfile` 上位数件。FM 不要（決定論。言語化は将来）。`beanProfiles` 未投入 / 信号なしなら空。分析タブに「試してみては」セクションでフレーバータグ付き表示。9-5（既訪問店の再訪）に対する新規開拓ナッジ。
@@ -359,8 +317,6 @@
 |------|------|------|
 | [x] | kmp-engineer: `SuggestUnexploredBeansUseCase` + `CoffeeStats.unexploredBeanSuggestions` + commonTest | 2026-07-07 完了。UIState でなく `CoffeeStats` に格納（`preferredBeanTraits`=12-C と同型。ドメイン実質派生値・`BuildCoffeeStatsUseCase` が records+beanProfiles を既に持つため配線最小）。未経験判定 =(origin,variety) ペア、好み合致は `BeanProfileMatchUseCase` 再利用。iOS 9/0 green + XCFramework link OK。LLM 非混入も親確認済（buildPrompt は選択読み）。data-model.md §1.7a 反映 |
 | [x] | ios-engineer: 分析タブに探索提案セクション（BeanProfile 名 + flavorNotes チップ） | 2026-07-07 完了。`UnexploredBeanSuggestionsCard`/`Row`（豆名 + variety + 理由文言 + flavorNotes チップ、空なら非表示）を「好みの豆の傾向」直後に配置。`buildPrompt` 未改変（LLM 非混入遵守）。BUILD SUCCEEDED・override 不使用 |
-| [ ] | 検証: 好み信号あり + 未記録 BeanProfile で提案表示、記録済みは除外、0 件時（beanProfiles 未投入 / 好み未確定）はセクション非表示 | **シミュレータ目視はユーザー作業（beanProfiles 投入前提）** |
-
 ---
 
 ## 外部 Skill の導入（2026-07-07）
@@ -435,7 +391,7 @@
 |------|------|------|
 | [x] | ios-engineer: Apple 検索ピン層の追加（fetch/デバウンス/ゲート/重複排除/意匠/タップ）+ `.mapStyle` excluding 化 + `mapFeatureSelection` 機構の除去 + ビルド検証 | 2026-07-07 完了。`MapTabView.swift` のみ。override 不使用で BUILD SUCCEEDED。意匠: 24pt + `.secondaryLabel` + `cup.and.saucer`（非塗り）。重複排除 40m 測地距離。ゲート 3000m。KMP 変更なし |
 | [x] | 親: override 無し再検証 | 2026-07-07 完了。`xcodebuild ... -destination iPhone 17` override 無しで `** BUILD SUCCEEDED **`、`No such module 'SharedLogic'` は framework 未インデックス時の SourceKit 誤検知（フルビルドで解消）|
-| [ ] | 親: シミュレータ目視促し + docs 反映 + commit | 目視観点: 広域〜中域でカフェピンが常時出る / 既存 4 種との二重表示なし / タップ→詳細 / しきい値超でクリア / ダークモードでのミュート配色視認性。目視 OK 後に commit |
+| [x] | 親: シミュレータ目視促し + docs 反映 + commit | commit `c6b0e90`（自前ピン化）+ `db4cee3`（標準 POI 非表示）+ `cbe3032`（視認性向上）。ユーザー目視で「見えるのにタップで該当なし」等が判明 → 17-B/C/D の後続修正を駆動（＝目視は実施済み）。17-D 修正後の最終目視のみ行 481 [~] で継続 |
 
 ### 17-B: 「見えるのにタップで『該当カフェなし』」不整合の修正（目視で発覚）
 
@@ -478,7 +434,7 @@
 |------|------|------|
 | [x] | (1) data-places 型フィルタなし検索追加 `searchByNameNear`（`includedType` nullable 化 + null 省略）(2) `onPoiTapped` を `searchByNameNear(name, bias 200m)` → タップ座標最近傍（名前一致優先）へ (3) 全 `CafeRepository` 実装/Fake 追随（6 Fake + 1 PlacesClient Fake）(4) テスト更新 | 2026-07-08 親が直接実装（kmp-engineer がセッション上限で中断のため引き継ぎ）。domain + data-places + feature/map 横断。距離解決の新テスト 2 件追加 |
 | [x] | 親: JVM test（全影響モジュール）+ iosSimulatorArm64Test + 統合ビルド再検証（override 無し）| 2026-07-08 完了。JVM: data-places/map/cafe-search/cafe-detail/coffee-editor 全 green。`:shared:feature:map:iosSimulatorArm64Test` green（新規距離テスト含む）。統合 xcodebuild override 無し `** BUILD SUCCEEDED **` |
-| [~] | 親: 目視促し + commit + lesson 記録 | 2026-07-08: commit `e087980` / lessons（「表示と解決で対象集合がズレると誤同定」）記録済み。**目視のみユーザー待ち**。目視: 3 ピン（夢やカフェ/ふわランドリー&カフェ/ごはんカフェ くるま）がそれぞれ別の正しい店を開くこと。波及: 型フィルタ解除で bakery も解決可能に → iOS `.cafe` 限定と `MapTabView.swift:1383` コメントは再検討候補（今回は据え置き） |
+| [x] | 親: 目視促し + commit + lesson 記録 | 2026-07-08: commit `e087980` / lessons（「表示と解決で対象集合がズレると誤同定」）記録済み。**目視は verification-checklist.md「マップ / カフェ探索」に移管**。波及メモ: 型フィルタ解除で bakery も解決可能に → iOS `.cafe` 限定と `MapTabView.swift:1383` コメントは再検討候補（据え置き）|
 
 ---
 
@@ -495,8 +451,6 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `buildCafe` の Edit/Duplicate self-extract 分岐を修正（引き継ぎ元 cafe なし → 手入力カフェとして新規 UUID 採番）+ mode 分岐の畳み込み + commonTest | 2026-07-08 完了。cafe 採用を状態ベース 3 段判定に一本化し `mode` 引数削除。回帰テスト 2 件追加。`testAndroidHostTest` 20 件 green / 親が `iosSimulatorArm64Test` を override 無しで green。implementation_note / lessons 2026-07-08 記録 |
-| [ ] | 検証: セルフ抽出記録を編集 → 手動カフェ名入力 → 保存でカフェが残る / 複製でも同様 / 既存の Places 選択・引き継ぎ元ありの正常系が回帰しない | **シミュレータ目視はユーザー作業** |
-
 ---
 
 ## docs / 設計判断バックログ（後回し可）
@@ -509,7 +463,7 @@
 | [ ] | B-2 | ViewModel テスト方針の整理。規約（architecture / coding-conventions）は「VM は runTest でテスト」だが主要 VM が未テスト。規約を実態に合わせるか、テストを足すか決める | CI を本格運用するとき / 新規 VM 追加時 |
 | [x] | B-3 | `requirements.md` の「API キーは難読化」を実態（Google Cloud 側のキー制限ベース。Info.plist / BuildConfig は平文）に修正 | 2026-07-01 完了。requirements→CoffeeRecord 全面改訂と同時に非機能要件の記述を修正 |
 | [ ] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を仕様化（`CoffeeRecord.rating` を nullable にするか 0 を明記するか）。`VisitedCafe` 集計が 0 を平均除外している | 集計まわりを次に触るとき。現状動作に実害なし。requirements §未決事項にも起票済み |
-| [ ] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 最初の PR を出すタイミングで自然解消 |
+| [x] | B-5 | CI（GitHub Actions）を実際の PR でグリーン確認し `tasks.md` フェーズ 0 の `[~]` を `[x]` 化 | 2026-07-08 完了。ユーザーが CI グリーン確認 → フェーズ 0 CI 行も `[x]` 化 |
 | [x] | B-6 | **既存テスト負債①**: `shared/domain` の `FavoriteSignalsPersonaTest.kt` が `"%.4f".format(...)`（JVM 専用 API）を多数使用し、Kotlin/Native で `Unresolved reference 'format'` → domain の `iosSimulatorArm64Test` がコンパイル不能だった。→ **2026-07-07 解消**（親が Native 安全な `Double.fmt(digits)` ヘルパに全 44 箇所置換）。domain の iOS テスト全 green（Persona 11 件含む failures=0）。15-E-2 検証がブロックされていたため親が対応 |
 | [ ] | B-7 | **既存テスト負債②**: `shared/feature/account` の `AccountViewModelTest`（9 件）が `vm.clear()` を呼ばず `UncompletedCoroutinesError`。2026-07-07 の 15-E-1 で発覚（clean tree 再現、android/iOS 双方）。修正: 各テストに `vm.clear()` + iOS 向けに `advanceUntilIdle()` drain（lessons 2026-07-06）。CI 導入前に対応 |
 | [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |

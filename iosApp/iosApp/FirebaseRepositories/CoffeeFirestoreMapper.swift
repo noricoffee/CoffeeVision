@@ -57,6 +57,7 @@ enum CoffeeFirestoreMapper {
             "notes": record.notes,
             "name": record.name,
             "brewMethod": record.brewMethod.name,
+            "tags": record.tags,
             "photos": photosArray,
             "createdAt": Timestamp(date: createdAtDate),
             "updatedAt": Timestamp(date: updatedAtDate),

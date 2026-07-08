@@ -582,3 +582,21 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 「一覧を出すフィルタ」と「1 件を同定するフィルタ」を**別物として設計**する。前者は絞り込み（ノイズ削減）が正義だが、後者で同じ絞り込みを流用すると対象が欠落して誤同定・不整合になる。異なるデータ提供者をまたぐ（Apple 表示 ⇄ Google 解決）ときは分類体系が一致しない前提で、同定は型ではなく名前+座標で行う。同系統の対症療法を 2 回試して直らなければ、フィルタ/集合の定義そのものを疑う（Plan Mode Default の「2 回失敗で再調査」の実例）
 - **発生源**: フェーズ 17（Apple 検索由来の自前カフェピン導入）→ 17-B/17-C/17-D で 3 段階に判明（2026-07-07〜08）
 - **横展開点検（2026-07-08）**: `grep -rn "includedType\|includedPrimaryTypes\|MKPointOfInterestFilter\|pointsOfInterest" shared iosApp`（非テスト）で「表示⇄解決の集合ズレ」箇所を洗い出し。①POI タップ解決（今回修正済）が唯一の表示⇄解決ミスマッチだった。②「このエリアを検索」（`searchNearby` cafe/coffee_shop）は**検索結果をそのまま表示**するため表示=解決で不整合なし（意図的な cafe 絞り込み）。③波及: 解決から型フィルタを外したことで bakery も名前+位置で解決可能になり、iOS 取得を `.cafe` 限定にした 17-B の理由（`MapTabView.swift:1383` コメント）が無効化 → 表示スコープの再検討候補として tasks.md 17-D に記録（今回は据え置き）
+
+### Firestore マッパーは Swift/Kotlin の二重手書き実装。片側の `toDocument` 変更は必ず対向を突き合わせる（追随漏れ = 無言のデータロス）
+
+- **症状**: iOS でコーヒー記録に**タグを付けて保存すると、別端末・再インストール・Android で同期したときタグが空になる**（永久消失）。originating 端末のローカル SQLDelight にはタグが残るため気づきにくい。コンパイルエラーも実行時例外も出ない
+- **原因の構造**: Firebase は公式プラットフォーム別 SDK（GitLive 不採用）方針のため、`CoffeeRecord ↔ Firestore` のシリアライズは **iOS 側 `iosApp/.../CoffeeFirestoreMapper.swift` と Android 側 `shared/data-firebase/androidMain/.../CoffeeFirestoreMapper.kt` の独立した手書き二重実装**。Kotlin `toDocument` は `"tags" to record.tags` を必須で書くが、Swift `toDocument` の `doc` 辞書リテラルに `tags` キーが欠落していた。**両側の `fromDocument` は `tags` を読む**ため、書き手（iOS）だけがフィールドを落とすと送信ドキュメントに載らず、受信側は既定の空リストになる。片側実装だけを変更/追加した際の追随漏れで、型システムは非対称を検出できない
+- **修正パターン**: Swift `toDocument` の `doc` 辞書に Kotlin と対称に `"tags": record.tags,` を追加（空配列でもキー省略しない＝Kotlin と同じ）。恒久策として **Firestore マッパーは片側を触ったら必ず対向プラットフォームの `toDocument`/`fromDocument` を全フィールド突き合わせる**。フィールドの単一の真は `docs/data-model.md`（§3.2）で、両実装をそこへ照合する
+- **教訓**: 「interface に fake 追随漏れ（2026-07-06）」「SQLDelight 列追加の upsert 追随漏れ（2026-07-07）」と同じ **「片側変更 → 対向未追随」ファミリー**の Firestore 版。公式 SDK 二重実装は構造上この追随を常に要求する。`CoffeeRecord` に必須フィールドを足すときは ①ドメイン model ②SQLDelight（.sq/migration/Mapper）③**Firestore mapper の Swift/Kotlin 両方**を 1 セットで直す
+- **発生源**: コードレビュー（2026-07-08）で発覚。`CoffeeFirestoreMapper.swift.toDocument` の `tags` 欠落
+- **横展開点検（2026-07-08）**: `CoffeeFirestoreMapper` の `toDocument` トップレベルキーを Swift/Kotlin で突き合わせ → `id/userId/visitedOn/rating/notes/name/brewMethod/tags/photos/createdAt/updatedAt` が両側一致し、`tags` 以外に欠落なし。`SavedCafeFirestoreMapper` は両側対称で問題なし。`BeanProfileFirestoreMapper` は Android 専用 read-only サービスデータで iOS 側に対向実装が無く対象外
+
+### DB/外部由来の文字列から enum を復元する箇所で `enum.valueOf(...)` を使わない（未知値の例外が Flow / 変換全体を巻き込む）
+
+- **症状**: ローカル DB の `coffee_record` 行に**現行 enum に存在しない文字列**（将来の enum リネーム/削除、より新しいクライアントが書いた値、DB 破損）が 1 行でもあると、`BrewMethod.valueOf(...)` が `IllegalArgumentException` を投げ、`observeAll` Flow 全体が落ちてリスト・マップ・分析画面が**同時に死ぬ**
+- **原因の構造**: `Mapper.kt` の `Coffee_record.toDomain()` が enum 復元に `valueOf`（未知名で例外）を使用。`toDomain` は `observeAll` の `mapToList` 内で**全行に走る**ため、単一の不正行が変換全体を巻き込む。同じ enum 復元を Firestore デコーダ（`CoffeeFirestoreMapper.kt`）は `entries.firstOrNull { it.name == raw }` で防御しており、**同一プロジェクト内で扱いが非対称**だった
+- **修正パターン**: enum 逆引きは `entries.firstOrNull { it.name == raw }` を既定にする。non-null 必須フィールド（`brewMethod`）は妥当なフォールバック値（`BrewMethod.Other`）へ、nullable（`processing`/`roastLevel`）は `null` へフォールバック。**ローカル DB は自分が書いた Source of Truth なので、未知 enum で行を丸ごと drop せずフォールバックで保全する**（Firestore デコーダは他クライアント由来なので行 drop でよいが、ローカルは保全優先）
+- **教訓**: `.claude/rules/kotlin-kmp.md` の「コルーチン内で `runCatching` を使わない」と同系の「例外を投げうる API を Flow/変換の内側に置かない」原則。列挙の逆引きは `valueOf`（例外）ではなく `firstOrNull`（null 安全）+ 明示フォールバックを既定にする。再発するなら rules へ昇格候補
+- **発生源**: コードレビュー（2026-07-08）で発覚。`Mapper.kt` の `toDomain`
+- **横展開点検（2026-07-08）**: `grep -rn "\.valueOf(" shared androidApp` → **該当なし**（今回の 3 箇所置換で全滅。Firestore デコーダ側は元から `firstOrNull` 方式）

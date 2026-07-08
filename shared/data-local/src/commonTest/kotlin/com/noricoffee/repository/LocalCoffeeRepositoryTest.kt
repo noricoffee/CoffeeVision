@@ -249,6 +249,86 @@ class LocalCoffeeRepositoryTest {
         assertEquals(tags, loaded?.tags, "非空 tags はそのまま往復するべき")
     }
 
+    // --- 未知 enum 文字列からの安全な復元テスト ---
+
+    @Test
+    fun observe_by_id_falls_back_to_other_for_unknown_brew_method_string() = runTest {
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        // ドメインモデルを経由せず、既存 enum に存在しない文字列を直接書き込む
+        // （enum リネーム/削除後の旧データや、より新しいクライアントが書いた値を模す）
+        insertRawRecord(id = "unknown-brew", brewMethod = "SomeFutureMethod")
+
+        val loaded = repository.observeById("unknown-brew").first()
+        assertEquals(BrewMethod.Other, loaded?.brewMethod, "未知の brew_method 文字列は Other にフォールバックするべき")
+    }
+
+    @Test
+    fun observe_by_id_falls_back_to_null_for_unknown_processing_and_roast_level_strings() = runTest {
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        insertRawRecord(id = "unknown-processing-roast", processing = "SomeFutureProcessing", roastLevel = "SomeFutureRoast")
+
+        val loaded = repository.observeById("unknown-processing-roast").first()
+        assertNull(loaded?.processing, "未知の processing 文字列は null にフォールバックするべき")
+        assertNull(loaded?.roastLevel, "未知の roast_level 文字列は null にフォールバックするべき")
+    }
+
+    @Test
+    fun observe_all_does_not_throw_when_a_row_has_unknown_enum_strings() = runTest {
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        repository.save(sampleRecord(id = "normal"))
+        insertRawRecord(id = "unknown-brew-in-list", brewMethod = "SomeFutureMethod")
+
+        // observeAll は 1 行でも未知 enum 文字列を含むと従来は例外で落ちていた（valueOf 由来）
+        val list = repository.observeAll(USER_ID).first()
+        assertEquals(2, list.size)
+    }
+
+    /**
+     * [CoffeeRecord] を経由せず、SQLDelight の `coffee_record` テーブルに直接
+     * 未知 enum 文字列を含む行を挿入するテストヘルパー。
+     */
+    private fun insertRawRecord(
+        id: String,
+        brewMethod: String = BrewMethod.HandDrip.name,
+        processing: String? = ProcessingMethod.Washed.name,
+        roastLevel: String? = RoastLevel.Medium.name,
+    ) {
+        db.coffeeRecordQueries.upsert(
+            id = id,
+            user_id = USER_ID,
+            cafe_place_id = null,
+            cafe_name = null,
+            cafe_address = null,
+            cafe_latitude = null,
+            cafe_longitude = null,
+            cafe_photo_references = null,
+            cafe_website_url = null,
+            cafe_maps_url = null,
+            visited_on = LocalDate(2026, 6, 2).toString(),
+            rating = 4.0,
+            notes = "",
+            name = "raw",
+            brew_method = brewMethod,
+            origin = null,
+            variety = null,
+            processing = processing,
+            roast_level = roastLevel,
+            cup = null,
+            brew_recipe = null,
+            sweetness = null,
+            body = null,
+            acidity = null,
+            flavor = null,
+            aftertaste = null,
+            tags = "[]",
+            created_at = 1_750_000_000_000,
+            updated_at = 1_750_000_000_000,
+        )
+    }
+
     // --- brewRecipe 往復テスト（フェーズ 15-E-1）---
 
     @Test

@@ -25,6 +25,17 @@ metadata:
 テスト用フェイクの nested class 内で外側クラスの private ヘルパを使いたい場合は、
 ヘルパの中身をそのまま inline するか、fake class の外（同ファイルのトップレベル private fun）に出す。
 
+## buildCafe: mode 分岐ではなく「引き継ぎ元 cafe の有無」に畳んだ（2026-07-08）
+
+旧実装は `buildCafe(mode, draft)` で `when (mode) { is Mode.Edit, is Mode.Duplicate -> currentInitialRecord?.cafe ?: return null ... }`
+となっており、セルフ抽出記録（元 cafe = null）を Edit/Duplicate して手動でカフェ名を入力すると
+`?: return null` で早期 return し、入力値が無言で捨てられるバグがあった（`Mode.Create` は
+`onAppear` で `currentInitialRecord = null` を明示設定するため、cafe 採用の判定は本来 mode 不要）。
+修正: `buildCafe(draft)` に簡素化し、`selectedCafe != null` → `currentInitialRecord?.cafe != null` →
+UUID 新規採番、の 3 段 `when` に一本化。`mode` を経由しない分、同種の「特定モードだけ null 経由で
+値を握りつぶす」バグを作り込みにくくなる。この関数を触るときは、`when (mode)` で分岐を作りたくなったら
+先に「本当に mode で分岐すべきか、状態（selectedCafe / currentInitialRecord）の有無で十分か」を疑う。
+
 ## 現在地サジェスト系の状態設計（要件 2-8 相当）
 
 - 「サジェスト表示」「カフェ選択でクリア」を同じ ViewModel に足すときは、選択アクション

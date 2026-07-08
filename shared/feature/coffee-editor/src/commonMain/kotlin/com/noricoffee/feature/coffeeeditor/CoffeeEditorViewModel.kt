@@ -694,7 +694,7 @@ class CoffeeEditorViewModel(
             }
         }
 
-        val cafe = buildCafe(mode, draft)
+        val cafe = buildCafe(draft)
 
         return CoffeeRecord(
             id = id,
@@ -720,37 +720,34 @@ class CoffeeEditorViewModel(
     }
 
     /**
-     * draft と [mode] から保存用の [Cafe]（任意）を組み立てる。
+     * draft から保存用の [Cafe]（任意）を組み立てる。
      *
      * 優先順位:
      * 1. [draft].cafeName が空 → null（セルフ抽出）
      * 2. このセッションで Places 選択があった（`selectedCafe` が非 null）→
      *    `selectedCafe` の placeId / latitude / longitude / photoReferences を採用
-     * 3. [Mode.Edit] / [Mode.Duplicate] かつ選択なし → [currentInitialRecord] の cafe
-     *    （placeId / 座標 / photoReferences）を引き継ぐ（[Mode.Duplicate] は複製元の cafe を同一カフェとして扱う）
-     * 4. [Mode.Create] かつ選択なし（手入力カフェ）→ UUID を placeId として採番、座標は null
+     * 3. 引き継ぎ元 cafe がある（[currentInitialRecord]`?.cafe` が非 null。[Mode.Edit] / [Mode.Duplicate] で
+     *    取得した元記録にカフェが紐づいていた場合）→ その placeId / 座標 / photoReferences を引き継ぐ
+     *    （[Mode.Duplicate] は複製元の cafe を同一カフェとして扱う）
+     * 4. 上記いずれでもない（[Mode.Create] の手入力カフェ、またはセルフ抽出記録
+     *    （元 cafe = null）の [Mode.Edit] / [Mode.Duplicate] で手動カフェ名を入力したケース）→
+     *    UUID を placeId として新規採番、座標は null / photoReferences は空
      *
+     * cafe 採用の判定は mode ではなく「引き継ぎ元 cafe の有無」の一点に畳める（[Mode.Create] は
+     * [onAppear] で [currentInitialRecord] を null にするため、自然に 4 に落ちる）。
      * いずれの場合も name / address / websiteUrl / mapsUrl は draft の編集値を採用する。
      */
-    private fun buildCafe(mode: Mode, draft: CoffeeDraft): Cafe? {
+    private fun buildCafe(draft: CoffeeDraft): Cafe? {
         if (draft.cafeName.isBlank()) return null
 
         val selected = selectedCafe
-        val (placeId, latitude, longitude, photoReferences) = if (selected != null) {
-            CafeSnapshot(selected.placeId, selected.latitude, selected.longitude, selected.photoReferences)
-        } else {
-            when (mode) {
-                is Mode.Edit, is Mode.Duplicate -> {
-                    val initialCafe = currentInitialRecord?.cafe ?: return null
-                    CafeSnapshot(
-                        initialCafe.placeId,
-                        initialCafe.latitude,
-                        initialCafe.longitude,
-                        initialCafe.photoReferences,
-                    )
-                }
-                is Mode.Create -> CafeSnapshot(kotlin.uuid.Uuid.random().toString(), null, null, emptyList())
-            }
+        val initialCafe = currentInitialRecord?.cafe
+        val (placeId, latitude, longitude, photoReferences) = when {
+            selected != null ->
+                CafeSnapshot(selected.placeId, selected.latitude, selected.longitude, selected.photoReferences)
+            initialCafe != null ->
+                CafeSnapshot(initialCafe.placeId, initialCafe.latitude, initialCafe.longitude, initialCafe.photoReferences)
+            else -> CafeSnapshot(kotlin.uuid.Uuid.random().toString(), null, null, emptyList())
         }
 
         return Cafe(

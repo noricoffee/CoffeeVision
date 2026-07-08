@@ -600,3 +600,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: `.claude/rules/kotlin-kmp.md` の「コルーチン内で `runCatching` を使わない」と同系の「例外を投げうる API を Flow/変換の内側に置かない」原則。列挙の逆引きは `valueOf`（例外）ではなく `firstOrNull`（null 安全）+ 明示フォールバックを既定にする。再発するなら rules へ昇格候補
 - **発生源**: コードレビュー（2026-07-08）で発覚。`Mapper.kt` の `toDomain`
 - **横展開点検（2026-07-08）**: `grep -rn "\.valueOf(" shared androidApp` → **該当なし**（今回の 3 箇所置換で全滅。Firestore デコーダ側は元から `firstOrNull` 方式）
+
+### `when (mode)` で特定モードだけを対象にした早期 return（`?: return null`）は、本来「状態の有無」で判定すべきものを mode で判定して値を無言で落とす
+
+- **症状**: セルフ抽出記録（`cafe == null`）を Edit / Duplicate モードで開き、手動でカフェ名を入力して保存しても、入力したカフェが保存されず `cafe = null` になる（無言のデータ欠落。コンパイルエラーも例外も出ない）
+- **原因の構造**: `CoffeeEditorViewModel.buildCafe` が `when (mode) { is Mode.Edit, is Mode.Duplicate -> currentInitialRecord?.cafe ?: return null; is Mode.Create -> UUID採番 }` と **mode で分岐**していた。本来 cafe の採否を決めるのは「引き継ぎ元 cafe（`currentInitialRecord?.cafe`）が有るか」という**状態**であって mode ではない。mode で分岐したため「Edit/Duplicate だが引き継ぎ元 cafe が無い（＝セルフ抽出記録の編集/複製）」という組み合わせが `?: return null` に吸い込まれ、Create なら通る UUID 採番パスに到達できなかった
+- **修正パターン**: 分岐条件を mode から状態へ移す。`when { selected != null -> ...; initialCafe != null -> ...; else -> UUID採番 }` の状態ベース 3 段判定に一本化し、`mode` 引数自体を削除。`Mode.Create` は `load()` で `currentInitialRecord = null` を明示するため、状態判定に畳んでも既存 Create 挙動は不変（mode 依存は見かけだった）
+- **教訓**: `when (mode)` を書く前に「本当に mode 依存か、内部状態（null か否か等）の有無で足りるか」を疑う。特に `?: return null` / `?: return` のような早期 return を特定モード分岐の中に置くと、想定外のモード×状態の組み合わせで値が無言で消える。**分岐軸が実体（状態）とズレていると、網羅的な `when` でも「網羅されていない組み合わせ」が生まれる**（2026-07-08 の「表示と解決で対象集合がズレる」と同型 — 判定軸の取り違え）
+- **発生源**: フェーズ 6 既知バグ（2026-07-06 の 15-B 実装中に kmp-engineer が発見・スコープ外で保留）→ 2026-07-08 修正
+- **横展開点検（2026-07-08）**: `grep -rln "currentInitialRecord" shared/feature/*/src/commonMain` → `CoffeeEditorViewModel.kt` 1 ファイルのみ（同型の値握りつぶし波及なし）。残る mode 束ね分岐は `buildRecord` の id/createdAt 採番 1 箇所のみで、`?: return` のような早期 return を含まず本パターンに非該当

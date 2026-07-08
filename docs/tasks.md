@@ -100,7 +100,7 @@
 | [ ] | 検索（キーワード）の高速化（SQLDelight FTS） | 一覧検索そのものはフェーズ 15-C（まずはメモリ内 filter）。FTS はデータ量で遅くなったら |
 | [ ] | エクスポート（JSON）機能 | フェーズ 15-E-2 に統合（そちらで実施）。7-4 を ○ へ引き上げ済み |
 | [ ] | 同一カフェの集計表示 | |
-| [~] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-06 の 15-B 実装中に kmp-engineer が発見（既存バグ・15-B スコープ外のため未修正）。**2026-07-08 着手**（専用セクション「フェーズ 6 既知バグ」に移管）。implementation_note 2026-07-06 参照 |
+| [x] | エディタ `buildCafe` の Edit/Duplicate 分岐の抜けを修正: 元 cafe が null（セルフ抽出）の記録を編集して手動でカフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき） | 2026-07-08 完了（専用セクション「フェーズ 6 既知バグ」参照）。目視のみユーザー待ち。implementation_note 2026-07-08 参照 |
 | [ ] | Widget / ホーム画面ショートカット | |
 
 ---
@@ -494,7 +494,8 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [~] | kmp-engineer: `buildCafe` の Edit/Duplicate self-extract 分岐を修正（引き継ぎ元 cafe なし → 手入力カフェとして新規 UUID 採番）+ mode 分岐の畳み込み + commonTest | 2026-07-08 着手 |
+| [x] | kmp-engineer: `buildCafe` の Edit/Duplicate self-extract 分岐を修正（引き継ぎ元 cafe なし → 手入力カフェとして新規 UUID 採番）+ mode 分岐の畳み込み + commonTest | 2026-07-08 完了。cafe 採用を状態ベース 3 段判定に一本化し `mode` 引数削除。回帰テスト 2 件追加。`testAndroidHostTest` 20 件 green / 親が `iosSimulatorArm64Test` を override 無しで green。implementation_note / lessons 2026-07-08 記録 |
+| [ ] | 検証: セルフ抽出記録を編集 → 手動カフェ名入力 → 保存でカフェが残る / 複製でも同様 / 既存の Places 選択・引き継ぎ元ありの正常系が回帰しない | **シミュレータ目視はユーザー作業** |
 
 ---
 

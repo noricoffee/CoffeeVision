@@ -875,3 +875,16 @@ TestFlight へのアップロードを GitHub Actions（`workflow_dispatch` 手�
   4. プロキシに **App Attest（DeviceCheck）** を足して正規アプリのみ通す（ここまでで実効的防御）
 
 - **現時点の判断**: リリース初期の個人開発規模なら **1 + 2 で現実的リスクは十分抑制**。3・4 はユーザー数増加で課金額が無視できなくなってから。Places 従量課金なので抜かれると自分の請求に跳ねる点を忘れない
+
+### 2026-07-08: `CoffeeEditorViewModel.buildCafe` の cafe 採用判定を mode 分岐から状態判定へ
+
+- 領域: Shared / feature/coffee-editor
+- 関連: `shared/feature/coffee-editor/src/commonMain/kotlin/com/noricoffee/feature/coffeeeditor/CoffeeEditorViewModel.kt`
+
+フェーズ 6 バックログの既知バグ修正（2026-07-06 の 15-B 実装中に kmp-engineer が発見・スコープ外で保留していたもの）。
+
+- **バグ**: セルフ抽出記録（`cafe == null`）を Edit / Duplicate して手動でカフェ名を入力しても、旧実装 `when (mode) { is Mode.Edit, is Mode.Duplicate -> currentInitialRecord?.cafe ?: return null; is Mode.Create -> ... UUID }` が `?: return null` で入力値を無言で破棄していた。手入力カフェとして新規 UUID を採番すべきところが cafe = null 保存になっていた
+- **修正**: cafe 採用の優先順位を状態ベースに一本化 — ①`cafeName` 空 → null（セルフ抽出）②`selectedCafe` あり → それを採用 ③引き継ぎ元 `currentInitialRecord?.cafe` あり → それを引き継ぐ ④いずれもなし → UUID 新規採番（座標 null / photoReferences 空）。これで `buildCafe` の `when (mode)` が不要になり `mode` 引数を削除（`buildCafe(draft)`）
+- **なぜ mode 不要か**: `Mode.Create` は `load()` で `currentInitialRecord = null` を明示設定するため、③の判定が Create では常に false → ④に落ちる = 従来の Create 挙動（UUID 採番）と一致。よって「引き継ぎ元 cafe の有無」の一点で 3 モードを統一でき、Create 挙動は不変
+- **検証**: 回帰テスト 2 件（Edit / Duplicate のセルフ抽出 × 手動カフェ名）追加。`testAndroidHostTest` 20 件 green / `iosSimulatorArm64Test` 親が override 無しで green
+- **iOS 影響なし**: `buildCafe` は private。公開 API（`Mode` / `UIState` / public メソッド）不変で Bridge 追随不要

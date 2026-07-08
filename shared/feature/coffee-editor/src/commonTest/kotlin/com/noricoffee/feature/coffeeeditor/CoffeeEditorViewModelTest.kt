@@ -301,6 +301,41 @@ class CoffeeEditorViewModelTest {
     }
 
     // ─────────────────────────────────────────────────
+    // Tests — Edit（セルフ抽出記録に手動カフェ名を入力）
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onSaveTapped_edit_selfExtractedRecord_manualCafeName_savesNewCafeWithUuidPlaceId() = runTest {
+        // 元記録は cafe = null（セルフ抽出）。修正前は「引き継ぎ元 cafe なし」で cafe = null のまま
+        // 保存され、手入力したカフェ名が無言で捨てられていた回帰を捕まえるテスト。
+        val initialRecord = sampleRecord(id = "record-1", cafe = null)
+        val fake = FakeCoffeeRepository()
+        fake.byIdFlow.value = initialRecord
+
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Edit(initialRecord.id), userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            // Places を選択せずに手動でカフェ名を入力する
+            vm.onCafeNameChanged("手入力カフェ")
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            val saved = fake.savedRecords.single()
+            val cafe = assertNotNull(saved.cafe)
+            assertEquals("手入力カフェ", cafe.name)
+            assertNull(cafe.latitude)
+            assertNull(cafe.longitude)
+            assertTrue(cafe.photoReferences.isEmpty())
+            assertTrue(cafe.placeId.isNotBlank())
+        } finally {
+            vm.clear()
+        }
+    }
+
+    // ─────────────────────────────────────────────────
     // Tests — onAppear 再呼び出しでの選択状態リセット
     // ─────────────────────────────────────────────────
 
@@ -451,6 +486,40 @@ class CoffeeEditorViewModelTest {
             testScheduler.advanceUntilIdle()
 
             assertEquals("", vm.state.value.draft.cafeName)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onSaveTapped_duplicate_selfExtractedSource_manualCafeName_savesNewCafeWithUuidPlaceId() = runTest {
+        // 複製元も cafe = null（セルフ抽出）。修正前は「引き継ぎ元 cafe なし」で cafe = null のまま
+        // 保存され、手入力したカフェ名が無言で捨てられていた回帰を捕まえるテスト。
+        val sourceRecord = sampleRecord(id = "source-record", cafe = null)
+        val fake = FakeCoffeeRepository()
+        fake.byIdFlow.value = sourceRecord
+
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Duplicate(sourceCoffeeId = sourceRecord.id), userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            // Places を選択せずに手動でカフェ名を入力する
+            vm.onCafeNameChanged("手入力カフェ")
+            // Duplicate は rating を引き継がない（0.0 = 未評価）ためバリデーションを通す値を設定する
+            vm.onRatingChanged(3.0)
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            val saved = fake.savedRecords.single()
+            assertNotEquals(sourceRecord.id, saved.id)
+            val cafe = assertNotNull(saved.cafe)
+            assertEquals("手入力カフェ", cafe.name)
+            assertNull(cafe.latitude)
+            assertNull(cafe.longitude)
+            assertTrue(cafe.photoReferences.isEmpty())
+            assertTrue(cafe.placeId.isNotBlank())
         } finally {
             vm.clear()
         }

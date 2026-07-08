@@ -20,6 +20,7 @@ struct RootTabView: View {
         TabView {
             Tab(String(localized: "マップ"), systemImage: "map") {
                 MapTabView(appState: appState)
+                    .trackScreen("map_tab")
             }
 
             Tab(String(localized: "コーヒー"), systemImage: "cup.and.saucer") {
@@ -28,16 +29,19 @@ struct RootTabView: View {
                         CoffeeListView(viewModel: bridge, appState: appState)
                     }
                 }
+                .trackScreen("coffee_list")
             }
 
             Tab(String(localized: "分析"), systemImage: "chart.bar.xaxis") {
                 if let bridge = appState.analysisBridge {
                     AnalysisView(viewModel: bridge, appState: appState)
+                        .trackScreen("analysis")
                 }
             }
 
             Tab(String(localized: "設定"), systemImage: "gearshape") {
                 SettingsView(appState: appState)
+                    .trackScreen("settings")
             }
         }
     }

@@ -71,6 +71,7 @@ struct CoffeeEditorView: View {
                 visitSection
                 photosSection
             }
+            .trackScreen("coffee_editor")
             .navigationTitle(navigationTitle)
             .navigationBarTitleDisplayMode(.inline)
             .toolbar { toolbarContent }

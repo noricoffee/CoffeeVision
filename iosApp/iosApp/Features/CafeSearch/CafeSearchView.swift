@@ -54,6 +54,7 @@ struct CafeSearchView: View {
                 resultsList
             }
         }
+        .trackScreen("cafe_search")
         .navigationTitle(String(localized: "カフェを検索"))
         .navigationBarTitleDisplayMode(.inline)
         // queryText をローカル @State にすることで、1 文字入力のたびに

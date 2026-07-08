@@ -32,6 +32,7 @@ struct CoffeeDetailView: View {
 
     var body: some View {
         content
+            .trackScreen("coffee_detail")
             .navigationTitle(viewModel.coffee?.name ?? String(localized: "詳細"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

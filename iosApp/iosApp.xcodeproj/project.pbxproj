@@ -10,6 +10,9 @@
 		FB0000010000000000000001 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseAuth */; };
 		FB0000010000000000000002 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000002 /* FirebaseFirestore */; };
 		FB0000010000000000000003 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000003 /* FirebaseStorage */; };
+		FB0000010000000000000004 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000004 /* FirebaseCrashlytics */; };
+		FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000005 /* FirebaseAnalytics */; };
+		FB0000010000000000000006 /* FirebasePerformance in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000006 /* FirebasePerformance */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +53,9 @@
 				FB0000010000000000000001 /* FirebaseAuth in Frameworks */,
 				FB0000010000000000000002 /* FirebaseFirestore in Frameworks */,
 				FB0000010000000000000003 /* FirebaseStorage in Frameworks */,
+				FB0000010000000000000004 /* FirebaseCrashlytics in Frameworks */,
+				FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */,
+				FB0000010000000000000006 /* FirebasePerformance in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,6 +90,7 @@
 				2A96A4DBB4D19D0F23597A05 /* Sources */,
 				869DC8FE24DD3F3D3CF10A44 /* Frameworks */,
 				46FF7C0E050BEA9D646DD937 /* Resources */,
+				FB0000040000000000000001 /* Upload dSYM to Crashlytics */,
 			);
 			buildRules = (
 			);
@@ -97,6 +104,9 @@
 				FB0000020000000000000001 /* FirebaseAuth */,
 				FB0000020000000000000002 /* FirebaseFirestore */,
 				FB0000020000000000000003 /* FirebaseStorage */,
+				FB0000020000000000000004 /* FirebaseCrashlytics */,
+				FB0000020000000000000005 /* FirebaseAnalytics */,
+				FB0000020000000000000006 /* FirebasePerformance */,
 			);
 			productName = iosApp;
 			productReference = 5934ABC536940296DA2BC581 /* coffeevision.app */;
@@ -168,6 +178,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
 			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\n# Android Studio の JBR があるローカル環境でのみ上書きする（CI では setup-java の JAVA_HOME をそのまま使う）\nif [ -d \"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ]; then\n  export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nfi\ncd \"$SRCROOT/..\"\n./gradlew :shared:framework:embedAndSignAppleFrameworkForXcode\n";
+		};
+		FB0000040000000000000001 /* Upload dSYM to Crashlytics */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}",
+				"$(SRCROOT)/$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Upload dSYM to Crashlytics";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -414,6 +444,21 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		FB0000020000000000000004 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		FB0000020000000000000005 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		FB0000020000000000000006 /* FirebasePerformance */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebasePerformance;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

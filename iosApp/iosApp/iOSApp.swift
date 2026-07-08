@@ -1,5 +1,6 @@
 import SwiftUI
 import FirebaseCore
+import FirebaseCrashlytics
 import FirebaseFirestore
 import SharedLogic
 
@@ -10,6 +11,10 @@ struct iOSApp: App {
 
     init() {
         FirebaseApp.configure()
+
+        // Crashlytics は同意不要で常時収集する（Info.plist にはフラグを立てず、ここで明示有効化する）。
+        // Performance は Info.plist にフラグを立てていないため、SDK 既定（常時 ON）のまま。
+        Crashlytics.crashlytics().setCrashlyticsCollectionEnabled(true)
 
         // Firestore のオフライン永続化を明示的に有効化（Modern API: PersistentCacheSettings）。
         // デフォルトでも ON だが、永続化が効いている状態を起動ログから確認できるよう明示設定する。

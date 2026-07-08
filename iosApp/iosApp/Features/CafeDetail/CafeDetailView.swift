@@ -37,6 +37,7 @@ struct CafeDetailView: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
+        .trackScreen("cafe_detail")
         .navigationTitle(bridge?.cafe?.name ?? initialCafe?.name ?? String(localized: "カフェ詳細"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbar { toolbarContent }

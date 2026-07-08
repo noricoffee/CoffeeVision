@@ -129,12 +129,14 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | ユーザーコンテンツ（コーヒー記録: 評価 / テイスティング / メモ / タグ / カフェ情報） | する | アプリ機能（クラウド同期 / バックアップ）+ **同意時のみ** サービス改善のための分析 | 紐付ける | しない | Firestore に保存。匿名 uid に紐付く。サービス改善利用は初回オンボーディング / 設定の同意トグル（`analyticsConsent`、既定 false）にオプトインした場合のみ |
 | 識別子（匿名ユーザー ID） | する | アプリ機能（同期のためのアカウント識別） | 紐付ける | しない | Firebase 匿名認証の uid |
 | メールアドレス | する（任意。Apple でサインイン時のみ） | アプリ機能（アカウントのアップグレード / 引き継ぎ） | 紐付ける | しない | Sign in with Apple での匿名アカウントアップグレード時に Firebase Auth が保持。ユーザーは Apple の「メールを非公開」を選択可。**申告要否はリリース前に再確認** |
+| 診断情報（クラッシュ / パフォーマンス） | する（**常時**） | アプリ機能（安定性・技術品質の改善） | 紐付ける（匿名 uid / Firebase Installation ID） | しない | Firebase Crashlytics + Performance。同意不要（安定性・技術品質の正当利益）。クラッシュスタック・非致命的エラー・起動/描画/ネットワークの遅延など。広告なし・IDFA なし |
+| 使用状況データ（製品インタラクション: `screen_view` / 自動収集イベント） | する（**同意時のみ**） | サービス改善のための分析 | 紐付ける（匿名 uid） | しない | Firebase Analytics（素の `FirebaseAnalytics` プロダクト。現行 SDK は既定で IDFA 非依存）。`analyticsConsent = true` の場合のみ収集を有効化。既定（未同意）は収集停止。カスタムイベントは未導入（自動収集 + `screen_view` のみ） |
 
 > 分析タブの AI 機能（傾向要約・Q&A・好み検索）は Apple の Foundation Models による**オンデバイス処理**で、記録データを外部サーバに送信しない（App Privacy の申告対象にならない）。
 
 ### 6.2 トラッキング
 
-- **App Tracking Transparency（ATT）**: 不要。広告 SDK・サードパーティ解析でのクロスアプリ追跡を行わないため。
+- **App Tracking Transparency（ATT）**: 不要。広告 SDK を使わず、Firebase Analytics も IDFA 非依存（素の `FirebaseAnalytics` プロダクト。IDFA を使う `FirebaseAnalyticsIdentitySupport` は追加していない）でクロスアプリ・クロスサイト追跡を行わないため。
 - サードパーティとのデータ共有: Google Places API へ検索クエリ / 座標を送信（カフェ検索機能の実現に必要な範囲のみ）。Firebase（Google）にユーザーコンテンツを保存。
 
 ### 6.3 第三者 SDK
@@ -144,8 +146,11 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Firebase Auth | Google | 匿名認証 + Sign in with Apple 連携 | 匿名 uid（Apple サインイン時は Apple ID 連携情報・メールアドレス） |
 | Firebase Firestore | Google | 記録の同期 / バックアップ | コーヒー記録（評価 / テイスティング / メモ / タグ / カフェ情報スナップショット / 写真メタデータ）+ データ利用同意フラグ |
 | Google Places API | Google | カフェ検索・エリア検索・詳細・写真取得 | 検索クエリ / 現在地・マップ中心座標 |
+| Firebase Crashlytics | Google | クラッシュ / 非致命的エラー診断（**常時**） | クラッシュスタック・デバイス/OS・Firebase Installation ID・（同意時のみ）Analytics breadcrumb |
+| Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
+| Firebase Analytics | Google | 製品利用分析（**同意時のみ**） | `screen_view`・自動収集イベント（起動/セッション等）。IDFA なし・クロスアプリ追跡なし |
 
-> Firebase Analytics / Crashlytics は導入していない（導入する場合は本表とプライバシー申告を更新すること）。
+> Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
 
 ### 6.4 必要 URL
 
@@ -245,3 +250,4 @@ CoffeeVision を初めてリリースしました。
 |------|---------|
 | 2026-06-17 | 初版作成。原稿（説明文 / キーワード / スクショ計画 / プライバシー申告 / 審査メモ / チェックリスト）を整備 |
 | 2026-07-02 | CoffeeRecord 主体モデルへ全面改訂。説明文 / プロモ文 / スクショ計画を 4 タブ構成（マップ / コーヒー / 分析 / 設定）と実装機能（セルフ抽出・テイスティング・タグ・分析タブ・エリア検索）に追随。審査メモに Sign in with Apple アップグレード / アカウント削除（revoke）/ データ利用同意オンボーディング / Apple Intelligence 要件を反映。プライバシー申告に `analyticsConsent`（オプトイン）とメールアドレス（Apple サインイン時）を追加、Foundation Models のオンデバイス処理を明記 |
+| 2026-07-08 | Firebase テレメトリ導入に伴いプライバシー申告を更新。Crashlytics / Performance を「診断情報（常時収集・トラッキング不使用）」、Analytics（素の `FirebaseAnalytics`・IDFA なし）を「使用状況データ（`analyticsConsent` 同意時のみ）」として 6.1 / 6.3 に追加。「Analytics / Crashlytics 未導入」の注記を撤去。ATT は引き続き不要（IDFA 非依存）。`PrivacyInfo.xcprivacy` 追加済み（実装で反映）|

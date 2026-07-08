@@ -475,6 +475,23 @@
 | [x] | 親: docs 反映（data-model.md 正規化記述の改訂・将来課題消し込み、implementation_note 経緯）+ commit | 2026-07-08 完了。data-model.md §1.6/§1.7/§1.7a/§1.8 を OriginNormalizer 準拠に改訂、implementation_note（ベクトル検索見送りの経緯）、lessons（辞書×contains のすれ違い + sweep）記録 |
 ---
 
+## フェーズ 18: Firebase テレメトリ導入（Crashlytics / Analytics / Performance、2026-07-08 起票）
+
+> **確定仕様（2026-07-08 親確定）**: iOS のみ（Android 配線なし）。**Crashlytics + Performance = 常時収集（同意不要）**、**Analytics = `analyticsConsent` 同意時のみ**。Analytics は IDFA 非依存の `FirebaseAnalyticsWithoutAdIdSupport`（ATT 不要を維持）。イベントは自動収集 + `screen_view` のみ（カスタムイベントは後続）。`Info.plist` で Analytics 自動収集を起動時 OFF → `AppState.applyTelemetryConsent` が consent 確定/変更時に Analytics だけ有効化。経緯・トレードオフは implementation_note 2026-07-08 エントリ、プライバシー申告は app-store-metadata.md 6.1/6.3。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: docs 反映（app-store-metadata プライバシー申告 6.1/6.3 + 変更履歴、implementation_note エントリ + 方針サマリ、本フェーズ起票） | 2026-07-08 完了 |
+| [x] | ios-engineer: SPM 3 プロダクト追加（`FirebaseCrashlytics` / `FirebaseAnalytics` / `FirebasePerformance`）+ `Info.plist` の `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` | 2026-07-08 完了。pbxproj 手編集で完結（Xcode UI 不要）。**`FirebaseAnalyticsWithoutAdIdSupport` は現行 SDK 12.14.0 で廃止 → 素の `FirebaseAnalytics` が既定 IDFA 非依存**のため名称変更（結論不変） |
+| [x] | ios-engineer: `iOSApp.swift` で Crashlytics 明示有効化 + `AppState.applyTelemetryConsent(_:)` 新設（`analyticsConsent` の `didSet` で一元発火 → `Analytics.setAnalyticsCollectionEnabled`）| 2026-07-08 完了。Performance/Crashlytics は触らない（常時 ON） |
+| [x] | ios-engineer: Crashlytics dSYM アップロード用 run-script build phase 追加 | 2026-07-08 完了（`Upload dSYM to Crashlytics`）。Release/TestFlight でのシンボリケーション用 |
+| [x] | ios-engineer: `.trackScreen("name")` view modifier 実装 + 4 タブ + 主要画面に付与 | 2026-07-08 完了。`AnalyticsScreenTracking.swift`。map_tab/coffee_list/analysis/settings + coffee_detail/cafe_detail/coffee_editor/cafe_search/account |
+| [x] | ios-engineer: `PrivacyInfo.xcprivacy` の集計データ種別（Crash/Performance/Product Interaction）+ UserDefaults 必須理由 API 宣言 | 2026-07-08 完了。全体の Required Reason API 網羅監査は別タスク（下記 F-1）|
+| [x] | 親: ビルド再検証（override 無し）+ docs のプロダクト名実態訂正 | 2026-07-08 完了。`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=NO` で `** BUILD SUCCEEDED **`。SourceKit の No such module は IDE インデックス偽陽性 |
+| [ ] | ユーザー: 実機/シミュレータで実挙動確認（Crashlytics テストクラッシュ送出 / Analytics DebugView で consent トグル ON→OFF / Performance トレース / `screen_view` 発火）+ 親が commit | ビルド成功 ≠ 動作確認完了 |
+
+---
+
 ## docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない（最優先 A-1〜A-3 / 整合 A-4〜A-7 はコミット済 `34ec607` / `7c86ab5`）。必要になったフェーズで着手する。判断経緯は精査結果と [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリを参照。
@@ -492,3 +509,4 @@
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
 | [x] | D-2 | `architecture.md`「データフロー（書き込み）」節が旧 Visit モデル / 旧構成（プラットフォーム別 VisitRepository 実装）のまま。現行の CoffeeRepositoryImpl 合成構成に書き直す（読み取り側は 2026-07-03 の shared レビュー対応で修正済） | 2026-07-04 完了。architecture.md 現行化（Visit 残骸消し込み・例コードの実体化）と同時に対応。詳細は implementation_note 2026-07-04 |
 | [~] | E-1 | アカウント削除時の Apple トークン失効（revoke）。App Store ガイドライン 5.1.1(v) 対応。**2026-06-24 着手 → 専用セクション「フェーズ 5.2」に移管**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-17 アカウント機能エントリ | App Store 申請前。現状の `deleteAuthUser` は Firebase ユーザー + Firestore データのみ削除 |
+| [ ] | F-1 | `PrivacyInfo.xcprivacy` のアプリ全体 Required Reason API 網羅監査（File Timestamp / System Boot Time / Disk Space 等）。フェーズ 18 では UserDefaults（`CA92.1`）+ テレメトリ集計データ種別のみ宣言済み | App Store 申請前。Firebase SDK 同梱マニフェストで足りる分を差し引いてアプリ側の残りを確認 |

@@ -81,6 +81,7 @@
 - 分析は 3 階層分離: 階層1・2 は KMP で決定論（`CoffeeStats` / `FavoriteSignals`。収縮平均 + n 連動 z ゲート `CATEGORY_Z = 2.0` + 相関 floor で「弱い傾向」だけを信号化、断定しない）、階層3 は iOS Foundation Models（`CoffeeInsightProvider`。可否は注入時判定、null = 非対応端末で graceful degradation）。Q&A は v1 = `CoffeeStats` digest 注入（単発・ステートレス）/ v2 = `Tool` から `CoffeeRecordQuery.searchRecords`（計算は KMP・LLM は解釈と整形のみ）
 - `BeanProfile`（12-B）はサーバ管理 read-only の豆ナレッジ。`CoffeeRecord` と ID 紐付けせず origin / processings のファジーマッチ。取得は one-shot get + メモリキャッシュ。12-C で `FavoriteSignals` と突合した `preferredBeanTraits` を `CoffeeStats` に付加し、Foundation Models で言語化
 - データ利用同意（12-A）: `users/{uid}.analyticsConsent`。初回起動オンボーディングで取得し設定トグルで変更可。ドキュメント不在は false 扱い
+- Firebase テレメトリ（iOS のみ）: **Crashlytics + Performance = 常時収集**（同意不要）、**Analytics = `analyticsConsent` 同意時のみ**。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 では既定で IDFA 非依存 = 旧 `WithoutAdIdSupport` 相当。旧プロダクトは廃止。IDFA を使う場合のみ `FirebaseAnalyticsIdentitySupport` を追加する反転構成）。`Info.plist` の `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` で Analytics 自動収集のみ起動時 OFF（Performance は常時 ON）→ `AppState.analyticsConsent` の `didSet` → `applyTelemetryConsent` が Analytics だけ有効化。イベントは自動収集 + `screen_view` のみ（カスタムイベント未導入）。詳細は 2026-07-08 エントリ
 
 ---
 
@@ -926,3 +927,19 @@ Firestore `beanProfiles` が空のまま残っていた初期データ投入（1
 - **Remote Config 見送りの理由**: ①公式プラットフォーム別 SDK 方針のため RC も Swift/Kotlin 二重実装 + KMP 抽象が必要（豆データ 1 種には過重）②「保持し続ける」にはローカル永続層（SQLDelight or ファイル）の新設が必要 ③**seed 投入（Firestore）と RC バージョン更新が別システムの手作業 2 段になり、上げ忘れで静かに壊れる**（「片側変更 → 対向未追随」ファミリーと同構造の同期ポイントを増やす）
 - **将来やる場合の採用案 = `_meta` ドキュメント方式**: `beanProfiles/_meta { version }` を seed スクリプトが投入時に自動インクリメント。起動時は `_meta` 1 read → ローカル保存済みバージョンと一致なら 38 件取得をスキップ。**バージョンがデータと同じ場所に住む**ため 1 回の投入で両方更新され、上げ忘れが構造的に起きない。新 SDK 不要
 - **再検討の損益分岐**: 豆データが数百件規模に成長、またはユーザー数増で beanProfiles の reads が課金圏に入ったとき
+
+### 2026-07-08: Firebase テレメトリ導入（Crashlytics / Performance = 常時、Analytics = 同意ゲート）
+
+- 領域: iosApp（iOS のみ。Android は配線しない = リリース対象外）
+- 関連: `iOSApp.swift` / `AppState.swift` / `Info.plist` / `iosApp.xcodeproj`
+
+ネイティブアプリのデファクト標準として Firebase Crashlytics / Analytics / Performance を導入。既存のオプトイン同意基盤（`analyticsConsent`、既定 false）に接続する。
+
+- **ゲート方針（ユーザー確定 2026-07-08）**: **Crashlytics + Performance は常時収集（同意不要）**、**Analytics のみ `analyticsConsent` 同意時に有効化**。
+  - 根拠: Crashlytics（クラッシュ診断）と Performance（起動/描画/ネットワーク遅延の技術診断）は個人の行動プロファイルではなく「安定性・技術品質の正当利益」で説明でき、常時 ON が妥当。一方 **Analytics は製品利用・行動データで、GDPR/ePrivacy では opt-in 同意が原則必須**。加えて既存オンボーディングで「記録データのサービス改善利用への同意」をユーザーに約束済みで、Analytics を勝手に常時 ON にすると同意文言と実挙動が矛盾する
+  - 検討したが不採用: ①3 つとも同意ゲート（Crashlytics のクラッシュ可視性を非同意層で失う。安定性目的の常時収集は業界標準で許容される）②3 つとも常時 ON（上記の Analytics 常時 ON の法務・信頼リスク）
+- **IDFA なし**: Analytics は素の `FirebaseAnalytics` プロダクトを採用。クロスアプリ追跡を行わないため **ATT プロンプト不要**を維持し、プライバシー申告を簡潔に保つ。⚠️ **実装時の実態訂正**: 当初は `FirebaseAnalyticsWithoutAdIdSupport` を採用予定だったが、現行 firebase-ios-sdk（解決版 12.14.0）で**同プロダクトは廃止**されていた。現行 SDK は**既定の `FirebaseAnalytics` が IDFA 非対応**に反転し、IDFA を使う場合のみ `FirebaseAnalyticsIdentitySupport` を追加する方式。よって `FirebaseAnalytics` を採用し `IdentitySupport` は足さない = IDFA なし・ATT 不要という結論は不変（プロダクト名だけ変更）
+- **収集の起動時制御**: `Info.plist` の `FIREBASE_ANALYTICS_COLLECTION_ENABLED = NO` で Analytics 自動収集を起動時 OFF（Performance は常時 ON なのでフラグを立てない / true）。`FirebaseApp.configure()` 後に Crashlytics を明示有効化。`AppState.applyTelemetryConsent(_:)` を新設し、bootstrap での consent 確定時・設定トグル/オンボーディングでの変更時に `Analytics.setAnalyticsCollectionEnabled(consent)` を呼ぶ（Performance/Crashlytics は触らない）
+- **Analytics イベント範囲（今回）**: 自動収集イベント + `screen_view` のみ。SwiftUI は UIKit 自動 screen tracking が効かないため `.trackScreen("name")` view modifier を自作し 4 タブ + 主要画面に付与。カスタムドメインイベント（記録作成 / カフェ検索 等）は後続タスクに分離
+- **トレードオフの記録**: Crashlytics の breadcrumb ログと crash-free users 指標は内部で Analytics に依存するため、**非同意ユーザーではクラッシュ前後の文脈が減る**（クラッシュ自体は記録される）。この損失は許容し、Analytics 常時 ON の法務・信頼リスクを回避する方を採った
+- **Xcode プロジェクト設定**: 既存 `firebase-ios-sdk` SPM パッケージから 3 プロダクトを追加。Crashlytics は dSYM アップロード用の run-script build phase（`${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run`）が Release/TestFlight でのシンボリケーションに必要。`PrivacyInfo.xcprivacy` の集計データ種別更新も要（app-store-metadata.md 6.1/6.3 と対応）

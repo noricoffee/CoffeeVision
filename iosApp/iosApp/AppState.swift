@@ -1,5 +1,6 @@
 import Foundation
 import Observation
+import FirebaseAnalytics
 import FirebaseFirestore
 import SharedLogic
 
@@ -73,7 +74,16 @@ final class AppState {
     var showConsentOnboarding: Bool = false
 
     /// データ共有への同意状態。Firestore `users/{uid}.analyticsConsent` と同期する。
-    private(set) var analyticsConsent: Bool = false
+    ///
+    /// `didSet` で Firebase Analytics の収集可否（`applyTelemetryConsent(_:)`）へ一元的に反映する。
+    /// 代入箇所は `checkConsentOnboarding`（初回読み込み）と `writeAnalyticsConsent`（変更）の 2 箇所のみ。
+    /// `init` 時点の既定値代入では `didSet` は発火しないため、起動直後は
+    /// `Info.plist` の `FIREBASE_ANALYTICS_COLLECTION_ENABLED = NO` がそのまま効く。
+    private(set) var analyticsConsent: Bool = false {
+        didSet {
+            applyTelemetryConsent(analyticsConsent)
+        }
+    }
 
     enum Status: Equatable {
         case idle
@@ -203,6 +213,14 @@ final class AppState {
     }
 
     // MARK: - Private helpers
+
+    /// Analytics（同意ゲート対象）にのみ同意状態を反映する。
+    ///
+    /// Crashlytics / Performance は常時収集のためここでは触らない
+    /// （安定性・技術品質の正当利益として同意不要と整理済み。詳細は `implementation_note.md` 2026-07-08）。
+    private func applyTelemetryConsent(_ consent: Bool) {
+        Analytics.setAnalyticsCollectionEnabled(consent)
+    }
 
     /// Firestore `users/{uid}` の存在確認。
     ///

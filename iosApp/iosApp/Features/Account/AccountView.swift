@@ -45,6 +45,7 @@ struct AccountView: View {
                 accountSection
                 dangerSection
             }
+            .trackScreen("account")
             .navigationTitle(String(localized: "アカウント"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {

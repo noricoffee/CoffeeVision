@@ -29,7 +29,7 @@
 | [x] | CI 整備: PR ごとに iOS / Android 両方のビルドを必須チェック化 | 2026-06-03 初回追加、Phase 2.5 PR3 で現行コマンドに差し替え済。**2026-07-08 ユーザーが CI グリーンを確認**（B-5 と同時解消）|
 | [x] | `local.properties` での API キー管理を整える（Places / Firebase） | Places 側は Phase 4 スライス 1（2026-06-11）で整備済。CI での Firebase 設定ファイル復元は 2026-07-07 の TestFlight ワークフローで解消（Secrets → `GoogleService-Info.plist` / `Secrets.xcconfig` 復元） |
 | [x] | App Store Connect アップロードワークフロー（`release-testflight.yml`）| 2026-07-07 完了。workflow_dispatch 手動起動 / ASC API キー + cloud signing / ビルド番号 = `github.run_number`。判断は implementation_note 2026-07-07 エントリ |
-| [ ] | **（ユーザー作業）** TestFlight ワークフローの Secrets 5 件登録 + 初回実行確認 | `ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_PRIVATE_KEY`（.p8 の中身・**App Manager 以上のロール必須**）/ `GOOGLE_SERVICE_INFO_PLIST_BASE64` / `PLACES_API_KEY`。登録後 Actions から手動実行し TestFlight にビルドが現れることを確認 |
+| [x] | **（ユーザー作業）** TestFlight ワークフローの Secrets 5 件登録 + 初回実行確認 | 2026-07-09 ユーザー完了。`ASC_KEY_ID` / `ASC_ISSUER_ID` / `ASC_PRIVATE_KEY`（.p8 の中身・**App Manager 以上のロール必須**）/ `GOOGLE_SERVICE_INFO_PLIST_BASE64` / `PLACES_API_KEY` 登録 + Actions 手動実行で TestFlight にビルドが現れることを確認済み |
 
 ---
 
@@ -81,7 +81,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | **（ユーザー作業・revoke 機能の前提）** Apple Developer で ① Sign in with Apple 用 Key（.p8）作成（Key ID / Team ID 控え）② Services ID 作成（Return URL = `https://coffeevision-a54aa.firebaseapp.com/__/auth/handler`）→ Firebase Console の Apple プロバイダ（OAuth コードフロー設定）に **Services ID / Apple Team ID / Key ID / 秘密鍵**の 4 つを登録。Console は 4 項目を 1 セットで検証するため Services ID も必須。**これが無いと `revokeToken` はサーバ側で失敗する** | E-1 の機能成立に必須。App Store 審査前に必ず実施 |
+| [x] | **（ユーザー作業・revoke 機能の前提）** Apple Developer で ① Sign in with Apple 用 Key（.p8）作成（Key ID / Team ID 控え）② Services ID 作成（Return URL = `https://coffeevision-a54aa.firebaseapp.com/__/auth/handler`）→ Firebase Console の Apple プロバイダ（OAuth コードフロー設定）に **Services ID / Apple Team ID / Key ID / 秘密鍵**の 4 つを登録。Console は 4 項目を 1 セットで検証するため Services ID も必須。**これが無いと `revokeToken` はサーバ側で失敗する** | 2026-07-09 ユーザー完了（Key / Services ID 作成 + Firebase Apple プロバイダに 4 項目登録済み）。実機での削除完走 + revoke 確認は verification-checklist.md 扱い |
 
 ---
 
@@ -508,5 +508,5 @@
 | [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
 | [x] | D-2 | `architecture.md`「データフロー（書き込み）」節が旧 Visit モデル / 旧構成（プラットフォーム別 VisitRepository 実装）のまま。現行の CoffeeRepositoryImpl 合成構成に書き直す（読み取り側は 2026-07-03 の shared レビュー対応で修正済） | 2026-07-04 完了。architecture.md 現行化（Visit 残骸消し込み・例コードの実体化）と同時に対応。詳細は implementation_note 2026-07-04 |
-| [~] | E-1 | アカウント削除時の Apple トークン失効（revoke）。App Store ガイドライン 5.1.1(v) 対応。**2026-06-24 着手 → 専用セクション「フェーズ 5.2」に移管**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-17 アカウント機能エントリ | App Store 申請前。現状の `deleteAuthUser` は Firebase ユーザー + Firestore データのみ削除 |
+| [x] | E-1 | アカウント削除時の Apple トークン失効（revoke）。App Store ガイドライン 5.1.1(v) 対応。**2026-06-24 実装 → 専用セクション「フェーズ 5.2」に移管**。詳細は [`implementation_note.md`](./implementation_note.md) 2026-06-17 アカウント機能エントリ | 2026-07-09 完了。実装（revoke オーケストレーション）+ Apple Key / Services ID / Firebase OAuth コードフロー登録（フェーズ 5.2）が揃い機能成立。実機での削除完走確認は verification-checklist.md |
 | [ ] | F-1 | `PrivacyInfo.xcprivacy` のアプリ全体 Required Reason API 網羅監査（File Timestamp / System Boot Time / Disk Space 等）。フェーズ 18 では UserDefaults（`CA92.1`）+ テレメトリ集計データ種別のみ宣言済み | App Store 申請前。Firebase SDK 同梱マニフェストで足りる分を差し引いてアプリ側の残りを確認 |

@@ -287,7 +287,7 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: `AnalysisViewModel.UIState` に `readiness: AnalysisReadiness?` を派生追加（上記確定仕様）+ commonTest | 2026-07-06 完了。新規 6 件 + QaTest 追随。**iOS テストが当初 16 件全滅（Native の cancel drain 漏れ）→ 親が `vm.clear()` 後の `advanceUntilIdle()` で修正、iOS/Android とも 16/0 green**。QaTest の fake 追随漏れ（12-C `summarizeBeanTraits`）も修正。教訓は lessons 2026-07-06、判断は implementation_note 2026-07-06。閾値は既存定数参照で二重定義なし |
-| [x] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | 2026-07-06 完了。`AnalysisReadinessProgressCard`（`ProgressView` + 残り件数で文言出し分け + 相関 track は補足キャプション）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 || [ ] | （軽微・後回し可）`favoriteSignalsSection` の `hasAnySignal` 相当判定を iOS 側再計算から `viewModel.readiness.hasAnySignal` 参照に寄せて単一ソース化 | 15-D 実装中に ios-engineer が指摘。現状は同じ `stats` から同時導出のため齟齬なしだが、将来 KMP 側判定変更時に乖離リスク。分析タブを次に触るとき |
+| [x] | ios-engineer: データ不足時のプログレス表示 UI（`hasAnySignal==false && totalCount>0` のとき「あと N 杯記録すると傾向分析が始まります」）。カテゴリ track を主表示、テイスティング相関 track は任意で補足 | 2026-07-06 完了。`AnalysisReadinessProgressCard`（`ProgressView` + 残り件数で文言出し分け + 相関 track は補足キャプション）。BUILD SUCCEEDED・override 不使用。判断は implementation_note 2026-07-06 || [x] | （軽微・後回し可）`favoriteSignalsSection` の `hasAnySignal` 相当判定を iOS 側再計算から `viewModel.readiness.hasAnySignal` 参照に寄せて単一ソース化 | 2026-07-09 完了。`AnalysisView.swift:201` の 4 フィールド再計算を削除し `readiness.hasAnySignal` に一本化（`readinessProgressSection` の非表示条件と対称・単一ソース）。`stats != nil` 分岐内でのみ到達＝readiness 必ず導出済みで挙動不変。Preview 用 `AnalysisViewPreviewContent`（viewModel 無し）は対象外。override 無し `** BUILD SUCCEEDED **`（iPhone 17 sim）|
 
 ### 15-E: 中期（後回し可）【要件 9-8 / 抽出レシピ / 7-4】
 

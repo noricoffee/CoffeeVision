@@ -199,14 +199,12 @@ struct AnalysisView: View {
     /// - 交絡（「産地が好き」か「店が好き」か）は判別不能のため断定しない旨を注記
     @ViewBuilder
     private func favoriteSignalsSection(stats: CoffeeStats) -> some View {
-        let signals = stats.favoriteSignals
-        let hasAnySignal = signals.bestOrigin != nil
-            || signals.bestRoastLevel != nil
-            || signals.bestBrewMethod != nil
-            || signals.dominantTastingAxis != nil
-
-        if hasAnySignal {
-            FavoriteSignalsCard(signals: signals)
+        // 表示条件は KMP 導出の `readiness.hasAnySignal` に一本化する（単一ソース化・15-D）。
+        // 従来はここで stats.favoriteSignals の 4 フィールドから再計算しており、
+        // readinessProgressSection（非表示条件）との二重定義で将来の乖離リスクがあった。
+        // stats != nil の分岐内でのみ到達するため readiness も必ず導出済み。
+        if let readiness = viewModel.readiness, readiness.hasAnySignal {
+            FavoriteSignalsCard(signals: stats.favoriteSignals)
         }
     }
 

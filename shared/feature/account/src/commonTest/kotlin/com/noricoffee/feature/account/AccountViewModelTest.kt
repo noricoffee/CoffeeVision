@@ -116,6 +116,9 @@ class AccountViewModelTest {
         assertEquals(anonymousAccount, vm.state.value.account)
         assertFalse(vm.state.value.isProcessing)
         assertNull(vm.state.value.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -129,6 +132,9 @@ class AccountViewModelTest {
         testScheduler.advanceUntilIdle()
 
         assertNull(vm.state.value.account)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -149,6 +155,9 @@ class AccountViewModelTest {
         assertEquals(appleAccount, state.account)
         assertFalse(state.isProcessing)
         assertNull(state.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -170,6 +179,9 @@ class AccountViewModelTest {
         assertEquals("Link failed", state.error)
         // account は変化しない（リンク失敗のため匿名のまま）
         assertEquals(anonymousAccount, state.account)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -188,6 +200,9 @@ class AccountViewModelTest {
         val state = vm.state.value
         assertFalse(state.isProcessing)
         assertNull(state.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -207,6 +222,9 @@ class AccountViewModelTest {
         val state = vm.state.value
         assertFalse(state.isProcessing)
         assertEquals("Sign out failed", state.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -226,6 +244,9 @@ class AccountViewModelTest {
         val state = vm.state.value
         assertFalse(state.isProcessing)
         assertNull(state.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -246,6 +267,9 @@ class AccountViewModelTest {
         val state = vm.state.value
         assertFalse(state.isProcessing)
         assertEquals("Delete failed", state.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 
     @Test
@@ -266,5 +290,8 @@ class AccountViewModelTest {
         vm.onErrorDismissed()
 
         assertNull(vm.state.value.error)
+
+        vm.clear()
+        testScheduler.advanceUntilIdle()
     }
 }

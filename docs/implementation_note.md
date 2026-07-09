@@ -28,7 +28,7 @@
 | iOS UI / UX ガイドライン | `ui-ux-guidelines.md` |
 | データモデル定義 | `data-model.md` |
 | Swift ⇄ Kotlin ブリッジルール（安定したもの） | `kmp-bridge.md` |
-| フェーズ別タスク・進捗 | `tasks.md` |
+| カテゴリ別タスク・進捗 | `tasks.md` |
 | 失敗から学んだ **汎用** パターン | `tasks/lessons.md` |
 
 迷ったらまず本ノートに書く。安定したら昇格させる（下記）。

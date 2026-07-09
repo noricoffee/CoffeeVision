@@ -127,5 +127,5 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 | データモデル | CoffeeRecord / Cafe / Photo / BeanProfile の Kotlin / SQLDelight / Firestore 表現 | [`docs/data-model.md`](./docs/data-model.md) |
 | KMP ブリッジ | Swift ⇄ Kotlin 相互運用ルール、`expect`/`actual`、Flow / suspend の扱い | [`docs/kmp-bridge.md`](./docs/kmp-bridge.md) |
 | 実装ノート | 要件未満の実装上の決定・影響・トレードオフ・経緯の時系列ログ（親のみ更新） | [`docs/implementation_note.md`](./docs/implementation_note.md) |
-| タスク一覧 | フェーズ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |
+| タスク一覧 | カテゴリ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |
 | App Store メタデータ | App Store Connect 提出用の原稿・プライバシー申告・提出前チェックリスト | [`docs/app-store-metadata.md`](./docs/app-store-metadata.md) |

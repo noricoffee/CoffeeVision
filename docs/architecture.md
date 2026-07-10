@@ -207,7 +207,7 @@ kotlin.sourceSets.getByName("commonMain").dependencies {
 }
 ```
 
-各 feature の `build.gradle.kts` は `plugins { id("kmp.feature") }` を起点に、必要な依存だけを追加します。**自動配線されるのは `core` / `domain` のみ**で、`kotlinx-coroutines-core`（全 feature 必須）・`kotlinx-datetime`（`LocalDate` 等を直接参照する場合）・commonTest 依存は各 feature が手動追加する（経緯は `implementation_note.md` 2026-06-15 エントリ）。
+各 feature の `build.gradle.kts` は `plugins { id("kmp.feature") }` を起点に、必要な依存だけを追加します。**自動配線されるのは `core` / `domain` のみ**で、`kotlinx-coroutines-core`（全 feature 必須）・`kotlinx-datetime`（`LocalDate` 等を直接参照する場合）・commonTest 依存は各 feature が手動追加する（commonTest を持つ feature が増えたら Plugin への組み込みを再検討）。
 
 ---
 
@@ -218,7 +218,7 @@ kotlin.sourceSets.getByName("commonMain").dependencies {
 - 分割・追加は機能追加と別 PR / 別コミットにする
 - 追加直後に必ず `./gradlew :shared:framework:assembleSharedLogicXCFramework` と `./gradlew :androidApp:assembleDebug` が通ることを確認する
 - パッケージ名 `com.noricoffee.*` を維持し、モジュール境界とパッケージ境界を一致させる（例: `feature/coffee-list` は `com.noricoffee.feature.coffeelist`）
-- `shared/framework` の `api(...)` / `export(...)` と `AppContainerViewModelFactory.kt` のファクトリ追記を忘れない
+- `shared/framework` の `api(...)` / `export(...)` と `AppContainerViewModelFactory.kt` のファクトリ追記を忘れない（ファクトリを `shared/core` でなく framework の拡張関数に置くのは、`feature → core` の api 依存と衝突する循環参照を避けるため）
 
 ---
 
@@ -375,7 +375,7 @@ final class CoffeeListViewModelBridge {
 }
 ```
 
-Bridge の生存スコープは、タブ常駐画面 = `AppState` で 1 つ保持 / push・sheet 画面 = View 内 `@State` で遷移ごと生成、の 2 系統（**タブ常駐 View の `onDisappear` で observation を止めない**。詳細は `.claude/rules/swift-ios.md` と `implementation_note.md` 2026-06-25 エントリ）。
+Bridge の生存スコープは、タブ常駐画面 = `AppState` で 1 つ保持 / push・sheet 画面 = View 内 `@State` で遷移ごと生成、の 2 系統（**タブ常駐 View の `onDisappear` で observation を止めない**。詳細は `.claude/rules/swift-ios.md` と `tasks/lessons.md` 2026-06-25 エントリ）。
 
 SwiftUI View は ViewModel を `@State` または `@Bindable` で保持し、状態の読み出しのみを行います。
 

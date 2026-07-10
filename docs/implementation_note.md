@@ -57,7 +57,7 @@
 
 ## 現在生きてる方針サマリ（手動メンテ）
 
-ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。（最終棚卸し: 2026-07-04）
+ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。（最終棚卸し: 2026-07-09）
 
 - ドメインは **CoffeeRecord 主体**（2026-06-19 クリーンブレイク）: 1 杯 = 1 記録、`cafe: Cafe?`（null = セルフ抽出）、`rating` は 0.5 刻み `Double`（0.0 = 未評価 sentinel）、`tasting` は all-or-nothing（`TastingScores?`）、`tags: List<String>`。モデル・DB・Firestore 表現は `data-model.md` を真とする
 - CI（GitHub Actions）は `:shared:data-local:testAndroidHostTest` + `:androidApp:assembleDebug`（Android ジョブ。ダミー `google-services.json` を CI 内で生成）と `:shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）で構成
@@ -90,6 +90,7 @@
 タイトル + 本文だけで十分。`影響` / `トレードオフ` / `経緯` は必要なときだけ書く。
 
 ```markdown
+
 ### YYYY-MM-DD: 短いタイトル
 
 - 領域: iOS / KMP / Shared / Build / Docs / etc
@@ -109,24 +110,6 @@
 
 <!-- 新しい決定は本セクションの末尾に追記する。陳腐化・昇格時は削除可 -->
 
-### 2026-06-09: AppContainer の ViewModel ファクトリは `shared/framework` の拡張関数として配置
-
-- 領域: KMP / Build
-- 関連: `shared/framework/.../AppContainerViewModelFactory.kt`
-
-`AppContainer`（`shared/core`）から feature の ViewModel を生成すると `kmp.feature` の自動配線（`feature → core` の `api` 依存）と衝突して循環依存になるため、全 shared モジュールを `api` で持つ最上位の `shared/framework` に拡張関数（`makeCoffeeListViewModel()` 等）として置く。Kotlin/Native は同モジュール内のレシーバ付き拡張関数を Obj-C category として出力するため、Swift からはインスタンスメソッドの形で呼べる。feature 追加ごとに本ファイルへ追記する運用。
-
-不採用: `core` に直接置く（即 `CircularReferenceException`）/ `AppContainer` 自体を `framework` へ移動（既存参照が広範に壊れる）/ feature → core を `implementation` に下げる（feature から core の型が見えなくなる）。
-
-### 2026-06-09: @Observable クラスは lazy var をサポートしない → Optional + bootstrap 時生成
-
-- 領域: iOS
-- 関連: `iosApp/iosApp/AppState.swift`
-
-`@Observable` マクロが生成する init accessor は他 stored property を参照できず、`lazy var` はコンパイルエラーになる。Bridge ホルダは `private(set) var xxx: Bridge?` で宣言し、`bootstrap()` 成功後（uid 確定後）に nil ガード付きで 1 度だけ生成するパターンに統一。以後のタブ常駐 Bridge も同パターン。
-
-関連する `@Observable` の制約（2026-06-15 発見）: `init` 内で「全 stored property 初期化前の self アクセス」が禁止されるため、`container` をローカル変数に受けてから順に代入する必要がある。
-
 ### 2026-06-11: SwiftUI Preview は「戦略 B（ダミー Demo）」+ PreviewSamples 集約
 
 - 領域: iOS
@@ -145,14 +128,6 @@
 - Ktor を `framework` に export すると `Ktor_httpHttpStatusCode.description` が Swift の `description()` と衝突し SKIE が `description_` にリネームする警告が出る（ビルドは通る。UI から未参照のため放置）
 - キー未設定でもビルドは通る（実 API 呼び出しで 401 になるだけ）。CI で実キー不要にする原則
 
-### 2026-06-13: @Observable ユーティリティの状態リセットと nonisolated delegate
-
-- 領域: iOS
-- 関連: `iosApp/iosApp/Utilities/LocationManager.swift`
-
-- `@Observable` ユーティリティの外部リセットが必要なプロパティは `private(set)` + リセットメソッド公開（`resetLastLocation()` / `clearError()`）。View からの直接代入は不可
-- `@MainActor` クラスを CoreLocation delegate に準拠させる場合、コールバックは背景スレッドから呼ばれるため**デリゲートメソッドすべてを `nonisolated` 宣言**し、内部の `@MainActor` プロパティ更新は `Task { @MainActor in ... }` で戻す。他フレームワークの Delegate 連携でも踏襲
-
 ### 2026-06-13: VisitedCafe 集計のトレードオフ
 
 - 領域: KMP / Shared
@@ -164,18 +139,6 @@
 - `lastVisitedAt` は `visitedOn`（LocalDate）を UTC 0:00 の Instant に変換した**ソート専用値**。表示には `visitedOn` を直接使うこと
 - `rating == 0` は未評価として `averageRating` 算出から除外（全件 0 なら null）
 
-### 2026-06-15: Apple Maps POI タップ → Google Places 照合動線
-
-- 領域: iOS / KMP / Places
-- 関連: `iosApp/.../Features/Map/MapTabView.swift`, `shared/data-places/.../PlacesClient.kt`
-
-iOS 17+ の `Map(selection:)` + `MapFeature` で Apple Maps 標準 POI のタップを検知し、Google Places に照合して CafeDetail へ進める動線。
-
-- **照合方式**: `searchText(name, locationBias = circle(POI座標, 500m))` で名前一致 + 近接をサーバ側評価。不採用: クライアント距離フィルタ（同名チェーンで劣化）/ `searchNearby` + name フィルタ（name 絞り込み不可）
-- **`MapFeature.featureIdentifier` は使わない**: Apple 内部 ID で Google placeId と非互換。照合結果の Google placeId を使うことで集計・詳細画面と整合
-- ヒットなし / エラーは alert。同名近接店舗の誤マッチは CafeDetail 上で気付ける UX で許容。POI 1 タップ = `searchText` 1 回課金
-- SKIE がデフォルト引数を出さないため `searchText` は「バイアスなし / あり」の 2 オーバーロードで公開
-
 ### 2026-06-15: Places 写真の都度取得（Photo Media API）
 
 - 領域: KMP / iOS / Places
@@ -185,13 +148,6 @@ iOS 17+ の `Map(selection:)` + `MapFeature` で Apple Maps 標準 POI のタッ
 - **永続キャッシュなし**（Places 規約）。AsyncImage 内部の標準 HTTP キャッシュのみ許容、`photoUri` レスポンスも保持しない
 - `PlacePhotoLoader` は状態を持たない URL ファクトリ（`@MainActor`、`@Observable` 不要）
 - Swift 側の注意: Kotlin `Int?` は `KotlinInt?` で公開（`KotlinInt(int:)` ラップが必要）。`AsyncImagePhase` は struct のため `@unknown default` が必要（`default` 禁止規約の例外）
-
-### 2026-06-15: `kmp.feature` Convention Plugin の自動配線と手動追加
-
-- 領域: Build / KMP
-- 関連: `build-logic/convention/src/main/kotlin/kmp.feature.gradle.kts`
-
-Convention Plugin が自動配線するのは `api(":shared:domain")` + `api(":shared:core")` のみ。各 feature で必要に応じて手動追加するもの: `kotlinx-coroutines-core`（全 feature 必須）/ `kotlinx-datetime`（`LocalDate` / `Instant` を直接参照する feature。`domain` の `implementation` 経由ではコンパイルが通らない）/ `commonTest` 依存（`kotlin.test` + `kotlinx.coroutines.test`）。commonTest を持つ feature が増えたら Plugin への組み込みを再検討。
 
 ### 2026-06-16: エラートースト共通コンポーネント（errorToast）
 
@@ -343,13 +299,6 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 
 `googleServices` プラグイン導入で `:androidApp:assembleDebug` が `google-services.json`（gitignore 済）を必須化し CI が失敗。Android はリリース対象外の検証ターゲットで実 Firebase 接続は不要のため、CI 内でゼロ埋めダミーを生成して通す（**GitHub Secrets 管理を不要にした**）。実接続テストが将来必要になったら別途仕組みを作る。
 
-### 2026-06-21: マップ POI フィルタを cafe / bakery のみに限定
-
-- 領域: iOS
-- 関連: `iosApp/.../Features/Map/MapTabView.swift`
-
-ベース地図の標準 POI が全カテゴリ素通しだったため `.mapStyle(.standard(pointsOfInterest: .including([.cafe, .bakery])))` に限定し、POI タップ許可カテゴリも同じ集合に揃えた（**表示フィルタとタップ許可を一致させる**。非対称にするとタップ導線がズレる）。`restaurant` を再追加する場合は両箇所を同時変更。
-
 ### 2026-06-22: 好み判定（FavoriteSignals）の統計設計 — 収縮平均 + n 連動ゲート
 
 - 領域: Shared / KMP
@@ -411,22 +360,6 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 
 周辺検索に駅・ホテル等の非カフェが混ざった 2 要因: ①kotlinx.serialization の既定 `encodeDefaults=false` で `includedTypes` 等のデフォルト値フィールドが JSON に載らず、型フィルタ無しの searchNearby になっていた → `encodeDefaults=true`（`explicitNulls=false` 併用で null 省略は維持）②`includedTypes`（cafe を副次に含む場所）+ prominence 順では大型店が上位に来る → **`includedPrimaryTypes=["cafe","coffee_shop"]` + `rankPreference="DISTANCE"`** に変更（`coffee_shop` 併記はチェーン店の分類対策）。
 
-### 2026-06-23: マップ近隣表示を Apple POI に一本化（proactive searchNearby 撤去）
-
-- 領域: KMP（feature/map）+ iOS
-
-マップを開くたびに Places `searchNearby`（課金）で周辺グレーピンを描いていたが、①Apple Maps ネイティブ POI（無料）と二重表示 ②同じ店で座標が微妙にズレる ③ユーザー意図と無関係な課金、のため撤去。近隣表示は Apple POI に一本化し、Places は POI タップ時の placeId 解決だけに使う。同日先行して「周辺」フィルタチップも撤去済み（現在地 FAB があればトグルは冗長というユーザー判断）。
-
-- KMP 減算: `UIState.nearbyPlaces` / `isLoadingNearby` / `onLocationUpdated` を削除
-- **`CafeRepository.searchNearby` / `PlacesClientImpl.searchNearby` は data 層 capability として温存**（精度改善済みの実装。→ 2026-07-01 フェーズ 14 の「このエリアを検索」で再利用され、未使用状態は解消）
-
-### 2026-06-23: CafeSearch — 検索欄テキストはローカル `@State` で管理（入力ラグ対策）
-
-- 領域: iOS
-- 関連: `iosApp/.../Features/CafeSearch/CafeSearchView.swift`
-
-検索欄の表示値を `bridge.query`（Kotlin `StateFlow` 経由）にすると、`set → Kotlin update → SKIE emit → apply → 再描画` の非同期ラウンドトリップまで文字が echo されず入力ラグが顕著になる。**`@State queryText` を表示の真実の源**とし、Kotlin へは `.onChange` で一方向転送のみ。将来 Kotlin 側から query をリセットする経路が生じたら逆方向反映が別途必要（現行 VM には無し）。
-
 ### 2026-06-23: CafeSearch — 「該当なし」は検索確定後のみ表示（UIState.hasSearched）
 
 - 領域: KMP + iOS
@@ -456,13 +389,6 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 - 同レビューの周辺整理: `LocalCoffeeRepository` の context 名 `ioContext` → `queryContext` 改名（実体は `Dispatchers.Default`。`Dispatchers.IO` は commonMain 不可）
 - **同レビューで surfacing した未解決の申し送り**（未修正のまま生きているもの）: ①`AccountView` / `MapTabView` の 0.1s ポーリング → `.task(id:)` パターンへの置換候補 ②`CoffeeEditorView` の `Photo_` 直接組み立て（Bridge にファクトリを足せば解消する軽微な規約逸脱）③`ContentView.swift` は未使用のデモ残骸（削除候補・要ユーザー確認）
 
-### 2026-06-25: Sign in with Apple ボタンのダークモード視認性修正
-
-- 領域: iOS
-- 関連: `iosApp/.../AccountView.swift`
-
-背景 `Color.primary.opacity(0.9)` + 前景 `.white` はダークモードで「白背景 + 白文字」になり不可視（lessons 済）。`@Environment(\.colorScheme)` で明示分岐（ライト = 黒地白字 / ダーク = 白地黒字 + separator ボーダー、HIG 慣習）。残置 warning 1 件: `AppleSignInCoordinator` の到達不能フォールバック `UIWindow()` の deprecated 警告（別タスク）。
-
 ### 2026-06-25: カフェ検索 — テキスト検索にマップ中心の位置バイアスを適用
 
 - 領域: iOS + KMP
@@ -474,15 +400,6 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 - `mapSearchCenter == nil`（マップ未表示）はバイアスなしにフォールバック
 - 検索本体は `launchSearch(errorMessage, producer)` に共通化（Job キャンセル → 状態遷移 → CancellationException 先行 catch）
 - 余談: 所有 viewModelScope を持つ VM の `runTest` テストは `finally { vm.clear() }` が必要（`UncompletedCoroutinesError`。lessons 参照。他 feature への横展開は別タスク）
-
-### 2026-06-25: カフェ検索 — 現在地系を撤去しテキスト検索のみに整理 + observation 停止バグ修正
-
-- 領域: iOS
-- 関連: `iosApp/.../Features/CafeSearch/CafeSearchView.swift`
-
-- **【バグ修正】検索が 1,2 回で効かなくなる原因は `.onDisappear { bridge.cancel() }`**: タブルートの View は push 先から戻っても再生成されず、`onDisappear` で止めた observation が二度と再開しない。→ 削除し、observation は Bridge `deinit` の `kotlin.clear()` まで生かす（タブルート = 永続 / sheet = View 破棄で自然回収）。lessons「タブ常駐 View の observation を onDisappear でキャンセルしない」の出所
-- 位置バイアス導入で役割重複になった現在地周辺検索 UI（現在地ボタン + 自動検索）を全撤去（ユーザー選択）。検索発火は `.onSubmit(of: .search)` のみに集約
-- `onNearbySearchRequested` API は残置 → 2026-07-01 フェーズ 14 のエリア検索で再利用され解消
 
 ### 2026-06-26: iOSDC LT — 逆方向変換 PoC（言葉→数値）を Foundation Models で実装
 
@@ -500,7 +417,7 @@ LT テーマ「数値⇄言葉の双方向変換」の逆方向（自由文 → 
 
 `IPHONEOS_DEPLOYMENT_TARGET = 26.0`（iOS 26 専用）かつ未リリースのため、`@available(iOS 26.0, *)` / `if #available` / PoC を隠す `#if DEBUG` はすべて冗長としてユーザー方針で sweep（lessons 2026-06-26）。意図的に残した `#if DEBUG` は ①Preview 補助（リリースバイナリ除外）②`seedOrClearDummyData`（RELEASE で毎起動 clear が走る破壊的副作用の防止）。
 
-- **要追跡（リリース前の意思決定）**: 逆変換 PoC 導線（`TastePreferenceConversionView` への NavLink）は現在**分析タブ最下部に全ユーザー常時表示**。App Store リリース前に「本番に含める / 設定 > 開発者向けへ移動 / 削除」を決めること
+- 逆変換 PoC 導線（分析タブ最下部の `TastePreferenceConversionView`）の本番可否判断は tasks.md「リリース前バックログ」へ移管（2026-07-09）
 
 ### 2026-06-29: フェーズ 10-A/B — マップピン再設計 + Places API 追加フィールド
 
@@ -508,7 +425,6 @@ LT テーマ「数値⇄言葉の双方向変換」の逆方向（自由文 → 
 
 - **10-A**: 訪問済みピンを 36pt + shadow に拡大し、訪問 2 回以上で回数バッジ（9+ 上限）。3 種ビジュアル体系: 訪問済み（36pt 茶）/ 好み一致（38pt アクセント + ハート）/ Apple 標準 POI
 - **10-B**: `Cafe` に表示用 5 フィールド（`openNow` / `weekdayDescriptions` / `phoneNumber` / `priceLevel` / `googleRating`）をデフォルト値付きで追加し FieldMask 拡張。**SQLDelight スキーマは変更なし**（スナップショットには含めず Places API 結果のみで利用）。CafeDetail に営業状態・評価・価格帯・電話・外部リンク・営業時間を追加
-- Kotlin のデフォルト引数は SKIE 越えに Swift へ伝播しないため、`Cafe` 構築側の Swift 全箇所に新引数の明示追加が必要だった
 - `foregroundStyle(.accentColor)` はコンパイルエラー（`ShapeStyle` にメンバなし）。`Color.accentColor` を明示
 - **クラスタリングは将来課題**: SwiftUI `Map` にネイティブ API がなく `MKMapView` ラッパが必要になるため、密集が実問題になった時点で再検討
 
@@ -535,7 +451,6 @@ LT テーマ「数値⇄言葉の双方向変換」の逆方向（自由文 → 
 
 - **`CoffeeRecord.tags: List<String>`** をデフォルト値付きで追加。SQLDelight は `tags TEXT NOT NULL DEFAULT ''`（JSON 配列文字列、`photoRefsSerializer` 流用）。クリーンブレイク（アプリ削除 → 再インストール）。カフェ粒度でなく**記録粒度**でタグ付けする設計
 - `MapViewModel` に `selectedTags` / `availableTags` + トグル API。**`combine` に `MutableStateFlow` を含めると `runTest` がタイムアウト**するため、キャッシュ変数 + `applyTagFilter()` 直接呼びのパターンを採用
-- Swift 側は `CoffeeRecord` コンストラクタ呼び出し全箇所に `tags:` 明示追加が必要だった（SKIE デフォルト引数制約）
 
 ### 2026-06-30: フェーズ 12-A — データ共有同意フロー
 
@@ -555,23 +470,11 @@ LT テーマ「数値⇄言葉の双方向変換」の逆方向（自由文 → 
 
 `tastingMin` / `tastingMax` のいずれかが指定されている場合、`tasting == null`（未記録）のレコードは除外する（`rating=0.0` を評価範囲から除外するのと同じ「未記録を誤ヒットさせない」思想）。各軸は独立評価（全 5 軸がそれぞれ範囲内であること）。13-A-3 で iOS が `TastePreference` → filter 変換時に `axis ± margin(=2)` の範囲を渡す。
 
-### 2026-06-30: CoffeeRecordFilter 新フィールド追加時は Swift 呼び出し側の全更新が必要（Phase 13-A-3）
-
-- 領域: KMP / iOS ブリッジ
-
-Kotlin data class に nullable フィールドをデフォルト値付きで追加しても、Kotlin/Native の Obj-C initializer は全パラメーター必須（SKIE 0.10.12 は DefaultArgumentInterop 未有効化）。`CoffeeRecordFilter(...)` を呼ぶ Swift コードに `tastingMin: nil, tastingMax: nil` の追記が必要だった。今後も同様。SKIE の `defaultArgumentInterop` 有効化を検討するとこの問題は自動解消される。
-
 ### 2026-06-30: MapViewModel テイストプロファイルフィルタの設計（Phase 13-C）
 
 - 領域: KMP / アーキテクチャ
 
 `tasteMatchedPlaceIds` は `selectedTags`（ピン絞り込み）とは**独立の別軸**として管理（iOS 側で非マッチピンの半透明化に使うため）。両フィルタの AND 要件が出たら再検討。`latestAllRecords` キャッシュ + 即時 `applyTasteFilter()` はタグフィルタと同じパターン。`combine` の変換式は `Pair<Triple, List>` 返し（複雑化したら data class 化を検討）。
-
-### 2026-06-30: MapTabView フィルタチップ内の Foundation Models 可否チェック（Phase 13-C）
-
-- 領域: iOS / パフォーマンス
-
-`filterChipRow` / `searchBarView` の `TastePreferenceExtractor.makeIfAvailable() != nil` は View body 再描画ごとに評価される（内部は availability 確認のみで軽量、実害なし）。問題が出たら Bridge のフラグ or `@State` キャッシュへ移行。
 
 ### 2026-06-30: Phase 12-B — Form 内サジェスト UI は VStack 展開（ZStack 非採用）
 
@@ -583,7 +486,7 @@ SwiftUI の `Form`（内部 List）は行単位クリッピングのため、ZSt
 
 - 領域: KMP
 
-`coffeeInsightProvider: CoffeeInsightProvider?` と異なり `BeanProfileRepository` は**非 null**（iOS / Android とも Firestore 実装が必ず要るため）。iOS 用コンストラクタが 6 引数になり、SKIE デフォルト引数制約により `AppState.swift` の `AppContainer` 生成へ `beanProfileRepository:` の明示追加が必要だった。
+`coffeeInsightProvider: CoffeeInsightProvider?` と異なり `BeanProfileRepository` は**非 null**（iOS / Android とも Firestore 実装が必ず要るため）。
 
 ### 2026-06-30: Phase 12-B — BeanProfileRepositoryAndroidImpl の Firestore Task キャンセル処理
 
@@ -597,23 +500,15 @@ Firestore の `get()` Task はキャンセル不可。`suspendCancellableCorouti
 
 `TastePreference` の 5 軸ベクトルを日本語キーワード（"フルーティ 浅煎り 酸味" 等）へ変換する `searchKeywords` を追加（スコア 7 以上 =「高い特徴」、body のみ 4 以下 =「低い特徴」）。全スコア中間 + roast unknown は空文字を返し呼び出し元でエラー表示。Places はカフェのテイスティング詳細を持たないため精度は限定的 — 「新しいカフェを発見する」補助機能として位置付ける。
 
-### 2026-07-01: Phase 12-C — PreferredBeanTraits の matchedProfiles と LLM プロンプトの分離
+### 2026-07-01: Phase 12-C — 実装判断まとめ
 
 - 領域: KMP / iOS
 
-`PreferredBeanTraits.matchedProfiles: List<BeanProfile>` は保持するが、現時点で LLM プロンプトには含めていない（`dominantFlavorNotes` / `originHint` / `roastLevelHint` / `dominantTastingAxis` のみ使用）。将来豆名や詳細フレーバーを足す場合は `matchedProfiles` を走査すればよい。
+（小粒 3 エントリを 2026-07-09 統合）
 
-### 2026-07-01: Phase 12-C — beanTraitsInsightStatus の初期値は Idle（Unsupported ではない）
-
-- 領域: iOS
-
-`insightStatus`（AI 要約）の初期値は `Unsupported`（非対応端末でセクション非表示）だが、`beanTraitsInsightStatus` は **`Idle`**。LLM 非対応端末でも `PreferredBeanTraitsCard` はフレーバータグのフォールバック表示が機能するため、`Unsupported` にするとフォールバック UI ごと消えてしまう。`beanProfiles` 未投入時は `stats.preferredBeanTraits` が nil でセクション自体が出ない、という表示制御の責任分担。
-
-### 2026-07-01: Phase 12-C — PreferredBeanTraitsCard で InsightLoadedCard を流用しない理由
-
-- 領域: iOS / SwiftUI
-
-`InsightLoadedCard` は `"sparkles"` SF Symbol 固定で、豆傾向カードには `"leaf"` を使いたいため流用せず直接実装。将来アイコン引数を追加して統一可能。
+- `PreferredBeanTraits.matchedProfiles: List<BeanProfile>` は保持するが LLM プロンプトには含めない（`dominantFlavorNotes` / `originHint` / `roastLevelHint` / `dominantTastingAxis` のみ使用。豆名や詳細フレーバーを足すときは `matchedProfiles` を走査）
+- `beanTraitsInsightStatus` の初期値は **`Idle`**（`insightStatus` の `Unsupported` と異なる）: LLM 非対応端末でもフレーバータグのフォールバック表示を生かすため。`beanProfiles` 未投入時は `stats.preferredBeanTraits` が nil でセクション自体が出ない、という表示制御の責任分担
+- `PreferredBeanTraitsCard` は `InsightLoadedCard`（`"sparkles"` 固定）を流用せず直接実装（`"leaf"` を使うため。将来アイコン引数化で統一可）
 
 ### 2026-07-01: マップ検索の使い勝手改善（フェーズ 14）— エリア検索ボタンと検索モード
 
@@ -631,9 +526,7 @@ Google Maps 風に「表示範囲内のカフェを一括ピン表示」でき�
 
 - 領域: Docs
 
-docs 全体精査（実コード突合）で修正: ①`data-model.md` にフェーズ 10 / 12-C を追随（tags / Cafe 表示用フィールド / preferredBeanTraits 等。tasks.md ではチェック済みだが実際は未反映だった）②`kmp-bridge.md` の「data-firebase は export しない」を実体に合わせ修正 ③`app-store-metadata.md` を CoffeeRecord 主体へ全面改訂 ④本ノートのサマリを全面更新（旧サマリは 2026-06-15 頃で凍結し Visit 系記述が残っていた）。lessons 2026-06-16「横断 doc は構造的に陳腐化する」の再発防止としてサマリに「最終棚卸し」日付を導入。
-
-未対応バックログ: kmp-bridge / coding-conventions / ui-ux-guidelines に残る Visit 系の旧例文、backlog ID「B-4」と Phase B-4 の名前衝突。
+data-model のフェーズ 10 / 12-C 追随・kmp-bridge の export 記述・app-store-metadata の CoffeeRecord 化・本ノートサマリ全面更新の 4 件（詳細は git 履歴）。再発防止としてサマリに「最終棚卸し」日付を導入した。
 
 ### 2026-07-03: iosApp コードレビュー指摘 #1〜#5 の修正 — ライフサイクル / 削除順序の判断
 
@@ -691,21 +584,6 @@ CLAUDE.md が 240 行と公式推奨（200 行以下）を超過し、docs 二�
 - 見出しスタイルを `### YYYY-MM-DD: タイトル` に統一し日付順へ整列。削除済みエントリへの過去参照（tasks.md の完了行等）は git 履歴（`git log -p docs/implementation_note.md`）で辿る
 - **同日 `tasks.md` も縮約**（860 行 / 127KB → 285 行 / 24KB）: 完了フェーズは「完了サマリ + 未完行のみの表」に置換し、未完 26 件は全数維持・`##` セクション見出しは参照アンカーとして全保全。以後この運用（tasks.md 冒頭に明記）を継続する
 
-### 2026-07-04: architecture.md 現行化 — D-2 書き込みフロー再構成と例コードの実体化
-
-- 領域: Docs
-- 関連: `docs/architecture.md`, tasks.md バックログ D-2
-
-Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイド含む）を消し込み、現行構成に全面追随した。
-
-- **D-2（書き込みフロー）**: 「プラットフォーム別 VisitRepository 実装」という旧構成の図を、現行の `CoffeeRepositoryImpl`（shared/core・プラットフォーム共通合成）+ `RemoteCoffeeDataSource`（プラットフォーム別実装）+ `WritePolicy` に書き直した
-- **例コードと実体の乖離を修正**: `kmp.library` 例（実体は jvmToolchain なし / iosX64 なし / `com.android.kotlin.multiplatform.library`）、`kmp.feature` 例（自動配線は core+domain のみ。coroutines-core は手動追加）、ViewModel / Bridge 例（所有 viewModelScope + clear() / @MainActor / deinit）、テスト例（`finally { vm.clear() }`）、Security Rules 記述（path uid 検証が実体）、外部依存表（未採用の Napier/kermit 行を削除し SKIE / Foundation Models を追加）
-- **完了済みの「段階的移行ステップ」表を削除**し、今後も効く運用ルール（別 PR / ビルド確認 / パッケージ一致 / framework 追記）だけ「モジュール分割の運用ルール」として残した
-- iosApp ツリーの実在しない `Bridge/` ディレクトリ表記を実体（`Features/<Name>/` 同居 + `FirebaseRepositories/FlowBridge.swift`）に修正（2026-07-04 エージェント定義改善で発覚したのと同じ誤り）
-- 残っていた Visit 旧例文は同日中に消し込み済み: `ui-ux-guidelines.md` 2 件を CoffeeListView / コーヒー記録の例に更新（`coding-conventions.md` の 1 件は `ObserveVisitedCafesUseCase` = 現行の正当名で修正不要と確認）。あわせて `tasks/lessons.md` を日付順に整列（誤配置 12 件を発生日セクションへ移動・重複 1 件を統合・旧モデル例文を現行化。教訓 64 件は全数維持）
-
-
-
 ### 2026-07-06: ゼロベース設計レビュー — 3 条件との突き合わせとフェーズ 15 起票
 
 - 領域: 仕様 / Docs
@@ -723,76 +601,46 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - **分析の統計精度のさらなる向上**: 収縮平均 + z ゲートで十分。現段階はループの穴埋め（15-A/B）の方がユーザー価値が高い
 - **9-8（未経験豆の探索提案）は △ に留めた**: 9-5（既訪問店の再訪推薦）・12-D（協調フィルタ = サーバー前提）の中間に位置する新規開拓ナッジ。BeanProfile × FavoriteSignals でサーバー不要に作れる算段だが、優先度は 15-A〜D の後
 
-### 2026-07-06: 15-A SavedCafe KMP 実装 — WritePolicy 共用ほかの実装判断
+### 2026-07-06: 15-A SavedCafe 実装判断（KMP + iOS）
 
-- 領域: KMP / shared
-- 関連: `data-model.md` §1.9〜§4.3、tasks.md フェーズ 15-A（kmp-engineer レポートより親が採録）
+- 領域: KMP / shared + iOS / SwiftUI
+- 関連: `data-model.md` §1.9〜§4.3、tasks.md フェーズ 15-A（KMP / iOS の 2 エントリを 2026-07-09 統合）
 
-- **`WritePolicy` の共用方法**: `SavedCafeRepositoryImpl` は独自 enum を作らず `CoffeeRepositoryImpl.WritePolicy`（nested enum）をそのまま型として再利用する。トップレベル切り出し案は、既存テストが `CoffeeRepositoryImpl.WritePolicy.*` を参照しており無用な破壊的変更になるため見送り。**3 つ目の Repository 合成パターンが増えた時点でトップレベル化を再検討**（現状 2 箇所の YAGNI 判断）
-- **`MapViewModel.recordedPlaceIds` はタグフィルタ前の全件から算出**: 行きたい一覧の「記録あり」バッジは、タグでピンを絞り込んでいても「実は記録済み」を正しく示すべきで、フィルタ適用後の `visitedCafes` に連動させない
-- **一覧シートの表示状態（isPresented）は KMP に持たせない**: sheet 表示トグルを VM 状態に持つ前例がコードベースに無く、「画面遷移は iosApp / androidApp の Navigation 層で繋ぐ」原則に従い SwiftUI の `@State` に委ねる
-- **`CafeDetailViewModel` に `error: String?` / `onErrorDismissed()` を追加**: `onSaveToggled` の失敗を握りつぶすと `MapViewModel` のエラーハンドリング規約と非対称になるため、同じパターンで対称化（依頼に明記は無かったが妥当と判断し親が承認）
-- 破壊的変更は `AppContainer` 公開コンストラクタ 3 本への `remoteSavedCafeDataSource` 追加のみ（SKIE がデフォルト引数を出さないため全オーバーロードに必須追加）。iOS 追随は ios-engineer に dispatch
+- **`WritePolicy` の共用**: `SavedCafeRepositoryImpl` は独自 enum を作らず `CoffeeRepositoryImpl.WritePolicy`（nested enum）を再利用。トップレベル切り出しは既存テスト参照の無用な破壊になるため見送り（**3 つ目の Repository 合成パターンが増えた時点で再検討**する YAGNI 判断）
+- **`MapViewModel.recordedPlaceIds` はタグフィルタ前の全件から算出**: 「記録あり」バッジは、タグでピンを絞り込んでいても「実は記録済み」を正しく示す
+- **一覧シートの表示状態・「行きたい」フィルタチップの表示状態は KMP に持たせず Swift `@State`**（「画面遷移は Navigation 層で繋ぐ」原則。`onShowVisitedToggled` との非対称は表示切替のみの関心事として許容し、他プラットフォーム実装が現実化した時に再検討）
+- `CafeDetailViewModel` に `error: String?` / `onErrorDismissed()` を追加し `MapViewModel` のエラーハンドリング規約と対称化
+- **ピンのビジュアル**: `Color.indigo` + `bookmark.fill` 34pt（訪問済み 36pt と検索結果 32pt の中間。既存 3 種との識別性優先）。**dedup（訪問済み > 行きたい > 検索結果）はチップ状態に関わらず常時適用**（競合解決はデータ整合性の関心事で表示切替と独立）
+- `CoffeeFirestoreMapper` の `toCafeMap`/`cafeFromMap` を `private` → `internal static` 化し `SavedCafeFirestoreMapper` から再利用（cafe 直列化規則の重複実装を回避）。破壊的変更は `AppContainer` 公開コンストラクタへの `remoteSavedCafeDataSource` 追加のみ
 
-### 2026-07-06: 15-A SavedCafe iOS 実装 — ピンのビジュアルと表示トグルの置き場所
+### 2026-07-06: 15-B 記録摩擦低減の実装判断（KMP + iOS）
 
-- 領域: iOS / SwiftUI
-- 関連: `data-model.md` §1.9、tasks.md フェーズ 15-A（ios-engineer レポートより親が採録）
+- 領域: KMP / feature/coffee-editor + iOS / SwiftUI
+- 関連: requirements 2-8 / 2-9 / 2-10、tasks.md フェーズ 15-B（KMP / iOS の 2 エントリを 2026-07-09 統合）
 
-- **行きたい店ピンのビジュアル**: `Color.indigo` + `bookmark.fill`、直径 34pt（訪問済み 36pt と検索結果 32pt の中間）。既存 3 種（訪問済み = brown/`cup.and.saucer.fill`、好み一致 = accentColor/`heart.fill`、検索結果 = blue/`mappin.and.ellipse`）との識別性を優先
-- **ピンの dedup（訪問済み > 行きたい > 検索結果）は「行きたい」フィルタチップの状態に関わらず常時適用**: 競合解決はデータ整合性の関心事で、表示切替とは独立
-- **「行きたい」フィルタチップの表示状態は Swift `@State` のみ（KMP に持たない）**: `MapViewModel` の `onShowVisitedToggled`（訪問済みトグル）とは非対称になるが、表示切替のみの関心事として View 側で完結させた。KMP 側へ寄せ直すかは他プラットフォーム実装が現実化した時に再検討
-- **一覧シートは保存日時テキストを表示しない**（savedAt 降順の並びだけで表現。Simplicity First、必要なら後付け可）
-- `CoffeeFirestoreMapper` の `toCafeMap`/`cafeFromMap` を `private` → `internal static` 化し、`SavedCafeFirestoreMapper` から再利用（cafe 直列化規則の重複実装を回避）
+- **`Mode.Duplicate` の cafe は `Mode.Edit` と同一経路（`currentInitialRecord.cafe` フォールバック）で引き継ぐ**: 「cafe を引き継ぐ」=「同じ物理カフェへの参照を保つ」の解釈で、placeId に一意性制約は無く `VisitedCafe` 集計で同一店にまとまるのは意図どおり。この経路のセルフ抽出バグ（発見時は未修正で起票）は 2026-07-08 buildCafe エントリで解消済み
+- **サジェストの発火条件は `draft.cafeName` が空かどうか**（`buildCafe` の null 判定と基準統一）。チップ表示条件は `!suggestedCafes.isEmpty` のみで Swift 側の二重ガードなし
+- **位置情報の「未許可なら無音」制御は呼び出し側（`CoffeeEditorView`）でガード**: 共有 `LocationManager.requestLocation()` の挙動（`.notDetermined` で許可ダイアログ）を変えず、他画面への影響を回避
+- 詳細画面ツールバーは `Menu`（`ellipsis.circle`）化で「編集」「これをもとに記録」を内包（HIG 標準の overflow パターン）。複製起動時は `initialCafe` を渡さない（KMP の `toDuplicateDraft` が設定済み）
+- **許可未決定ユーザー向けの明示入口（「近くのカフェから選ぶ」ボタン）は検討の上見送り**（2026-07-06 ユーザー判断）: サジェストは許可済みユーザー向けの補助機能と割り切る。マップで現在地を一度使えば以後は発動する
 
-### 2026-07-06: 15-B 記録摩擦低減 KMP 実装 — Duplicate の cafe 引き継ぎ経路と既存バグの発見
-
-- 領域: KMP / feature/coffee-editor
-- 関連: requirements 2-8 / 2-9 / 2-10、tasks.md フェーズ 15-B（kmp-engineer レポートより親が採録）
-
-- **`Mode.Duplicate` の cafe は `Mode.Edit` と同一経路（`currentInitialRecord.cafe` フォールバック）で引き継ぐ**: 複製後の新記録は複製元と同一の placeId を持つ（Places 実在カフェはその ID、セルフ抽出の手入力カフェは複製元採番の UUID）。「cafe を引き継ぐ」=「同じ物理カフェへの参照を保つ」の解釈で、placeId に一意性制約は無いため矛盾しない。`VisitedCafe` 集計上も同一店としてまとまるのはむしろ意図どおり
-- **サジェストの発火条件は `draft.cafeName` が空かどうかで判定**（`selectedCafe` 変数ではなく）: `buildCafe` の「cafe = null」判定も `cafeName` ベースであり、判定基準を統一
-- **既存バグを発見（未修正・15-B スコープ外）**: `buildCafe` の Edit 分岐は `currentInitialRecord?.cafe` が null なら `return null` するため、セルフ抽出記録の編集で手動カフェ名を入力しても cafe が保存されない（手入力カフェとして新規 UUID を採番すべき）。`Mode.Duplicate` も同分岐のため同挙動を継承。フェーズ 6 の後続タスクに起票済み。次に Edit/Duplicate のカフェ引き継ぎを触るときに修正する
-
-### 2026-07-06: 15-B iOS 実装 — 位置情報ガードの置き場所と詳細画面の Menu 化
-
-- 領域: iOS / SwiftUI
-- 関連: requirements 2-8 / 2-10、tasks.md フェーズ 15-B（ios-engineer レポートより親が採録）
-
-- **位置情報の「未許可なら無音」制御は呼び出し側（`CoffeeEditorView`）でガード**: 共有ユーティリティ `LocationManager.requestLocation()` は `.notDetermined` で許可ダイアログを出す設計（`MapTabView` の明示的な現在地ボタン向け）のため、これを変えず、エディタ側が `authorizationStatus` を事前 switch して許可済みのときだけ呼ぶ。共有ユーティリティの挙動変更による他画面への影響を回避
-- **詳細画面ツールバーを Menu 化**: 単発「編集」ボタンを `Menu`（`ellipsis.circle`）に置き換え、「編集」「これをもとに記録」の 2 アクションを内包。ツールバーのボタン数を増やさない HIG 標準の overflow パターン
-- **サジェストチップの表示条件は `!suggestedCafes.isEmpty` のみ**: 「カフェ選択でチップが消える」制御は KMP 側の状態管理に委ね、Swift 側で二重ガードしない
-- 複製起動時は `initialCafe` を渡さない（複製元カフェは KMP の `toDuplicateDraft` が設定済み）。`Duplicate` の画面タイトルは Create と同じ「コーヒーを記録」
-- **許可未決定ユーザー向けの明示入口（「近くのカフェから選ぶ」ボタン + タップ時のみ許可ダイアログ）は検討の上見送り**（2026-07-06 ユーザー判断）: サジェストは許可済みユーザー向けの補助機能と割り切る。マップで現在地を一度使えば以後は発動する
-
-### 2026-07-06: 15-C 一覧検索 + 月別グルーピング KMP 実装（サブエージェント中断→親仕上げ）
+### 2026-07-06: 15-C 一覧検索 + 月別グルーピング KMP 実装
 
 - 領域: KMP / feature/coffee-list / sharedUI
 - 関連: requirements 6-1 / 2-11、tasks.md フェーズ 15-C
 
 - `CoffeeListViewModel` の `UIState.coffees: List<CoffeeRecord>` を `sections: List<MonthSection>` に置換（破壊的）+ `searchQuery` + `onSearchQueryChanged`。検索 → 月別グルーピングの順で `buildSections` に純粋関数化。yearMonth は `"YYYY-MM"` ゼロパディング、セクション降順・月内順序維持（安定フィルタ）
-- **サブエージェント（kmp-engineer）がビルド検証直前でセッション上限により中断**。実装・テストは完成状態で残っており、親が内容をレビューのうえ検証を引き継いだ
-- **破壊的変更の波及先を親が補完**: `coffees` 廃止により `sharedUI/CoffeeListScreen.kt`（Android 検証用 Compose 画面）が未追随でビルドを壊す状態だった。`sections` ベース（月別ヘッダ + 記録行）に更新。Android 検証画面は「VM が Android でも動く + Firestore observe 往復」を示す最小実装のため、検索 UI は付けず月別表示のみに留める（検索は iOS 一覧の関心事）
-- 教訓寄り: feature の `UIState` フィールドを rename/廃止する破壊的変更は、`sharedUI`（Android 検証）と `iosApp`（Bridge）の両方が波及先になる。KMP 側 dispatch 時に「`shared*` 内の参照追随（sharedUI 含む）まで」を必ずスコープに含める
+- 破壊的変更の波及で `sharedUI/CoffeeListScreen.kt`（Android 検証画面）も `sections` ベースに追随。検索 UI は付けず月別表示のみに留める（「VM が Android でも動く + Firestore observe 往復」を示す最小実装の位置付け維持）。**feature の UIState フィールドを rename/廃止する破壊的変更は `sharedUI` と `iosApp` Bridge の両方が波及先**（KMP dispatch 時に sharedUI 追随までスコープに含める）
 
-### 2026-07-06: 15-D 分析空状態プログレス KMP 実装 + iOS テストの Native cancel drain 修正
+### 2026-07-06: 15-D 分析空状態プログレスの実装判断（KMP + iOS）
 
-- 領域: KMP / feature/analysis
-- 関連: requirements 9-7、tasks.md フェーズ 15-D、lessons 2026-07-06（2 件）
+- 領域: KMP / feature/analysis + iOS / SwiftUI
+- 関連: requirements 9-7、tasks.md フェーズ 15-D、lessons 2026-07-06（KMP / iOS の 2 エントリを 2026-07-09 統合）
 
 - `AnalysisViewModel.UIState` に `readiness: AnalysisReadiness?` を派生追加（`CoffeeStats` は不変＝LLM 入力を汚さない）。閾値は `FavoriteSignals().minSampleSize` / `BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE` を参照しハードコードしない。`hasAnySignal` は `FavoriteSignals` の file-private 拡張関数
-- **サブエージェント（kmp-engineer）のレポートがセッション上限で尻切れ**になり、`androidHostTest` green のみ報告。親が iOS 検証を引き継いだところ **iosSimulatorArm64Test が 16 件全滅**（`UncompletedCoroutinesError` / SupervisorJob Active / 各 60s）だった
-- **根本原因と修正**: `vm.clear()`（`viewModelScope.cancel()`）は Native では runTest の完了チェック前にキャンセルが処理されず SupervisorJob が Active のまま残る。`finally { vm.clear() }` → `finally { vm.clear(); testScheduler.advanceUntilIdle() }` に変更して drain。iOS/Android とも 16/0 green を親が実測確認。`backgroundScope` に載せ替える案は `advanceUntilIdle()` が VM の observe を駆動せず state=null になる別の壊れ方をしたため不採用（経緯は lessons 2026-07-06）
-- **副次発見**: `AnalysisViewModelQaTest` の fake が 12-C の `summarizeBeanTraits` override を欠き、commonTest が長期間コンパイル不能なまま見過ごされていた（本体 main は green のため気付けず）。fake 追随 + drain 追加で解消
-- **プロセス教訓**: サブエージェントの「androidHostTest green」報告を VM テストの完了根拠にしない。親が必ず `iosSimulatorArm64Test` を回す（既存の親責務「iOS ターゲットのテスト実行」の具体例。CLAUDE.md 準拠）
-
-### 2026-07-06: 15-D 空状態プログレス iOS 実装
-
-- 領域: iOS / SwiftUI
-- 関連: requirements 9-7、tasks.md フェーズ 15-D
-
-- `AnalysisView` に `AnalysisReadinessProgressCard` を追加。表示条件は `readiness != null && !readiness.hasAnySignal`（`totalCount==0` は既存 emptyState 分岐に入り到達しない）。`ProgressView(value: ratedCount/categoryThreshold)` を主表示に、残り件数 = `max(0, categoryThreshold - ratedCount)` で「あと N 杯…」/「もう少し記録すると…」を出し分け。テイスティング相関 track は残数ありのとき控えめな補足キャプション（「できます」止まりで断定回避）
-- **将来リスク（tasks.md 15-D にバックログ化）**: 既存 `favoriteSignalsSection` は iOS 側で `stats.favoriteSignals` の 4 フィールドから独自に「信号あり」を再計算しており、今回の `readiness.hasAnySignal`（KMP 算出）と別経路。現状は同一 `stats` から同時導出で齟齬なしだが、KMP 側判定が変わると乖離しうる。単一ソース化は分析タブを次に触るときに寄せる
+- **iOS テスト 16 件全滅（Native の cancel drain 漏れ）** → `finally { vm.clear(); testScheduler.advanceUntilIdle() }` で解消。経緯と別解（backgroundScope）の不採用理由は lessons 2026-07-06 が正。副次発見: `AnalysisViewModelQaTest` の fake が 12-C `summarizeBeanTraits` 未追随で commonTest が長期コンパイル不能だった（fake 追随で解消）
+- iOS の表示条件は `readiness != null && !readiness.hasAnySignal`（`totalCount==0` は既存 emptyState 分岐で到達しない）。`ProgressView(value: ratedCount/categoryThreshold)` 主表示 + 残り件数で文言出し分け、テイスティング相関 track は控えめな補足キャプション（「できます」止まりで断定回避）
+- `favoriteSignalsSection` の iOS 側再計算との二重判定リスクは 2026-07-09 に `readiness.hasAnySignal` 参照へ単一ソース化して解消済み
 
 ### 2026-07-07: 15-E-2 データエクスポート KMP 実装 + B-6（Native .format）解消
 
@@ -800,9 +648,8 @@ Visit 残骸 31 件（冒頭の「読み替えてください」バンドエイ�
 - 関連: requirements 7-4、tasks.md フェーズ 15-E-2 / backlog B-6
 
 - `ExportCoffeeRecordsUseCase`（`suspend operator fun invoke(userId): String`、`@Throws`）: `observeAll(userId).first()` → **export 専用 `@Serializable` DTO**（`domain/export/`）→ `Json { prettyPrint = true; encodeDefaults = true }`。ドメインモデルに `@Serializable` を付けず DTO 分離（Firestore 直列化規則踏襲: enum は `.name` / 日時は文字列 / 写真はメタデータのみ）。包みは `{ exportedAt, version: 1, records: [] }`（将来互換のため version 保持）。`AppContainer.exportCoffeeRecordsUseCase` で公開
-- **`encodeDefaults = true` 必須**: 既定 false だと `version=1` や空 `tags`/`photos` が省略される（lessons の Places `Json{}` 教訓と同根のため新規 lessons は不要と判断）
-- **SKIE は `operator fun invoke` を Swift の `callAsFunction` 化しない**: iOS は `appContainer.exportCoffeeRecordsUseCase.invoke(userId:)` と明示呼び出し（`(userId:)` 糖衣不可）。他の `operator fun invoke` UseCase も同様
-- **B-6 解消（親対応）**: 15-E-2 の export テストは domain にあり、iOS 検証が backlog B-6（`FavoriteSignalsPersonaTest` の `"%.Nf".format` = JVM 専用で Native コンパイル不能）でブロックされていた。この壊れテストは domain の iOS テストを丸ごと止めており、15-E-1・15-E-2 と 2 度検証を阻害したため、親が Native 安全な `Double.fmt(digits)` ヘルパ（デバッグ/メッセージ用途のみ・アサーション条件に非関与）に全 44 箇所置換。domain の iOS テストが全 green に回復（Persona 11 / Export 4 / 他 failures=0）。以後 domain の Native テストが CI・親検証で回せる
+- `encodeDefaults = true` 必須（coding-conventions §1.12 に昇格済み）。SKIE は `operator fun invoke` を `callAsFunction` 化しない → `.invoke(userId:)` 明示呼び出し（kmp-bridge.md に昇格済み）
+- **B-6 解消（親対応）**: `FavoriteSignalsPersonaTest` の JVM 専用 `"%.Nf".format` が domain の iOS テストを丸ごと止めていたため、Native 安全な `Double.fmt(digits)` ヘルパ（デバッグ用途のみ・アサーション条件に非関与）へ全 44 箇所置換して回復（15-E-1 / 15-E-2 の検証を 2 度阻害していた）
 
 ### 2026-07-07: 外部 Skill 導入（mattpocock/skills → grilling / diagnosing-bugs / writing-great-skills）
 
@@ -855,27 +702,11 @@ TestFlight へのアップロードを GitHub Actions（`workflow_dispatch` 手�
 ### 2026-07-08: Places API キーのクライアント埋め込みリスクとバンドル ID 制限の実効性
 
 - 領域: iOS / Shared / Security
-- 関連: `shared/data-places/src/iosMain/kotlin/com/noricoffee/data/places/PlacesHttpClient.ios.kt`、`iosApp/Configuration/Base.xcconfig`、`iosApp/iosApp/AppState.swift`
+- 関連: `shared/data-places/src/iosMain/kotlin/com/noricoffee/data/places/PlacesHttpClient.ios.kt`
 
-「Places API キーがアプリに埋め込まれているのは安全か」という問いへの整理。結論: **キーの抽出は避けられず、現状のバンドル ID 制限は実効的な防御になっていない**。
+「Places API キーがアプリに埋め込まれているのは安全か」への整理。結論: **キーの抽出は不可避（Info.plist 経由で `.ipa` に平文）で、`X-Ios-Bundle-Identifier` によるバンドル ID 制限はヘッダ文字列の照合のみ（暗号検証なし）のため、なりすましで突破可能 = 実効的防御ではない**。防げるのは他アプリ・別プロジェクトへのキー流用事故のみで、キー抽出後の課金踏み台化は防げない。この制限を実効的セキュリティと誤認しないこと。git 漏洩は無し（`Secrets.xcconfig` 未追跡 + `git log -S` 確認済み）。
 
-- **git 漏洩は無し**: `Secrets.xcconfig` は未追跡・`.gitignore` 済・履歴にもキー文字列なし（`git log -S` で確認済み）。ここは問題ない
-- **抽出は不可避**: キーは xcconfig → Info.plist → アプリバイナリ（`.ipa`）に平文で入る。`Bundle.main.object(forInfoDictionaryKey:)` で読む以上、逆に言えば誰でも `.ipa` から抜ける。これはクライアント埋め込みキーの原理的性質で回避不能
-- **バンドル ID 制限はなりすまし可能（本エントリの主眼）**: `PlacesHttpClient.ios.kt` は `X-Ios-Bundle-Identifier` ヘッダを付与しているが、Google のサーバはこの**ヘッダ文字列を照合するだけ**で暗号署名・証明書検証は無い。キーを抜いた攻撃者は `curl` に `X-Ios-Bundle-Identifier: com.noricoffee.coffeevision` を足すだけで正規アプリと区別がつかず、課金の踏み台にできる。「鍵」と「本人証明」の両方をクライアントが握り、本人証明が平文文字列という構図
-  - 補足: Google Maps **SDK** 経路は追加署名で生 REST より突破しづらいが完全な attestation ではない。CoffeeVision は Ktor 生 REST なのでその“少しマシ”な経路すら使っていない
-  - `PlacesHttpClient.ios.kt` のコメント（403 を防ぐため付与）は「事故防止（他アプリ流用の遮断）」としては正しいが、悪意ある第三者の課金踏み台化は防げない。**この制限を実効的セキュリティと誤認しないこと**
-
-- **防げること / 防げないこと**:
-  - ✅ 防ぐ: キーが別アプリ・別プロジェクトに流用される事故
-  - ❌ 防げない: キー抽出後、バンドル ID を騙った課金の踏み台化
-
-- **推奨対策（優先順）**:
-  1. Google Cloud で**予算アラート + 日次クォータ上限**（最優先・被害額に天井。クライアント側で完結する唯一の現実的な守り）
-  2. API 制限を **Places API (New) 限定**に（権限最小化。実設定が README 手順どおりか要確認）
-  3. 本命: **バックエンドプロキシ**でキーをサーバ側に隔離しクライアントから排除（個人開発・カフェ記録アプリには重い。規模とコスト次第）
-  4. プロキシに **App Attest（DeviceCheck）** を足して正規アプリのみ通す（ここまでで実効的防御）
-
-- **現時点の判断**: リリース初期の個人開発規模なら **1 + 2 で現実的リスクは十分抑制**。3・4 はユーザー数増加で課金額が無視できなくなってから。Places 従量課金なので抜かれると自分の請求に跳ねる点を忘れない
+推奨対策（優先順）: ①Google Cloud の**予算アラート + 日次クォータ上限**（被害額に天井・クライアント側で完結する唯一の現実的な守り）②API 制限を Places API (New) 限定に ③バックエンドプロキシでキーをサーバ側へ隔離 ④プロキシ + App Attest。**現時点はリリース初期の個人開発規模のため ①+② で十分抑制**と判断（③④はユーザー数増加で課金額が無視できなくなってから）。
 
 ### 2026-07-08: `CoffeeEditorViewModel.buildCafe` の cafe 採用判定を mode 分岐から状態判定へ
 

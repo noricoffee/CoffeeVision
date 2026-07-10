@@ -424,7 +424,7 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-23 カフェ検索タブで「キーボードを開くと重い」+ `Gesture: System gesture gate timed out.` / `Received external candidate resultset` / `containerToPush is nil` のログ。当初は MapKit 常駐や `.searchable` バインディングを疑ったが、ユーザー確認で **debug 状態以外では重くない**ことが判明し、実在の性能バグではなかった
 - 原因の構造: (1) Kotlin/Native debug ビルドは非最適化で SKIE 往復・SwiftUI 再評価が桁違いに遅い、(2) Xcode デバッガアタッチ中は GeoServices 等がメインスレッドから吐く大量の os_log をコンソールへ転送するオーバーヘッドだけでメインスレッドが詰まり、キーボード提示のジェスチャが gate timeout する。Release（デバッガ非アタッチ）では消える
 - **教訓**: 「重い」報告は最初に **(a) Release/Profile ビルドで再現するか (b) デバッガをデタッチして再現するか** を切り分ける。debug 限定なら追わない（MapKit ライフサイクル制御や Tab 構成の作り変えは実在しない問題への過剰設計になる）。`candidate resultset` / `containerToPush` / `gesture gate timed out` は OS フレームワーク由来のログでアプリからは抑制できない無害ノイズ
-- 補足: このとき検索欄テキストを Kotlin StateFlow 直結から View ローカル `@State` + `.onChange` 一方向転送に変えた変更は、debug 問題とは独立に「表示を非同期ラウンドトリップに依存させない」定石として正しいので残した（[`implementation_note.md`](../implementation_note.md) 2026-06-23 エントリ参照）
+- 補足: このとき検索欄テキストを Kotlin StateFlow 直結から View ローカル `@State` + `.onChange` 一方向転送に変えた変更は、debug 問題とは独立に「表示を非同期ラウンドトリップに依存させない」定石として正しいので残した（`coding-conventions.md` §2.3 に昇格済み）
 
 ---
 
@@ -457,7 +457,7 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 - 2026-06-25、`AccountView` の「Apple でサインイン」ボタンが背景 `Color.primary.opacity(0.9)` + 前景 `.white` だった。`Color.primary` はライトで黒・**ダークで白**になるため、ダークモードで「白背景 + 白文字」となりボタンがほぼ見えなかった（ユーザー報告で発覚。ビルドは通るので静的には気づけない）
 - 原因の構造: `Color.primary` / `Color(.label)` は前景テキスト用のセマンティックカラーで colorScheme に応じて反転する。これを**ボタンの背景**に使い、前景を固定色（`.white`）にすると、片方のモードで前景と背景が同色化する
-- **教訓**: Sign in with Apple のような**固定配色が要るボタン**は `@Environment(\.colorScheme)` で背景・前景を明示分岐する（ライト: 黒背景+白文字 / ダーク: 白背景+黒文字+`Color(.separator)` ボーダー、が Apple HIG 慣習）。反転するセマンティックカラーを背景に使うときは前景も必ず連動させる。Preview 用ダミー View に同スタイルを複製している場合はそちらも同時修正（[`implementation_note.md`](../implementation_note.md) 2026-06-25 エントリ参照）
+- **教訓**: Sign in with Apple のような**固定配色が要るボタン**は `@Environment(\.colorScheme)` で背景・前景を明示分岐する（ライト: 黒背景+白文字 / ダーク: 白背景+黒文字+`Color(.separator)` ボーダー、が Apple HIG 慣習）。反転するセマンティックカラーを背景に使うときは前景も必ず連動させる。Preview 用ダミー View に同スタイルを複製している場合はそちらも同時修正
 
 ### 所有 viewModelScope（SupervisorJob 子スコープ）を持つ ViewModel のテストは `finally { vm.clear() }` が必須
 
@@ -470,7 +470,7 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 
 - `Tab { CafeSearchView(...) }` のようにタブのルートに直接置かれた View は、タブ切替や子画面 push（`CafeDetailView` への `NavigationLink`）で `onDisappear` が発火するが、**View インスタンス自体は破棄されず `@State` も保持される**。ここで `.onDisappear { bridge.cancel() }` のように Kotlin `StateFlow` の `observationTask` を止めると、`startObservation()` は init でしか呼ばれないため、戻ってきても観測が再開されず、以降 Kotlin 側の状態更新が Swift に一切反映されなくなる
 - 2026-06-25、`CafeSearchView` でこれが顕在化（検索 → カフェ詳細 push → 戻る、で検索が効かなくなる「1,2 回はできたが止まる」バグ）。`.onDisappear { bridge.cancel() }` を削除して解消
-- **教訓**: タブ常駐 View（`@State` でブリッジを自前生成し、push/タブ切替で破棄されないもの）の observation は `onDisappear` でキャンセルしない。observation は**ブリッジの `deinit`（`kotlin.clear()`）まで生かす**。sheet/push で都度生成・破棄される使い方（同 View を sheet 起動するモード等）では、View 破棄 → `deinit` が自然に observation と Kotlin scope を片付ける。`onDisappear` は「遷移アニメ中にも発火する」「常駐 View では再 init されない」の二点で破棄フックとして不適。所有 viewModelScope の `clear()` を呼ぶのも同じ理由で `deinit` 起点にする（本ファイル 2026-06-24「画面ごとの ViewModel に app-wide scope を共有させない」エントリと同根）（[`implementation_note.md`](../implementation_note.md) 2026-06-25「現在地系を撤去しテキスト検索のみに整理」エントリ参照）
+- **教訓**: タブ常駐 View（`@State` でブリッジを自前生成し、push/タブ切替で破棄されないもの）の observation は `onDisappear` でキャンセルしない。observation は**ブリッジの `deinit`（`kotlin.clear()`）まで生かす**。sheet/push で都度生成・破棄される使い方（同 View を sheet 起動するモード等）では、View 破棄 → `deinit` が自然に observation と Kotlin scope を片付ける。`onDisappear` は「遷移アニメ中にも発火する」「常駐 View では再 init されない」の二点で破棄フックとして不適。所有 viewModelScope の `clear()` を呼ぶのも同じ理由で `deinit` 起点にする（本ファイル 2026-06-24「画面ごとの ViewModel に app-wide scope を共有させない」エントリと同根）
 
 ---
 

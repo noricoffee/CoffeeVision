@@ -59,6 +59,12 @@ plugins {
 | `sealed class Result { object Loading; data class Success(...) }` | `enum Result { case loading; case success(...) }`（Swift の `switch` で網羅性チェックが効く） |
 | `enum class BrewMethod { HandDrip, FullCity, ... }` | `@frozen enum BrewMethod: Hashable, CaseIterable { case handDrip, fullCity, ... }` — case 名は **camelCase 変換**。全列挙は `.allCases`（CaseIterable）、Obj-C ヘッダの `.entries` は Swift 側からは使わない。`.name` プロパティで Kotlin 側の元名（`"HandDrip"`）を取得可能 |
 
+#### ⚠ デフォルト引数は Swift に伝播しない
+
+SKIE 0.10.12 は `DefaultArgumentInterop` を有効化しておらず、Kotlin のデフォルト引数は Obj-C initializer では**全パラメーター必須**になる。data class（`Cafe` / `CoffeeRecord` / `CoffeeRecordFilter` 等）や `AppContainer` にフィールド・引数をデフォルト値付きで追加したら、**Swift の全呼び出し箇所へ新引数の明示追加が必要**（フェーズ 10-B / 10-D / 13-A-3 / 12-B / 15-A で反復確認済みのルール）。関数のデフォルト引数を Swift に見せたい場合はオーバーロードを手で切る（例: `searchText` のバイアス有無 2 本、`onNearbySearchRequested` の半径付き）。SKIE の `defaultArgumentInterop` 有効化で解消できる可能性はあるが未検証・未採用。
+
+あわせて、SKIE は `operator fun invoke` を Swift の `callAsFunction` に変換しない。UseCase の呼び出しは `.invoke(userId:)` のように明示する（15-E-2 で確認）。
+
 #### `sealed interface RecommendationReason`（B-4 / 9-5）の Swift 表現
 
 `shared/domain` の `sealed interface RecommendationReason`（味覚一致カフェの推薦理由）は SKIE の SealedInterop で **`onEnum(of:)` による switch** に変換される（**Swift が「使う」側＝ calling direction**、protocol witness 不要）:

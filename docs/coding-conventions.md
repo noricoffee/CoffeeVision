@@ -268,6 +268,15 @@ data["brewMethod"] = item.brewMethod.name
 
 ---
 
+## 1.12 kotlinx.serialization（JSON）
+
+API クライアント / エクスポートの `Json` 設定は **`encodeDefaults = true` + `explicitNulls = false`** を基本にする:
+
+- `encodeDefaults = false`（既定）だとデフォルト値を持つフィールドが JSON から**静かに脱落**する（Places の `includedPrimaryTypes` 欠落・export の `version` 欠落で実証。implementation_note 2026-06-23 / 2026-07-07）
+- `explicitNulls = false` により、省略可能なリクエストフィールドは `val includedType: String? = "cafe"` のように nullable + デフォルト値で表現でき、null 渡しでキーごと省略できる（フェーズ 17-D のパターン）
+
+---
+
 # 2. Swift（iosApp）
 
 ## 2.1 命名規則
@@ -347,6 +356,7 @@ struct CoffeeListView: View {
 - View はレイアウトと `viewModel.on○○()` の呼び出しのみを担う
 - ビジネスロジックを View に書かない
 - `@State` は View 内に閉じる値のみ。共有状態は ViewModel に寄せる
+- 例外: 高頻度テキスト入力（検索欄等）の表示値は Kotlin `StateFlow` に直結せず、**View ローカル `@State` を表示の真実の源**にして `.onChange` で Kotlin へ一方向転送する（`set → Kotlin → SKIE emit → 再描画` の非同期ラウンドトリップによる入力ラグ防止）
 - 各 View にプレビューを実装する（ダミー Bridge を使う）
 
 ```swift
@@ -399,6 +409,12 @@ final class CoffeeListViewModelBridge { ... }
 CoffeeListView(...)
     .task { await viewModel.onAppear() }
 ```
+
+### `@Observable` / `@MainActor` の実装パターン
+
+- `@Observable` は `lazy var` 非対応（マクロの init accessor が他 stored property を参照できない）。遅延生成は `private(set) var x: T?` + bootstrap 成功後の 1 回生成で表現する。`init` 内では全 stored property 初期化前の `self` アクセスも不可（依存はローカル変数に受けてから順に代入）
+- 外部からのリセットが必要なプロパティは `private(set)` + リセットメソッド公開（例: `resetLastLocation()` / `clearError()`）。View からの直接代入はさせない
+- `@MainActor` クラスを CoreLocation 等の delegate に準拠させる場合、delegate メソッドは**すべて `nonisolated` 宣言**し、内部の `@MainActor` プロパティ更新は `Task { @MainActor in ... }` で戻す（コールバックは背景スレッドから呼ばれるため）
 
 ---
 

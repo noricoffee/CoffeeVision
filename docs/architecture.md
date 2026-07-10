@@ -23,7 +23,7 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ ネイティブ UI** 構成を
 
 ## モジュール構成
 
-### 現状（Phase 5 時点）
+### 現状
 
 旧 `sharedLogic` 一枚モジュールを Phase 2.5（2026-06-08）で基盤レイヤーに分割し、その後 Phase 3 / 3.5 / 4 で `feature/*` と `data-places` を順次切り出した。構成は **基盤層（`core` / `domain` / `data-*`）+ feature 層（1 画面 = 1 モジュール、画面追加ごとに増える）+ `framework`（iOS Umbrella）+ アプリ層** という固定パターン。**モジュールの正確な一覧と件数は `settings.gradle.kts` を真とする**（このツリーは構造を示すための代表例で、feature の網羅列挙はしない）。
 
@@ -37,7 +37,7 @@ coffeevision/
 │           └── android.library.gradle.kts
 │
 ├── shared/
-│   ├── core/                             # [com.noricoffee.core] AppContainer / CoffeeRepositoryImpl（local+remote 合成）
+│   ├── core/                             # [com.noricoffee.core] AppContainer（合成ルート）/ CoffeeRepositoryImpl・SavedCafeRepositoryImpl（local+remote 合成）/ DummyCoffeeData（dev）
 │   ├── domain/                           # [com.noricoffee.domain] ドメインモデル / enum / *Repository I/F / UseCase / VisitedCafe
 │   ├── data-local/                       # [com.noricoffee.dataLocal] SQLDelight スキーマ / Mapper / DriverFactory / LocalCoffeeRepository
 │   ├── data-places/                      # [com.noricoffee.dataPlaces] Ktor + Google Places API クライアント（PlacesClient / CafeRepositoryImpl）
@@ -63,7 +63,7 @@ coffeevision/
 ```
 
 - iOS 向けには `shared/framework` が **全 shared モジュール（基盤層 + 全 feature）** を `api` + `export(...)` で再公開し、`SharedLogic.framework`（XCFramework 名も `SharedLogic`）として配布。feature を追加したらこの export にも 1 行追加する
-- `shared/data-firebase` は `androidMain` に Android 実装（`AuthRepositoryAndroidImpl` / `RemoteCoffeeDataSourceAndroidImpl` / `CoffeeFirestoreMapper`）を持つ。iOS 実装は `iosApp` 側 Swift で `domain` の I/F に準拠
+- `shared/data-firebase` は `androidMain` に、domain の Firebase 系 I/F 4 つ（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository`）の Android 実装 + 各 Firestore Mapper を持つ（**実体一覧は `shared/data-firebase/src/androidMain` を真とする** — クラス名の列挙はしない）。iOS 実装は `iosApp` 側 Swift で同じ I/F に準拠
 
 #### この分割の設計目的（KMP モジュール分割アーキテクチャの実証）
 
@@ -80,15 +80,15 @@ Android ターゲットは「リリース対象」ではなく **「共通レイ
 
 ### モジュールの責務
 
-| カテゴリ | モジュール | 中身 | 依存可能先 |
+| カテゴリ | モジュール | 中身 | 依存可能先（各 `build.gradle.kts` が真） |
 |---------|----------|------|----------|
-| **基盤** | `core` | Result 型 / Logger / Dispatchers / DI 基盤 / Fake / TestDispatcher | （なし） |
-| **ドメイン** | `domain` | ドメインモデル（`data class`）/ enum / Repository インターフェース / UseCase | `core` |
-| **データ** | `data-local` | SQLDelight スキーマ・DAO・`DatabaseDriverFactory` (expect/actual) | `core`, `domain` |
-|  | `data-places` | Places API クライアント（Ktor） | `core`, `domain` |
-|  | `data-firebase` | `androidMain` のみソースを持つ Firestore / Auth 実装 | `core`, `domain` |
+| **ドメイン** | `domain` | ドメインモデル（`data class`）/ enum / Repository インターフェース / UseCase | （なし・最下層） |
+| **データ** | `data-local` | SQLDelight スキーマ・Mapper・`DatabaseDriverFactory` (expect/actual)・`LocalCoffeeRepository` | `domain` |
+|  | `data-places` | Places API クライアント（Ktor） | `domain` |
+|  | `data-firebase` | domain の Firebase 系 I/F の Android 実装 + Firestore Mapper（`androidMain` のみソースを持つ） | `domain` |
+| **基盤（合成）** | `core` | `AppContainer`（手書き DI コンテナ = 合成ルート）/ `CoffeeRepositoryImpl`・`SavedCafeRepositoryImpl`（local + remote 合成）/ `DummyCoffeeData`（dev seed） | `domain`, `data-local`, `data-places`, `data-firebase` |
 | **機能** | `feature/*` | ViewModel + `UIState`（Kotlin）／画面ごとに 1 モジュール | `core`, `domain`（**他 feature 不可**） |
-| **配布** | `framework` | iOS 向け umbrella。全 feature/data/domain を `api` で再 export | 全 shared モジュール |
+| **配布** | `framework` | iOS 向け umbrella。全 shared モジュールを `api` + `export` で再公開 + ViewModel ファクトリ | 全 shared モジュール |
 | **アプリ** | `iosApp` | SwiftUI View + Bridge + Firebase Swift 実装 + DI 配線 | `framework`（XCFramework）|
 |  | `androidApp` | Compose Navigation + コーヒー一覧 1 画面（**検証用最小実装**） | `feature/coffee-list`, `data/*`, `domain`, `core` |
 
@@ -108,7 +108,7 @@ app (iosApp / androidApp)
                           feature/* （★ feature 同士の相互依存は禁止）
                                 │
                                 ▼
-                            domain
+                              core （AppContainer = 合成ルート）
                                 │
                           ┌─────┼─────┐
                           ▼     ▼     ▼
@@ -116,12 +116,13 @@ app (iosApp / androidApp)
                           │     │     │
                           └─────┼─────┘
                                 ▼
-                              core
+                             domain （最下層・依存なし）
 ```
 
 - **feature 同士は依存禁止**：画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
+- feature は `core` と `domain` の**両方に直接依存**する（`kmp.feature` Convention Plugin が自動配線。図は代表経路のみ）
 - **domain はインターフェースのみ**：`data-*` モジュールが実装し、`AppContainer` が注入する
-- **data-firebase の iOS 実装は `iosApp` 側 Swift**：domain の Repository インターフェース（`RemoteCoffeeDataSource` / `AuthRepository` / `BeanProfileRepository`）準拠の Swift クラスを書く（[`kmp-bridge.md`](./kmp-bridge.md) 参照）
+- **data-firebase の iOS 実装は `iosApp` 側 Swift**：domain の Firebase 系インターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository`）準拠の Swift クラスを書く（[`kmp-bridge.md`](./kmp-bridge.md) 参照）
 
 ---
 
@@ -439,6 +440,7 @@ ViewModel が UIState を更新 → View が再描画
 - **リモート失敗の扱いは `CoffeeRepositoryImpl.WritePolicy`**: 既定 `PropagateRemoteFailure`（例外を呼び出し元へ伝播し ViewModel がエラー表示）/ `IgnoreRemoteFailure`（Firestore SDK のオフライン永続化・リトライに委譲して握りつぶす）
 - オフライン時の再送は Firestore SDK のオフライン永続化が引き受ける（独自の同期キューは書かない）
 - 削除・更新も同じパターンで、UI は常にローカルの最新状態を見る
+- **`SavedCafe`（フェーズ 15-A）も同型の合成**: `SavedCafeRepositoryImpl`（`shared/core`）が local + `RemoteSavedCafeDataSource` を合成し、読み取り・書き込み・reconciliation とも本節と同じパターン（`WritePolicy` も `CoffeeRepositoryImpl` と共用）
 
 ---
 
@@ -482,7 +484,7 @@ class AppContainer(
 ```
 
 - `SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
-- Firebase を扱うインターフェース（`RemoteCoffeeDataSource` / `AuthRepository` / `BeanProfileRepository`）は **`commonMain` で定義のみ**し、実装は以下のように分けます。
+- Firebase を扱うインターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository`）は **`commonMain` で定義のみ**し、実装は以下のように分けます。
     - **Android**: `shared/data-firebase/androidMain` に Firebase Android SDK を使った実装を置き、`AppContainer` 生成時に Application から渡す
     - **iOS**: `iosApp` 側の Swift コードで `FirebaseFirestore`（SPM 配信）を使った実装クラスを書き、Kotlin のインターフェースに準拠させて `AppContainer` 構築時に渡す
 

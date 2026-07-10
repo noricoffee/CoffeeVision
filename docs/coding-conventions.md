@@ -357,7 +357,7 @@ struct CoffeeListView: View {
 - ビジネスロジックを View に書かない
 - `@State` は View 内に閉じる値のみ。共有状態は ViewModel に寄せる
 - 例外: 高頻度テキスト入力（検索欄等）の表示値は Kotlin `StateFlow` に直結せず、**View ローカル `@State` を表示の真実の源**にして `.onChange` で Kotlin へ一方向転送する（`set → Kotlin → SKIE emit → 再描画` の非同期ラウンドトリップによる入力ラグ防止）
-- 各 View にプレビューを実装する（ダミー Bridge を使う）
+- 各 View にプレビューを実装する（ダミー Demo 方式。下記「プレビュー」参照）
 
 ```swift
 // Good
@@ -375,13 +375,7 @@ Button("追加") {
 
 ### プレビュー
 
-```swift
-#Preview {
-    CoffeeListView(viewModel: .preview)
-}
-```
-
-`*ViewModelBridge` に `static let preview` を生やしてダミー実装を返します。
+本体 View は `AppState` / Kotlin VM に依存する Bridge を要求するため、**Preview では本物の Bridge を構築しない**。`#Preview` ブロック内に「同等構造のダミー Demo View」を直接書き、ダミーデータは `PreviewSupport/PreviewSamples.swift` の `static let` に集約して Preview 間で共有する（戦略 B。経緯は implementation_note 2026-06-11）。本体の構造が変わったら Preview 側も追従する（コード重複は割り切り）。`*ViewModelBridge` に `static let preview` を生やす方式は**採用していない**。
 
 ---
 
@@ -430,7 +424,7 @@ Kotlin 側と同じ方針。**WHY** のみ書き、WHAT は書かない。
 
 - Kotlin: `ktlint` または IDE の標準フォーマッタ
 - Swift: Xcode 標準フォーマッタ（4 スペースインデント）
-- CI で format チェックを将来導入する（タスク参照: `docs/tasks.md`）
+- CI での format チェックは未導入（導入するときに `docs/tasks.md` へ起票する）
 
 ## 3.2 コミットメッセージ
 

@@ -105,12 +105,13 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 #### Swift から `Flow` を「作って」返す方法
 
-`observeUserId() -> any Kotlinx_coroutines_coreFlow` のような Flow 戻り値の interface を Swift で実装するには、Kotlin の Flow インスタンスを Swift 側で生成する必要があります。基本パターン:
+`observeUserId() -> any Kotlinx_coroutines_coreFlow` のような Flow 戻り値の interface を Swift で実装するには、Kotlin の Flow インスタンスを Swift 側で生成する必要があります。
 
-1. **`MutableStateFlow` を Swift から構築 → 値を流し込む**: SKIE 経由で `MutableStateFlow(initialValue:)` を Swift から呼び、Firestore リスナや AsyncStream のイベントごとに `setValue` で更新する
-2. **Kotlin 側に AsyncStream → Flow の薄いブリッジヘルパを置く**（`iosMain`）: 詰まったらこちらに退避
+**正規パターンは `FlowBridge.swift` の `CallbackFlow<T>` / `CallbackFlowOptional<T>`**（`Kotlinx_coroutines_coreFlow` に準拠した Swift クラス。2026-06 に確立し、`RemoteCoffeeDataSourceIosImpl` / `RemoteSavedCafeDataSourceIosImpl` / `AuthRepositoryIosImpl` の全 Flow 戻り値で使用中）:
 
-実装 PoC の結果に応じて、上記のどちらを正規パターンにするかを `implementation_note.md` に記録すること。
+- `CallbackFlow<T: AnyObject>`: collect 開始時に `onStart` で上流（Firestore リスナ等）を起動し、コールバックから emit。コルーチン cancel → `deinit` の `onCancel` で `listener.remove()` 等を解放
+- `CallbackFlowOptional<T: AnyObject>`: nil を流せる版（サインアウト時の `AuthAccount?` nil emit 用）
+- 新しい Flow 戻り値 interface を Swift 実装するときは、独自に `MutableStateFlow` 等を組み立てず、まずこの 2 ヘルパを再利用する
 
 ---
 

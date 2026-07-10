@@ -2,7 +2,7 @@
 
 実装を進める中で気付いた、再発させたくない落とし穴・お作法を蓄積する場所です。
 セッション開始時に見直し、関連するルールを再確認してください。
-セクションは発生日ごと・日付昇順。新しい教訓は末尾に追記する（2026-07-04 整列。旧例文は現行モデルに更新済み）。
+セクションは発生日ごと・日付昇順。新しい教訓は末尾に追記する（2026-07-04 整列。旧例文は現行モデルに更新済み。2026-07-10 に完全重複 2 組を統合 — 昇格済みの教訓も発生源として残す方針は維持）。
 
 ---
 
@@ -77,6 +77,7 @@
 - Swift 側からは「全引数を明示する版」しか見えないため、デフォルト値の意味するインスタンス（例: `MainScope()`）を Swift で作る必要が出る → 結果として **ダミー値を作る hack に走られる**（Phase 2 で `IosMainScope`（dispatcher なし）を Swift で実装してしまったのが実例）
 - 回避策: デフォルト引数を持たせず、**セカンダリコンストラクタ / オーバーロードで「scope 引数なし版」を別途定義**して内部で `MainScope()` を生成する。プライマリ側もデフォルト値を消し、用途（テスト / 本番）でコンストラクタを分ける
 - SKIE 採用プロジェクトでは「Swift から呼ぶ API は **全部明示引数で書く**」を原則にしておくと、デフォルト引数の hack 化リスクを早期に潰せる
+- 2026-07-09 に `kmp-bridge.md`「デフォルト引数は Swift に伝播しない」節へルールとして昇格済み（本エントリは発生源として残す）
 
 ---
 
@@ -173,6 +174,7 @@
 - `xcodebuild` で BUILD SUCCEEDED でも、SourceKit（IDE インデックス）が `import X` を「No such module」と報告することがある
 - 原因はインデックスキャッシュ。`Product → Clean Build Folder` + `~/Library/Developer/Xcode/DerivedData/iosApp-*` 削除で直ることが多い
 - そもそも `import X` が当該ファイル内で使われていなければ **import 自体を削除** するのが最もエレガント（dead code 削除 + SourceKit 黄信号解消）
+- 本プロジェクトでは `No such module 'SharedLogic'` として Phase 2.5 以降頻発（Phase 3 写真ピッカーでも複数ファイルで発生）。`xcodebuild` の BUILD SUCCEEDED を確認できていれば無視してよい（2026-06-10 の重複エントリを 2026-07-10 に統合）
 
 ### KDoc 内に `/*` を含む文字列を書くとネストコメント開始として解釈される
 
@@ -199,6 +201,7 @@
 - `SharedLogic.framework/Headers/SharedLogic.h`（Obj-C ヘッダ）は Obj-C 互換の生 API で、SKIE 変換後の Swift API（`@frozen enum` / `async throws` / `SkieSwiftFlow` 等）は出てこない
 - 「`.h` に `BrewMethodEntries` が見えるから Swift から `BrewMethod.entries` で呼べるはず」と思ったら Swift 側からは「no member」エラーになる、というのが典型的な踏み方
 - 切り分け順: `grep` で `.swiftinterface` を見る → ない場合のみ `.h` を見る
+- **enum の case 名も同様**: `.h` では全小文字に見えても Swift 実体は camelCase（2026-06-22 B-4 で `.roastlevel` と誤報告 → `.swiftinterface` 確認で `.roastLevel` が正と判明。ビルド成功が裏付け）。**docs に case 名を固定する前に** `strings <...>.swiftinterface | grep "case "` で実体を見る（2026-06-22 の重複エントリを 2026-07-10 に統合）
 
 ### Xcode の DerivedData が古い symlink を掴むとビルド成功と SourceKit が乖離する別パターン
 
@@ -216,12 +219,6 @@
 - 結果として「一度選択した写真と全く同じ写真をもう一度選んだとき」「選択 → 削除 → 同じ写真をもう一度選んだとき」に 2 回目以降が無視される
 - 回避: `onChange(of: selectedPickerItems)` のハンドラ末尾で `selectedPickerItems = []` する。次の選択は必ず空 → 非空への遷移になるため確実に発火する
 - 「選択結果をメモリで処理（Data 読み込み + ドメインモデル作成）した後にバインディングをクリア」のパターンが iOS 16+ のレシピ通り
-
-### SourceKit の `No such module 'SharedLogic'` は実ビルドが通っていれば無視可（既出）
-
-- 本プロジェクトでは Phase 2.5 以降頻発する。`xcodebuild` は BUILD SUCCEEDED でも IDE のインデックスだけ赤くなる
-- 詳細は同ファイル既出の「SourceKit の `No such module 'X'` は実ビルド成功と乖離することがある」エントリ参照
-- Phase 3 写真ピッカー実装時にも複数ファイルで同警告が出たが、`xcodebuild` 成功確認で問題ないと判断した
 
 ### KMP `androidMain` で kotlinx-datetime 等 `implementation` 宣言のライブラリは推移しない
 
@@ -372,12 +369,6 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 実例: `FavoriteSignals` のカテゴリ好みは「最大群が globalMean を超えたら信号化」だが、これは「複数群の最良が平均を超えるか」＝**ほぼ恒真**で偽陽性率 100%。tasting 軸の「5 軸 max|r|≥0.3」も多重比較で 40%。どちらも単体テストでは検出不能だった
 - **教訓**: ①「最大値が全体平均を超えたら採用」は閾値ガードにならない（最良は大抵平均を超える）。effect-size 閾値（差 > δ）や信頼区間下限など「ゼロからの距離」で見る ②複数候補から max を拾う設計は多重比較で偽陽性が乗る ③assert 閾値は**測定してから**決める（理論値を仮置きで hard-fail させると、偶然 pass か設計欠陥かを取り違える）。null ペルソナで「全フィールド null」を期待する固定シード assert を書く前に、本当に null になるシードが存在するかスキャンで確認する
 
-### SKIE enum の Swift case 名は `.swiftinterface` を真とする（Obj-C ヘッダと異なる）
-
-- Kotlin `enum class` を SKIE が Swift `@frozen enum` に変換する際の case 名は、**Obj-C ヘッダ（`.h`）と Swift の `.swiftinterface` で表記が異なる**ことがある。h では全小文字に見えても、Swift 実コードは camelCase（`RoastLevel`→`roastLevel`）が正しい
-- 2026-06-22 B-4 で kmp-engineer が「`.roastlevel`（全小文字）」と報告したが、ios-engineer が `.swiftinterface` を確認し `.roastLevel`（camelCase）が正と判明（ビルド成功が裏付け）
-- **教訓**: enum の Swift case 名を docs に固定する前に `*.swiftinterface` を確認する。`strings <...>.swiftinterface | grep "case "` で実体を見る。Obj-C ヘッダの表記を鵜呑みにしない
-
 ### `maxWith(compareByDescending { ... })` は意図と逆の要素を返す
 
 - `maxWith(Comparator)` は **Comparator 上で「最大」** の要素を返す。`compareByDescending { it.rating }` は「rating が大きいほど Comparator では小さい（前に来る）」順序なので、`maxWith` と組み合わせると **最低 rating の要素が選ばれる**（意図と逆）。コンパイルは通るので気づきにくい
@@ -418,6 +409,7 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - 2026-06-23 の Places で、`SearchNearbyRequest.includedTypes=listOf("cafe")` がデフォルト値ゆえに送信されず、型フィルタ無しの searchNearby になり駅・観光地が周辺ピンに並んだ。UI 上はエラーも出ず「それっぽい結果」が返るため気づきにくく、curl でリクエストボディを実送信比較して初めて発覚
 - **教訓**: 外部 API クライアントの `Json{}` には `encodeDefaults=true` を明示する。`explicitNulls=false` と併用すれば null デフォルトは省略されるので「必須は送る・null は省く」が両立する。「サーバが期待するフィールドを送っているはず」を疑い、ビルドした実体の送信ボディを curl と突き合わせる
 - 関連: Places searchNearby は `includedTypes`（副次タイプ含む・prominence 順）より `includedPrimaryTypes`（主タイプ）+ `rankPreference="DISTANCE"` の方が「実カフェを近い順」に絞れる
+- 2026-07-09 に `coding-conventions.md` §1.12（kotlinx.serialization 規約）へ昇格済み（本エントリは発生源として残す）
 
 ### 「実機 debug でのみ重い」UI ジャンクは debug ビルド/デバッガアタッチのアーティファクトを最初に疑う
 

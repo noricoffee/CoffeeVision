@@ -129,3 +129,4 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 | 実装ノート | 要件未満の実装上の決定・影響・トレードオフ・経緯の時系列ログ（親のみ更新） | [`docs/implementation_note.md`](./docs/implementation_note.md) |
 | タスク一覧 | カテゴリ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |
 | App Store メタデータ | App Store Connect 提出用の原稿・プライバシー申告・提出前チェックリスト | [`docs/app-store-metadata.md`](./docs/app-store-metadata.md) |
+| 有料サービス棚卸し | Places / Firebase 等の課金対象サービス一覧とコスト抑制状況（コスト構造が変わる変更で更新） | [`docs/paid-services.md`](./docs/paid-services.md) |

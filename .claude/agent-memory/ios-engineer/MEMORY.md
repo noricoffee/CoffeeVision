@@ -1,5 +1,11 @@
 # ios-engineer memory
 
+## 横スクロール（LazyHStack）内の「さらに表示」段階読み込みは `@State var visibleCount` + Item enum への追加 case で完結する（2026-07-13、CafePhotoHeader 写真ヘッダーで確認）
+
+- KMP 側データ（`cafe.photoReferences` 等）はそのまま `prefix(visibleCount)` で間引くだけでよく、Kotlin 側に変更は不要（純粋な表示制御は View 内 `@State` に閉じる、既存規約どおり）。
+- `isEmpty`（呼び出し側がヘッダー全体を隠すかの判定）は**元データ基準**にし、`visibleCount` に依存させない。段階読み込みの表示上限（例: 全体で最大 10 件）とは別に判定すること。
+- 「さらに表示」ボタンは既存セルと同じ `Identifiable` enum（`Item`）に `case loadMore` を追加し、`items` 配列の末尾（次セクションの手前）に条件付きで挿入するのが素直。ボタン自体は `.frame(width:height:)` を既存の写真セルと揃えれば ScrollView 内でレイアウトが崩れない。
+
 ## Kotlin の nullable Double プロパティ（`Double?`）を Swift で扱うときの型変換パターン（2026-07-13、`CoffeeRecord.rating` nullable 化で確認）
 
 - SKIE の `.swiftinterface` は「呼び出し方向」の糖衣構文しか載らない。`data class` のプロパティ自体の nullable Double は Obj-C ヘッダで `SharedLogicDouble * _Nullable`（= Swift `KotlinDouble?`）と確認するのが確実（`shared/framework/build/bin/iosSimulatorArm64/debugFramework/SharedLogic.framework/Headers/SharedLogic.h` を `grep`）。

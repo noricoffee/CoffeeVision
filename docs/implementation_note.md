@@ -784,3 +784,12 @@ iOSDC LT 由来の PoC 導線（分析タブ最下部の `TastePreferenceConvers
 
 - 判断の根拠: ①フェーズ 13 で同じ `TastePreferenceExtractor` が実用昇格済みで技術は本番品質 ②起票時（2026-06-26）の懸念だった「全ユーザー常時表示」は、その後のフェーズ 13 実装で `makeIfAvailable()` ゲートが入り **FM 非対応端末では導線非表示**になっていた（`AnalysisView.swift` の `tasteSearchSection` で 2026-07-12 コード確認）③`coffeeRecordQuery` 連携済みで、変換デモではなく「自由文 → 好み検索」の実画面に成長している
 - 追加実装なし。リリース前バックログの当該行は完了
+
+### 2026-07-12: F-1 — Required Reason API 網羅監査（FileTimestamp C617.1 を追加宣言）
+
+- 領域: iOS / リリース準備
+- 関連: tasks.md「リリース前バックログ」F-1、`iosApp/iosApp/PrivacyInfo.xcprivacy`
+
+- **監査方法**: ①iosApp Swift 全域を Apple の 5 カテゴリ（File Timestamp / System Boot Time / Disk Space / Active Keyboard / UserDefaults）の対象シンボルで grep ②自前 Kotlin（shared）のプラットフォーム API 接点を grep（接点は DriverFactory / PlacesHttpClient の 2 ファイルのみ・該当なし）③**アプリ同梱バイナリ `SharedLogic.framework` を `nm -u` でシンボル実測** ④Firebase SDK は各プロダクトが PrivacyInfo.xcprivacy を同梱していることを SPM checkout で確認（SDK 側の自己申告でアプリ側対応不要）
+- **結果**: Swift 側の使用は UserDefaults のみ（CA92.1 宣言済み）。**SharedLogic（Kotlin/Native ランタイム）が File Timestamp カテゴリの `stat` / `fstat` / `fstatat` / `lstat` / `getattrlist` / `getattrlistbulk` をリンク**しており、アプリ同梱バイナリのため提出時スキャン（ITMS-91053）の対象 → `NSPrivacyAccessedAPICategoryFileTimestamp` + **C617.1**（アプリコンテナ内ファイルへのアクセス。K/N ランタイムの内部ファイル操作・SQLite DB ファイル等）を追加宣言。Boot Time / Disk Space / Active Keyboard は Swift・バイナリとも該当なし
+- K/N ランタイムが posix stat 系を持ち込むのは KMP アプリの既知事象で、C617.1 宣言が標準的な対応。grep だけでなく**バイナリの `nm -u` まで見る**のが監査として確実（Swift ソース grep だけでは K/N 由来を見落とす）。`plutil -lint` OK

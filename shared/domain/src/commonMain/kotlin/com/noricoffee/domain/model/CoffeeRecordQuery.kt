@@ -46,8 +46,9 @@ interface CoffeeRecordQuery {
  *   どちらも null ならこのテキスト条件は無視する。
  * - [brewMethod] / [roastLevel]: enum `.name`（"HandDrip" 等）に対し大小無視 + 部分一致
  *   （例: "drip" は "HandDrip" にマッチ）。roastLevel が null のレコードは [roastLevel] 指定時は除外。
- * - [minRating] / [maxRating]: `rating` の範囲。`rating == 0.0`（未評価 sentinel）は
- *   評価範囲フィルタが指定されている場合は除外（未評価を「評価済みとして扱う」誤りを防ぐ）。
+ * - [minRating] / [maxRating]: `rating` の範囲。`record.rating == null`（未評価。2026-07-12 B-4 で
+ *   0.0 sentinel を廃止し nullable 化）は評価範囲フィルタが指定されている場合は除外
+ *   （未評価を「評価済みとして扱う」誤りを防ぐ）。
  * - [fromYearMonth] / [toYearMonth]: `visitedOn` の年月（"YYYY-MM" 文字列比較）で範囲絞り込み。
  *   "YYYY-MM" 文字列の辞書順比較で正しく機能する（ISO-8601 年月形式の性質）。
  * - [tastingMin] / [tastingMax]: テイスティング各軸の範囲条件。`record.tasting == null`（未記録）は
@@ -96,7 +97,9 @@ data class CoffeeRecordFilter(
  *
  * - [brewMethod]: `BrewMethod.name`（"HandDrip" 等）。iOS 側で日本語化する。
  * - [roastLevel]: `RoastLevel.name` または null（未設定）。
- * - [rating]: `0.0` は未評価 sentinel。
+ * - [rating]: LLM ブリッジ境界の例外として `Double` を維持（domain の `CoffeeRecord.rating` は
+ *   2026-07-12 B-4 で nullable 化済みだが、ここでは `0.0` を未評価 sentinel として使い続ける。
+ *   マッピングは `record.rating ?: 0.0`）。
  * - [visitedOn]: "YYYY-MM-DD" 文字列（ISO-8601 LocalDate）。
  */
 data class CoffeeRecordSummary(
@@ -164,12 +167,12 @@ class CoffeeRecordQueryImpl(
             if (!enumName.contains(filter.roastLevel, ignoreCase = true)) return false
         }
 
-        // 評価範囲フィルタ: rating=0.0（未評価）は除外
+        // 評価範囲フィルタ: rating=null（未評価）は除外
         val hasRatingFilter = filter.minRating != null || filter.maxRating != null
         if (hasRatingFilter) {
-            if (record.rating == 0.0) return false
-            if (filter.minRating != null && record.rating < filter.minRating) return false
-            if (filter.maxRating != null && record.rating > filter.maxRating) return false
+            val rating = record.rating ?: return false
+            if (filter.minRating != null && rating < filter.minRating) return false
+            if (filter.maxRating != null && rating > filter.maxRating) return false
         }
 
         // fromYearMonth / toYearMonth: visitedOn の "YYYY-MM" 文字列比較
@@ -210,7 +213,7 @@ class CoffeeRecordQueryImpl(
         origin = origin,
         brewMethod = brewMethod.name,
         roastLevel = roastLevel?.name,
-        rating = rating,
+        rating = rating ?: 0.0, // LLM ブリッジ境界の例外: domain の null を 0.0 sentinel に写す
         visitedOn = visitedOn.toString(), // LocalDate.toString() は "YYYY-MM-DD"
     )
 

@@ -549,7 +549,7 @@ struct CoffeeEditorView: View {
 
             LabeledContent(String(localized: "評価")) {
                 StarRatingView(
-                    rating: viewModel.draft.rating,
+                    rating: viewModel.draft.rating?.doubleValue,
                     onChange: { viewModel.onRatingChanged(rating: $0) }
                 )
             }
@@ -842,7 +842,7 @@ private struct PhotoThumbnailCell: View {
                     Text("2026/06/19")
                 }
                 LabeledContent(String(localized: "評価")) {
-                    StarRatingView(rating: 0.0)
+                    StarRatingView(rating: nil)
                 }
             }
 

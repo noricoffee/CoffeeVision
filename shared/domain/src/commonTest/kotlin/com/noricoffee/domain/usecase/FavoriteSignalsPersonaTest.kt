@@ -554,7 +554,7 @@ class FavoriteSignalsPersonaTest {
      */
     private fun countCandidateCategories(records: List<CoffeeRecord>): Int {
         val minSampleSize = 3
-        val ratedRecords = records.filter { it.rating > 0.0 }
+        val ratedRecords = records.filter { it.rating != null }
 
         val brewCandidates = ratedRecords
             .groupBy { it.brewMethod.name }
@@ -1231,13 +1231,13 @@ class FavoriteSignalsPersonaTest {
         val k = BuildCoffeeStatsUseCase.SHRINKAGE_PRIOR_WEIGHT.toDouble()
         val minSampleSize = 3 // FavoriteSignals.minSampleSize の既定値
 
-        val ratedRecords = records.filter { it.rating > 0.0 }
+        val ratedRecords = records.filter { it.rating != null }
         val globalMean = if (ratedRecords.isEmpty()) return Pair(false, false)
-        else ratedRecords.sumOf { it.rating } / ratedRecords.size
+        else ratedRecords.sumOf { it.rating!! } / ratedRecords.size
 
         // globalStd（z ゲート用）
         val globalStd = if (categoryZ != null) {
-            val variance = ratedRecords.sumOf { (it.rating - globalMean) * (it.rating - globalMean) } / ratedRecords.size
+            val variance = ratedRecords.sumOf { val r = it.rating!!; (r - globalMean) * (r - globalMean) } / ratedRecords.size
             sqrt(variance)
         } else 0.0
 
@@ -1248,9 +1248,9 @@ class FavoriteSignalsPersonaTest {
             var bestN = 0
             for ((_, group) in groups) {
                 if (group.size < minSampleSize) continue
-                val rated = group.filter { it.rating > 0.0 }
+                val rated = group.filter { it.rating != null }
                 if (rated.isEmpty()) continue
-                val mean = rated.sumOf { it.rating } / rated.size
+                val mean = rated.sumOf { it.rating!! } / rated.size
                 val shrunk = (rated.size * mean + k * globalMean) / (rated.size + k)
                 val shrunkDelta = shrunk - globalMean
                 // 最良候補を shrunkMean 最大で選ぶ
@@ -1283,7 +1283,7 @@ class FavoriteSignalsPersonaTest {
         if (sampleSize < BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE) return Pair(catSignal, false)
 
         val effectiveFloor = maxOf(BuildCoffeeStatsUseCase.CORRELATION_MIN_ABS, floorC / sqrt(sampleSize.toDouble()))
-        val ratings = tastingRecords.map { it.rating }
+        val ratings = tastingRecords.map { it.rating!! }
 
         fun pearsonR(xs: List<Double>, ys: List<Double>): Double? {
             val n = xs.size
@@ -1386,9 +1386,9 @@ class FavoriteSignalsPersonaTest {
 
                 // heavy-skew（軸別も計測）
                 val heavyRecs = generateNullPersonaHeavySkew(seed = seed)
-                val ratedH = heavyRecs.filter { it.rating > 0.0 }
-                val globalMeanH = ratedH.sumOf { it.rating } / ratedH.size
-                val globalStdH = sqrt(ratedH.sumOf { (it.rating - globalMeanH) * (it.rating - globalMeanH) } / ratedH.size)
+                val ratedH = heavyRecs.filter { it.rating != null }
+                val globalMeanH = ratedH.sumOf { it.rating!! } / ratedH.size
+                val globalStdH = sqrt(ratedH.sumOf { val r = it.rating!!; (r - globalMeanH) * (r - globalMeanH) } / ratedH.size)
                 val k = BuildCoffeeStatsUseCase.SHRINKAGE_PRIOR_WEIGHT.toDouble()
                 val minS = 3
 
@@ -1398,9 +1398,9 @@ class FavoriteSignalsPersonaTest {
                     var bestN = 0
                     for ((_, group) in groups) {
                         if (group.size < minS) continue
-                        val rated = group.filter { it.rating > 0.0 }
+                        val rated = group.filter { it.rating != null }
                         if (rated.isEmpty()) continue
-                        val mean = rated.sumOf { it.rating } / rated.size
+                        val mean = rated.sumOf { it.rating!! } / rated.size
                         val shrunk = (rated.size * mean + k * globalMeanH) / (rated.size + k)
                         val sd = shrunk - globalMeanH
                         if (sd > bestShrunkDelta) {

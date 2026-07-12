@@ -108,7 +108,7 @@ class CoffeeEditorViewModel(
          * 既存記録を複製元にした新規作成モード（要件 2-10）。
          *
          * 引き継ぐ: cafe / name / brewMethod / origin / variety / processing / roastLevel / cup / brewRecipe / tags。
-         * 引き継がない: rating（0.0 = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
+         * 引き継がない: rating（null = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
          * `visitedOn` は今日、保存時の id / createdAt は [Create] と同様に新規採番する。
          *
          * @property sourceCoffeeId 複製元の [CoffeeRecord.id]
@@ -126,7 +126,7 @@ class CoffeeEditorViewModel(
      * @property cafeWebsiteUrl カフェの Web サイト URL（任意）
      * @property cafeMapsUrl カフェの Google Maps URL（任意）
      * @property visitedOn 飲んだ日（デフォルトは今日）
-     * @property rating 評価（0.5..5.0（0.5 刻み）。0.0 は未評価扱いで保存時にバリデーションエラー）
+     * @property rating 評価（0.5..5.0（0.5 刻み）。null = 未評価（未評価のまま保存可。2026-07-12 B-4））
      * @property notes 自由メモ（任意。最大 2000 文字）
      * @property photos 写真アイテム一覧
      * @property name コーヒー名（必須。最大 200 文字）
@@ -146,7 +146,7 @@ class CoffeeEditorViewModel(
         val cafeWebsiteUrl: String,
         val cafeMapsUrl: String,
         val visitedOn: LocalDate,
-        val rating: Double,
+        val rating: Double?,
         val notes: String,
         val photos: List<Photo> = emptyList(),
         val name: String,
@@ -327,8 +327,8 @@ class CoffeeEditorViewModel(
         _state.update { it.copy(draft = it.draft.copy(visitedOn = date)) }
     }
 
-    /** 評価を更新する（0.5..5.0、0.5 刻み）。0.0 は未評価。 */
-    fun onRatingChanged(rating: Double) {
+    /** 評価を更新する（0.5..5.0、0.5 刻み）。null = 未評価。 */
+    fun onRatingChanged(rating: Double?) {
         _state.update { it.copy(draft = it.draft.copy(rating = rating)) }
     }
 
@@ -655,19 +655,23 @@ class CoffeeEditorViewModel(
      * draft のバリデーション。エラーメッセージを返す。問題なければ null を返す。
      *
      * - name（コーヒー名）は必須・最大 200 文字
-     * - rating は 0.5..5.0（0.5 刻み）必須（0.0 は未評価扱いでエラー）
+     * - rating は null（未評価。未評価のまま保存可）または 0.5..5.0（0.5 刻み）。
+     *   非 null のときのみ範囲・刻みをバリデーションする（2026-07-12 B-4）
      * - notes は最大 2000 文字
      * - brewRecipe は最大 500 文字
      * - cafe は任意（空の場合はセルフ抽出として保存）
      */
-    private fun validate(draft: CoffeeDraft): String? = when {
-        draft.name.isBlank() -> "コーヒー名を入力してください"
-        draft.name.length > 200 -> "コーヒー名は 200 文字以内で入力してください"
-        draft.rating < 0.5 || draft.rating > 5.0 || (draft.rating * 2) % 1.0 != 0.0 ->
-            "評価を 0.5〜5.0 で入力してください"
-        draft.notes.length > 2000 -> "メモは 2000 文字以内で入力してください"
-        draft.brewRecipe.length > 500 -> "抽出レシピは 500 文字以内で入力してください"
-        else -> null
+    private fun validate(draft: CoffeeDraft): String? {
+        val rating = draft.rating
+        return when {
+            draft.name.isBlank() -> "コーヒー名を入力してください"
+            draft.name.length > 200 -> "コーヒー名は 200 文字以内で入力してください"
+            rating != null && (rating < 0.5 || rating > 5.0 || (rating * 2) % 1.0 != 0.0) ->
+                "評価を 0.5〜5.0 で入力してください"
+            draft.notes.length > 2000 -> "メモは 2000 文字以内で入力してください"
+            draft.brewRecipe.length > 500 -> "抽出レシピは 500 文字以内で入力してください"
+            else -> null
+        }
     }
 
     /**
@@ -787,7 +791,7 @@ class CoffeeEditorViewModel(
             cafeWebsiteUrl = "",
             cafeMapsUrl = "",
             visitedOn = Clock.System.todayIn(TimeZone.currentSystemDefault()),
-            rating = 0.0,
+            rating = null,
             notes = "",
             photos = emptyList(),
             name = DEFAULT_COFFEE_NAME,
@@ -838,7 +842,7 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
  * 引き継ぐ: cafe（表示用フィールドのみ。placeId / 座標 / photoReferences は `currentInitialRecord` 経由で
  * [CoffeeEditorViewModel.buildCafe] が引き継ぐ）/ name / brewMethod / origin / variety / processing /
  * roastLevel / cup / brewRecipe / tags。
- * 引き継がない: rating（0.0 = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
+ * 引き継がない: rating（null = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
  * `visitedOn` は今日にする（元記録の日付は使わない）。
  */
 private fun CoffeeRecord.toDuplicateDraft(): CoffeeEditorViewModel.CoffeeDraft =
@@ -848,7 +852,7 @@ private fun CoffeeRecord.toDuplicateDraft(): CoffeeEditorViewModel.CoffeeDraft =
         cafeWebsiteUrl = cafe?.websiteUrl ?: "",
         cafeMapsUrl = cafe?.mapsUrl ?: "",
         visitedOn = Clock.System.todayIn(TimeZone.currentSystemDefault()),
-        rating = 0.0,
+        rating = null,
         notes = "",
         photos = emptyList(),
         name = name,

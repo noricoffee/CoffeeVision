@@ -42,7 +42,7 @@ class BuildCoffeeStatsUseCaseTest {
 
     private fun record(
         id: String,
-        rating: Double = 3.0,
+        rating: Double? = 3.0,
         visitedOn: LocalDate = LocalDate(2026, 6, 1),
         brewMethod: BrewMethod = BrewMethod.HandDrip,
         origin: String? = null,
@@ -115,12 +115,12 @@ class BuildCoffeeStatsUseCaseTest {
         assertEquals(4.5, stats.averageRating)
     }
 
-    // --- 未評価（rating 0.0）の除外 ---
+    // --- 未評価（rating null）の除外 ---
 
     @Test
     fun unratedRecord_isExcludedFromAverageAndRatedCount() {
         val records = listOf(
-            record("r1", rating = 0.0),
+            record("r1", rating = null),
             record("r2", rating = 4.0),
             record("r3", rating = 3.0),
         )
@@ -136,8 +136,8 @@ class BuildCoffeeStatsUseCaseTest {
     @Test
     fun allUnrated_averageRatingIsNull() {
         val records = listOf(
-            record("r1", rating = 0.0),
-            record("r2", rating = 0.0),
+            record("r1", rating = null),
+            record("r2", rating = null),
         )
 
         val stats = useCase(records)
@@ -150,7 +150,7 @@ class BuildCoffeeStatsUseCaseTest {
     @Test
     fun unratedRecord_notIncludedInRatingHistogram() {
         val records = listOf(
-            record("r1", rating = 0.0),  // 未評価: ヒストグラムに入らない
+            record("r1", rating = null),  // 未評価: ヒストグラムに入らない
             record("r2", rating = 4.0),
             record("r3", rating = 4.0),
             record("r4", rating = 5.0),
@@ -207,7 +207,7 @@ class BuildCoffeeStatsUseCaseTest {
             record("r1", brewMethod = BrewMethod.HandDrip, rating = 4.0),
             record("r2", brewMethod = BrewMethod.HandDrip, rating = 3.0),
             record("r3", brewMethod = BrewMethod.Espresso, rating = 5.0),
-            record("r4", brewMethod = BrewMethod.HandDrip, rating = 0.0), // 未評価
+            record("r4", brewMethod = BrewMethod.HandDrip, rating = null), // 未評価
         )
 
         val stats = useCase(records)
@@ -215,7 +215,7 @@ class BuildCoffeeStatsUseCaseTest {
         // HandDrip が 3 件で 1 位
         assertEquals("HandDrip", stats.byBrewMethod[0].label)
         assertEquals(3, stats.byBrewMethod[0].count)
-        // HandDrip の平均 = (4 + 3) / 2 = 3.5（未評価 0.0 除外）
+        // HandDrip の平均 = (4 + 3) / 2 = 3.5（未評価 null 除外）
         assertEquals(3.5, stats.byBrewMethod[0].averageRating)
 
         assertEquals("Espresso", stats.byBrewMethod[1].label)
@@ -226,7 +226,7 @@ class BuildCoffeeStatsUseCaseTest {
     @Test
     fun byBrewMethod_averageRatingIsNullWhenAllUnrated() {
         val records = listOf(
-            record("r1", brewMethod = BrewMethod.AeroPress, rating = 0.0),
+            record("r1", brewMethod = BrewMethod.AeroPress, rating = null),
         )
 
         val stats = useCase(records)
@@ -295,7 +295,7 @@ class BuildCoffeeStatsUseCaseTest {
     fun byProcessing_averageAndCountAreCorrect() {
         val records = listOf(
             record("r1", processing = ProcessingMethod.Natural, rating = 4.0),
-            record("r2", processing = ProcessingMethod.Natural, rating = 0.0), // 未評価
+            record("r2", processing = ProcessingMethod.Natural, rating = null), // 未評価
             record("r3", processing = ProcessingMethod.Natural, rating = 5.0),
         )
 
@@ -303,7 +303,7 @@ class BuildCoffeeStatsUseCaseTest {
 
         val natural = stats.byProcessing.first { it.label == "Natural" }
         assertEquals(3, natural.count)
-        // (4.0 + 5.0) / 2 = 4.5（未評価 0.0 除外）
+        // (4.0 + 5.0) / 2 = 4.5（未評価 null 除外）
         assertEquals(4.5, natural.averageRating)
     }
 
@@ -405,7 +405,7 @@ class BuildCoffeeStatsUseCaseTest {
         val records = listOf(
             record("r1", visitedOn = LocalDate(2026, 6, 1), rating = 4.0),
             record("r2", visitedOn = LocalDate(2026, 6, 15), rating = 3.0),
-            record("r3", visitedOn = LocalDate(2026, 6, 30), rating = 0.0), // 未評価
+            record("r3", visitedOn = LocalDate(2026, 6, 30), rating = null), // 未評価
         )
 
         val stats = useCase(records)
@@ -414,7 +414,7 @@ class BuildCoffeeStatsUseCaseTest {
         val june = stats.monthlyTrend.first()
         assertEquals("2026-06", june.yearMonth)
         assertEquals(3, june.count)
-        // (4.0 + 3.0) / 2 = 3.5（未評価 0.0 除外）
+        // (4.0 + 3.0) / 2 = 3.5（未評価 null 除外）
         assertEquals(3.5, june.averageRating)
     }
 
@@ -566,8 +566,8 @@ class BuildCoffeeStatsUseCaseTest {
     fun favoriteSignals_allRatedZero_returnsAllNull() {
         // 評価済み 0 件 → globalMean 算出不可 → 3 つとも null
         val records = listOf(
-            record("r1", rating = 0.0, brewMethod = BrewMethod.HandDrip),
-            record("r2", rating = 0.0, brewMethod = BrewMethod.HandDrip),
+            record("r1", rating = null, brewMethod = BrewMethod.HandDrip),
+            record("r2", rating = null, brewMethod = BrewMethod.HandDrip),
         )
 
         val stats = useCase(records)
@@ -873,7 +873,7 @@ class BuildCoffeeStatsUseCaseTest {
 
     @Test
     fun favoriteSignals_dominantTastingAxis_unratedRecords_excludedFromSample() {
-        // rating = 0.0（未評価）は母数から除外 → sampleSize に反映される
+        // rating = null（未評価）は母数から除外 → sampleSize に反映される
         val t = TastingScores(8, 5, 7, 9, 8)
         val records = listOf(
             record("r1", rating = 5.0, tasting = t),
@@ -881,12 +881,12 @@ class BuildCoffeeStatsUseCaseTest {
             record("r3", rating = 3.0, tasting = TastingScores(3, 5, 3, 3, 3)),
             record("r4", rating = 3.0, tasting = TastingScores(3, 5, 3, 3, 3)),
             record("r5", rating = 3.0, tasting = TastingScores(3, 5, 3, 3, 3)),
-            record("r6", rating = 0.0, tasting = t), // 未評価: 除外
+            record("r6", rating = null, tasting = t), // 未評価: 除外
         )
 
         val stats = useCase(records)
 
-        // sampleSize は 5（未評価 0.0 は除外）
+        // sampleSize は 5（未評価 null は除外）
         val axis = stats.favoriteSignals.dominantTastingAxis
         if (axis != null) {
             assertEquals(5, axis.sampleSize)
@@ -898,9 +898,9 @@ class BuildCoffeeStatsUseCaseTest {
     @Test
     fun mixedRecords_totalCountIncludesAllRecords() {
         val records = listOf(
-            record("r1", rating = 0.0),  // 未評価
+            record("r1", rating = null),  // 未評価
             record("r2", rating = 4.0),
-            record("r3", rating = 0.0),  // 未評価
+            record("r3", rating = null),  // 未評価
         )
 
         val stats = useCase(records)

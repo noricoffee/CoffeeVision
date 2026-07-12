@@ -22,7 +22,7 @@ import kotlin.math.sqrt
  * [ObserveCoffeeStatsUseCase] から呼ばれることを主目的とするが、単体でテストできる設計。
  *
  * ## 集計ルール
- * - **平均評価**: `rating == 0.0`（未評価 sentinel）は常に母数から除外。対象が 0 件なら `null`
+ * - **平均評価**: `rating == null`（未評価）は常に母数から除外。対象が 0 件なら `null`
  * - **`ratingHistogram`**: 0.5 刻みの存在するバケットのみ、rating 昇順
  * - **`byBrewMethod` / `byRoastLevel` / `byProcessing`**: label = enum.name、件数降順
  * - **`byProcessing` / `byRoastLevel`**: nullable。null の record は当該軸の集計から除外
@@ -62,7 +62,7 @@ class BuildCoffeeStatsUseCase {
         /**
          * [FavoriteSignals.dominantTastingAxis] を算出するためのピアソン相関の最低母数。
          *
-         * `tasting != null` かつ `rating > 0.0` のレコードがこの件数未満なら `dominantTastingAxis` は null。
+         * `tasting != null` かつ `rating != null` のレコードがこの件数未満なら `dominantTastingAxis` は null。
          */
         const val CORRELATION_MIN_SAMPLE = 5
 
@@ -128,7 +128,7 @@ class BuildCoffeeStatsUseCase {
         records: List<CoffeeRecord>,
         beanProfiles: List<BeanProfile> = emptyList(),
     ): CoffeeStats {
-        val ratedRecords = records.filter { it.rating > 0.0 }
+        val ratedRecords = records.filter { it.rating != null }
         val favoriteSignals = buildFavoriteSignals(records)
 
         val preferredBeanTraits = if (beanProfiles.isNotEmpty()) {
@@ -146,7 +146,7 @@ class BuildCoffeeStatsUseCase {
         return CoffeeStats(
             totalCount = records.size,
             ratedCount = ratedRecords.size,
-            averageRating = computeAverage(ratedRecords.map { it.rating }),
+            averageRating = computeAverage(ratedRecords.mapNotNull { it.rating }),
             ratingHistogram = buildRatingHistogram(records),
             byBrewMethod = buildBrewMethodStats(records),
             byRoastLevel = buildRoastLevelStats(records),
@@ -175,12 +175,12 @@ class BuildCoffeeStatsUseCase {
 
     /**
      * 0.5 刻みの評価ヒストグラムを構築する。
-     * rating == 0.0（未評価）は除外し、存在する刻みのみ昇順で返す。
+     * rating == null（未評価）は除外し、存在する刻みのみ昇順で返す。
      */
     private fun buildRatingHistogram(records: List<CoffeeRecord>): List<RatingBucket> {
         return records
-            .filter { it.rating > 0.0 }
-            .groupBy { it.rating }
+            .mapNotNull { it.rating }
+            .groupBy { it }
             .map { (rating, group) -> RatingBucket(rating = rating, count = group.size) }
             .sortedBy { it.rating }
     }
@@ -195,7 +195,7 @@ class BuildCoffeeStatsUseCase {
                 CategoryStat(
                     label = label,
                     count = group.size,
-                    averageRating = computeAverage(group.filter { it.rating > 0.0 }.map { it.rating }),
+                    averageRating = computeAverage(group.mapNotNull { it.rating }),
                 )
             }
             .sortedByDescending { it.count }
@@ -213,7 +213,7 @@ class BuildCoffeeStatsUseCase {
                 CategoryStat(
                     label = label,
                     count = group.size,
-                    averageRating = computeAverage(group.filter { it.rating > 0.0 }.map { it.rating }),
+                    averageRating = computeAverage(group.mapNotNull { it.rating }),
                 )
             }
             .sortedByDescending { it.count }
@@ -231,7 +231,7 @@ class BuildCoffeeStatsUseCase {
                 CategoryStat(
                     label = label,
                     count = group.size,
-                    averageRating = computeAverage(group.filter { it.rating > 0.0 }.map { it.rating }),
+                    averageRating = computeAverage(group.mapNotNull { it.rating }),
                 )
             }
             .sortedByDescending { it.count }
@@ -254,7 +254,7 @@ class BuildCoffeeStatsUseCase {
                 CategoryStat(
                     label = displayLabel,
                     count = group.size,
-                    averageRating = computeAverage(group.filter { it.rating > 0.0 }.map { it.rating }),
+                    averageRating = computeAverage(group.mapNotNull { it.rating }),
                 )
             }
             .sortedByDescending { it.count }
@@ -277,7 +277,7 @@ class BuildCoffeeStatsUseCase {
                 MonthlyStat(
                     yearMonth = yearMonth,
                     count = group.size,
-                    averageRating = computeAverage(group.filter { it.rating > 0.0 }.map { it.rating }),
+                    averageRating = computeAverage(group.mapNotNull { it.rating }),
                 )
             }
             .sortedBy { it.yearMonth }
@@ -300,7 +300,7 @@ class BuildCoffeeStatsUseCase {
                     placeId = placeId,
                     name = latestRecord.cafe!!.name,
                     count = group.size,
-                    averageRating = computeAverage(group.filter { it.rating > 0.0 }.map { it.rating }),
+                    averageRating = computeAverage(group.mapNotNull { it.rating }),
                 )
             }
             .sortedByDescending { it.count }
@@ -316,13 +316,13 @@ class BuildCoffeeStatsUseCase {
      */
     private fun buildRecentHighlights(records: List<CoffeeRecord>): List<RecordDigest> {
         return records
-            .filter { it.rating >= HIGHLIGHTS_MIN_RATING }
+            .filter { it.rating != null && it.rating >= HIGHLIGHTS_MIN_RATING }
             .sortedByDescending { it.visitedOn }
             .take(RECENT_HIGHLIGHTS_LIMIT)
             .map { record ->
                 RecordDigest(
                     name = record.name,
-                    rating = record.rating,
+                    rating = record.rating!!, // 直前の filter で rating != null 保証済み
                     cafeName = record.cafe?.name,
                     visitedOn = record.visitedOn,
                 )
@@ -365,7 +365,7 @@ class BuildCoffeeStatsUseCase {
      *
      * ## カテゴリ好み（bestBrewMethod / bestOrigin / bestRoastLevel）
      *
-     * 1. 評価済み（rating > 0.0）レコードの全体平均 globalMean と
+     * 1. 評価済み（rating != null）レコードの全体平均 globalMean と
      *    全体母標準偏差 globalStd（`sqrt(Σ(r-globalMean)²/N)`）を算出。
      *    0 件なら 3 つとも null。
      * 2. 各軸で `count >= minSampleSize` かつ平均評価ありの候補を列挙。
@@ -379,7 +379,7 @@ class BuildCoffeeStatsUseCase {
      *
      * ## 好みの軸（dominantTastingAxis）
      *
-     * 1. `tasting != null` かつ `rating > 0.0` のレコードが [CORRELATION_MIN_SAMPLE] 未満なら null。
+     * 1. `tasting != null` かつ `rating != null` のレコードが [CORRELATION_MIN_SAMPLE] 未満なら null。
      * 2. 5 軸それぞれと rating のピアソン相関 r（符号付き）を計算。分散 0 の軸はスキップ。
      * 3. |r| 最大の軸を採用。
      *    実効下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))` 未満なら null
@@ -389,17 +389,17 @@ class BuildCoffeeStatsUseCase {
         val signals = FavoriteSignals()
         val minSample = signals.minSampleSize
 
-        val ratedRecords = records.filter { it.rating > 0.0 }
-        val globalMean = computeAverage(ratedRecords.map { it.rating })
+        val ratedRecords = records.filter { it.rating != null }
+        val globalMean = computeAverage(ratedRecords.mapNotNull { it.rating })
             ?: return FavoriteSignals() // 評価済み 0 件 → 全フィールド null のデフォルト
 
         // 全評価済み rating の母標準偏差（B-1d z ゲート用）
-        val globalStd = computeGlobalStd(ratedRecords.map { it.rating }, globalMean)
+        val globalStd = computeGlobalStd(ratedRecords.mapNotNull { it.rating }, globalMean)
 
         return FavoriteSignals(
             bestBrewMethod = selectBestCategory(
                 candidateGroups = ratedRecords.groupBy { it.brewMethod.name },
-                ratingExtractor = { it.rating },
+                ratingExtractor = { it.rating!! }, // ratedRecords は rating != null フィルタ済み
                 globalMean = globalMean,
                 globalStd = globalStd,
                 minSampleSize = minSample,
@@ -409,7 +409,7 @@ class BuildCoffeeStatsUseCase {
                 candidateGroups = ratedRecords
                     .filter { it.roastLevel != null }
                     .groupBy { it.roastLevel!!.name },
-                ratingExtractor = { it.rating },
+                ratingExtractor = { it.rating!! }, // ratedRecords は rating != null フィルタ済み
                 globalMean = globalMean,
                 globalStd = globalStd,
                 minSampleSize = minSample,
@@ -521,7 +521,7 @@ class BuildCoffeeStatsUseCase {
      * 表示ラベルはグループ内最初に出現した元表記の `trim()` のみ）を適用してから
      * [selectBestCategory] と同じ選定ロジック（収縮 + z ゲート + δ AND）を適用する。
      *
-     * @param ratedRecords 評価済み（rating > 0.0）レコード
+     * @param ratedRecords 評価済み（rating != null）レコード
      * @param globalMean 全評価済みレコードの平均評価
      * @param globalStd 全評価済みレコードの母標準偏差（[computeGlobalStd] で算出）
      * @param minSampleSize 件数ガードのしきい値
@@ -550,7 +550,7 @@ class BuildCoffeeStatsUseCase {
         for ((_, group) in normalizedGroups) {
             if (group.size < minSampleSize) continue
             val displayLabel = group.first().origin!!.trim()
-            val ratings = group.map { it.rating }
+            val ratings = group.mapNotNull { it.rating } // group は ratedRecords 由来のため rating != null 保証済み
             val mean = computeAverage(ratings) ?: continue
             val shrunkMean = (group.size * mean + k * globalMean) / (group.size + k)
             labels.add(displayLabel)
@@ -597,7 +597,7 @@ class BuildCoffeeStatsUseCase {
     /**
      * テイスティング軸と評価のピアソン相関から [TastingAxisCorrelation] を算出する。
      *
-     * 母数（tasting != null かつ rating > 0.0 の件数）が [CORRELATION_MIN_SAMPLE] 未満なら null。
+     * 母数（tasting != null かつ rating != null の件数）が [CORRELATION_MIN_SAMPLE] 未満なら null。
      * 分散 0 の軸はスキップ。|r| < effectiveFloor なら null。
      *
      * **実効下限（effectiveFloor）**:
@@ -614,7 +614,7 @@ class BuildCoffeeStatsUseCase {
         // サンプル数連動の |r| 下限: max(絶対下限, c / sqrt(n))
         val effectiveFloor = maxOf(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(sampleSize.toDouble()))
 
-        val ratings = sampleRecords.map { it.rating }
+        val ratings = sampleRecords.mapNotNull { it.rating } // sampleRecords は ratedRecords 由来のため rating != null 保証済み
 
         data class AxisResult(val axis: TastingAxis, val r: Double)
 

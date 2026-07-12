@@ -27,7 +27,7 @@ import kotlinx.datetime.todayIn
  * - 抽出方法: [BrewMethod] 全 8 enum を分散
  * - 焙煎度: [RoastLevel] 全 8 enum + null 数件
  * - 精製方法: [ProcessingMethod] 全 5 enum + null 数件
- * - 評価: 3.0〜5.0 中心（0.5 刻み）+ 0.0（未評価）を 2 件混入
+ * - 評価: 3.0〜5.0 中心（0.5 刻み）+ null（未評価）を 2 件混入
  * - 日付: 今日から逆算して直近 12 ヶ月に分散
  * - カフェ: 約 2/3 に固定ダミーカフェ（5 件）を割り当て / 約 1/3 は cafe = null（セルフ抽出）
  */
@@ -125,7 +125,7 @@ object DummyCoffeeData {
     private data class RawData(
         val name: String,
         val cafe: Cafe?,
-        val rating: Double,
+        val rating: Double?,
         val notes: String,
         val brewMethod: BrewMethod,
         val origin: String?,
@@ -304,11 +304,11 @@ object DummyCoffeeData {
             cup = null,
             tasting = TastingScores(sweetness = 6, body = 5, acidity = 9, flavor = 8, aftertaste = 7),
         ),
-        // 013: Ethiopia / Espresso / Medium / cafe1 — 未評価（sentinel 0.0）、tasting 未設定
+        // 013: Ethiopia / Espresso / Medium / cafe1 — 未評価（null）、tasting 未設定
         RawData(
             name = "エチオピア シダマ ナチュラル",
             cafe = cafe1,
-            rating = 0.0,
+            rating = null,
             notes = "まだメモが書けていない。いつか振り返ろう。",
             brewMethod = BrewMethod.Espresso,
             origin = "Ethiopia",
@@ -454,11 +454,11 @@ object DummyCoffeeData {
             roastLevel = RoastLevel.FullCity,
             cup = null,
         ),
-        // 024: Colombia / HandDrip / Medium / null(cafe=セルフ) — 未評価（sentinel 0.0）、tasting 未設定
+        // 024: Colombia / HandDrip / Medium / null(cafe=セルフ) — 未評価（null）、tasting 未設定
         RawData(
             name = "コロンビア ナリーニョ スプレモ",
             cafe = null,
-            rating = 0.0,
+            rating = null,
             notes = "サンプルとして購入。評価は後日。",
             brewMethod = BrewMethod.HandDrip,
             origin = "Colombia",

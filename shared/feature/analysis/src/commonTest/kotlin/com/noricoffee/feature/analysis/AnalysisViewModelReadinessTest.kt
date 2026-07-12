@@ -52,7 +52,7 @@ class AnalysisViewModelReadinessTest {
 
     private fun record(
         id: String,
-        rating: Double = 4.0,
+        rating: Double? = 4.0,
         brewMethod: BrewMethod = BrewMethod.HandDrip,
         tasting: TastingScores? = null,
     ) = CoffeeRecord(
@@ -136,7 +136,7 @@ class AnalysisViewModelReadinessTest {
         val records = listOf(
             record("r-1", rating = 4.0),
             record("r-2", rating = 3.5),
-            record("r-3", rating = 0.0), // 未評価 sentinel。ratedCount には数えない
+            record("r-3", rating = null), // 未評価。ratedCount には数えない
         )
         val vm = makeViewModel(records, this)
         try {

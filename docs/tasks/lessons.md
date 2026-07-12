@@ -610,3 +610,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 名寄せ辞書・エイリアス変換を既存マッチングパイプラインに差し込むときは、**contains / startsWith 等の部分一致を使う箇所とその既存テストを必ず洗い出して実行**する。fail した既存テストは「壊れた」ではなく「新仕様との境界が露出した」なので、直す前に実データでの発生可能性から仕様判断する
 - **発生源**: OriginNormalizer 導入（2026-07-08、kmp-engineer が検出し親が仕様判断）。経緯詳細は implementation_note 2026-07-08 OriginNormalizer エントリ
 - **横展開点検（2026-07-08）**: ① `grep -rn "OriginNormalizer.normalize" shared`（非テスト）→ 全使用箇所（5 UseCase 7 呼び出し）とも比較の**両辺**に normalize 適用済みで、片側だけ正規化して contains する混在なし。② `grep -rn "\.contains(" shared/domain/.../usecase/ + CoffeeRecordQuery.kt` → contains 使用は BeanProfileMatch / PreferredBeanTraits（両辺正規化済み）と CoffeeRecordQuery（正規化対象外の生 ignoreCase、混在なし）のみ。③ 辞書語を複合語で使う残存テスト grep（Yirgacheffe / イルガチェフェ / キリマンジャロ等）→ CoffeeRecordQueryImplTest の「エチオピア イルガチェフェ」（対象外機能のため影響なし）と意図的な新テストのみ。**該当なし**
+
+## 2026-07-13
+
+### SQLDelight `Schema.migrate(driver, oldVersion, newVersion)` の `oldVersion` は「これから適用する最初の .sqm 番号」（適用済みの N.sqm を飛ばすには N+1 を渡す）
+
+- **症状**: migration 5 のテストで、v4 相当のスキーマを手組みした DB に `Schema.migrate(driver, 4L, 6L)` 相当を呼ぶと、適用済みのはずの `4.sqm` が再実行されて `duplicate column name: brew_recipe` で fail する
+- **原因の構造**: SQLDelight は `oldVersion <= N < newVersion` の範囲の `N.sqm` を実行する（`N.sqm` 適用後のスキーマバージョンは N+1、という規約）。「DB は 4.sqm まで適用済み = バージョン 4」と直感で読み替えると 1 つズレる。`4.sqm` まで適用済みの DB は**バージョン 5**であり、`5.sqm` だけを当てるには `migrate(driver, 5L, 6L)` を渡す
+- **修正パターン**: migration テストでは「N.sqm だけを適用する」意図を `migrate(driver, N, N+1)` で表現し、テスト冒頭コメントにこのセマンティクスを明記する（`CoffeeRecordMigration5Test.kt` / `CoffeeRecordMigration5IosTest.kt` が実例）。中間バージョンのスキーマは head の `.sq` からは再現できないため、生 DDL で手組みする
+- **教訓**: バージョン番号が「状態」なのか「次に適用する差分」なのかを API ごとに確認する。off-by-one で赤くなる場合、テストの手組みスキーマではなくバージョン引数のセマンティクスを先に疑う
+- **発生源**: B-4 rating nullable 化の migration 5 テスト実装（2026-07-12、kmp-engineer）。詳細な API 裏取り手順はエージェントメモリ `sqldelight_migration_version_semantics.md`
+- **横展開点検（2026-07-13）**: `grep -rn "\.migrate(" --include="*.kt" shared androidApp`（build 除外）→ 呼び出しは migration テスト 2 箇所（androidHostTest / iosTest）のみで、いずれも `migrate(driver, 5L, 6L)` と正しく、セマンティクス解説コメント付き。本番経路はドライバ構築時の自動 migration（`user_version` 管理）で手動呼び出しなし。**該当なし**

@@ -125,7 +125,7 @@ struct CoffeeDetailView: View {
                 }
 
                 LabeledContent(String(localized: "評価")) {
-                    StarRatingView(rating: coffee.rating)
+                    StarRatingView(rating: coffee.rating?.doubleValue)
                 }
             }
 

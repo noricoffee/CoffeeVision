@@ -183,14 +183,19 @@ struct CoffeeRow: View {
     }
 
     private var starRating: some View {
-        StarRatingView(rating: coffee.rating, size: .caption2)
+        StarRatingView(rating: coffee.rating?.doubleValue, size: .caption2)
     }
 
     private var accessibilityDescription: String {
         let cafeName = coffee.cafe?.name ?? String(localized: "セルフ抽出")
-        let ratingStr = coffee.rating.truncatingRemainder(dividingBy: 1) == 0
-            ? "\(Int(coffee.rating))星"
-            : "\(coffee.rating)星"
+        let ratingStr: String
+        if let rating = coffee.rating?.doubleValue {
+            ratingStr = rating.truncatingRemainder(dividingBy: 1) == 0
+                ? "\(Int(rating))星"
+                : "\(rating)星"
+        } else {
+            ratingStr = String(localized: "未評価")
+        }
         return "\(cafeName), \(coffee.name), \(formattedDate), \(ratingStr)"
     }
 }

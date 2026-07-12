@@ -16,8 +16,8 @@ import kotlinx.datetime.LocalDate
  */
 data class CoffeeStats(
     val totalCount: Int,                       // 全記録件数
-    val ratedCount: Int,                       // rating >= 0.5 の件数
-    val averageRating: Double?,                // 未評価(0.0)除外の平均。全未評価なら null
+    val ratedCount: Int,                       // rating != null の件数
+    val averageRating: Double?,                // 未評価(null)除外の平均。全未評価なら null
     val ratingHistogram: List<RatingBucket>,   // 0.5 刻みの度数（存在する刻みのみ、昇順）
     val byBrewMethod: List<CategoryStat>,      // 抽出方法別（label = enum.name）
     val byRoastLevel: List<CategoryStat>,      // 焙煎度別
@@ -35,7 +35,7 @@ data class CoffeeStats(
 /**
  * 0.5 刻みの評価 1 バケットの度数。
  *
- * [rating] は 0.5..5.0 の値（0.5 刻み）。0.0（未評価）は含まない。
+ * [rating] は 0.5..5.0 の値（0.5 刻み）。未評価（null）のレコードは含まない。
  */
 data class RatingBucket(val rating: Double, val count: Int)
 
@@ -44,7 +44,7 @@ data class RatingBucket(val rating: Double, val count: Int)
  *
  * @param label enum.name または正規化済み産地文字列
  * @param count このカテゴリに属するレコード件数
- * @param averageRating このカテゴリ内の平均評価（未評価(0.0)除外、全未評価なら null）
+ * @param averageRating このカテゴリ内の平均評価（未評価(null)除外、全未評価なら null）
  */
 data class CategoryStat(
     val label: String,
@@ -57,7 +57,7 @@ data class CategoryStat(
  *
  * @param yearMonth "YYYY-MM" 形式
  * @param count その月の記録件数
- * @param averageRating その月の平均評価（未評価(0.0)除外、全未評価なら null）
+ * @param averageRating その月の平均評価（未評価(null)除外、全未評価なら null）
  */
 data class MonthlyStat(
     val yearMonth: String,
@@ -73,7 +73,7 @@ data class MonthlyStat(
  * @param placeId Google Places の place_id
  * @param name 最新記録時のカフェ名スナップショット
  * @param count このカフェでのコーヒー記録件数
- * @param averageRating このカフェでの平均評価（未評価(0.0)除外、全未評価なら null）
+ * @param averageRating このカフェでの平均評価（未評価(null)除外、全未評価なら null）
  */
 data class CafeStat(
     val placeId: String,
@@ -89,7 +89,7 @@ data class CafeStat(
  * 階層3（Foundation Models）が具体名に言及できるよう高評価かつ直近のレコードを少数含める。
  *
  * @param name コーヒー名
- * @param rating 評価値（0.5..5.0。0.0 = 未評価は通常含まないが防御的に許容）
+ * @param rating 評価値（0.5..5.0。recentHighlights は高評価済みレコードのみ対象のため常に非 null）
  * @param cafeName カフェ名（セルフ抽出は null）
  * @param visitedOn 飲んだ日
  */
@@ -117,7 +117,7 @@ enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
  * @param axis 相関が最大だった軸
  * @param correlation ピアソン相関係数 r（-1.0..1.0、符号付き）。
  *   r > 0 ＝「その軸が高いほど高評価」、r < 0 ＝「低いほど高評価」
- * @param sampleSize 相関の母数（tasting != null かつ rating > 0.0 の件数）
+ * @param sampleSize 相関の母数（tasting != null かつ rating != null の件数）
  */
 data class TastingAxisCorrelation(
     val axis: TastingAxis,

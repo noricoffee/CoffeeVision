@@ -19,6 +19,8 @@ import kotlinx.datetime.LocalDate
  * photos は `CoffeeRecord` ドキュメントに埋め込み配列として保存する。
  *
  * ## フィールド規則
+ * - `rating`（2026-07-12 B-4 で nullable 化）: null（未評価）なら他の nullable フィールドと同じくキーごと省略。
+ *   decode 時はキー欠如 / null / `0.0`（nullable 化以前の legacy sentinel）をすべて null に正規化する
  * - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup / brewRecipe）は null ならキーごと省略
  * - cafe が null（セルフ抽出）の場合は `cafe` キーごと省略
  * - photos は埋め込み配列。`localPath` / `remoteUrl` は端末固有値または未使用のため Firestore に書かない
@@ -44,7 +46,6 @@ object CoffeeFirestoreMapper {
             "id" to record.id,
             "userId" to record.userId,
             "visitedOn" to record.visitedOn.toString(),
-            "rating" to record.rating,
             "notes" to record.notes,
             "name" to record.name,
             "brewMethod" to record.brewMethod.name,
@@ -62,6 +63,9 @@ object CoffeeFirestoreMapper {
 
         // cafe が非 null のときのみキーを追加（null = セルフ抽出、キーごと省略）
         record.cafe?.let { doc["cafe"] = cafeToMap(it) }
+
+        // rating（未評価 = null）は null ならキーごと省略
+        record.rating?.let { doc["rating"] = it }
 
         // nullable コーヒー属性は null ならキーごと省略
         record.origin?.let { doc["origin"] = it }
@@ -146,7 +150,8 @@ object CoffeeFirestoreMapper {
         val userId = data["userId"] as? String ?: return null
         val visitedOnStr = data["visitedOn"] as? String ?: return null
         val visitedOn = parseLocalDate(visitedOnStr) ?: return null
-        val rating = (data["rating"] as? Number)?.toDouble() ?: return null
+        // rating: キー欠如 / null / 0.0（nullable 化以前の legacy sentinel）はすべて null（未評価）に正規化
+        val rating = (data["rating"] as? Number)?.toDouble()?.takeIf { it != 0.0 }
         val notes = data["notes"] as? String ?: return null
         val name = data["name"] as? String ?: return null
         val brewMethodName = data["brewMethod"] as? String ?: return null

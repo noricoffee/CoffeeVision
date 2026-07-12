@@ -343,13 +343,22 @@ private struct CoffeeSummaryRow: View {
             Text(formattedDate)
                 .font(.caption)
                 .foregroundStyle(.secondary)
-            StarRatingView(rating: coffee.rating, size: .caption)
+            StarRatingView(rating: coffee.rating?.doubleValue, size: .caption)
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
         .accessibilityLabel(
-            String(localized: "\(coffee.name), \(formattedDate), \(coffee.rating.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(coffee.rating))" : "\(coffee.rating)")星")
+            String(localized: "\(coffee.name), \(formattedDate), \(ratingAccessibilityText)")
         )
+    }
+
+    private var ratingAccessibilityText: String {
+        guard let rating = coffee.rating?.doubleValue else {
+            return String(localized: "未評価")
+        }
+        return rating.truncatingRemainder(dividingBy: 1) == 0
+            ? "\(Int(rating))星"
+            : "\(rating)星"
     }
 
     private var formattedDate: String {

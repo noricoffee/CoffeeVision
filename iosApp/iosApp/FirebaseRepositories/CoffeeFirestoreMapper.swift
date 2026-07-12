@@ -53,7 +53,6 @@ enum CoffeeFirestoreMapper {
             "id": record.id,
             "userId": record.userId,
             "visitedOn": record.visitedOn.description(),
-            "rating": record.rating,
             "notes": record.notes,
             "name": record.name,
             "brewMethod": record.brewMethod.name,
@@ -62,6 +61,9 @@ enum CoffeeFirestoreMapper {
             "createdAt": Timestamp(date: createdAtDate),
             "updatedAt": Timestamp(date: updatedAtDate),
         ]
+
+        // rating: null（未評価）はキーごと省略（2026-07-12 B-4 nullable 化）
+        if let rating = record.rating { doc["rating"] = rating.doubleValue }
 
         // cafe は null 時キーごと省略
         if let cafe = record.cafe {
@@ -102,10 +104,11 @@ enum CoffeeFirestoreMapper {
             return nil
         }
 
-        // rating: Double として読む。旧形式（Int）との互換のため NSNumber 経由でも解釈する
-        let rating: Double = (data["rating"] as? Double)
+        // rating: キー欠如 / null / 0.0（nullable 化以前の legacy sentinel）はすべて未評価（nil）に正規化
+        // （2026-07-12 B-4。`docs/data-model.md` §3.2 rating 参照）
+        let ratingRaw: Double? = (data["rating"] as? Double)
             ?? (data["rating"] as? NSNumber)?.doubleValue
-            ?? 0.0
+        let rating: KotlinDouble? = ratingRaw.flatMap { $0 == 0.0 ? nil : KotlinDouble(value: $0) }
 
         // cafe は null 時 nil（セルフ抽出）
         let cafe: Cafe?

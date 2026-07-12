@@ -162,6 +162,19 @@ class LocalCoffeeRepositoryTest {
     }
 
     @Test
+    fun null_rating_round_trips_correctly() = runTest {
+        // rating = null（未評価）が SQLDelight の nullable REAL カラムで正確に往復することを確認する
+        // （2026-07-12 B-4: rating の NOT NULL 撤廃）
+        repository = LocalCoffeeRepository(db, coroutineContext)
+
+        val record = sampleRecord().copy(rating = null)
+        repository.save(record)
+
+        val loaded = repository.observeById(record.id).first()
+        assertNull(loaded?.rating, "rating = null のレコードは null として往復するべき")
+    }
+
+    @Test
     fun record_with_cafe_round_trips_correctly() = runTest {
         repository = LocalCoffeeRepository(db, coroutineContext)
 

@@ -6,11 +6,12 @@ import SwiftUI
 ///
 /// - `onChange` が `nil` のとき: read-only モード（タップ非反応）
 /// - `onChange` が非 `nil` のとき: 編集モード（星の左半分タップ → value - 0.5、右半分 → value）
-/// - 有効値: 0.0（未評価）〜 maxRating（0.5 刻み）
+/// - `rating` が `nil` のとき: 未評価（星は表示せず「未評価」ラベルを表示）
+/// - 有効値: `nil`（未評価）または 0.5...maxRating（0.5 刻み）
 struct StarRatingView: View {
 
-    /// 現在の評価値（0.0...maxRating、0.5 刻み）
-    let rating: Double
+    /// 現在の評価値（nil = 未評価 / 0.5...maxRating、0.5 刻み）
+    let rating: Double?
 
     /// 評価の上限。デフォルト 5
     var maxRating: Int = 5
@@ -19,8 +20,8 @@ struct StarRatingView: View {
     var size: Font = .body
 
     /// タップ・VoiceOver 操作で評価が変わった時のハンドラ。
-    /// nil なら read-only モード（タップ非反応）
-    var onChange: ((Double) -> Void)? = nil
+    /// nil なら read-only モード（タップ非反応）。呼び出し時の引数 `nil` は「未評価に戻す」を表す
+    var onChange: ((Double?) -> Void)? = nil
 
     var body: some View {
         if onChange != nil {
@@ -34,6 +35,7 @@ struct StarRatingView: View {
 
     /// value（1...maxRating）に対して、現在の rating に応じた SF Symbol 名を返す。
     private func starSymbol(for value: Int) -> String {
+        guard let rating else { return "star" }
         if rating >= Double(value) {
             return "star.fill"
         } else if rating >= Double(value) - 0.5 {
@@ -45,54 +47,80 @@ struct StarRatingView: View {
 
     // MARK: - Read-only
 
+    @ViewBuilder
     private var readOnlyStars: some View {
-        HStack(spacing: 2) {
-            ForEach(1...maxRating, id: \.self) { value in
-                Image(systemName: starSymbol(for: value))
-                    .font(size)
-                    .foregroundStyle(.yellow)
-                    .accessibilityHidden(true)
+        if rating != nil {
+            HStack(spacing: 2) {
+                ForEach(1...maxRating, id: \.self) { value in
+                    Image(systemName: starSymbol(for: value))
+                        .font(size)
+                        .foregroundStyle(.yellow)
+                        .accessibilityHidden(true)
+                }
             }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(localized: "評価"))
+            .accessibilityValue(accessibilityValueString)
+        } else {
+            Text(String(localized: "未評価"))
+                .font(size)
+                .foregroundStyle(.secondary)
+                .accessibilityLabel(String(localized: "評価"))
+                .accessibilityValue(String(localized: "未評価"))
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "評価"))
-        .accessibilityValue(accessibilityValueString)
     }
 
     // MARK: - 編集モード
 
     private var editableStars: some View {
-        HStack(spacing: 2) {
-            ForEach(1...maxRating, id: \.self) { value in
-                // 各星を左右 2 分割した透明タップ領域で 0.5 / 1.0 を判定する
-                StarTapCell(
-                    symbol: starSymbol(for: value),
-                    font: size,
-                    onTapHalf: { onChange?(Double(value) - 0.5) },
-                    onTapFull: { onChange?(Double(value)) }
-                )
+        HStack(spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(1...maxRating, id: \.self) { value in
+                    // 各星を左右 2 分割した透明タップ領域で 0.5 / 1.0 を判定する
+                    StarTapCell(
+                        symbol: starSymbol(for: value),
+                        font: size,
+                        onTapHalf: { onChange?(Double(value) - 0.5) },
+                        onTapFull: { onChange?(Double(value)) }
+                    )
+                }
+            }
+            .accessibilityElement(children: .ignore)
+            .accessibilityLabel(String(localized: "評価"))
+            .accessibilityValue(accessibilityValueString)
+            .accessibilityAdjustableAction { direction in
+                switch direction {
+                case .increment:
+                    onChange?(min((rating ?? 0.0) + 0.5, Double(maxRating)))
+                case .decrement:
+                    let next = (rating ?? 0.5) - 0.5
+                    onChange?(next <= 0.0 ? nil : next)
+                @unknown default:
+                    break
+                }
+            }
+            .sensoryFeedback(.selection, trigger: rating)
+
+            if rating != nil {
+                Button {
+                    onChange?(nil)
+                } label: {
+                    Image(systemName: "xmark.circle.fill")
+                        .font(size)
+                        .foregroundStyle(.secondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .accessibilityLabel(String(localized: "評価を未評価に戻す"))
             }
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel(String(localized: "評価"))
-        .accessibilityValue(accessibilityValueString)
-        .accessibilityAdjustableAction { direction in
-            switch direction {
-            case .increment:
-                onChange?(min(rating + 0.5, Double(maxRating)))
-            case .decrement:
-                onChange?(max(rating - 0.5, 0.0))
-            @unknown default:
-                break
-            }
-        }
-        .sensoryFeedback(.selection, trigger: rating)
     }
 
     // MARK: - アクセシビリティ
 
-    /// 整数なら「4星」、0.5 刻みなら「3.5星」と読む
+    /// 未評価なら「未評価」、整数なら「4星」、0.5 刻みなら「3.5星」と読む
     private var accessibilityValueString: String {
+        guard let rating else { return String(localized: "未評価") }
         if rating.truncatingRemainder(dividingBy: 1) == 0 {
             return String(localized: "\(Int(rating))星")
         } else {
@@ -143,17 +171,18 @@ private struct StarTapCell: View {
 
 // MARK: - Preview
 
-#Preview("Read-only（0〜5, 0.5 刻み）") {
+#Preview("Read-only（未評価 + 0〜5, 0.5 刻み）") {
     VStack(alignment: .leading, spacing: 12) {
-        ForEach([0.0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0], id: \.self) { value in
+        ForEach([nil, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0, 3.5, 4.0, 4.5, 5.0] as [Double?], id: \.self) { value in
             HStack(spacing: 8) {
-                Text(value.truncatingRemainder(dividingBy: 1) == 0
-                     ? "\(Int(value))星"
-                     : "\(value)星"
+                Text(
+                    value == nil
+                        ? "未評価"
+                        : (value!.truncatingRemainder(dividingBy: 1) == 0 ? "\(Int(value!))星" : "\(value!)星")
                 )
                 .font(.caption)
                 .foregroundStyle(.secondary)
-                .frame(width: 36, alignment: .trailing)
+                .frame(width: 44, alignment: .trailing)
                 StarRatingView(rating: value)
             }
         }
@@ -169,12 +198,13 @@ private struct StarTapCell: View {
 }
 
 private struct StarRatingViewEditorPreview: View {
-    @State private var rating: Double = 3.5
+    @State private var rating: Double? = 3.5
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(rating.truncatingRemainder(dividingBy: 1) == 0
-                 ? "現在の評価: \(Int(rating))星"
-                 : "現在の評価: \(rating)星"
+            Text(
+                rating == nil
+                    ? "現在の評価: 未評価"
+                    : (rating!.truncatingRemainder(dividingBy: 1) == 0 ? "現在の評価: \(Int(rating!))星" : "現在の評価: \(rating!)星")
             )
             .font(.caption)
             .foregroundStyle(.secondary)

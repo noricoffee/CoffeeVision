@@ -74,7 +74,7 @@ class CoffeeRecordQueryImplTest {
         id: String,
         name: String = "Test Coffee",
         visitedOn: LocalDate = LocalDate(2026, 6, 1),
-        rating: Double = 3.0,
+        rating: Double? = 3.0,
         origin: String? = null,
         brewMethod: BrewMethod = BrewMethod.HandDrip,
         roastLevel: RoastLevel? = null,
@@ -350,10 +350,12 @@ class CoffeeRecordQueryImplTest {
     }
 
     @Test
-    fun ratingFilter_excludesZeroRatingSentinel() = runTest {
-        // rating=0.0（未評価 sentinel）は評価範囲フィルタが指定された場合に除外される
+    fun ratingFilter_excludesUnratedNull() = runTest {
+        // rating=null（未評価。2026-07-12 B-4 で 0.0 sentinel を廃止）は評価範囲フィルタが
+        // 指定された場合に除外される。CoffeeRecordSummary.rating は LLM ブリッジ境界の例外として
+        // 0.0 sentinel を維持するため、除外確認は summary 側の 0.0 で行う。
         val records = listOf(
-            record("r1", rating = 0.0), // 未評価
+            record("r1", rating = null), // 未評価
             record("r2", rating = 3.0),
             record("r3", rating = 4.0),
         )
@@ -365,10 +367,10 @@ class CoffeeRecordQueryImplTest {
     }
 
     @Test
-    fun ratingFilter_zeroRatingIncludedWhenNoRatingFilter() = runTest {
-        // 評価範囲フィルタが未指定のときは rating=0.0（未評価）のレコードも含まれる
+    fun ratingFilter_unratedIncludedWhenNoRatingFilter() = runTest {
+        // 評価範囲フィルタが未指定のときは rating=null（未評価）のレコードも含まれる
         val records = listOf(
-            record("r1", rating = 0.0),
+            record("r1", rating = null),
             record("r2", rating = 3.0),
         )
         val query = makeQuery(records)
@@ -378,10 +380,10 @@ class CoffeeRecordQueryImplTest {
     }
 
     @Test
-    fun ratingFilter_onlyMinRating_zeroRatingExcluded() = runTest {
-        // minRating のみ指定しても rating=0.0 は除外される
+    fun ratingFilter_onlyMinRating_unratedExcluded() = runTest {
+        // minRating のみ指定しても rating=null は除外される
         val records = listOf(
-            record("r1", rating = 0.0),
+            record("r1", rating = null),
             record("r2", rating = 2.0),
         )
         val query = makeQuery(records)

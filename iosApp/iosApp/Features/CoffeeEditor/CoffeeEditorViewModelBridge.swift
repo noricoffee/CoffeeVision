@@ -80,8 +80,9 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onVisitedOnChanged(date: date)
     }
 
-    func onRatingChanged(rating: Double) {
-        kotlin.onRatingChanged(rating: rating)
+    /// 評価を変更する。`nil` = 未評価に戻す（2026-07-12 B-4 nullable 化）。
+    func onRatingChanged(rating: Double?) {
+        kotlin.onRatingChanged(rating: rating.map { KotlinDouble(value: $0) })
     }
 
     func onNotesChanged(_ text: String) {

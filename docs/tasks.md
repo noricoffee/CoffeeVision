@@ -42,17 +42,11 @@
 
 #### フェーズ 12: コミュニティ / データ共有基盤
 
-> 起票 2026-06-29。個人の記録を（同意を得た上で）集合知として活用する基盤。**12-A** データ共有同意フロー（`DataConsentOnboardingView` + Settings トグル + `AuthAccount.analyticsConsent`、implementation_note 2026-06-30。残タスクのプライバシーポリシー更新はカテゴリ 4「リリース前バックログ」へ移管）/ **12-B** コーヒー豆ナレッジベース（`BeanProfile` read-only + origin/processings ファジーマッチ、data-model.md §1.8。seed 投入はカテゴリ 4「BeanProfile 初期データ整備」）/ **12-C** 個人好みとの突合・言語化（`PreferredBeanTraitsUseCase` → 分析タブ、implementation_note 2026-07-01）まで完了。12-D はサーバー側インフラが前提で未着手。
+> 起票 2026-06-29。個人の記録を（同意を得た上で）集合知として活用する基盤。**12-A** データ共有同意フロー（`DataConsentOnboardingView` + Settings トグル + `AuthAccount.analyticsConsent`、implementation_note 2026-06-30。残タスクのプライバシーポリシー更新はカテゴリ 4「リリース前バックログ」へ移管）/ **12-B** コーヒー豆ナレッジベース（`BeanProfile` read-only + origin/processings ファジーマッチ、data-model.md §1.8。seed 投入はカテゴリ 4「BeanProfile 初期データ整備」）/ **12-C** 個人好みとの突合・言語化（`PreferredBeanTraitsUseCase` → 分析タブ、implementation_note 2026-07-01）まで完了。12-D はサーバー側インフラが前提で保留（下記）。
 
 ##### 12-D: 協調フィルタリング（B-4 将来版 / 9-6）
 
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [ ] | サーバーサイド基盤設計（GCP Cloud Run / Cloud Functions + Firestore 集計パイプライン） | インフラ選定・コスト見積もりが前提 |
-| [ ] | ユーザー間好み類似度計算ロジック設計（コサイン類似度 / ピアソン相関 on `FavoriteSignals` ベクトル） | |
-| [ ] | `CafeRecommendationProvider` のサーバーリモート実装（既存ローカル実装と差し替え可能な設計は B-4 で済み）| B-4 の将来 9-6 エントリと連動。フェーズ 8 の将来 9-6 行（implementation_note 2026-06-22 Future Direction）は本行へ統合（2026-07-09） |
-| [ ] | iOS: マップ上の好み一致ピン（B-4）を協調フィルタリング結果に差し替え（フラグ制御で A/B 切替可能な設計） | |
-| [ ] | 全体データを使った「このカフェを好む人は○○傾向」などのコミュニティ統計を分析タブに追加 | |
+> **保留（2026-07-12 縮約）**: サーバーサイド基盤（インフラ選定・コスト見積もり）が前提で未着手。設計方針の正は requirements.md 9-6（✕ 将来）/ implementation_note 2026-06-22 Future Direction。`CafeRecommendationProvider` をリモート実装で差し替え可能な設計は B-4 で済み。フェーズ 8 の将来 9-6 行は本セクションへ統合済み（2026-07-09）。当時のタスク分解は git 履歴参照 — 優先度が上がったらインフラ選定から仕切り直す。
 
 ### 完了（フェーズ番号 → 日付順）
 
@@ -148,13 +142,12 @@
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない。必要になったフェーズで着手する（経緯は [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリ）。
 > 完了済み（2026-07-09 縮約）: B-3（07-01 requirements の API キー記述修正）/ B-5（07-08 CI グリーン確認）/ B-6（07-07 Persona テストの Native `.format` 置換で domain iOS テスト回復）/ B-7（07-09 `AccountViewModelTest` の `vm.clear()` + drain）/ D-2（07-04 architecture 書き込みフロー現行化）/ E-1（07-09 フェーズ 5.2 で成立）。F-1 はカテゴリ 4「リリース前バックログ」へ移管。詳細は git 履歴 / lessons。
+> 追記（2026-07-12 実態突き合わせで解消確認）: B-2（「主要 VM が未テスト」が陳腐化 — 8 VM 中 7 つに commonTest あり、規約と実態の乖離は解消。未テストは `CoffeeDetailViewModel` のみ）/ C-1（「core 暫定置き場」運用は消滅 — 全 VM が最初から `shared/feature/*` 配下に配置済み）。
 
 | 状態 | ID | タスク | 着手目安 / 備考 |
 |------|----|------|----------------|
 | [ ] | B-1 | マルチデバイス書き込みの競合解決方針を明文化（`updatedAt` での last-writer-wins 等）。現状 remote→local は `INSERT OR REPLACE` で世代比較なし | 複数端末同期（要件 7-3、優先度○）を実装・検証する段階。単一端末では実害なし |
-| [ ] | B-2 | ViewModel テスト方針の整理。規約（architecture / coding-conventions）は「VM は runTest でテスト」だが主要 VM が未テスト。規約を実態に合わせるか、テストを足すか決める | CI を本格運用するとき / 新規 VM 追加時 |
-| [ ] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を仕様化（`CoffeeRecord.rating` を nullable にするか 0 を明記するか）。`VisitedCafe` 集計が 0 を平均除外している | 集計まわりを次に触るとき。現状動作に実害なし。requirements §未決事項にも起票済み |
-| [ ] | C-1 | feature ViewModel の「`shared/core` 暫定置き場 → 後で feature module へ git mv」運用の見直し（最初から feature module を作る案） | 次の feature 追加時に再評価 |
+| [x] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を解消し、`CoffeeRecord.rating` を **nullable 化する**（2026-07-12 ユーザー決定） | 2026-07-13 完了。あわせて未評価のまま保存可に変更（従来はエディタで評価必須 = requirements と矛盾していた）。migration 5（0.0→NULL、JVM / NativeSqliteDriver 両方でテスト実証）+ Firestore は読み側で legacy 0.0 正規化。requirements §未決事項も消し込み済み。判断は implementation_note 2026-07-12、SQLDelight migrate の off-by-one は lessons 2026-07-13。**シミュレータ目視（未評価保存 → 表示 → 分析除外 → 既存 DB の migration）はユーザー作業** |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
 
 ### 完了

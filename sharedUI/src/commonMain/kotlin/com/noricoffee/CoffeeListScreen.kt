@@ -125,7 +125,7 @@ private fun CoffeeRecordRow(record: CoffeeRecord) {
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
-            text = "★ ${record.rating}",
+            text = record.rating?.let { "★ $it" } ?: "未評価",
             style = MaterialTheme.typography.bodySmall,
         )
     }

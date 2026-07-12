@@ -448,7 +448,7 @@ class CoffeeEditorViewModelTest {
             assertEquals(sourceRecord.tags, draft.tags)
 
             // 引き継がない 4 項目
-            assertEquals(0.0, draft.rating)
+            assertNull(draft.rating)
             assertEquals("", draft.notes)
             assertTrue(draft.photos.isEmpty())
             assertNull(draft.tasting)
@@ -506,7 +506,8 @@ class CoffeeEditorViewModelTest {
 
             // Places を選択せずに手動でカフェ名を入力する
             vm.onCafeNameChanged("手入力カフェ")
-            // Duplicate は rating を引き継がない（0.0 = 未評価）ためバリデーションを通す値を設定する
+            // Duplicate は rating を引き継がない（null = 未評価。未評価のまま保存可だが、
+            // このテストの本題（cafe placeId 挙動）に絞るため明示的に値を設定する）
             vm.onRatingChanged(3.0)
 
             vm.onSaveTapped()
@@ -703,6 +704,54 @@ class CoffeeEditorViewModelTest {
             vm.onNameChanged("ハンドドリップ")
             vm.onRatingChanged(4.0)
             vm.onBrewRecipeChanged("あ".repeat(501))
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(fake.savedRecords.isEmpty())
+            assertNotNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tests — B-4 rating の nullable 化（2026-07-12）
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onSaveTapped_unratedNullRating_savesSuccessfully() = runTest {
+        // Create モードの draft.rating は初期値 null（未評価）。onRatingChanged を呼ばずに
+        // 保存してもバリデーションを通り、rating = null のまま保存できる（2026-07-12 B-4）。
+        val fake = FakeCoffeeRepository()
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+
+            vm.onNameChanged("ハンドドリップ")
+
+            vm.onSaveTapped()
+            testScheduler.advanceUntilIdle()
+
+            assertNull(vm.state.value.draft.rating)
+            val saved = fake.savedRecords.single()
+            assertNull(saved.rating)
+            assertNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onSaveTapped_ratingOutOfRange_setsErrorAndDoesNotSave() = runTest {
+        // 非 null の rating は引き続き 0.5..5.0 の範囲バリデーションが効く
+        val fake = FakeCoffeeRepository()
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+
+            vm.onNameChanged("ハンドドリップ")
+            vm.onRatingChanged(5.5)
 
             vm.onSaveTapped()
             testScheduler.advanceUntilIdle()

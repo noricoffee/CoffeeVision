@@ -46,7 +46,7 @@ data class CoffeeRecord(
     val userId: String,                   // Firebase Auth uid
     val cafe: Cafe?,                      // Places 由来のスナップショット。null = セルフ抽出（自宅等）
     val visitedOn: LocalDate,             // 飲んだ日
-    val rating: Double,                   // 0.5..5.0（0.5 刻み）。0.0 = 未評価（sentinel）
+    val rating: Double?,                  // 0.5..5.0（0.5 刻み）。null = 未評価（2026-07-12 B-4 で 0.0 sentinel を廃止し nullable 化。0.0 は不正値）
     val notes: String,                    // 自由メモ（旧 ambiance / フード等もここに吸収）
     val photos: List<Photo>,
     // --- コーヒー属性（旧 CoffeeItem から昇格）---
@@ -175,7 +175,7 @@ data class VisitedCafe(
     val cafe: Cafe,                       // 最新記録時のカフェスナップショット
     val lastVisitedAt: Instant,           // そのカフェで最後にコーヒーを記録した日
     val visitCount: Int,                  // そのカフェでのコーヒー記録件数
-    val averageRating: Double?,           // 記録の平均評価（rating=0.0 の未評価は除外、全て未評価なら null）
+    val averageRating: Double?,           // 記録の平均評価（rating=null の未評価は除外、全て未評価なら null）
 )
 ```
 
@@ -190,7 +190,7 @@ data class VisitedCafe(
 ```kotlin
 data class CoffeeStats(
     val totalCount: Int,                       // 全記録件数
-    val ratedCount: Int,                       // rating >= 0.5 の件数
+    val ratedCount: Int,                       // rating != null の件数
     val averageRating: Double?,                // 未評価(0.0)除外の平均。全未評価なら null
     val ratingHistogram: List<RatingBucket>,   // 0.5 刻みの度数（存在する刻みのみ、昇順）
     val byBrewMethod: List<CategoryStat>,      // 抽出方法別（label = enum.name）
@@ -254,7 +254,7 @@ data class FavoriteSignals(
 data class TastingAxisCorrelation(
     val axis: TastingAxis,                     // 相関が最大だった軸
     val correlation: Double,                   // ピアソン相関係数 r（-1.0..1.0、符号付き）
-    val sampleSize: Int,                       // 相関の母数（rating>0 かつ tasting!=null の件数）
+    val sampleSize: Int,                       // 相関の母数（rating!=null かつ tasting!=null の件数）
 )
 
 enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
@@ -273,16 +273,16 @@ data class PreferredBeanTraits(
 
 ### 集計ルール（決定論）
 
-- **平均評価**: `rating == 0.0`（未評価 sentinel）は常に母数から除外。対象が 0 件なら `null`。
+- **平均評価**: `rating == null`（未評価）は常に母数から除外。対象が 0 件なら `null`。
 - **`favoriteSignals`（階層2 / 好み判定）**: 「複数の評価から好みを統計的に抽出する」層。**生平均のランキングはサンプル数の罠に弱い**（n=1 の 5.0 が最上位に来る）ため、以下の補正を入れる。出力は常に **「弱い傾向」止まり**（断定しない。理由は交絡 = 下記）。
   - **カテゴリ好み（`bestBrewMethod` / `bestOrigin` / `bestRoastLevel`）= 収縮平均による選定**:
-    1. 母数: `rating > 0.0` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
+    1. 母数: `rating != null` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
     2. 候補: 各軸で件数 `>= minSampleSize`（既定 3）かつ平均評価ありの label。
     3. **経験ベイズ収縮**: 各候補の評価を `shrunkMean = (n·mean + k·globalMean) / (n + k)` で全体平均へ寄せる（`k = SHRINKAGE_PRIOR_WEIGHT`、既定 5 ＝「全体平均を 5 杯ぶん事前に混ぜる」）。少数群の極端値を抑える。
     4. 選定: `shrunkMean` 最大の候補（n=1 外れ値に頑健な選定キー）。ただし信号化は **n 連動の信頼区間ゲート**で足切りする: `mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)`（一標本 z 検定近似。`globalStd` = 全評価済 rating の母標準偏差、`n` = 候補群の件数、`mean` = 候補群の生平均）。これを満たす最良候補だけ信号にする。**固定オフセット δ（`shrunkMean - globalMean > δ`）は特異度を上げられない**（最良群の偶然の上振れ＝winner's curse がサンプリングばらつき σ/√n に比例して膨らみ、固定 δ では止まらない。B-1b 100% / B-1c 不均等でも 86.7% と実測）。よって**ばらつき連動（n 連動）の閾値**で足切りする。`CATEGORY_MIN_EFFECT = 0.20` は「統計的有意だが実用上は誤差レベル」を弾く小さな絶対下限として併用してよい（z ゲートと AND）。
     5. 返す `CategoryStat` は**生の `averageRating` と `count`**（収縮値・effect-size は選定/足切りの内部利用のみ。`count` が小さければ言語化で「但し書き」に使う）。タイ時は件数多 → label 昇順で決定論化。
   - **好みの軸（`dominantTastingAxis`）= テイスティング軸と評価の相関**:
-    1. 母数: `tasting != null` かつ `rating > 0.0` の記録。`CORRELATION_MIN_SAMPLE`（既定 5）未満なら `null`。
+    1. 母数: `tasting != null` かつ `rating != null` の記録。`CORRELATION_MIN_SAMPLE`（既定 5）未満なら `null`。
     2. 5 軸それぞれと `rating` の**ピアソン相関係数 r**（符号付き）を計算。分散 0 の軸（全件同値）は相関定義不可のためスキップ。
     3. `|r|` 最大の軸を採用。ただし **`|r| >= CORRELATION_ABS_FLOOR`（サンプル数連動の下限。下記）のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。**5 軸の max|r| を採る多重比較で偽陽性が乗る**（B-1b 実測 40%）ため、固定 0.3 ではなくサンプル数に応じて締める。
   - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
@@ -368,7 +368,7 @@ data class CoffeeRecordSummary(
     val origin: String?,
     val brewMethod: String,   // enum 名（iOS 側で日本語化）
     val roastLevel: String?,  // enum 名 or null
-    val rating: Double,       // 0.0 = 未評価
+    val rating: Double,       // 0.0 = 未評価（LLM ブリッジ境界の明示 sentinel。domain の null を 0.0 に写す。下記「filter は全て String/Double/Int」参照）
     val visitedOn: String,    // "YYYY-MM-DD"
 )
 ```
@@ -376,7 +376,7 @@ data class CoffeeRecordSummary(
 設計上の決め事:
 
 - **単一の柔軟な検索 tool**: 複数の専用 tool に分けず、`searchRecords` 1 本に絞り込み条件を optional で並べる。Foundation Models は引数説明が充実した単一 tool の方が安定し、KMP 照会 API も 1 メソッドで済む。
-- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、`rating=0.0`（未評価 sentinel）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。
+- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、未評価（domain の `rating == null`）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。**`CoffeeRecordSummary.rating` はこの境界の例外として `Double` のまま `0.0 = 未評価` を維持**（マッピングは `record.rating ?: 0.0`。domain の nullable 化 = 2026-07-12 B-4 後も、LLM ブリッジは primitive 主義を優先。iOS 側の `>= 0.5` 表示分岐はこの仕様に依存）。
 - **`origin`/`cafeName` はフィールド横断の free-text term**（2026-06-21 横断化）: 各 term が `record.cafe?.name`（カフェ名）/ `record.origin`（産地）/ `record.name`（コーヒー名）/ `record.variety`（品種）のいずれかに部分一致（大小無視）すればマッチ。両方指定時は AND（各 term がそれぞれ union のいずれかにヒット）。どちらも null ならこのテキスト条件は無視。背景: Foundation Models が `cafeName` と `origin` を誤分類しても確実にヒットさせるため（例: "フグレン" を `origin` に入れても cafe 名にマッチ）。トレードオフとして、コーヒー名に地名が含まれる場合の偽陽性が増えるが個人アプリ規模では許容。
 - **userId は実装が内部で解決**: `CoffeeRecordQueryImpl` は `authRepository.signInAnonymouslyIfNeeded()` で現在 uid を取得し、`coffeeRepository.observeAll(uid).first()` で全件取得 → Kotlin で filter 適用 → `visitedOn` 降順 → `limit` 件に切って `CoffeeRecordSummary` 化する。個人アプリ規模（数十〜数百件）のため全件読みで十分。`shared/domain` 内に置き、`CoffeeRepository` + `AuthRepository` インターフェースのみに依存させる（テスト容易）。`AppContainer` が組み立てて `val coffeeRecordQuery` で公開する。
 - **digest はベース文脈として併用（ハイブリッド）**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き `buildPrompt(stats)` の digest を含める。
@@ -575,7 +575,7 @@ CREATE TABLE coffee_record (
     cafe_maps_url TEXT,
     -- 記録本体
     visited_on TEXT NOT NULL,              -- ISO-8601 (YYYY-MM-DD)
-    rating REAL NOT NULL,                  -- 0.5..5.0（0.5 刻み）。0.0 = 未評価
+    rating REAL,                           -- 0.5..5.0（0.5 刻み）。NULL = 未評価（migration 5.sqm で NOT NULL 撤廃 + 既存 0.0 → NULL 変換）
     notes TEXT NOT NULL,
     -- コーヒー属性
     name TEXT NOT NULL,
@@ -675,6 +675,7 @@ DELETE FROM photo WHERE id = ?;
 - 写真の参照配列やタグ（`tags`）など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する。`tags` は空文字（旧行）も空リストとして読む
 - `cafe_place_id` が null の行は `cafe = null` で組み立てる。非 null の行のみ `Cafe(...)` を構築する
 - **`brew_recipe`（フェーズ 15-E）**: migration `4.sqm` で `ALTER TABLE coffee_record ADD COLUMN brew_recipe TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `brew_recipe` を追加する。Mapper は他の nullable TEXT 列と同じ扱い
+- **`rating` nullable 化（B-4、2026-07-12）**: migration `5.sqm`。SQLite は NOT NULL 撤廃の ALTER をサポートしないため**テーブル再作成方式**（新テーブル CREATE → `NULLIF(rating, 0.0)` で INSERT SELECT → 旧テーブル DROP → RENAME → インデックス再作成）。photo テーブルの FK（`record_id` → `coffee_record.id`、2026-07-03 本番有効化）をトランザクション内で壊さない手順にすること
 
 ## 2.4 SavedCafe.sq（フェーズ 15-A）
 
@@ -837,6 +838,7 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
 ```
 
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
+- **rating**（2026-07-12 B-4 で nullable 化）: `rating == null`（未評価）なら他の nullable フィールドと同じく**キーごと省略**。decode 時は **キー欠如 / null / `0.0`（nullable 化以前の legacy sentinel）をすべて `null` に正規化**する（iOS / Android 対称。リモートの既存 0.0 ドキュメントは migration せず読み側で吸収）
 - **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。`brewRecipe` はフェーズ 15-E 追加（decode 時にキー欠如は null 扱い）
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
@@ -1034,7 +1036,7 @@ interface RemoteSavedCafeDataSource {
 
 # 7. バリデーション
 
-- `rating` は 0.5..5.0 の範囲（0.5 刻み）。0.0 は未評価扱い（保存時はバリデーションで 0.5 以上を要求）
+- `rating` は null（未評価）または 0.5..5.0 の範囲（0.5 刻み）。**未評価のままの保存を許可する**（2026-07-12 B-4。「まず記録、あとで評価」を可能に）。非 null 時のみ 0.5..5.0 かつ 0.5 刻みをバリデーション
 - `name`（コーヒー名）は必須・最大 200 文字（SQLite の現実的な上限）
 - `notes` は最大 2000 文字
 - `cafe` は任意（未選択でもセルフ抽出として保存可能）

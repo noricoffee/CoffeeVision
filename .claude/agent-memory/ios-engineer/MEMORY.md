@@ -1,5 +1,19 @@
 # ios-engineer memory
 
+## Kotlin の nullable Double プロパティ（`Double?`）を Swift で扱うときの型変換パターン（2026-07-13、`CoffeeRecord.rating` nullable 化で確認）
+
+- SKIE の `.swiftinterface` は「呼び出し方向」の糖衣構文しか載らない。`data class` のプロパティ自体の nullable Double は Obj-C ヘッダで `SharedLogicDouble * _Nullable`（= Swift `KotlinDouble?`）と確認するのが確実（`shared/framework/build/bin/iosSimulatorArm64/debugFramework/SharedLogic.framework/Headers/SharedLogic.h` を `grep`）。
+- 読み取り側: `record.rating?.doubleValue` で `Double?` に変換してから Swift ネイティブ API（`StarRatingView` 等）に渡す。
+- 書き込み側（Firestore encode）: `if let rating = record.rating { doc["rating"] = rating.doubleValue }`（他の nullable フィールドと同じ「非 nil のときだけキーを立てる」パターンを踏襲）。
+- Swift → Kotlin へ渡す側（ViewModel ブリッジの `onXxxChanged`）: `Double?` を引数に取る Swift 関数内で `rating.map { KotlinDouble(value: $0) }` に包んでから Kotlin 側 `KotlinDouble?` パラメータへ渡す。
+- `data class` の positional initializer に `Double` リテラル（`4.5` 等）を直接渡している箇所（`PreviewSamples.swift` 等）は、フィールドが `Double` → `Double?`（Kotlin 側）に変わると **コンパイルエラーではなくキャストエラー**にもならず一見動きそうに見えて実際は `KotlinDouble` 型不一致でビルドエラーになる。`KotlinDouble(value:)` で明示ラップが必要（`CoffeeRecord.rating` / `CoffeeStats` 系の既存パターンと同型）。
+
+## 「未評価に戻せる」UI は accessibilityAdjustableAction の decrement 下限 + 明示クリアボタンの二重導線にする（2026-07-13、StarRatingView nullable rating 対応で確認）
+
+- `rating: Double?` 化した `StarRatingView` は、read-only モードで `nil` のとき星を出さず `Text("未評価")`（`.foregroundStyle(.secondary)`）を表示する（星 0 個表示は「1つも星がない低評価」と誤読されるため避ける）。
+- 編集モードのクリア手段は 2 経路用意すると VoiceOver / タップ操作の両方をカバーできる: ① `accessibilityAdjustableAction` の `.decrement` を rating 0.5 未満に到達したら `nil` を返すよう実装（スワイプ操作の自然な延長）、② 星の右側に `xmark.circle.fill` の明示クリアボタン（`rating != nil` のときだけ表示、`.frame(minWidth: 44, minHeight: 44)` で 44pt 確保）。星の HStack 全体は `accessibilityElement(children: .ignore)` でグループ化しつつ、クリアボタンは**その外側**の別要素にする（グループに巻き込むと VoiceOver から個別にフォーカスできなくなるため）。
+- `some View` を返す computed var 内で `if/else` 分岐を書くには `@ViewBuilder` 属性が必須（`body` プロパティ自体は View プロトコル要件により暗黙で付与されるが、任意の computed var には付かない。既存コードでも `CafeDetailView.swift` 等に確立パターンあり）。
+
 ## xcodebuild を `| tail -N` で絞ると Gradle Run Script フェーズの出力が見えなくなる（2026-07-06 確認）
 
 `xcodebuild ... | tail -80` のように末尾だけ見ると、ビルド後半（Swift コンパイル〜リンク）しか映らず、序盤に実行される `./gradlew :shared:framework:embedAndSignAppleFrameworkForXcode`（`project.pbxproj` の Run Script フェーズ）のログが消えて「Gradle が本当に走ったか」を確認できない。**`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` を使わずに Gradle 実行を裏取りしたいときは、出力をファイルへリダイレクト（`> build.log 2>&1`）してから `grep` する**（`tail` で絞らない）。差分検証なら `clean build` にすると Run Script も含め全フェーズが必ず再実行されるので確実。

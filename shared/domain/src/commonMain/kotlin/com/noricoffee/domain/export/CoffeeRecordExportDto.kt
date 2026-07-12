@@ -18,7 +18,7 @@ data class CoffeeRecordExportDto(
     val userId: String,
     val cafe: CafeExportDto?,
     val visitedOn: String,
-    val rating: Double,
+    val rating: Double? = null,
     val notes: String,
     val name: String,
     val brewMethod: String,

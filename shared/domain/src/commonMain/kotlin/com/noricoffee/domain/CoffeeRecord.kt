@@ -8,7 +8,7 @@ data class CoffeeRecord(
     val userId: String,                   // Firebase Auth uid
     val cafe: Cafe?,                      // Places 由来のスナップショット。null = セルフ抽出（自宅等）
     val visitedOn: LocalDate,             // 飲んだ日
-    val rating: Double,                    // 0.5..5.0（0.5 刻み）。0.0 = 未評価（sentinel）
+    val rating: Double?,                   // 0.5..5.0（0.5 刻み）。null = 未評価（2026-07-12 B-4 で 0.0 sentinel を廃止）
     val notes: String,                    // 自由メモ（旧 ambiance / フード等もここに吸収）
     val photos: List<Photo>,
     // --- コーヒー属性（旧 CoffeeItem から昇格）---

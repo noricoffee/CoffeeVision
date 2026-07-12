@@ -68,7 +68,7 @@ class ObserveVisitedCafesUseCaseTest {
         id: String,
         placeId: String?,
         visitedOn: LocalDate,
-        rating: Double = 3.0,
+        rating: Double? = 3.0,
         cafeName: String = "カフェ ${placeId ?: "home"}",
     ) = CoffeeRecord(
         id = id,
@@ -182,10 +182,10 @@ class ObserveVisitedCafesUseCaseTest {
     }
 
     @Test
-    fun averageRating_excludesZeroRating() = runTest {
-        // rating = 0.0 は「未評価」として除外する
+    fun averageRating_excludesUnratedNull() = runTest {
+        // rating = null は「未評価」として除外する（2026-07-12 B-4 で 0.0 sentinel を廃止）
         val records = listOf(
-            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0.0),
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = null),
             record("r2", "place-1", LocalDate(2026, 2, 1), rating = 5.0),
             record("r3", "place-1", LocalDate(2026, 3, 1), rating = 3.0),
         )
@@ -193,7 +193,7 @@ class ObserveVisitedCafesUseCaseTest {
 
         val result = useCase("user-1").first()
 
-        // (5 + 3) / 2 = 4.0（rating=0 は除外）
+        // (5 + 3) / 2 = 4.0（rating=null は除外）
         assertEquals(4.0, result.first().averageRating)
     }
 
@@ -213,10 +213,10 @@ class ObserveVisitedCafesUseCaseTest {
     }
 
     @Test
-    fun averageRating_nullWhenAllRatingsAreZero() = runTest {
+    fun averageRating_nullWhenAllRatingsAreUnrated() = runTest {
         val records = listOf(
-            record("r1", "place-1", LocalDate(2026, 1, 1), rating = 0.0),
-            record("r2", "place-1", LocalDate(2026, 2, 1), rating = 0.0),
+            record("r1", "place-1", LocalDate(2026, 1, 1), rating = null),
+            record("r2", "place-1", LocalDate(2026, 2, 1), rating = null),
         )
         val useCase = ObserveVisitedCafesUseCase(FakeCoffeeRepository(records))
 

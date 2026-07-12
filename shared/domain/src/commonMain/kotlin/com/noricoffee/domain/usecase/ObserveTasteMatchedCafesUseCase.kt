@@ -128,8 +128,8 @@ class ObserveTasteMatchedCafesUseCase(
         val latestRecord = cafeRecords.maxBy { it.visitedOn }
         val cafe = latestRecord.cafe!!
 
-        // 評価しきい値以上のレコードだけを候補にする
-        val highRatedRecords = cafeRecords.filter { it.rating >= RECOMMEND_MIN_RATING }
+        // 評価しきい値以上のレコードだけを候補にする（rating == null の未評価は対象外）
+        val highRatedRecords = cafeRecords.filter { it.rating != null && it.rating >= RECOMMEND_MIN_RATING }
 
         val matches = mutableListOf<RecommendationReason.TasteProfileMatch>()
 
@@ -209,7 +209,7 @@ class ObserveTasteMatchedCafesUseCase(
             axis = axis,
             matchedLabel = matchedLabel,
             exampleRecordName = representative.name,
-            exampleRating = representative.rating,
+            exampleRating = representative.rating!!, // matchingRecords は rating != null フィルタ済み
         )
     }
 }

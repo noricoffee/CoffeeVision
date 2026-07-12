@@ -15,3 +15,4 @@
 - [POI 近傍曖昧性解消パターン](poi_nearby_disambiguation_pattern.md) — searchNearby 結果から単一候補を`.first()`だけで選ぶと別店を拾う。名前一致優先+フォールバックの実装場所
 - [Mapper enum フォールバック + raw row テスト手法](mapper_enum_fallback_and_raw_row_test.md) — `valueOf`→`entries.firstOrNull` 置換の記録。ドメインモデルを経由せず SQLDelight クエリへ直接不正値を書き込むテストヘルパーの作り方
 - [OriginNormalizer シノニム辞書導入](origin_normalizer_synonym_dict.md) — origin 正規化 5 箇所の置換リスト + 辞書完全一致方式が複合語 contains テストを壊す既知トレードオフ
+- [SQLDelight migration のバージョン番号の実際の意味](sqldelight_migration_version_semantics.md) — `oldVersion<=N` の罠（N.sqm だけ実行するには oldVersion=N+1）/ `migrate(0,N)` が空DBで失敗する理由 / テーブル再作成 migration の PRAGMA foreign_keys は ON/OFF でなく 0/1 / iOS 版 migration テスト（NativeSqliteDriver 低レベル構築 + `klib dump-abi` での API 裏取り）/ sandbox でも `iosSimulatorArm64Test` が通った実績

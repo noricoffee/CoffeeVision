@@ -299,19 +299,11 @@ struct MapTabView: View {
     /// ネガティブキャッシュへ登録する対象を特定するために保持する（周辺カフェピンのノイズ除去、2026-07-13）。
     @State private var lastTappedApplePoi: ApplePoiCafe? = nil
 
-    /// Apple `.cafe` 誤分類の非カフェ（法人本社 / レンタルスペース / コンカフェ等）を
-    /// 名前の部分一致で除外するキーワード一覧（周辺カフェピンのノイズ除去、2026-07-13）。
-    /// 除外理由: Apple 地図データの `.cafe` カテゴリには稀にこれらが誤分類され、
-    /// タップしても Google Places 側で解決できず「該当なし」になるため事前に弾く。
-    private static let excludedApplePoiNameKeywords: Set<String> = [
-        "株式会社", "(株)", "（株）", "有限会社", "合同会社",
-        "本社", "事務所", "オフィス", "レンタルスペース", "貸会議室", "貸スペース",
-        "コワーキング", "シェアオフィス", "コンカフェ", "コンセプトカフェ", "ガールズバー",
-    ]
-
     /// 名前ヒューリスティックで除外すべき Apple POI かどうかを判定する。
+    ///
+    /// 除外キーワード一覧は `ApplePoiFilterConfig`（Firebase Remote Config 外部注入、2026-07-13）を参照する。
     private func isExcludedByNameHeuristic(_ name: String) -> Bool {
-        Self.excludedApplePoiNameKeywords.contains { name.contains($0) }
+        ApplePoiFilterConfig.excludedNameKeywords.contains { name.contains($0) }
     }
 
     // MARK: - 検索モード

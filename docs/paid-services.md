@@ -35,7 +35,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 
 ## 2. Firebase（Blaze 従量課金の対象）
 
-導入 SDK（iOS SPM / Android Gradle）: Auth / Firestore / Storage / Crashlytics / Analytics / Performance。
+導入 SDK（iOS SPM / Android Gradle）: Auth / Firestore / Storage / Crashlytics / Analytics / Performance / Remote Config（iOS のみ）。
 
 | プロダクト | 課金 | 利用状況 |
 |-----------|------|---------|
@@ -43,6 +43,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 | Firebase Auth | 実質無料（電話認証なし） | 匿名認証 + Sign in with Apple のリンク。SMS を使わないため課金なし |
 | Cloud Storage for Firebase | **現状課金なし** | **採用見送り済み**。SDK リンクと `storage.rules` は残っているが、写真は端末ローカル（Documents/photos/）保存のみで `Photo.remoteUrl` は常に null。将来復活用にフィールド・rules を残置（data-model.md §1.4） |
 | Crashlytics / Analytics / Performance | 無料 | クラッシュレポート・利用分析・パフォーマンス計測 |
+| Remote Config | 無料 | マップ POI 除外キーワードの配信（`map_poi_excluded_name_keywords`、`ApplePoiFilterConfig`）。起動時 fetch 1 回・最小フェッチ間隔は SDK 既定 12h（2026-07-13） |
 
 ---
 

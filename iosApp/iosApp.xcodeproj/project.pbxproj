@@ -13,6 +13,7 @@
 		FB0000010000000000000004 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000004 /* FirebaseCrashlytics */; };
 		FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000005 /* FirebaseAnalytics */; };
 		FB0000010000000000000006 /* FirebasePerformance in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000006 /* FirebasePerformance */; };
+		FB0000010000000000000007 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000007 /* FirebaseRemoteConfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -56,6 +57,7 @@
 				FB0000010000000000000004 /* FirebaseCrashlytics in Frameworks */,
 				FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */,
 				FB0000010000000000000006 /* FirebasePerformance in Frameworks */,
+				FB0000010000000000000007 /* FirebaseRemoteConfig in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -107,6 +109,7 @@
 				FB0000020000000000000004 /* FirebaseCrashlytics */,
 				FB0000020000000000000005 /* FirebaseAnalytics */,
 				FB0000020000000000000006 /* FirebasePerformance */,
+				FB0000020000000000000007 /* FirebaseRemoteConfig */,
 			);
 			productName = iosApp;
 			productReference = 5934ABC536940296DA2BC581 /* coffeevision.app */;
@@ -459,6 +462,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebasePerformance;
+		};
+		FB0000020000000000000007 /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

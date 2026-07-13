@@ -821,3 +821,15 @@ Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメ�
 - 不採用: 周辺ピンソースの Google `searchNearby` 置き換え（データ品質は最良だがカメラ移動ごとの課金が発生しコスト構造が変わる。1+2 で不十分な場合の次の手として保留）
 - トレードオフ: 名前フィルタはブラックリスト方式なのですり抜けは残る（すり抜け分はタップ 1 回でネガティブキャッシュが吸収）。逆に「オフィス」等の語を含む実在カフェを誤除外するリスクは許容（該当したらキーワードを見直す）
 - 経緯: SKIE 知見 — プレーンな nested data class は `.swiftinterface` に現れず、生成 ObjC ヘッダの `swift_name` 属性で裏取りする（kmp-engineer メモリにも記録済み）。また Kotlin data class は `isEqual:`/`hash` オーバーライドにより SwiftUI `.onChange(of:)` にそのまま使える
+
+### 2026-07-13: POI 除外キーワードの Remote Config 外部注入
+
+- 領域: iOS / Firebase
+- 関連: `iosApp/.../Features/Map/ApplePoiFilterConfig.swift`、tasks.md「名前フィルタの Remote Config 外部注入（2026-07-13 起票）」
+
+同日のノイズ除去で導入した除外キーワード 16 語を Firebase Remote Config（キー `map_poi_excluded_name_keywords`、JSON 文字列配列）で配信し、リリースなしで追加・削除可能にした。iOS 専用の view 層の関心事のため KMP を通さず iosApp 内で完結（`shared/domain` Repository 経由の Firebase 不変条件はユーザーデータの層の話で、アプリ設定値の配信はその対象外と判断）。
+
+- **置き換えセマンティクス**: remote の parse に成功したら bundled デフォルトを完全置換（和集合にしない — コンソールの見た目と実挙動を一致させる）。**空配列 `[]` も「成功」として 0 件を許容**（フィルタの一時無効化に使える。設定ミスで全 POI が出るリスクは許容）。空文字・parse 失敗・未取得は bundled デフォルトへフォールバックし、コンソール未設定でも現行挙動と完全同一
+- **fetch 戦略**: 起動時 `fetchAndActivate` 1 回・失敗無視（fire-and-forget）。最小フェッチ間隔は SDK 既定 12h、リアルタイムリスナー不採用（次回起動反映で十分）。テレメトリ同意（`analyticsConsent`）フローの対象外（設定値配信でありユーザーデータ収集ではない）
+- **プライバシー**: FirebaseRemoteConfig は SDK 同梱の PrivacyInfo.xcprivacy で UserDefaults(1C8F.1) + Other Diagnostic Data（非トラッキング）を自己申告（SPM checkout の実物を plutil で確認済み）→ アプリ側 `PrivacyInfo.xcprivacy` 変更不要。app-store-metadata 6.3 に SDK 行のみ追加
+- 不採用: Firestore の設定ドキュメント方式（新 SDK 不要だが、公開 read の security rule 追加が必要でユーザーデータの層にアプリ設定が混ざる。編集体験もコンソールに劣る）

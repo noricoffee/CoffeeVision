@@ -26,6 +26,13 @@ struct iOSApp: App {
         Firestore.firestore().settings = settings
         print("[CoffeeVision] Firestore persistent cache enabled")
 
+        // Apple POI 名前フィルタの除外キーワードを Remote Config から取得する（名前フィルタの
+        // Remote Config 外部注入、2026-07-13）。同意フローとは無関係に取得してよく、
+        // 失敗・未取得時は bundled デフォルトへフォールバックするため fire-and-forget でよい。
+        Task {
+            await ApplePoiFilterConfig.fetchAndActivate()
+        }
+
         // AppState は FirebaseApp.configure() 完了後に組み立てる
         // （内部で Firestore.firestore() を参照するため）。
         _appState = State(initialValue: AppState())

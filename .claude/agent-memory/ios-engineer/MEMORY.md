@@ -1,5 +1,7 @@
 # ios-engineer memory
 
+## 新規 Firebase SPM プロダクト追加の pbxproj 手順 + `FIRRemoteConfigValue.stringValue` 非 Optional 注意（[firebase_remote_config_spm.md](firebase_remote_config_spm.md)、2026-07-13）
+
 ## Kotlin data class（ネスト型含む）は `.onChange(of:)` にそのまま渡せる — Foundation の `NSObject: Equatable` 拡張が effectively 効く（2026-07-13、`MapViewModel.PoiLookupError` 導入で確認）
 
 - Kotlin の `data class`（`Cafe` や `MapViewModel.PoiLookupError` 等のネスト data class 含む）は Obj-C ヘッダ上で `SharedLogicBase : NSObject` を継承し、`equals()`/`hashCode()` から生成された `isEqual:`/`hash` をオーバーライドしている。Foundation は `extension NSObject: Equatable { == は isEqual: を呼ぶ }` を提供しているため、**Swift 側で追加の `Equatable` 適合を書かなくても** `.onChange(of: bridge.someKotlinDataClassOptional)` がそのまま使える（`Optional` の条件付き `Equatable` 経由）。既存の `.onChange(of: bridge.poiLookupResult)`（`Cafe?`）と同型。新しい nested data class を State 監視に使うときも、まず素朴に `.onChange` を試してよい（Equatable 拡張を自前で書く必要は基本ない）。

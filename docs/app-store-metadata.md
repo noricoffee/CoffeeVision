@@ -160,6 +160,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Firebase Crashlytics | Google | クラッシュ / 非致命的エラー診断（**常時**） | クラッシュスタック・デバイス/OS・Firebase Installation ID・（同意時のみ）Analytics breadcrumb |
 | Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
 | Firebase Analytics | Google | 製品利用分析（**同意時のみ**） | `screen_view`・自動収集イベント（起動/セッション等）。IDFA なし・クロスアプリ追跡なし |
+| Firebase Remote Config | Google | マップ POI 除外キーワードの設定値配信（**常時**、同意不要） | 設定値取得のためのリクエスト（Firebase Installation ID・アプリバージョン/デバイス構成）。ユーザーデータの送信なし（SDK 同梱マニフェストは Other Diagnostic Data / 非トラッキングを自己申告） |
 
 > Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
 
@@ -263,3 +264,4 @@ CoffeeVision を初めてリリースしました。
 | 2026-07-02 | CoffeeRecord 主体モデルへ全面改訂。説明文 / プロモ文 / スクショ計画を 4 タブ構成（マップ / コーヒー / 分析 / 設定）と実装機能（セルフ抽出・テイスティング・タグ・分析タブ・エリア検索）に追随。審査メモに Sign in with Apple アップグレード / アカウント削除（revoke）/ データ利用同意オンボーディング / Apple Intelligence 要件を反映。プライバシー申告に `analyticsConsent`（オプトイン）とメールアドレス（Apple サインイン時）を追加、Foundation Models のオンデバイス処理を明記 |
 | 2026-07-08 | Firebase テレメトリ導入に伴いプライバシー申告を更新。Crashlytics / Performance を「診断情報（常時収集・トラッキング不使用）」、Analytics（素の `FirebaseAnalytics`・IDFA なし）を「使用状況データ（`analyticsConsent` 同意時のみ）」として 6.1 / 6.3 に追加。「Analytics / Crashlytics 未導入」の注記を撤去。ATT は引き続き不要（IDFA 非依存）。`PrivacyInfo.xcprivacy` 追加済み（実装で反映）|
 | 2026-07-12 | コピーを「過去から未来までのコーヒー体験」軸に刷新（ユーザー確定）: サブタイトル「コーヒー記録・分析・行きたい店」/ プロモテキスト（107 字）/ 説明文リード・締めを差し替え。あわせてフェーズ 15〜17 機能を原稿に追随: 説明文に「行きたいお店を保存する」ブロック + 抽出レシピ・複製・現在地サジェスト・周辺ピン・未経験豆提案・一覧検索/月別・JSON エクスポートの各行（計 1014 字）、キーワード 5 語追加（計 79 字）、スクショ #7（行きたいピン + 保存リスト）追加 |
+| 2026-07-13 | Firebase Remote Config 導入（マップ POI 除外キーワードの配信）に伴い 6.3 SDK 一覧に行を追加。ユーザーデータの送信はなく ASC 申告のデータ種別に変更なし（SDK 同梱マニフェストが Other Diagnostic Data / 非トラッキングを自己申告、アプリ側 `PrivacyInfo.xcprivacy` 変更不要を確認済み） |

@@ -48,6 +48,16 @@
 | [x] | 親: 統合検証（verify-kmp-ios）+ implementation_note 記録 + commit | 2026-07-13 完了。①testAndroidHostTest / iosSimulatorArm64Test 全緑 ②XCFramework 成功 ③xcodebuild override 無しで BUILD SUCCEEDED |
 | [ ] | ユーザー: シミュレータ / 実機確認（キーワード POI 非表示 / 該当なしタップ → ピン消滅・再パンでも非表示 / 通信エラーではピンが消えない） | ビルド成功 ≠ 修正完了 |
 
+#### 名前フィルタの Remote Config 外部注入（2026-07-13 起票）
+
+> 上記ノイズ除去の除外キーワード 16 語（`MapTabView.excludedApplePoiNameKeywords` ハードコード）を Firebase Remote Config で配信し、リリースなしで追加・削除できるようにする。キー `map_poi_excluded_name_keywords`（JSON 文字列配列）。**remote はハードコードのデフォルトを置き換える**（和集合ではない — コンソールの見た目と実挙動を一致させる）。remote 未取得・parse 失敗時は bundled デフォルトにフォールバック（現行挙動と同一）。Remote Config は無料でコスト構造は不変。iOS のみで完結（KMP 変更なし）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: SPM に FirebaseRemoteConfig 追加 + キーワードプロバイダ実装 + `MapTabView` 参照差し替え + 起動時 fetchAndActivate | 2026-07-13 完了。`ApplePoiFilterConfig`。空配列は成功扱い（フィルタ一時無効化に使える） |
+| [x] | 親: 検証（xcodebuild override 無し）+ docs 更新（implementation_note / paid-services 棚卸し行）+ commit | 2026-07-13 完了。PrivacyInfo は SDK 同梱マニフェスト確認でアプリ側変更不要、app-store-metadata 6.3 に SDK 行追加 |
+| [ ] | ユーザー: Firebase コンソールで `map_poi_excluded_name_keywords` パラメータ作成 → コンソール変更が次回起動で反映されることを実機確認 | パラメータ未作成でも bundled デフォルトで動作する |
+
 #### フェーズ 6（任意 / 後続）
 
 > 旧行の縮約（2026-07-09）: Android 実装は取り下げ（リリース対象外）/ エクスポートは 15-E-2 へ統合 / buildCafe バグは専用セクション「フェーズ 6 既知バグ」で解消済み。詳細は git 履歴。

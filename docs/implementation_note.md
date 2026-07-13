@@ -833,3 +833,16 @@ Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメ�
 - **fetch 戦略**: 起動時 `fetchAndActivate` 1 回・失敗無視（fire-and-forget）。最小フェッチ間隔は SDK 既定 12h、リアルタイムリスナー不採用（次回起動反映で十分）。テレメトリ同意（`analyticsConsent`）フローの対象外（設定値配信でありユーザーデータ収集ではない）
 - **プライバシー**: FirebaseRemoteConfig は SDK 同梱の PrivacyInfo.xcprivacy で UserDefaults(1C8F.1) + Other Diagnostic Data（非トラッキング）を自己申告（SPM checkout の実物を plutil で確認済み）→ アプリ側 `PrivacyInfo.xcprivacy` 変更不要。app-store-metadata 6.3 に SDK 行のみ追加
 - 不採用: Firestore の設定ドキュメント方式（新 SDK 不要だが、公開 read の security rule 追加が必要でユーザーデータの層にアプリ設定が混ざる。編集体験もコンソールに劣る）
+
+### 2026-07-13: 分析タブ可視化改善 — 焙煎度の順序尺度化 + テイスティングのレーダー化
+
+- 領域: iOS
+- 関連: `iosApp/.../Features/Analysis/AnalysisView.swift`、`iosApp/.../Features/Analysis/TastingRadarChart.swift`、tasks.md「分析タブ可視化改善（2026-07-13 起票）」
+
+分析タブの可視化レビューで採用した 2 件（ユーザー確定: レーダーは横棒を置き換え / 焙煎度は全 8 段階を常時表示）。KMP 変更なし。
+
+- **焙煎度チャート**: 件数降順・単色縦棒 → 全 8 段階を焙煎順（浅→深）の横棒 + 浅→深のブラウン明暗ランプ。**`CoffeeStats.byRoastLevel` の件数降順契約は KMP 側で変更しない**（LLM digest で「最頻焙煎度」参照に使う契約のため）— Swift 側で `RoastLevel` enum 宣言順（= 焙煎順）の固定配列に count 0 補完でマージする表示専用変換とした。記録ゼロの段階もラベルを出す（「飲まない領域が見える」ことが情報）が、`byRoastLevel` 自体が空ならセクション非表示（従来どおり）
+- **色ランプ**: `Color.accentColor`（#8B5A2B ブラウン）を `Color.mix(with:by:)`（iOS 18+、本プロジェクトは iOS 26 ターゲット）で white 側 0.55 〜 black 側 0.45 に寄せた 2 端点の線形補間 8 段。Assets の AccentColor ライト/ダーク両変種に自動追従するため Color Set の追加なし（ui-ux-guidelines「勝手に色を増やさない」と整合）。「中央段を純 accent に固定する」案は不採用（全段が単調に明→暗になる方が読みやすい）。寄せ幅は感覚値でシミュレータでのコントラスト確認はユーザー確認待ち
+- **テイスティングレーダー**: Swift Charts にレーダーが無いため `GeometryReader` + `Path` のカスタム View。5 軸固定・スケール 0–10 固定（データ最大値に正規化しない — 記録が増えても形を比較可能に保つ）。`RadarChartAxis(label, value, accessibilityLabel)` を受けるドメイン非依存コンポーネントとし、「N 件の記録」等の文言は呼び出し側が組み立てる（将来の 5 軸系転用を想定）。数値精度は各軸ラベルに平均値を添えて担保（横棒廃止の代償）
+- **軸ラベル配置**: 2-pass 実測レイアウトではなく軸角度の cos/sin 閾値ヒューリスティック（正五角形固定なら上/左右/下に自然収束）。Dynamic Type 極大時の重なりは許容
+- **a11y**: レーダーの装飾レイヤーは `accessibilityHidden`、軸ラベルのみが要素となり VoiceOver は軸ごと 5 要素で読み上げ（既存 `tastingAccessibilityLabel` を維持）

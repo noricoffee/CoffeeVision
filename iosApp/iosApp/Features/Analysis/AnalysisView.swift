@@ -374,45 +374,33 @@ struct AnalysisView: View {
               let aftertaste = avgs.aftertaste?.doubleValue
         else { return AnyView(EmptyView()) }
 
-        struct TastingItem: Identifiable {
-            let id: String  // label
-            let label: String
-            let avg: Double
-        }
-
-        let items: [TastingItem] = [
-            TastingItem(id: "甘味",   label: String(localized: "甘味"),  avg: sweetness),
-            TastingItem(id: "ボディ", label: String(localized: "ボディ"), avg: body),
-            TastingItem(id: "酸味",   label: String(localized: "酸味"),  avg: acidity),
-            TastingItem(id: "風味",   label: String(localized: "風味"),  avg: flavor),
-            TastingItem(id: "後味",   label: String(localized: "後味"),  avg: aftertaste),
+        let axes: [RadarChartAxis] = [
+            RadarChartAxis(
+                id: "甘味", label: String(localized: "甘味"), value: sweetness,
+                accessibilityLabel: tastingAccessibilityLabel(String(localized: "甘味"), avg: sweetness, count: ratedCount)
+            ),
+            RadarChartAxis(
+                id: "ボディ", label: String(localized: "ボディ"), value: body,
+                accessibilityLabel: tastingAccessibilityLabel(String(localized: "ボディ"), avg: body, count: ratedCount)
+            ),
+            RadarChartAxis(
+                id: "酸味", label: String(localized: "酸味"), value: acidity,
+                accessibilityLabel: tastingAccessibilityLabel(String(localized: "酸味"), avg: acidity, count: ratedCount)
+            ),
+            RadarChartAxis(
+                id: "風味", label: String(localized: "風味"), value: flavor,
+                accessibilityLabel: tastingAccessibilityLabel(String(localized: "風味"), avg: flavor, count: ratedCount)
+            ),
+            RadarChartAxis(
+                id: "後味", label: String(localized: "後味"), value: aftertaste,
+                accessibilityLabel: tastingAccessibilityLabel(String(localized: "後味"), avg: aftertaste, count: ratedCount)
+            ),
         ]
 
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "テイスティング平均（強度 1〜10）"))
-                Chart(items) { item in
-                    BarMark(
-                        x: .value("強度", item.avg),
-                        y: .value("要素", item.label)
-                    )
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityLabel(tastingAccessibilityLabel(item.label, avg: item.avg, count: ratedCount))
-                }
-                .chartXScale(domain: 0...10)
-                .chartXAxis {
-                    AxisMarks(values: [0, 2, 4, 6, 8, 10]) { _ in
-                        AxisGridLine()
-                        AxisValueLabel()
-                    }
-                }
-                .chartYAxis {
-                    AxisMarks { _ in
-                        AxisValueLabel()
-                    }
-                }
-                .frame(height: 200)
-                .accessibilityLabel(String(localized: "テイスティング 5 要素の平均強度グラフ"))
+                TastingRadarChart(axes: axes, maxValue: 10)
             }
         )
     }
@@ -458,35 +446,89 @@ struct AnalysisView: View {
 
     // MARK: - 焙煎度分布
 
+    /// 焙煎順（浅 → 深）に固定した `RoastLevel` 1 段階分のグラフ用アイテム。
+    ///
+    /// `stats.byRoastLevel`（KMP 側は件数降順の契約。この契約自体は変更しない）を
+    /// 焙煎順にマージし、記録が 0 件の段階も欠かさず保持する。
+    private struct RoastLevelBarItem: Identifiable {
+        let id: String  // label（Kotlin RoastLevel.name）
+        let label: String
+        let position: Int  // 0（Light）〜7（Italian）
+        let count: Int
+        let averageRating: Double?
+    }
+
+    /// Kotlin `RoastLevel`（`shared/domain/.../RoastLevel.kt`）の焙煎順固定配列。
+    private static let roastLevelOrder: [String] = [
+        "Light", "Cinnamon", "Medium", "High", "City", "FullCity", "French", "Italian",
+    ]
+
+    /// `stats.byRoastLevel` を焙煎順の全 8 段階にマージする。欠けている段階は count 0 で補完する。
+    private func fullRoastLevelStats(_ stats: CoffeeStats) -> [RoastLevelBarItem] {
+        let byLabel = Dictionary(uniqueKeysWithValues: stats.byRoastLevel.map { ($0.label, $0) })
+        return Self.roastLevelOrder.enumerated().map { position, label in
+            let stat = byLabel[label]
+            return RoastLevelBarItem(
+                id: label,
+                label: label,
+                position: position,
+                count: Int(stat?.count ?? 0),
+                averageRating: stat?.averageRating?.doubleValue
+            )
+        }
+    }
+
+    /// 焙煎順の位置（0〜7）から浅→深のブラウンランプ色を算出する。
+    ///
+    /// `Color.accentColor`（コーヒーブラウン）を基準に、最も浅い段は白へ、
+    /// 最も深い段は黒へ寄せた 2 色を両端とし、8 段階を線形補間する。
+    private func roastLevelColor(at position: Int) -> Color {
+        let lightest = Color.accentColor.mix(with: .white, by: 0.55)
+        let darkest = Color.accentColor.mix(with: .black, by: 0.45)
+        let t = Double(position) / Double(Self.roastLevelOrder.count - 1)
+        return lightest.mix(with: darkest, by: t)
+    }
+
+    private func roastLevelAccessibilityLabel(_ item: RoastLevelBarItem) -> String {
+        let name = localizedRoastLevel(item.label)
+        guard item.count > 0 else {
+            return String(localized: "\(name): 記録なし")
+        }
+        var label = "\(name): \(item.count) 件"
+        if let avg = item.averageRating {
+            label += String(format: "（平均 %.1f 点）", avg)
+        }
+        return label
+    }
+
     private func roastLevelSection(stats: CoffeeStats) -> some View {
         guard !stats.byRoastLevel.isEmpty else { return AnyView(EmptyView()) }
+        let items = fullRoastLevelStats(stats)
         return AnyView(
             VStack(alignment: .leading, spacing: 8) {
-                sectionHeader(String(localized: "焙煎度の内訳"))
-                Chart(stats.byRoastLevel, id: \.label) { item in
+                sectionHeader(String(localized: "焙煎度の内訳（浅 → 深）"))
+                Chart(items) { item in
                     BarMark(
-                        x: .value(String(localized: "焙煎度"), localizedRoastLevel(item.label)),
-                        y: .value(String(localized: "件数"), item.count)
+                        x: .value(String(localized: "件数"), item.count),
+                        y: .value(String(localized: "焙煎度"), localizedRoastLevel(item.label))
                     )
-                    .foregroundStyle(Color.accentColor)
-                    .accessibilityLabel(
-                        "\(localizedRoastLevel(item.label)): \(item.count) 件"
-                        + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
-                    )
+                    .foregroundStyle(roastLevelColor(at: item.position))
+                    .accessibilityLabel(roastLevelAccessibilityLabel(item))
                 }
-                .frame(height: 160)
+                .chartYScale(domain: Self.roastLevelOrder.map { localizedRoastLevel($0) })
+                .frame(height: CGFloat(Self.roastLevelOrder.count) * 32)
                 .chartXAxis {
-                    AxisMarks { _ in
-                        AxisValueLabel()
-                    }
-                }
-                .chartYAxis {
                     AxisMarks(values: .automatic) { _ in
                         AxisGridLine()
                         AxisValueLabel()
                     }
                 }
-                .accessibilityLabel(String(localized: "焙煎度の内訳グラフ"))
+                .chartYAxis {
+                    AxisMarks { _ in
+                        AxisValueLabel()
+                    }
+                }
+                .accessibilityLabel(String(localized: "焙煎度の内訳グラフ（浅い順）"))
             }
         )
     }

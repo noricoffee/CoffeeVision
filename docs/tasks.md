@@ -26,6 +26,17 @@
 
 ### 未完・バックログ
 
+#### 分析タブ可視化改善: 焙煎度チャート + テイスティングレーダー（2026-07-13 起票）
+
+> 分析タブの可視化レビューから 2 件を採用（プラン承認済み）。① 焙煎度チャートを件数降順・単色縦棒 → **全 8 段階を焙煎順（浅→深）の横棒 + アクセント基準のブラウン明暗ランプ**に変更（`byRoastLevel` の KMP 契約は件数降順のまま、Swift 側で表示用マージ）。② テイスティング 5 軸の横棒を **カスタムレーダーチャート**（`Canvas`/`Path`、Swift Charts 非対応のため）に置き換え、各軸ラベルに平均値を添える。iOS のみで完結（KMP 変更なし）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `roastLevelSection` を全 8 段階・焙煎順横棒 + 浅→深ランプ化 | 2026-07-13 完了。`byRoastLevel` 空ならセクション非表示は従来どおり |
+| [x] | ios-engineer: `TastingRadarChart.swift` 新規 + `tastingAveragesSection` 置き換え | 2026-07-13 完了。ドメイン非依存の `RadarChartAxis` 設計 |
+| [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-13 完了。Gradle タスク実行 + BUILD SUCCEEDED を親再検証 |
+| [ ] | ユーザー: シミュレータで表示確認（焙煎順 + ランプ / レーダー描画 / ダークモード / VoiceOver） | ビルド成功 ≠ 修正完了 |
+
 #### カフェ詳細 Places 写真の段階読み込み（2026-07-13 起票）
 
 > Photo Media API のコスト削減（paid-services.md）。現状はヘッダー表示で先頭 6 枚を一括読み込み → 初期 3 枚 + 「さらに表示」ボタンで 3 枚ずつ追加、上限 10 枚に変更する。iOS のみ（`CafePhotoHeader.swift`）。

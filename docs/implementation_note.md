@@ -807,3 +807,17 @@ backlog B-4 の解消。`CoffeeRecord.rating: Double`（0.0 = 未評価 sentinel
 - **migration 5 はテーブル再作成方式**: SQLite は NOT NULL 撤廃の ALTER 不可のため CREATE → `NULLIF(rating, 0.0)` で INSERT SELECT → DROP → RENAME → インデックス再作成。`PRAGMA foreign_keys` は SQLDelight グラマの制約で `0`/`1` リテラル表記。「SQLite はトランザクション内の `PRAGMA foreign_keys` を無視する」既知の罠があるため、JVM（JdbcSqliteDriver）に加えて NativeSqliteDriver（iOS 本番ドライバ、FK 有効の本番構成）でも migration テストを追加して実証（`CoffeeRecordMigration5IosTest`、0.0→NULL 変換 + photo FK 保持 + CASCADE 継続を確認。in-memory での検証のため実機ディスク DB はシミュレータ目視で補完）
 - **iOS の未評価 UI**: read-only は星 0 個でなく「未評価」テキスト（低評価との誤読回避）。解除は明示クリアボタン + VoiceOver の decrement 下限の 2 経路（再タップ解除は discoverability と VoiceOver 非対応で不採用）
 - 影響: `data-firebase` に初のテスト基盤新設（`commonTest` に kotlin-test 追加、plain JVM で Firestore `Timestamp` が動くことを確認）
+
+### 2026-07-13: 周辺カフェピンのノイズ除去（名前フィルタ + ネガティブキャッシュ）
+
+- 領域: KMP / iOS / Maps
+- 関連: `shared/feature/map/.../MapViewModel.kt`、`iosApp/.../Features/Map/ApplePoiNegativeCache.swift`、tasks.md「周辺カフェピンのノイズ除去（2026-07-13 起票）」
+
+Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメイトカフェ」/ コンカフェ / ガールズバー等）が周辺ピンに混入する問題への 2 段対策。Apple ソース（無料）は維持し、Places 課金構造は不変（paid-services.md 更新不要）。
+
+- **`UIState.poiLookupError` を `String?` → `PoiLookupError(message, isNotFound)` に型変更**: ネガティブキャッシュに記録してよいのは「Google 解決で該当なし」だけで、通信エラー等の一時的失敗を記録すると実在カフェを恒久非表示にしてしまう。この区別は commonMain の状態遷移（空結果 vs 例外）でしか判定できないため、公開 API で型として区別する。表示文言は不変
+- **名前ヒューリスティック除外（iOS）**: 除外キーワード 16 語（法人格 / スペース系 / 業態系）を `MapTabView` の static Set に一元化し、`fetchAppleNearbyCafes` で部分一致除外。リストは追記で育てる運用
+- **ネガティブキャッシュ設計**: UserDefaults + JSON、一致判定は「名前完全一致 + 座標 30m 以内」（Apple POI に安定 ID がないための複合キー）、上限 300 件 FIFO、**TTL なし**（Google で解決できない POI は恒久的にタップ不能 = 17-B の「表示＝解決可能」原則に沿って隠したままで整合）。件数上限が小さいため線形走査で十分と判断
+- 不採用: 周辺ピンソースの Google `searchNearby` 置き換え（データ品質は最良だがカメラ移動ごとの課金が発生しコスト構造が変わる。1+2 で不十分な場合の次の手として保留）
+- トレードオフ: 名前フィルタはブラックリスト方式なのですり抜けは残る（すり抜け分はタップ 1 回でネガティブキャッシュが吸収）。逆に「オフィス」等の語を含む実在カフェを誤除外するリスクは許容（該当したらキーワードを見直す）
+- 経緯: SKIE 知見 — プレーンな nested data class は `.swiftinterface` に現れず、生成 ObjC ヘッダの `swift_name` 属性で裏取りする（kmp-engineer メモリにも記録済み）。また Kotlin data class は `isEqual:`/`hash` オーバーライドにより SwiftUI `.onChange(of:)` にそのまま使える

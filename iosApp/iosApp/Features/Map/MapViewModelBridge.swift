@@ -45,7 +45,9 @@ final class MapViewModelBridge {
 
     private(set) var isLookingUpPoi: Bool = false
     private(set) var poiLookupResult: Cafe? = nil
-    private(set) var poiLookupError: String? = nil
+    /// POI ルックアップで発生したエラー。`message` は表示用文言、`isNotFound` で
+    /// 「該当なし（ネガティブキャッシュ対象）」と「通信エラー等（キャッシュ対象外）」を区別する。
+    private(set) var poiLookupError: MapViewModel.PoiLookupError? = nil
 
     // MARK: - Init
 

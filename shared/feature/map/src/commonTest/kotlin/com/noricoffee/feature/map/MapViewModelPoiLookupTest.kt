@@ -205,7 +205,8 @@ class MapViewModelPoiLookupTest {
         val state = vm.state.value
         assertFalse(state.isLookingUpPoi)
         assertNull(state.poiLookupResult)
-        assertEquals("該当するカフェが見つかりませんでした", state.poiLookupError)
+        assertEquals("該当するカフェが見つかりませんでした", state.poiLookupError?.message)
+        assertTrue(state.poiLookupError?.isNotFound == true)
 
         vm.clear()
     }
@@ -230,7 +231,8 @@ class MapViewModelPoiLookupTest {
         val state = vm.state.value
         assertFalse(state.isLookingUpPoi)
         assertNull(state.poiLookupResult)
-        assertEquals("Network timeout", state.poiLookupError)
+        assertEquals("Network timeout", state.poiLookupError?.message)
+        assertFalse(state.poiLookupError?.isNotFound == true)
 
         vm.clear()
     }

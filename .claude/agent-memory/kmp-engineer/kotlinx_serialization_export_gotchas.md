@@ -56,11 +56,20 @@ kotlinx-serialization は `encodeDefaults` の既定値が **false**。data clas
 `:shared:framework:assembleSharedLogicXCFramework` はデフォルトの `xcode-select -p`
 （CommandLineTools）だと `linkDebugFrameworkIosSimulatorArm64` 等が `xcrun xcodebuild -version`
 失敗で FAILED になるが、`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` を
-付けて自分（サブエージェント）で実行すれば通る（2026-07-07 再確認。約 49 秒、debug/release 両方
+付けて自分（サブエージェント）で実行すれば通る（2026-07-13 再確認。約 51 秒、debug/release 両方
 XCFramework 生成成功）。`commonMain` の公開 API 変更時はこれで最後まで検証してから報告してよい。
 
-## Swift シグネチャの裏取り方法
+## Swift シグネチャの裏取り方法（プレーンな data class / nested class は .swiftinterface に出ない）
 
-`grep -rn "<ClassName>" shared/framework/build/XCFrameworks/debug/SharedLogic.xcframework/ios-arm64-simulator/SharedLogic.framework/Modules/SharedLogic.swiftmodule/*.swiftinterface`
-で `extension SharedLogic::<ClassName> { public func ... }` の実際のシグネチャを確認できる
-（`assembleSharedLogicXCFramework` 実行後に生成される）。
+`.swiftinterface`（`SharedLogic.framework/Modules/SharedLogic.swiftmodule/*.swiftinterface`）に
+載るのは **SKIE が追加で生成した拡張**（sealed class の `Skie.*` 名前空間、suspend/Flow ラッパ等）
+だけ。ネストした `data class`（例: `MapViewModel.PoiLookupError`）のような SKIE の変換を受けない
+プレーンなクラスは `.swiftinterface` に一切現れない（grep してもヒットしない）ので注意。
+
+その場合は生成済み ObjC ヘッダ `SharedLogic.framework/Headers/SharedLogic.h` を見る。
+Kotlin/Native はネストクラスに自動で `__attribute__((swift_name("Outer.Inner")))` を付与するため、
+`grep -n "PoiLookupError\b" .../Headers/SharedLogic.h` で
+`__attribute__((swift_name("MapViewModel.PoiLookupError")))` のような行が見つかり、Swift 側の
+実際の型名（ネスト形）とプロパティ / イニシャライザのシグネチャ（`doCopy(message:isNotFound:)` 等、
+data class の `copy` は `doCopy` に改名される）を裏取りできる。
+（`assembleSharedLogicXCFramework` 実行後に `shared/framework/build/XCFrameworks/debug/SharedLogic.xcframework/ios-arm64-simulator/SharedLogic.framework/Headers/SharedLogic.h` に生成される）

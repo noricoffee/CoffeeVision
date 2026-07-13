@@ -1,5 +1,15 @@
 # ios-engineer memory
 
+## Kotlin data class（ネスト型含む）は `.onChange(of:)` にそのまま渡せる — Foundation の `NSObject: Equatable` 拡張が effectively 効く（2026-07-13、`MapViewModel.PoiLookupError` 導入で確認）
+
+- Kotlin の `data class`（`Cafe` や `MapViewModel.PoiLookupError` 等のネスト data class 含む）は Obj-C ヘッダ上で `SharedLogicBase : NSObject` を継承し、`equals()`/`hashCode()` から生成された `isEqual:`/`hash` をオーバーライドしている。Foundation は `extension NSObject: Equatable { == は isEqual: を呼ぶ }` を提供しているため、**Swift 側で追加の `Equatable` 適合を書かなくても** `.onChange(of: bridge.someKotlinDataClassOptional)` がそのまま使える（`Optional` の条件付き `Equatable` 経由）。既存の `.onChange(of: bridge.poiLookupResult)`（`Cafe?`）と同型。新しい nested data class を State 監視に使うときも、まず素朴に `.onChange` を試してよい（Equatable 拡張を自前で書く必要は基本ない）。
+- ただし `.swiftinterface` にはこの Equatable 適合は載らない（ObjC ブリッジ経由の暗黙効果のため）。裏取りは「Foundation が NSObject に Equatable を生やす」という一般知識で足り、都度 grep する必要はない。
+
+## UserDefaults + JSON（Codable）ローカルキャッシュは `enum` static メソッド + private struct Entry で完結する（2026-07-13、`ApplePoiNegativeCache` 新設で確認）
+
+- 既存 `PhotoFileStore`（ファイル I/O 版）と同じ「全 `static` メソッドの enum、インスタンス不要」パターンを UserDefaults 版でも踏襲できる。`private struct Entry: Codable` を型内に閉じ込め、`loadEntries()`/`saveEntries(_:)` の private ヘルパで JSON エンコード/デコードを行う最小構成で十分（件数上限が小さい—数百件程度—なら線形走査で過剰設計にならない）。
+- Apple の POI（`MKMapItem`）は安定 ID を持たないため、名前完全一致 + 座標近接（`CLLocation.distance(from:)`）の複合キーで dedup / 一致判定するのが定番（`displayedAppleNearbyCafes` の既存 40m 近接排除と同じ手法、キャッシュ側は 30m を採用）。
+
 ## 横スクロール（LazyHStack）内の「さらに表示」段階読み込みは `@State var visibleCount` + Item enum への追加 case で完結する（2026-07-13、CafePhotoHeader 写真ヘッダーで確認）
 
 - KMP 側データ（`cafe.photoReferences` 等）はそのまま `prefix(visibleCount)` で間引くだけでよく、Kotlin 側に変更は不要（純粋な表示制御は View 内 `@State` に閉じる、既存規約どおり）。

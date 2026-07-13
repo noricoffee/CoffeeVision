@@ -79,7 +79,7 @@ class MapViewModel(
      * @property isLookingUpPoi Apple Maps POI タップ後の Places ルックアップ中かどうか
      * @property poiLookupResult POI ルックアップで取得した [Cafe]。View が消費（NavigationPath への append 等）
      *   したあと [onPoiLookupConsumed] を呼んで null に戻すこと
-     * @property poiLookupError POI ルックアップで発生したエラーメッセージ。
+     * @property poiLookupError POI ルックアップで発生したエラー。
      *   alert を閉じたあと [onPoiLookupErrorDismissed] を呼んで null に戻すこと
      * @property selectedTags 現在選択中のタグフィルタ集合。空のとき全カフェを表示。
      *   [onTagFilterToggled] で on/off を切り替え、[onTagFilterCleared] で全解除する
@@ -95,7 +95,7 @@ class MapViewModel(
         val error: String? = null,
         val isLookingUpPoi: Boolean = false,
         val poiLookupResult: Cafe? = null,
-        val poiLookupError: String? = null,
+        val poiLookupError: PoiLookupError? = null,
         val selectedTags: Set<String> = emptySet(),
         val availableTags: List<String> = emptyList(),
         /**
@@ -121,6 +121,23 @@ class MapViewModel(
          * 全件ベースの集合で、行きたい一覧の「記録あり」バッジ判定に使う。
          */
         val recordedPlaceIds: Set<String> = emptySet(),
+    )
+
+    /**
+     * POI ルックアップ（[onPoiTapped]）で発生したエラーを表す。Swift からは SKIE 経由で
+     * `MapViewModel.PoiLookupError` として参照される公開 API。
+     *
+     * [isNotFound] で「検索結果が空（該当なし）」と「例外（通信エラー等）」を区別する。
+     * これは Apple `.cafe` 誤分類対策のネガティブキャッシュ（該当なし POI のみをローカル記録して
+     * 以後非表示にする）を iOS 側で実装するために必要な区別で、通信エラー時はキャッシュしない
+     * 判断材料として使う。
+     *
+     * @property message 表示用エラーメッセージ（alert 等にそのまま表示する文言）
+     * @property isNotFound true = 検索結果が空（該当なし）/ false = 例外（通信エラー等）
+     */
+    data class PoiLookupError(
+        val message: String,
+        val isNotFound: Boolean,
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -340,9 +357,9 @@ class MapViewModel(
      * ## 状態遷移
      * 1. `isLookingUpPoi = true`, `poiLookupError = null`
      * 2. `cafeRepository.searchByNameNear(name, LocationBias(latitude, longitude, 200m))` を呼ぶ
-     * 3. 結果が空 → `poiLookupError = "該当するカフェが見つかりませんでした"`
+     * 3. 結果が空 → `poiLookupError = PoiLookupError("該当するカフェが見つかりませんでした", isNotFound = true)`
      * 4. 結果あり → [selectBestPoiMatch] でタップ座標最近傍（[name] 一致優先）を選び `poiLookupResult` にセット
-     * 5. 例外 → `poiLookupError = e.message ?: "カフェ情報の取得に失敗しました"`
+     * 5. 例外 → `poiLookupError = PoiLookupError(e.message ?: "カフェ情報の取得に失敗しました", isNotFound = false)`
      * 6. `isLookingUpPoi = false`
      *
      * @param name POI の表示名（Apple Maps から取得した `MapFeature.title`）。検索クエリ兼、候補内の
@@ -367,7 +384,10 @@ class MapViewModel(
                     _state.update {
                         it.copy(
                             isLookingUpPoi = false,
-                            poiLookupError = "該当するカフェが見つかりませんでした",
+                            poiLookupError = PoiLookupError(
+                                message = "該当するカフェが見つかりませんでした",
+                                isNotFound = true,
+                            ),
                         )
                     }
                 } else {
@@ -386,7 +406,10 @@ class MapViewModel(
                 _state.update {
                     it.copy(
                         isLookingUpPoi = false,
-                        poiLookupError = e.message ?: "カフェ情報の取得に失敗しました",
+                        poiLookupError = PoiLookupError(
+                            message = e.message ?: "カフェ情報の取得に失敗しました",
+                            isNotFound = false,
+                        ),
                     )
                 }
             }

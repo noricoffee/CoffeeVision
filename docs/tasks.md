@@ -36,6 +36,18 @@
 | [x] | paid-services.md の Photo Media 行を追随更新（親） | 2026-07-13 完了 |
 | [ ] | ユーザー: シミュレータ / 実機で表示確認 | ビルド成功 ≠ 修正完了 |
 
+#### 周辺カフェピンのノイズ除去（名前フィルタ + ネガティブキャッシュ、2026-07-13 起票）
+
+> Apple `.cafe` 誤分類の非カフェ（法人本社・コンカフェ・ガールズバー等）が周辺ピンに混入し、タップしても Places 解決で「該当なし」になる（17-B「表示＝解決可能」原則違反）。対策: ① 除外キーワードによる名前フィルタ（iOS）+ ② 解決「該当なし」POI のローカル記録・非表示化（ネガティブキャッシュ）。後者のため `UIState.poiLookupError` を `PoiLookupError(message, isNotFound)` に型変更（通信エラーはキャッシュ対象外にするための区別）。設計判断は implementation_note 2026-07-13 エントリ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `MapViewModel.UIState.poiLookupError` を `PoiLookupError` data class 化 + テスト追随 | 2026-07-13 完了。`shared/feature/map` のみ |
+| [x] | 親: `:shared:feature:map:iosSimulatorArm64Test` 再検証 | 2026-07-13 全緑 |
+| [x] | ios-engineer: Bridge 追随 + 名前フィルタ + `ApplePoiNegativeCache`（UserDefaults / 30m+名前一致 / 上限 300 FIFO / TTL なし）+ MapTabView 配線 | 2026-07-13 完了。除外キーワード 16 語は `MapTabView.excludedApplePoiNameKeywords` に一元化 |
+| [x] | 親: 統合検証（verify-kmp-ios）+ implementation_note 記録 + commit | 2026-07-13 完了。①testAndroidHostTest / iosSimulatorArm64Test 全緑 ②XCFramework 成功 ③xcodebuild override 無しで BUILD SUCCEEDED |
+| [ ] | ユーザー: シミュレータ / 実機確認（キーワード POI 非表示 / 該当なしタップ → ピン消滅・再パンでも非表示 / 通信エラーではピンが消えない） | ビルド成功 ≠ 修正完了 |
+
 #### フェーズ 6（任意 / 後続）
 
 > 旧行の縮約（2026-07-09）: Android 実装は取り下げ（リリース対象外）/ エクスポートは 15-E-2 へ統合 / buildCafe バグは専用セクション「フェーズ 6 既知バグ」で解消済み。詳細は git 履歴。

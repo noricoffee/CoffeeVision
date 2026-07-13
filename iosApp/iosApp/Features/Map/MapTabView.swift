@@ -295,6 +295,25 @@ struct MapTabView: View {
     /// ズームゲートしきい値（この可視半径[m]を超えたら fetch せず既存ピンをクリアする）。
     private static let applePoiZoomGateRadiusMeters: Double = 3000
 
+    /// 直近でタップされた Apple 検索由来ピン。POI ルックアップが「該当なし」だった際に
+    /// ネガティブキャッシュへ登録する対象を特定するために保持する（周辺カフェピンのノイズ除去、2026-07-13）。
+    @State private var lastTappedApplePoi: ApplePoiCafe? = nil
+
+    /// Apple `.cafe` 誤分類の非カフェ（法人本社 / レンタルスペース / コンカフェ等）を
+    /// 名前の部分一致で除外するキーワード一覧（周辺カフェピンのノイズ除去、2026-07-13）。
+    /// 除外理由: Apple 地図データの `.cafe` カテゴリには稀にこれらが誤分類され、
+    /// タップしても Google Places 側で解決できず「該当なし」になるため事前に弾く。
+    private static let excludedApplePoiNameKeywords: Set<String> = [
+        "株式会社", "(株)", "（株）", "有限会社", "合同会社",
+        "本社", "事務所", "オフィス", "レンタルスペース", "貸会議室", "貸スペース",
+        "コワーキング", "シェアオフィス", "コンカフェ", "コンセプトカフェ", "ガールズバー",
+    ]
+
+    /// 名前ヒューリスティックで除外すべき Apple POI かどうかを判定する。
+    private func isExcludedByNameHeuristic(_ name: String) -> Bool {
+        Self.excludedApplePoiNameKeywords.contains { name.contains($0) }
+    }
+
     // MARK: - 検索モード
 
     /// 検索モード判定: 検索欄フォーカス中、または検索結果ドロップダウン表示中。
@@ -392,11 +411,21 @@ struct MapTabView: View {
                         }
                         .onChange(of: bridge.poiLookupResult) { _, result in
                             if let cafe = result {
+                                lastTappedApplePoi = nil
                                 navigationPath.append(
                                     CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
                                 )
                                 bridge.onPoiLookupConsumed()
                             }
+                        }
+                        // 「該当なし」だった Apple POI をネガティブキャッシュへ登録し、
+                        // 以後の一覧から即時除外する（周辺カフェピンのノイズ除去、2026-07-13）。通信エラー等
+                        // （isNotFound == false）はキャッシュしない。
+                        .onChange(of: bridge.poiLookupError) { _, error in
+                            guard let error, error.isNotFound, let tapped = lastTappedApplePoi else { return }
+                            ApplePoiNegativeCache.add(name: tapped.name, coordinate: tapped.coordinate)
+                            appleNearbyCafes.removeAll { $0.id == tapped.id }
+                            lastTappedApplePoi = nil
                         }
                         // 検索完了（テキスト検索 / エリア検索の両方）を検知して全件ピン反映する
                         .onChange(of: searchBridge?.isLoading) { _, isLoading in
@@ -455,7 +484,10 @@ struct MapTabView: View {
             return (message, { areaSearchEmptyMessage = nil })
         }
         if let e = bridge.poiLookupError {
-            return (e, { bridge.onPoiLookupErrorDismissed() })
+            return (e.message, {
+                bridge.onPoiLookupErrorDismissed()
+                lastTappedApplePoi = nil
+            })
         }
         return nil
     }
@@ -471,6 +503,7 @@ struct MapTabView: View {
                 ForEach(displayedAppleNearbyCafes(bridge)) { cafe in
                     Annotation(cafe.name, coordinate: cafe.coordinate) {
                         Button {
+                            lastTappedApplePoi = cafe
                             bridge.onPoiTapped(
                                 name: cafe.name,
                                 latitude: cafe.coordinate.latitude,
@@ -1382,6 +1415,9 @@ struct MapTabView: View {
     /// ベーカリー（`.bakery`）は Google Places 側の解決（`onPoiTapped` → `searchNearby`、
     /// `includedPrimaryTypes=[cafe, coffee_shop]`）に一致せずタップ解決できないため取得対象から
     /// 除外している（「表示＝解決可能」を揃える。フェーズ 17-B）。
+    ///
+    /// 名前ヒューリスティック除外（法人本社等）とネガティブキャッシュ（過去に「該当なし」
+    /// だった POI）の両方でノイズを除去する（周辺カフェピンのノイズ除去、2026-07-13）。
     private func fetchAppleNearbyCafes(center: MapSearchCenter) async {
         let request = MKLocalPointsOfInterestRequest(
             center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
@@ -1391,11 +1427,14 @@ struct MapTabView: View {
         do {
             let response = try await MKLocalSearch(request: request).start()
             guard !Task.isCancelled else { return }
-            appleNearbyCafes = response.mapItems.map { item in
+            appleNearbyCafes = response.mapItems.compactMap { item -> ApplePoiCafe? in
                 let coordinate = item.location.coordinate
+                let name = item.name ?? String(localized: "カフェ")
+                guard !isExcludedByNameHeuristic(name) else { return nil }
+                guard !ApplePoiNegativeCache.contains(name: name, coordinate: coordinate) else { return nil }
                 return ApplePoiCafe(
                     id: "\(coordinate.latitude)_\(coordinate.longitude)",
-                    name: item.name ?? String(localized: "カフェ"),
+                    name: name,
                     coordinate: coordinate
                 )
             }

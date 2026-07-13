@@ -846,3 +846,16 @@ Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメ�
 - **テイスティングレーダー**: Swift Charts にレーダーが無いため `GeometryReader` + `Path` のカスタム View。5 軸固定・スケール 0–10 固定（データ最大値に正規化しない — 記録が増えても形を比較可能に保つ）。`RadarChartAxis(label, value, accessibilityLabel)` を受けるドメイン非依存コンポーネントとし、「N 件の記録」等の文言は呼び出し側が組み立てる（将来の 5 軸系転用を想定）。数値精度は各軸ラベルに平均値を添えて担保（横棒廃止の代償）
 - **軸ラベル配置**: 2-pass 実測レイアウトではなく軸角度の cos/sin 閾値ヒューリスティック（正五角形固定なら上/左右/下に自然収束）。Dynamic Type 極大時の重なりは許容
 - **a11y**: レーダーの装飾レイヤーは `accessibilityHidden`、軸ラベルのみが要素となり VoiceOver は軸ごと 5 要素で読み上げ（既存 `tastingAccessibilityLabel` を維持）
+
+### 2026-07-13: エクスポート JSON の Firestore 投入スクリプト（開発用インポート）
+
+- 領域: scripts/seed
+- 関連: `scripts/seed/seed-coffees.mjs`、requirements 7-4、tasks.md カテゴリ 3「開発支援: エクスポート JSON の Firestore 投入スクリプト」
+
+「エクスポートがあるのにインポートが無い」という論点の帰結。開発用途（ダミーデータの実機投入）が動機だったため、**アプリ内のインポート機能は作らず、Admin SDK シードスクリプトで充足**した。
+
+- **アプリ本体のインポート機能は意図的に非対応**: 復元・機種変更は Firestore 同期（7-3）が担い、写真は iCloud Backup（7-2）。エクスポート（7-4）はバックアップではなく「データの持ち出し手段」で、往復対称性は要件でない。アカウント削除後の JSON からの復帰は非サポート（必要になったら要件化から再検討。ID 衝突マージ・version 互換・写真非復元の期待値ギャップがコスト）
+- **入力はエクスポート envelope v1 をそのまま受ける**: エクスポート DTO が Firestore 直列化規則を踏襲して設計されているため、変換は薄い差分吸収のみ — ① null キー省略（エクスポートは `encodeDefaults = true` で null キーも出す）② `createdAt`/`updatedAt` の ISO 文字列 → `Timestamp`（`Date.parse` でミリ秒精度に切り詰め、dev 用途で許容）③ **photos は常に空配列**（画像は端末ローカルのみで fileName 参照が解決不能。メタデータだけ入れると詳細画面で欠損表示になる）
+- **`userId` は `--uid` 引数で全レコード上書き**: エクスポート元と投入先のアカウントが違っても付け替えて投入できる（doc 内 `userId` とパス uid の不一致を作らない）
+- bean-profiles と同じ流儀（`--dry-run` は firebase-admin 不要 / 投入前バリデーション / ドキュメント ID = record.id の `set()` 冪等 upsert）。enum 名リスト（BrewMethod / ProcessingMethod / RoastLevel）は shared/domain と一致させる必要がある（bean-profiles 同様の複製。enum 追加時に追随）
+- 投入後は実機のサインイン中リスナー（`startSync`）が自動反映。投入したレコードは `DummyCoffeeData` と違い「本物のレコード」として全端末に同期される点に注意（削除はコンソールかアプリから）

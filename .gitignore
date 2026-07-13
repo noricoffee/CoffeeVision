@@ -27,6 +27,9 @@ google-services.json
 *service-account*.json
 scripts/seed/package-lock.json
 
+# アプリのエクスポート JSON（個人の記録データ。seed-coffees.mjs の入力用に置くことがある）
+scripts/seed/*export*.json
+
 # Places API キー（ローカル開発用。コミット禁止）
 iosApp/Configuration/Secrets.xcconfig
 

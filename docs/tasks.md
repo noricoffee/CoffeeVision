@@ -253,6 +253,10 @@
 
 > 完了（2026-06-19）: 専用 Scheme「iosApp (Dummy Data)」（env `SEED_DUMMY_DATA=1`）でローカル DB のみに固定 ID 30 件を冪等 seed / 通常 Scheme で clear。設計判断は implementation_note 2026-06-19 エントリ。
 
+#### 開発支援: エクスポート JSON の Firestore 投入スクリプト（2026-07-13）
+
+> 完了（2026-07-13）: アプリのエクスポート JSON（envelope v1）を `users/{uid}/coffees` へ冪等 upsert する `scripts/seed/seed-coffees.mjs`（開発用）。バリデーション + Firestore 直列化規則への変換（null キー省略 / Timestamp 化 / photos 空化 / userId を `--uid` で付け替え）。`--dry-run` で正常系・異常系とも検証済み。投入の実行はユーザー作業（手順は `scripts/seed/README.md`）。判断は implementation_note 2026-07-13 エントリ。
+
 #### 外部 Skill の導入（2026-07-07）
 
 > 完了（2026-07-07）: [mattpocock/skills](https://github.com/mattpocock/skills)（MIT）から `grilling`（実装前インタビュー）/ `diagnosing-bugs`（診断ループ + HITL）/ `writing-great-skills`（Skill 設計原則）の 3 つを日本語化 + 本プロジェクト調整で `.claude/skills/` に移植し、CLAUDE.md に参照を追記。選定・調整の判断（丸ごと導入不採用の理由含む）は implementation_note 2026-07-07 エントリ。

@@ -867,6 +867,8 @@ Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメ�
 
 requirements.md §11-4 の「データ利用同意オンボーディングの直後に ATT」を文字どおり実装すると、Firestore に `users/{uid}` が既にあるユーザー（オンボーディングが二度と出ない）は ATT フローに永久に到達しない。実装では `UserDefaults` の `hasCompletedAdConsentFlow` フラグを導入し、「未実施なら `bootstrap()` 完了時に 1 回だけ表示」に拡張した（新規はオンボーディング直後、既存は次回起動時に到達）。未リリースのため現時点の実害はないが、意図的な仕様拡張（requirements §11-4 の備考にも反映済み）。
 
+追記（同日）: 初版は UMP `loadAndPresentIfRequired` を無条件に呼んでいたため、フォールバックの Google テスト用 App ID に構成済みの IDFA 説明メッセージ（"Our App wants to stay free…"）が自前プレプロンプト + ATT の直後に**二重表示**された（ユーザーのシミュレータ確認で発覚）。自前プレプロンプト + 直接 ATT が §11-4 の正であり UMP のメッセージ UI は使わない方針のため、`consentStatus == .required` のときのみフォームを提示するガードに修正（日本配信では実質 no-op、将来 EU 配信時は GDPR フォームだけがこの分岐を通る）。
+
 ### 2026-07-14: ネイティブ広告は mediaView 非表示・icon + text + CTA テンプレートで統一
 
 - 領域: iOS / Ads

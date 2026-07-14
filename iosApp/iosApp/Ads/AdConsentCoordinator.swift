@@ -4,10 +4,16 @@ import UserMessagingPlatform
 
 /// 広告プレプロンプト → UMP 同意更新 → ATT 許諾ダイアログ、を束ねるコーディネータ（requirements.md §11-4）。
 ///
+/// - 自前のプレプロンプト（`AdPrePromptView`）+ 直接の ATT 呼び出しが §11-4 の正である。
+///   UMP 側が提示する同意メッセージ UI はここでは使わない
 /// - 呼び出し元（`AdPrePromptView` 経由）は既存のデータ利用同意オンボーディング直後の 1 回のみ `run()` を呼ぶ
-/// - 配信地域は日本のみ確定のため UMP の同意フォームは通常表示されない。UMP SDK 自体は AdMob の
-///   組み込み要件として導入し、`requestConsentInfoUpdate` → `loadAndPresentIfRequired` を毎セッション呼ぶ
-///   （フォーム不要な地域では内部で no-op になる）
+/// - 配信地域は日本のみ確定のため、通常は `consentStatus` が `.required` にならず UMP フォームは表示されない。
+///   ただし **`loadAndPresentIfRequired` を無条件に呼ぶと、AdMob コンソール側にメッセージが構成されている
+///   場合（フォールバックの Google テスト用 App ID には "Our App wants to stay free…" という
+///   IDFA 説明メッセージが構成済み）に、自前のプレプロンプト + ATT の直後へさらに UMP 側の英語ダイアログが
+///   二重表示されてしまう**（2026-07-14 実機確認で発覚）。そのため `consentStatus == .required`
+///   のときだけフォームを提示するようガードする（日本配信では該当しないため実質 no-op のまま維持され、
+///   将来 EU 配信するときは GDPR フォームだけがこの分岐を通る）
 /// - ATT が「許可」以外（拒否 / 制限 / 未定）のときは非パーソナライズ広告（NPA）にフォールバックする。
 ///   各広告リクエストは `isPersonalizedAdsAllowed` を見て NPA extras を付与するかを判断する
 ///   （`NativeAdLoader.makeRequest()` 参照）
@@ -40,7 +46,11 @@ enum AdConsentCoordinator {
             }
         }
 
-        // 日本配信のみのため通常は no-op（フォームが必要な地域のときだけ内部で表示される）。
+        // `loadAndPresentIfRequired` を無条件に呼ぶと、AdMob コンソール側に構成されたメッセージ
+        // （フォールバックの Google テスト用 App ID には IDFA 説明メッセージが構成済み）が
+        // 自前のプレプロンプト + ATT の直後に二重表示されてしまう。日本配信では通常 `.required`
+        // にならないため、明示的にガードして無条件呼び出しを避ける。
+        guard UMPConsentInformation.sharedInstance.consentStatus == .required else { return }
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             UMPConsentForm.loadAndPresentIfRequired(from: nil) { _ in
                 continuation.resume()

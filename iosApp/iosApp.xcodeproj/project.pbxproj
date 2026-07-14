@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD0000010000000000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000020000000000000001 /* GoogleMobileAds */; };
 		FB0000010000000000000001 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseAuth */; };
 		FB0000010000000000000002 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000002 /* FirebaseFirestore */; };
 		FB0000010000000000000003 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000003 /* FirebaseStorage */; };
@@ -58,6 +59,7 @@
 				FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */,
 				FB0000010000000000000006 /* FirebasePerformance in Frameworks */,
 				FB0000010000000000000007 /* FirebaseRemoteConfig in Frameworks */,
+				AD0000010000000000000001 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -110,6 +112,7 @@
 				FB0000020000000000000005 /* FirebaseAnalytics */,
 				FB0000020000000000000006 /* FirebasePerformance */,
 				FB0000020000000000000007 /* FirebaseRemoteConfig */,
+				AD0000020000000000000001 /* GoogleMobileAds */,
 			);
 			productName = iosApp;
 			productReference = 5934ABC536940296DA2BC581 /* coffeevision.app */;
@@ -141,6 +144,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				AD0000030000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E34C9F83EBE8C5966FE1C553 /* Products */;
@@ -422,6 +426,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AD0000030000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.0.0;
+			};
+		};
 		FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -433,6 +445,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AD0000020000000000000001 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD0000030000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
 		FB0000020000000000000001 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;

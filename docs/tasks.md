@@ -32,11 +32,11 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | ios-engineer: Google Mobile Ads SDK + UMP 導入（SPM）、`Info.plist`（`GADApplicationIdentifier` / `NSUserTrackingUsageDescription`）、`Secrets.xcconfig` 注入経路 | テスト用 App ID で開始可 |
-| [ ] | ios-engineer: ATT プレプロンプト（「広告により無料で提供」説明）→ ATT を既存同意オンボーディング直後に接続。拒否時 NPA 設定 | §11-4 |
-| [ ] | ios-engineer: 共通ネイティブ広告コンポーネント 2 種（インライン用 / 下部固定用）。ロード失敗・オフライン時は枠ごと畳む。`maxAdContentRating = G`。「広告」ラベル / AdChoices 表示 | §11 確定仕様 |
-| [ ] | ios-engineer: 4 面配線 — カフェ詳細（情報系の後・記録の前）/ 検索ドロップダウン（3 件目の後・結果 3 件未満は非表示）/ コーヒー記録タブ（下部固定、FAB を広告の上へ）/ 分析タブ（下部固定） | §11-1〜11-3 |
-| [ ] | 親: 検証（verify-kmp-ios、xcodebuild override 無し）+ Places データをターゲティングに渡していないかレビュー + implementation_note 記録 + commit | 規約遵守チェック含む |
+| [x] | ios-engineer: Google Mobile Ads SDK + UMP 導入（SPM）、`Info.plist`（`GADApplicationIdentifier` / `NSUserTrackingUsageDescription`）、`Secrets.xcconfig` 注入経路 | 2026-07-14 完了。v13.6.0（UMP は内部依存で自動リンク）。テスト用 ID フォールバックは `Base.xcconfig`、切替手順は `iosApp/Configuration/README.md` |
+| [x] | ios-engineer: ATT プレプロンプト（「広告により無料で提供」説明）→ ATT を既存同意オンボーディング直後に接続。拒否時 NPA 設定 | 2026-07-14 完了。既存ユーザーも UserDefaults フラグで 1 回到達（implementation_note 2026-07-14） |
+| [x] | ios-engineer: 共通ネイティブ広告コンポーネント 2 種（インライン用 / 下部固定用）。ロード失敗・オフライン時は枠ごと畳む。`maxAdContentRating = G`。「広告」ラベル / AdChoices 表示 | 2026-07-14 完了。`iosApp/iosApp/Ads/`。mediaView 非表示テンプレート（implementation_note 2026-07-14） |
+| [x] | ios-engineer: 4 面配線 — カフェ詳細（情報系の後・記録の前）/ 検索ドロップダウン（3 件目の後・結果 3 件未満は非表示）/ コーヒー記録タブ（下部固定、FAB を広告の上へ）/ 分析タブ（下部固定） | 2026-07-14 完了 |
+| [x] | 親: 検証（verify-kmp-ios、xcodebuild override 無し）+ Places データをターゲティングに渡していないかレビュー + implementation_note 記録 + commit | 2026-07-14 完了。override 無し BUILD SUCCEEDED + Gradle BUILD SUCCESSFUL 確認。Ads/ に Places 参照なし（コメントのみ）・素の Request + NPA フラグのみ確認 |
 | [ ] | ユーザー: AdMob アカウント作成・アプリ登録・ネイティブ広告ユニット 4 つ発行 → `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備 |
 | [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
 | [ ] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | ビルド成功 ≠ 完了 |

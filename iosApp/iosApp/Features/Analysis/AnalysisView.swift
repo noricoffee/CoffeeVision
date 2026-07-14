@@ -41,6 +41,10 @@ struct AnalysisView: View {
             }
             .navigationTitle(String(localized: "分析"))
             .navigationBarTitleDisplayMode(.large)
+            // 下部固定広告（requirements.md §11-3）。ロード失敗時は高さ 0 に畳まれる。
+            .safeAreaInset(edge: .bottom) {
+                BottomBarNativeAdView(adUnitID: AdUnitIDs.analysisBottomBar)
+            }
         }
         .errorToast(message: viewModel.error) {
             viewModel.onErrorDismissed()

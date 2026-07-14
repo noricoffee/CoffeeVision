@@ -708,7 +708,7 @@ struct MapTabView: View {
             } else if !sb.results.isEmpty {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(sb.results, id: \.placeId) { cafe in
+                        ForEach(Array(sb.results.enumerated()), id: \.element.placeId) { index, cafe in
                             Button {
                                 selectSearchResult(cafe)
                             } label: {
@@ -739,6 +739,16 @@ struct MapTabView: View {
                             .buttonStyle(.plain)
                             if cafe.placeId != sb.results.last?.placeId {
                                 Divider().padding(.leading, 52)
+                            }
+                            // 3 件目の後にインライン広告 1 枠（結果 3 件未満のときは到達しないため非表示。
+                            // requirements.md §11-2）。
+                            if index == 2 {
+                                InlineNativeAdCard(adUnitID: AdUnitIDs.mapSearchDropdown)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                if cafe.placeId != sb.results.last?.placeId {
+                                    Divider().padding(.leading, 52)
+                                }
                             }
                         }
                     }

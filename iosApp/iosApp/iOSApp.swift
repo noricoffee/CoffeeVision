@@ -2,6 +2,7 @@ import SwiftUI
 import FirebaseCore
 import FirebaseCrashlytics
 import FirebaseFirestore
+import GoogleMobileAds
 import SharedLogic
 
 @main
@@ -32,6 +33,13 @@ struct iOSApp: App {
         Task {
             await ApplePoiFilterConfig.fetchAndActivate()
         }
+
+        // Google Mobile Ads SDK は同意フロー（ATT / UMP）の結果を待たずアプリ起動時に開始する
+        // （公式推奨: 起動直後の呼び出しでセッション最初の広告リクエストのレイテンシを下げる）。
+        // 個々の広告リクエストが NPA を要求するかどうかは ATT 許諾状態を都度参照して判断する
+        // （`NativeAdLoader.makeRequest()`）ため、SDK 起動自体を待たせる必要はない。
+        MobileAds.shared.requestConfiguration.maxAdContentRating = GADMaxAdContentRating.general
+        MobileAds.shared.start()
 
         // AppState は FirebaseApp.configure() 完了後に組み立てる
         // （内部で Firestore.firestore() を参照するため）。
@@ -78,6 +86,15 @@ private struct AppRootView: View {
                 )) {
                     DataConsentOnboardingView(appState: appState)
                         .presentationDetents([.large])
+                        .presentationDragIndicator(.visible)
+                        .interactiveDismissDisabled()
+                }
+                .sheet(isPresented: Binding(
+                    get: { appState.showAdConsentFlow },
+                    set: { if !$0 { appState.showAdConsentFlow = false } }
+                )) {
+                    AdPrePromptView(appState: appState)
+                        .presentationDetents([.medium, .large])
                         .presentationDragIndicator(.visible)
                         .interactiveDismissDisabled()
                 }

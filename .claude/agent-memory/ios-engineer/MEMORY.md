@@ -7,6 +7,7 @@
 - [xcodebuild 検証の落とし穴](xcodebuild-verification.md) — tail で Gradle ログが消える、destination 名確認、-list の Schemes 位置
 - [Firebase SPM pbxproj 手動追加](firebase-spm-pbxproj.md) — 一般手順 + FirebaseAnalyticsWithoutAdIdSupport 廃止
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意
+- [AdMob ネイティブ広告 + UMP 実装パターン](admob-native-ads.md) — SPM モジュール名の罠、バージョン指定と NS_SWIFT_NAME 有無、UIKit ネイティブ広告ビュー、NPA 指定、start() のタイミング
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 

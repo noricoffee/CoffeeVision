@@ -17,39 +17,44 @@ struct CoffeeListView: View {
     @State private var isPresentingEditor = false
 
     var body: some View {
-        content
-            .navigationTitle(String(localized: "コーヒー記録"))
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(
-                text: Binding(
-                    get: { viewModel.searchQuery },
-                    set: { viewModel.searchQuery = $0 }
-                ),
-                prompt: String(localized: "コーヒー名・カフェ名・メモで検索")
+        VStack(spacing: 0) {
+            content
+                // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）。
+                // 下部固定広告（§11-3）の直上に来るよう、overlay は content（広告を含まない）に適用する。
+                .overlay(alignment: .bottomTrailing) {
+                    addCoffeeFAB
+                        .padding(.trailing, 16)
+                        .padding(.bottom, 16)
+                }
+            // 下部固定広告（requirements.md §11-3）。ロード失敗時は高さ 0 に畳まれ、FAB もその分下がる。
+            BottomBarNativeAdView(adUnitID: AdUnitIDs.coffeeListBottomBar)
+        }
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+        .searchable(
+            text: Binding(
+                get: { viewModel.searchQuery },
+                set: { viewModel.searchQuery = $0 }
+            ),
+            prompt: String(localized: "コーヒー名・カフェ名・メモで検索")
+        )
+        .task {
+            guard let uid = appState.uid else { return }
+            viewModel.onAppear(userId: uid)
+        }
+        .onDisappear {
+            viewModel.onDisappear()
+        }
+        .errorToast(message: viewModel.error) {
+            viewModel.onErrorDismissed()
+        }
+        .sheet(isPresented: $isPresentingEditor) {
+            CoffeeEditorView(
+                mode: CoffeeEditorViewModelModeCreate.shared,
+                appState: appState,
+                initialCafe: nil
             )
-            .task {
-                guard let uid = appState.uid else { return }
-                viewModel.onAppear(userId: uid)
-            }
-            .onDisappear {
-                viewModel.onDisappear()
-            }
-            .errorToast(message: viewModel.error) {
-                viewModel.onErrorDismissed()
-            }
-            .sheet(isPresented: $isPresentingEditor) {
-                CoffeeEditorView(
-                    mode: CoffeeEditorViewModelModeCreate.shared,
-                    appState: appState,
-                    initialCafe: nil
-                )
-            }
-            // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）
-            .overlay(alignment: .bottomTrailing) {
-                addCoffeeFAB
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 16)
-            }
+        }
     }
 
     // MARK: - 追加 FAB

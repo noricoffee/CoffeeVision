@@ -621,3 +621,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: バージョン番号が「状態」なのか「次に適用する差分」なのかを API ごとに確認する。off-by-one で赤くなる場合、テストの手組みスキーマではなくバージョン引数のセマンティクスを先に疑う
 - **発生源**: B-4 rating nullable 化の migration 5 テスト実装（2026-07-12、kmp-engineer）。詳細な API 裏取り手順はエージェントメモリ `sqldelight_migration_version_semantics.md`
 - **横展開点検（2026-07-13）**: `grep -rn "\.migrate(" --include="*.kt" shared androidApp`（build 除外）→ 呼び出しは migration テスト 2 箇所（androidHostTest / iosTest）のみで、いずれも `migrate(driver, 5L, 6L)` と正しく、セマンティクス解説コメント付き。本番経路はドライバ構築時の自動 migration（`user_version` 管理）で手動呼び出しなし。**該当なし**
+
+## 2026-07-14
+
+### SPM の `upToNextMajorVersion` に控えめな `minimumVersion` を渡すと古いメジャーで解決され、古い API 形状のまま実装してしまう
+
+- **症状**: Google Mobile Ads SDK を SPM 追加した際、`minimumVersion` を低く指定したため v11 系で解決され、Swift 向け `NS_SWIFT_NAME` リネーム（`GADNativeAd` → `NativeAd` 等）が入っていない古い API 形状に合わせてコードを書き始めてしまった（最新ドキュメントの API 名とコンパイルエラーで乖離が発覚）
+- **原因の構造**: `upToNextMajorVersion` は「指定メジャー内の最新」までしか上げない。「とりあえず低めの minimum を書いておけば SPM が最新を取る」という直感は**メジャーをまたがない**ため誤り。SDK 側がメジャーバージョンで API リネームを行っていると、ドキュメント（最新版準拠）と手元の解決バージョンで API 形状が食い違う
+- **修正パターン**: パッケージ追加前に GitHub Releases で実際の最新メジャーを確認し、`minimumVersion` にその最新メジャー（例: `13.0.0`）を明示してから実装に入る。追加後は `Package.resolved` の解決バージョンを実読みして想定メジャーか確認する
+- **教訓**: SPM 依存を追加するときは「バージョン指定 → resolve → `Package.resolved` 確認」までをセットにする。ドキュメントと API 名が合わないときは自分のコードより先に解決バージョンを疑う
+- **発生源**: AdMob 広告導入（2026-07-14、ios-engineer）。詳細はエージェントメモリ `admob-native-ads.md`
+- **横展開点検（2026-07-14）**: `grep -B2 -A4 "minimumVersion" iosApp/iosApp.xcodeproj/project.pbxproj` + `Package.resolved` 実読み → 直接依存は 2 つのみ。GoogleMobileAds（min 13.0.0 → 解決 13.6.0）/ firebase-ios-sdk（min 12.0.0 → 解決 12.14.0、現行メジャー）とも最新メジャーで解決済み。**該当なし**

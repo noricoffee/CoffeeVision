@@ -2,20 +2,39 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<key>ADMOB_NATIVE_AD_UNIT_ID_ANALYSIS</key>
+	<string>$(ADMOB_NATIVE_AD_UNIT_ID_ANALYSIS)</string>
+	<key>ADMOB_NATIVE_AD_UNIT_ID_CAFE_DETAIL</key>
+	<string>$(ADMOB_NATIVE_AD_UNIT_ID_CAFE_DETAIL)</string>
+	<key>ADMOB_NATIVE_AD_UNIT_ID_COFFEE_LIST</key>
+	<string>$(ADMOB_NATIVE_AD_UNIT_ID_COFFEE_LIST)</string>
+	<key>ADMOB_NATIVE_AD_UNIT_ID_MAP_SEARCH</key>
+	<string>$(ADMOB_NATIVE_AD_UNIT_ID_MAP_SEARCH)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDisplayName</key>
 	<string>CoffeeVision</string>
 	<key>FIREBASE_ANALYTICS_COLLECTION_ENABLED</key>
 	<false/>
+	<key>GADApplicationIdentifier</key>
+	<string>$(ADMOB_APP_ID)</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>近くのカフェを検索するために、現在地を一時的に使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>カフェで撮った写真を訪問記録に添えるため、写真ライブラリへのアクセスを使用します</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>よりご興味に近い広告を表示し、アプリを無料でご利用いただくために利用状況を計測します。</string>
 	<key>PLACES_API_KEY</key>
 	<string>$(PLACES_API_KEY)</string>
+	<key>SKAdNetworkItems</key>
+	<array>
+		<dict>
+			<key>SKAdNetworkIdentifier</key>
+			<string>cstr6suwn9.skadnetwork</string>
+		</dict>
+	</array>
 	<key>UILaunchScreen</key>
 	<dict>
 		<key>UIColorName</key>

@@ -76,6 +76,7 @@ struct CafeDetailView: View {
                 cafeLinksSection(cafe: cafe)
                 cafeHoursSection(cafe: cafe)
             }
+            adSection
             coffeesSection(bridge: bridge)
         }
         .listStyle(.insetGrouped)
@@ -264,6 +265,17 @@ struct CafeDetailView: View {
         case "PRICE_LEVEL_EXPENSIVE":     return "¥¥¥"
         case "PRICE_LEVEL_VERY_EXPENSIVE": return "¥¥¥¥"
         default:                          return nil
+        }
+    }
+
+    // MARK: - 広告セクション
+
+    /// 情報系セクション（カフェ情報 / 外部リンク / 営業時間）とコーヒー記録セクションの間の
+    /// インライン広告（requirements.md §11-1）。
+    private var adSection: some View {
+        Section {
+            InlineNativeAdCard(adUnitID: AdUnitIDs.cafeDetail)
+                .listRowInsets(EdgeInsets())
         }
     }
 

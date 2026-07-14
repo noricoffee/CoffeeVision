@@ -632,3 +632,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: SPM 依存を追加するときは「バージョン指定 → resolve → `Package.resolved` 確認」までをセットにする。ドキュメントと API 名が合わないときは自分のコードより先に解決バージョンを疑う
 - **発生源**: AdMob 広告導入（2026-07-14、ios-engineer）。詳細はエージェントメモリ `admob-native-ads.md`
 - **横展開点検（2026-07-14）**: `grep -B2 -A4 "minimumVersion" iosApp/iosApp.xcodeproj/project.pbxproj` + `Package.resolved` 実読み → 直接依存は 2 つのみ。GoogleMobileAds（min 13.0.0 → 解決 13.6.0）/ firebase-ios-sdk（min 12.0.0 → 解決 12.14.0、現行メジャー）とも最新メジャーで解決済み。**該当なし**
+
+### 外部 SDK の「必要なら表示」系 API は、required 判定がコンソール / サーバー構成で決まるならクライアント側の条件ガードで制御できない — 使わない UI 経路は呼び出し自体を消す
+
+- **症状**: 自前の広告プレプロンプト + ATT ダイアログの後に、UMP の英語ダイアログ（"Our App wants to stay free…"）が二重表示。`consentStatus == .required` ガードを入れた 1 回目の修正でも**再発**した
+- **原因の構造**: UMP の `loadAndPresentIfRequired` は「required なら出す」API だが、その required 判定は AdMob **コンソール側のメッセージ構成**に依存する。ATT メッセージ（IDFA 説明）が構成されていると、GDPR 圏外でも ATT 未決定なら `consentStatus` が `.required` 扱いになり、ガードを素通りする。さらにフォールバック中の Google テスト用 App ID は**他人（Google デモアプリ）のコンソール構成**を継承するため、自アプリで制御する余地が構造的にない。「条件を狭めて呼ぶ」修正はこの外部状態への従属を解消しない
+- **修正パターン**: 自前 UI（プレプロンプト + 直接 ATT）が仕様の正である以上、UMP のメッセージ表示経路は条件ガードではなく**呼び出しを全撤去**する。撤去時は連動プロパティの残存参照も点検する（`canRequestAds` は `requestConsentInfoUpdate` を呼ばない構成では常に false になるため参照禁止 — `AdConsentCoordinator` のコメントに明記）
+- **教訓**: 「required / needed なら出す」系 API の判定材料がクライアント外（コンソール・サーバー構成・他者管理のテスト ID）にあるときは、ガード条件では自分の仕様を表現できない。**ガード追加の 1 回目が効かなかった時点で、条件調整の続行ではなく経路撤去へアプローチ系統を変える**
+- **発生源**: AdMob 広告導入の ATT フロー（2026-07-14、ユーザーのシミュレータ確認 2 回で発覚 → 同日 UMP 呼び出し全撤去で解消）。経緯詳細は implementation_note 2026-07-14 ATT エントリ
+- **横展開点検（2026-07-14）**: `grep -rn "UMP\|UserMessagingPlatform\|canRequestAds" iosApp/iosApp --include="*.swift"` → API 呼び出しの残存なし（`AdConsentCoordinator` の経緯説明コメントのみ）。陳腐化コメント 2 行（`AppState.swift` / `iOSApp.swift` の「UMP 同意更新」言及）は同時に消し込み済み。**該当なし**

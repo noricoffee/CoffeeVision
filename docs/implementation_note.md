@@ -867,7 +867,7 @@ Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメ�
 
 requirements.md §11-4 の「データ利用同意オンボーディングの直後に ATT」を文字どおり実装すると、Firestore に `users/{uid}` が既にあるユーザー（オンボーディングが二度と出ない）は ATT フローに永久に到達しない。実装では `UserDefaults` の `hasCompletedAdConsentFlow` フラグを導入し、「未実施なら `bootstrap()` 完了時に 1 回だけ表示」に拡張した（新規はオンボーディング直後、既存は次回起動時に到達）。未リリースのため現時点の実害はないが、意図的な仕様拡張（requirements §11-4 の備考にも反映済み）。
 
-追記（同日）: 初版は UMP `loadAndPresentIfRequired` を無条件に呼んでいたため、フォールバックの Google テスト用 App ID に構成済みの IDFA 説明メッセージ（"Our App wants to stay free…"）が自前プレプロンプト + ATT の直後に**二重表示**された（ユーザーのシミュレータ確認で発覚）。自前プレプロンプト + 直接 ATT が §11-4 の正であり UMP のメッセージ UI は使わない方針のため、`consentStatus == .required` のときのみフォームを提示するガードに修正（日本配信では実質 no-op、将来 EU 配信時は GDPR フォームだけがこの分岐を通る）。
+追記（同日）: 初版は UMP `loadAndPresentIfRequired` を無条件に呼んでいたため、フォールバックの Google テスト用 App ID に構成済みの IDFA 説明メッセージ（"Our App wants to stay free…"）が自前プレプロンプト + ATT と**二重表示**された（ユーザーのシミュレータ確認で発覚）。1 回目の修正で `consentStatus == .required` ガードを入れたが解消せず — **ATT メッセージがコンソールに構成されていると、GDPR 圏外でも ATT 未決定なら UMP は required 扱いにする**ため、ガードを素通りする。「条件を狭めて呼ぶ」系はコンソール構成に挙動が依存して制御できないと判断し、最終的に **UMP の呼び出し（`requestConsentInfoUpdate` / `loadAndPresentIfRequired`）をコードから全撤去**した（SDK リンク自体は Google Mobile Ads SDK の内部依存で残る）。同意 UI は自前プレプロンプト + 直接 ATT で完結。`canRequestAds` は requestConsentInfoUpdate を呼ばない構成では常に false のため**参照禁止**。EU 配信を始める場合は GDPR フォーム実装として UMP を再導入する。
 
 ### 2026-07-14: ネイティブ広告は mediaView 非表示・icon + text + CTA テンプレートで統一
 

@@ -1,19 +1,23 @@
 import AppTrackingTransparency
 import UIKit
-import UserMessagingPlatform
 
-/// 広告プレプロンプト → UMP 同意更新 → ATT 許諾ダイアログ、を束ねるコーディネータ（requirements.md §11-4）。
+/// 広告プレプロンプト → 直接 ATT 許諾ダイアログ、を束ねるコーディネータ（requirements.md §11-4）。
 ///
 /// - 自前のプレプロンプト（`AdPrePromptView`）+ 直接の ATT 呼び出しが §11-4 の正である。
-///   UMP 側が提示する同意メッセージ UI はここでは使わない
-/// - 呼び出し元（`AdPrePromptView` 経由）は既存のデータ利用同意オンボーディング直後の 1 回のみ `run()` を呼ぶ
-/// - 配信地域は日本のみ確定のため、通常は `consentStatus` が `.required` にならず UMP フォームは表示されない。
-///   ただし **`loadAndPresentIfRequired` を無条件に呼ぶと、AdMob コンソール側にメッセージが構成されている
-///   場合（フォールバックの Google テスト用 App ID には "Our App wants to stay free…" という
-///   IDFA 説明メッセージが構成済み）に、自前のプレプロンプト + ATT の直後へさらに UMP 側の英語ダイアログが
-///   二重表示されてしまう**（2026-07-14 実機確認で発覚）。そのため `consentStatus == .required`
-///   のときだけフォームを提示するようガードする（日本配信では該当しないため実質 no-op のまま維持され、
-///   将来 EU 配信するときは GDPR フォームだけがこの分岐を通る）
+/// - **UMP（`UserMessagingPlatform`）の呼び出しは撤去済み**（2026-07-14）。
+///   `requestConsentInfoUpdate` → `loadAndPresentIfRequired` を経由すると、AdMob コンソール側に
+///   ATT メッセージ（IDFA 説明）が構成されている場合、**GDPR 圏外でも ATT が `.notDetermined` なら
+///   UMP が `consentStatus` を `.required` 扱いにする**ため、`.required` ガードを付けても
+///   コンソール構成（フォールバックの Google テスト用 App ID には ATT メッセージが構成済み）次第で
+///   素通りしてしまい、自前のプレプロンプト + ATT の直後にさらに UMP 側の英語ダイアログが
+///   二重表示される（2026-07-14 実機確認で 2 度目も再現）。「条件を狭めて呼ぶ」系のアプローチは
+///   コンソール構成に挙動が依存し解決しないと判断し、UMP の呼び出し自体を撤去した。
+///   日本のみ配信で GDPR フォームは不要なため実害はない。EU 配信を始める場合は GDPR フォーム実装として
+///   UMP を再導入すること
+/// - Google Mobile Ads SDK（SPM）の内部依存として UMP SDK のリンク自体は外れていない（コードから呼ばないだけ）
+/// - `requestConsentInfoUpdate` を呼ばない構成のため `UMPConsentInformation.sharedInstance.canRequestAds`
+///   は常に `false` になる。**このプロパティを広告ロードのゲートに使ってはいけない**
+///   （`NativeAdLoader` / 呼び出し側は参照していない。今後も参照しないこと）
 /// - ATT が「許可」以外（拒否 / 制限 / 未定）のときは非パーソナライズ広告（NPA）にフォールバックする。
 ///   各広告リクエストは `isPersonalizedAdsAllowed` を見て NPA extras を付与するかを判断する
 ///   （`NativeAdLoader.makeRequest()` 参照）
@@ -29,33 +33,9 @@ enum AdConsentCoordinator {
     ///
     /// Google Mobile Ads SDK 自体の起動（`MobileAds.shared.start()`）はこのフローの完了を待たず
     /// アプリ起動時に行う（`iOSApp.init()` 参照。SDK 起動自体は同意の有無に依存しない）。
-    /// ここでは UMP の同意更新と ATT 許諾ダイアログの表示のみを行う。
+    /// ここでは ATT 許諾ダイアログの表示のみを行う（UMP は呼ばない。上記クラスコメント参照）。
     static func run() async {
-        await updateUMPConsentInfo()
         await requestATTAuthorizationIfNeeded()
-    }
-
-    // MARK: - UMP（配信地域は日本のみのためフォームは通常表示されない）
-
-    private static func updateUMPConsentInfo() async {
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            UMPConsentInformation.sharedInstance.requestConsentInfoUpdate(
-                with: UMPRequestParameters()
-            ) { _ in
-                continuation.resume()
-            }
-        }
-
-        // `loadAndPresentIfRequired` を無条件に呼ぶと、AdMob コンソール側に構成されたメッセージ
-        // （フォールバックの Google テスト用 App ID には IDFA 説明メッセージが構成済み）が
-        // 自前のプレプロンプト + ATT の直後に二重表示されてしまう。日本配信では通常 `.required`
-        // にならないため、明示的にガードして無条件呼び出しを避ける。
-        guard UMPConsentInformation.sharedInstance.consentStatus == .required else { return }
-        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            UMPConsentForm.loadAndPresentIfRequired(from: nil) { _ in
-                continuation.resume()
-            }
-        }
     }
 
     // MARK: - ATT

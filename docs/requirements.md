@@ -191,7 +191,7 @@ CoffeeRecord は **1 杯のコーヒー = 1 件の記録**を表すアプリの�
 - `maxAdContentRating = G`（全年齢向けに制限）
 - AdMob App ID / 広告ユニット ID（4 面 = 4 ユニット）は Places キーと同じ経路（`Secrets.xcconfig` → `Info.plist`）で注入
 - ネイティブ広告の必須アド属性（「広告」ラベル / AdChoices）を全面で表示（AdMob ポリシー準拠）
-- 配信地域は**日本のみ**（確定）→ GDPR 同意フォームは非表示。UMP SDK 自体は AdMob 要件に従い導入する
+- 配信地域は**日本のみ**（確定）→ GDPR 同意フォームは不要。**UMP のメッセージ表示 API はコードから呼ばない**（コンソール構成に挙動が依存し、ATT メッセージ構成時は GDPR 圏外でも自前プレプロンプトと二重表示になるため。UMP SDK 自体は Google Mobile Ads SDK の内部依存としてリンクされるのみ。EU 配信を始める場合は GDPR フォーム実装として再導入。implementation_note 2026-07-14）
 - **Places 由来のデータ（店名・カテゴリ等）を広告リクエストのターゲティングシグナルに渡さない**（Google Maps Platform 規約遵守）
 
 **未決事項**: 広告のプリロード / セッション内キャッシュ戦略の詳細は実装時に判断。

@@ -180,8 +180,8 @@ final class AppState {
         showAdConsentFlow = true
     }
 
-    /// `AdPrePromptView` の「続ける」タップで呼ぶ。シートを閉じ、UMP 同意更新 → ATT 許諾ダイアログを実行する
-    /// （Google Mobile Ads SDK 自体は `iOSApp.init()` で起動済み）。
+    /// `AdPrePromptView` の「続ける」タップで呼ぶ。シートを閉じ、ATT 許諾ダイアログを実行する
+    /// （UMP は呼ばない — `AdConsentCoordinator` 参照。Google Mobile Ads SDK 自体は `iOSApp.init()` で起動済み）。
     func onAdPrePromptContinue() {
         showAdConsentFlow = false
         UserDefaults.standard.set(true, forKey: Self.adConsentFlowShownKey)

@@ -11,7 +11,10 @@ struct InlineNativeAdCard: View {
     @State private var loader: NativeAdLoader?
 
     var body: some View {
-        Group {
+        // `Group { if let ... }` は未ロード時（子が EmptyView 相当）に `.task` の付け先が
+        // 実体化されず発火しない不具合があったため、常に実体化される `ZStack` を root にする
+        // （2026-07-14 実機診断で確認）。
+        ZStack {
             if let nativeAd = loader?.nativeAd {
                 NativeAdContainerView(nativeAd: nativeAd, layout: .card)
                     .frame(minHeight: 96)

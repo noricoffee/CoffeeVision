@@ -875,3 +875,16 @@ requirements.md §11-4 の「データ利用同意オンボーディングの直
 - 関連: `iosApp/iosApp/Ads/NativeAdContainerView.swift`
 
 4 面とも既存 UI（検索結果行・List セクション・下部固定枠）の行の高さに揃えるため、ネイティブ広告の `mediaView`（画像 / 動画アセット）を表示しないテキスト主体テンプレートにした。AdMob ポリシー上は headline 以外のアセットは任意のため問題ないが、動画中心のインベントリからの fill 率に影響しうる（収益が想定より低い場合の見直しポイント）。UMP SDK は Google Mobile Ads SDK（SPM）の内部依存として自動リンクされるため個別導入は不要。
+
+追記（同日）: テスト広告の AdMob native ad validator が「1 implementation issue」を検出。内容はシミュレータ UI からのみ確認可能（ユーザー確認待ち）。mediaView 非表示が原因の可能性が高いとみている。指摘内容次第でテンプレート見直し（小さな MediaView 追加等）を判断する。
+
+### 2026-07-14: 広告コンポーネントの task 発火バグ修正（Group → ZStack / ローダー持ち上げ / safeAreaInset 統一）
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/InlineNativeAdCard.swift`, `iosApp/iosApp/Ads/BottomBarNativeAdView.swift`, `CafeDetailView.swift`, `CoffeeListView.swift`
+
+「広告が分析タブ以外表示されない」報告の修正で確定した 3 判断（バグ機構の詳細は lessons 2026-07-14）:
+
+- **広告コンポーネントの root は `ZStack`**: `Group { if let }` + `.task` は子ゼロの間 task が発火しない。ZStack は常に実体化されるため空でも発火し、空時は高さ 0 に畳まれる（畳み仕様は維持）
+- **カフェ詳細はローダーを画面側へ持ち上げ**: List の Section 内で空 ZStack を置くと空 Section の余白・区切り線が残るため、`CafeDetailView` が `@State` でローダーを持ち、`List` 自体の `.task` でロード駆動、`nativeAd != nil` のときだけ `adSection` を List に含める
+- **下部固定広告は `.safeAreaInset(edge: .bottom)` に統一**: コーヒー記録タブの VStack 末尾直置きは iOS 26 のフローティングタブバー背後に隠れる。分析タブと同方式に統一し、FAB は `ZStack(alignment: .bottomTrailing)` + safeAreaInset で縮んだ安全域基準となり広告の上に自然に乗る（広告が畳まれれば FAB も下がる）

@@ -47,6 +47,15 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 
 ---
 
+## 2b. Google AdMob — **収益側**（課金なし・導入決定済み / 実装前）
+
+- 2026-07-14 に導入決定（仕様は [requirements.md §11](./requirements.md)）。Places 従量コストの回収手段。SDK 利用自体は無料（収益から Google が手数料控除）。
+- ネイティブ広告 4 面: カフェ詳細 / マップ検索ドロップダウン / コーヒー記録タブ・分析タブの下部固定。iosApp View 層完結・iOS のみ。
+- **規約上の注意**: Places 由来のデータ（店名等）を広告リクエストのターゲティングシグナルに渡さないこと（Google Maps Platform Service Specific Terms）。実装・レビュー時に確認する。
+- App ID / 広告ユニット ID（4 ユニット）は `Secrets.xcconfig` → `Info.plist` 注入（Places キーと同経路）。
+
+---
+
 ## 3. 無料のもの（誤解しやすいので明記）
 
 - **Apple MapKit / Apple Maps POI**: ネイティブアプリでの MapKit 利用は無料。マップ表示・POI タップ自体には課金なし（POI 解決で Places `searchText` を叩いた時点で課金）

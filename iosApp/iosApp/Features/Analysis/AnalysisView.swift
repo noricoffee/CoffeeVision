@@ -28,6 +28,9 @@ struct AnalysisView: View {
     var viewModel: AnalysisViewModelBridge
     var appState: AppState
 
+    /// 下部固定アンカーアダプティブバナー用ローダー（requirements.md §11-3）。
+    @State private var adLoader = BannerAdLoader(adUnitID: AdUnitIDs.analysisBottomBar)
+
     var body: some View {
         NavigationStack {
             Group {
@@ -43,7 +46,7 @@ struct AnalysisView: View {
             .navigationBarTitleDisplayMode(.large)
             // 下部固定広告（requirements.md §11-3）。ロード失敗時は高さ 0 に畳まれる。
             .safeAreaInset(edge: .bottom) {
-                BottomBarNativeAdView(adUnitID: AdUnitIDs.analysisBottomBar)
+                AnchoredBannerAdView(loader: adLoader)
             }
         }
         .errorToast(message: viewModel.error) {

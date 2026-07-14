@@ -1,3 +1,4 @@
+import GoogleMobileAds
 import SwiftUI
 import SharedLogic
 
@@ -21,10 +22,10 @@ struct CafeDetailView: View {
     @State private var bridge: CafeDetailViewModelBridge?
     @State private var isPresentingEditor = false
 
-    /// インライン広告（requirements.md §11-1）のローダー。`cafeDetailList` の `List` 自体に
-    /// `.task` を付けてロードする（`List` は常に実体化されるため `.task` は確実に発火する。
-    /// 詳細は `adSection` のコメント参照）。
-    @State private var adLoader: NativeAdLoader?
+    /// インラインアダプティブバナー（requirements.md §11-1）のローダー。`cafeDetailList` の
+    /// `List` 自体に `.background(GeometryReader)` + `.task` を付けてロードする
+    /// （常に実体化されるビューに付けるため確実に発火する。詳細は `adSection` のコメント参照）。
+    @State private var adLoader = BannerAdLoader(adUnitID: AdUnitIDs.cafeDetail)
 
     // MARK: - Body
 
@@ -85,13 +86,25 @@ struct CafeDetailView: View {
             coffeesSection(bridge: bridge)
         }
         .listStyle(.insetGrouped)
-        .task {
-            // List 自体（常に実体化される）に付けるため確実に発火する。
-            let adLoader = adLoader ?? NativeAdLoader(adUnitID: AdUnitIDs.cafeDetail)
-            self.adLoader = adLoader
-            adLoader.load()
-        }
+        .background(
+            // List 自体の実測幅からインラインアダプティブバナーの幅を計算する（iPad マルチタスキング
+            // でも正確な幅になる）。`.insetGrouped` の左右余白は概算値（`Self.adHorizontalMargin`）を
+            // 差し引く。Color.clear は常に実体化されるため `.task` は確実に発火する。
+            GeometryReader { proxy in
+                Color.clear
+                    .task(id: proxy.size.width) {
+                        let width = proxy.size.width - Self.adHorizontalMargin * 2
+                        guard width > 0 else { return }
+                        adLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: Self.adMaxHeight))
+                    }
+            }
+        )
     }
+
+    /// `.insetGrouped` リストの左右余白概算（実測値より狭めに見積もり、バナーがはみ出さないようにする）。
+    private static let adHorizontalMargin: CGFloat = 32
+    /// インラインアダプティブバナーの上限高さ（行の高さになじむ値）。
+    private static let adMaxHeight: CGFloat = 100
 
     // MARK: - 視覚ヘッダー（写真帯 + 店名 + 評価 / 営業状態 / 価格帯 + 保存ボタン）
 
@@ -282,18 +295,18 @@ struct CafeDetailView: View {
     // MARK: - 広告セクション
 
     /// 情報系セクション（カフェ情報 / 外部リンク / 営業時間）とコーヒー記録セクションの間の
-    /// インライン広告（requirements.md §11-1）。
+    /// インラインアダプティブバナー（requirements.md §11-1）。
     ///
-    /// `List` の `Section` は中身が空でも行の余白・区切り線を描画しうるため、`InlineNativeAdCard`
-    /// のような「コンポーネント内部で畳む」方式ではなく、ここで `adLoader.nativeAd` を直接見て
-    /// **未ロード時は Section 自体を List の body に含めない**（2026-07-14 実機診断で確認した
-    /// 対応。ローダーは `cafeDetailList` の `List` に付けた `.task` が保持・駆動する）。
+    /// `List` の `Section` は中身が空でも行の余白・区切り線を描画しうるため、ここで
+    /// `adLoader.isLoaded` を直接見て**未ロード時は Section 自体を List の body に含めない**
+    /// （2026-07-14 実機診断で確認した対応。ローダーは `cafeDetailList` の `List` に付けた
+    /// `.background(GeometryReader).task` が保持・駆動する）。
     @ViewBuilder
     private var adSection: some View {
-        if let nativeAd = adLoader?.nativeAd {
+        if adLoader.isLoaded, let bannerView = adLoader.bannerView {
             Section {
-                NativeAdContainerView(nativeAd: nativeAd, layout: .card)
-                    .frame(minHeight: 96)
+                BannerViewRepresentable(bannerView: bannerView)
+                    .frame(maxWidth: .infinity)
                     .listRowInsets(EdgeInsets())
             }
         }

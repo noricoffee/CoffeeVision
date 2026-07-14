@@ -258,6 +258,9 @@ struct MapTabView: View {
     /// マップ上部検索バー用の CafeSearch ブリッジ。`.task` で 1 度だけ生成する。
     @State private var searchBridge: CafeSearchViewModelBridge? = nil
 
+    /// 検索ドロップダウンのインラインアダプティブバナー用ローダー（requirements.md §11-2）。
+    @State private var searchAdLoader = BannerAdLoader(adUnitID: AdUnitIDs.mapSearchDropdown)
+
     /// 検索結果ドロップダウンの表示フラグ。
     @State private var showingSearchResults: Bool = false
 
@@ -740,10 +743,10 @@ struct MapTabView: View {
                             if cafe.placeId != sb.results.last?.placeId {
                                 Divider().padding(.leading, 52)
                             }
-                            // 3 件目の後にインライン広告 1 枠（結果 3 件未満のときは到達しないため非表示。
-                            // requirements.md §11-2）。
+                            // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
+                            // 到達しないため非表示。requirements.md §11-2）。
                             if index == 2 {
-                                InlineNativeAdCard(adUnitID: AdUnitIDs.mapSearchDropdown)
+                                InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 8)
                                 if cafe.placeId != sb.results.last?.placeId {

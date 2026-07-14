@@ -37,7 +37,7 @@ struct iOSApp: App {
         // Google Mobile Ads SDK は同意フロー（ATT）の結果を待たずアプリ起動時に開始する
         // （公式推奨: 起動直後の呼び出しでセッション最初の広告リクエストのレイテンシを下げる）。
         // 個々の広告リクエストが NPA を要求するかどうかは ATT 許諾状態を都度参照して判断する
-        // （`NativeAdLoader.makeRequest()`）ため、SDK 起動自体を待たせる必要はない。
+        // （`BannerAdLoader.makeRequest()`）ため、SDK 起動自体を待たせる必要はない。
         MobileAds.shared.requestConfiguration.maxAdContentRating = GADMaxAdContentRating.general
         MobileAds.shared.start()
 

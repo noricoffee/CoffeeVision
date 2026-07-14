@@ -16,6 +16,9 @@ struct CoffeeListView: View {
     /// FAB タップで開くエディタの表示状態。
     @State private var isPresentingEditor = false
 
+    /// 下部固定アンカーアダプティブバナー用ローダー（requirements.md §11-3）。
+    @State private var adLoader = BannerAdLoader(adUnitID: AdUnitIDs.coffeeListBottomBar)
+
     var body: some View {
         // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）。
         // `safeAreaInset` は同じ ZStack に直接適用する（分析タブと同じ方式に統一。iOS 26 の
@@ -30,7 +33,7 @@ struct CoffeeListView: View {
         }
         .safeAreaInset(edge: .bottom) {
             // 下部固定広告（requirements.md §11-3）。ロード失敗時は高さ 0 に畳まれる。
-            BottomBarNativeAdView(adUnitID: AdUnitIDs.coffeeListBottomBar)
+            AnchoredBannerAdView(loader: adLoader)
         }
         .navigationTitle(String(localized: "コーヒー記録"))
         .navigationBarTitleDisplayMode(.large)

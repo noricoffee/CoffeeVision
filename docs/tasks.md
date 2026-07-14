@@ -37,7 +37,8 @@
 | [x] | ios-engineer: 共通ネイティブ広告コンポーネント 2 種（インライン用 / 下部固定用）。ロード失敗・オフライン時は枠ごと畳む。`maxAdContentRating = G`。「広告」ラベル / AdChoices 表示 | 2026-07-14 完了。`iosApp/iosApp/Ads/`。mediaView 非表示テンプレート（implementation_note 2026-07-14） |
 | [x] | ios-engineer: 4 面配線 — カフェ詳細（情報系の後・記録の前）/ 検索ドロップダウン（3 件目の後・結果 3 件未満は非表示）/ コーヒー記録タブ（下部固定、FAB を広告の上へ）/ 分析タブ（下部固定） | 2026-07-14 完了 |
 | [x] | 親: 検証（verify-kmp-ios、xcodebuild override 無し）+ Places データをターゲティングに渡していないかレビュー + implementation_note 記録 + commit | 2026-07-14 完了。override 無し BUILD SUCCEEDED + Gradle BUILD SUCCESSFUL 確認。Ads/ に Places 参照なし（コメントのみ）・素の Request + NPA フラグのみ確認 |
-| [ ] | ユーザー: AdMob アカウント作成・アプリ登録・ネイティブ広告ユニット 4 つ発行 → `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備 |
+| [x] | ios-engineer: **全面バナー化への再実装**（MediaView 必須判明による再編、requirements §11 改訂済み）— NativeAd 系 4 ファイル撤去、下部固定 2 面 = アンカーアダプティブバナー / インライン 2 面 = インラインアダプティブバナー（maxHeight 制限）、テスト用ユニット ID をバナー用に差し替え | 2026-07-14 完了。親再検証済み（build + Places 混入なし）。設計判断は implementation_note 2026-07-14 バナー再実装エントリ |
+| [ ] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット 4 つ発行 → `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備 |
 | [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
 | [ ] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | ビルド成功 ≠ 完了 |
 

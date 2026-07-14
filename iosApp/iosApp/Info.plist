@@ -2,14 +2,14 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<key>ADMOB_NATIVE_AD_UNIT_ID_ANALYSIS</key>
-	<string>$(ADMOB_NATIVE_AD_UNIT_ID_ANALYSIS)</string>
-	<key>ADMOB_NATIVE_AD_UNIT_ID_CAFE_DETAIL</key>
-	<string>$(ADMOB_NATIVE_AD_UNIT_ID_CAFE_DETAIL)</string>
-	<key>ADMOB_NATIVE_AD_UNIT_ID_COFFEE_LIST</key>
-	<string>$(ADMOB_NATIVE_AD_UNIT_ID_COFFEE_LIST)</string>
-	<key>ADMOB_NATIVE_AD_UNIT_ID_MAP_SEARCH</key>
-	<string>$(ADMOB_NATIVE_AD_UNIT_ID_MAP_SEARCH)</string>
+	<key>ADMOB_BANNER_AD_UNIT_ID_ANALYSIS</key>
+	<string>$(ADMOB_BANNER_AD_UNIT_ID_ANALYSIS)</string>
+	<key>ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL</key>
+	<string>$(ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL)</string>
+	<key>ADMOB_BANNER_AD_UNIT_ID_COFFEE_LIST</key>
+	<string>$(ADMOB_BANNER_AD_UNIT_ID_COFFEE_LIST)</string>
+	<key>ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH</key>
+	<string>$(ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH)</string>
 	<key>CADisableMinimumFrameDurationOnPhone</key>
 	<true/>
 	<key>CFBundleDisplayName</key>

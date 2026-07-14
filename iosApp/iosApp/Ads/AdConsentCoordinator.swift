@@ -17,10 +17,10 @@ import UIKit
 /// - Google Mobile Ads SDK（SPM）の内部依存として UMP SDK のリンク自体は外れていない（コードから呼ばないだけ）
 /// - `requestConsentInfoUpdate` を呼ばない構成のため `UMPConsentInformation.sharedInstance.canRequestAds`
 ///   は常に `false` になる。**このプロパティを広告ロードのゲートに使ってはいけない**
-///   （`NativeAdLoader` / 呼び出し側は参照していない。今後も参照しないこと）
+///   （`BannerAdLoader` / 呼び出し側は参照していない。今後も参照しないこと）
 /// - ATT が「許可」以外（拒否 / 制限 / 未定）のときは非パーソナライズ広告（NPA）にフォールバックする。
 ///   各広告リクエストは `isPersonalizedAdsAllowed` を見て NPA extras を付与するかを判断する
-///   （`NativeAdLoader.makeRequest()` 参照）
+///   （`BannerAdLoader.makeRequest()` 参照）
 @MainActor
 enum AdConsentCoordinator {
 

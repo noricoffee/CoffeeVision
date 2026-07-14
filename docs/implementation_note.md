@@ -876,7 +876,7 @@ requirements.md §11-4 の「データ利用同意オンボーディングの直
 
 4 面とも既存 UI（検索結果行・List セクション・下部固定枠）の行の高さに揃えるため、ネイティブ広告の `mediaView`（画像 / 動画アセット）を表示しないテキスト主体テンプレートにした。AdMob ポリシー上は headline 以外のアセットは任意のため問題ないが、動画中心のインベントリからの fill 率に影響しうる（収益が想定より低い場合の見直しポイント）。UMP SDK は Google Mobile Ads SDK（SPM）の内部依存として自動リンクされるため個別導入は不要。
 
-追記（同日）: テスト広告の AdMob native ad validator が「1 implementation issue」を検出。内容はシミュレータ UI からのみ確認可能（ユーザー確認待ち）。mediaView 非表示が原因の可能性が高いとみている。指摘内容次第でテンプレート見直し（小さな MediaView 追加等）を判断する。
+追記（同日）: テスト広告の AdMob native ad validator が「1 implementation issue」を検出し、ユーザー確認の結果 **MediaView（最小 120×120pt）が必須アセット**と判明（「headline 以外は任意」という当初の理解が誤り）。コンパクト枠に 120pt メディアを組み込むとバナー（50〜60pt）より大きく悪目立ちし「溶け込むからネイティブ」の前提が崩れたため、**全面アダプティブバナーへ再編**（同日ユーザー確定。requirements §11 改訂済み）。本エントリのテンプレート判断はこの時点で廃止。ネイティブ実装で得た教訓（Group+task 発火 / safeAreaInset 統一）はバナー実装にも引き継ぐ。
 
 ### 2026-07-14: 広告コンポーネントの task 発火バグ修正（Group → ZStack / ローダー持ち上げ / safeAreaInset 統一）
 
@@ -888,3 +888,16 @@ requirements.md §11-4 の「データ利用同意オンボーディングの直
 - **広告コンポーネントの root は `ZStack`**: `Group { if let }` + `.task` は子ゼロの間 task が発火しない。ZStack は常に実体化されるため空でも発火し、空時は高さ 0 に畳まれる（畳み仕様は維持）
 - **カフェ詳細はローダーを画面側へ持ち上げ**: List の Section 内で空 ZStack を置くと空 Section の余白・区切り線が残るため、`CafeDetailView` が `@State` でローダーを持ち、`List` 自体の `.task` でロード駆動、`nativeAd != nil` のときだけ `adSection` を List に含める
 - **下部固定広告は `.safeAreaInset(edge: .bottom)` に統一**: コーヒー記録タブの VStack 末尾直置きは iOS 26 のフローティングタブバー背後に隠れる。分析タブと同方式に統一し、FAB は `ZStack(alignment: .bottomTrailing)` + safeAreaInset で縮んだ安全域基準となり広告の上に自然に乗る（広告が畳まれれば FAB も下がる）
+
+### 2026-07-14: 全面アダプティブバナーへの再実装で確定した判断
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/BannerAdLoader.swift`, `InlineBannerAdView.swift`, `AnchoredBannerAdView.swift`, `CafeDetailView.swift`
+
+MediaView 必須判明によるネイティブ → バナー再編（requirements §11 改訂）の実装で確定した判断:
+
+- **アンカー面は `largeAnchoredAdaptiveBanner(width:)`**: ドキュメント記載の `currentOrientationAnchoredAdaptiveBanner` は現行 SDK ヘッダで非推奨のため置き換え（SDK ヘッダ実読み + 公式サンプルで裏取り）
+- **インライン面は `inlineAdaptiveBanner(width:maxHeight:)`**: 実測幅は `.background(GeometryReader)` + `.task` で取得（ロードトリガーは常在ビューに付ける原則を踏襲）
+- **カフェ詳細のバナー幅は List 実測幅 − 32pt の概算**: `.insetGrouped` の左右余白の保守的な見積もり（`CafeDetailView.adHorizontalMargin`）。実機で狭すぎ / 広すぎが見えたらこの定数を調整する
+- テスト用フォールバック ID はバナー用 `ca-app-pub-3940256099942544/2435281174`（アンカー / インライン共通）。xcconfig キー名は `ADMOB_BANNER_AD_UNIT_ID_*` にリネーム済み
+- ネイティブ実装（NativeAd 系 4 ファイル）は完全撤去。NPA / 畳み挙動 / 4 面配置は不変

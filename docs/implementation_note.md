@@ -901,3 +901,14 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **カフェ詳細のバナー幅は List 実測幅 − 32pt の概算**: `.insetGrouped` の左右余白の保守的な見積もり（`CafeDetailView.adHorizontalMargin`）。実機で狭すぎ / 広すぎが見えたらこの定数を調整する
 - テスト用フォールバック ID はバナー用 `ca-app-pub-3940256099942544/2435281174`（アンカー / インライン共通）。xcconfig キー名は `ADMOB_BANNER_AD_UNIT_ID_*` にリネーム済み
 - ネイティブ実装（NativeAd 系 4 ファイル）は完全撤去。NPA / 畳み挙動 / 4 面配置は不変
+
+### 2026-07-15: バナーローダーの安定化（pending 方式 / 実サイズ明示 / 既知の過渡エラー）
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/BannerAdLoader.swift`, `BannerViewRepresentable.swift`, `InlineBannerAdView.swift`, `AnchoredBannerAdView.swift`, `CafeDetailView.swift`
+
+バナー再実装後の「カフェ詳細以外表示されない」報告（ユーザーの Xcode コンソールログで診断）の修正で確定した判断。バグ機構の一般形は lessons 2026-07-15 の 2 エントリ。
+
+- **`BannerAdLoader` は pending 方式**: ロード中の新要求は `pendingAdSize` に保存し完了後に追いかけ実行（最後の要求の保証）。同一サイズロード済みは no-op。`hasEverReceivedAd` 後の失敗では表示を巻き戻さない。呼び出し側は `minimumRequestableWidth`（150pt）未満の過渡幅でロードしない
+- **表示は受信後の実サイズで明示 frame**: `loadedAdSize`（didReceive 時の `bannerView.adSize.size`）で `.frame(width:height:)`。Google 公式 SwiftUI サンプル（BannerViewContainer）準拠 + インラインアダプティブの可変返却サイズ対応（リクエスト時サイズではなく実サイズを使う点が公式サンプルとの意図的な差分）
+- **既知の過渡エラー（許容）**: 受信直後に `load()` 非経由の「Invalid ad width or height」失敗ログが 1 回出ることがあるが、直後に再受信して表示は正常維持される。テスト段階では 4 面が**同一テストユニット ID を共有**しており切り分け不能なノイズと判断。**本番の面別ユニット ID 発行後も継続して出る場合は再調査する**（観察ポイント）

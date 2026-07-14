@@ -94,7 +94,9 @@ struct CafeDetailView: View {
                 Color.clear
                     .task(id: proxy.size.width) {
                         let width = proxy.size.width - Self.adHorizontalMargin * 2
-                        guard width > 0 else { return }
+                        // レイアウト測定の過渡状態（ゴミ幅・負値）でリクエストしない
+                        // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。
+                        guard width >= BannerAdLoader.minimumRequestableWidth else { return }
                         adLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: Self.adMaxHeight))
                     }
             }
@@ -301,13 +303,25 @@ struct CafeDetailView: View {
     /// `adLoader.isLoaded` を直接見て**未ロード時は Section 自体を List の body に含めない**
     /// （2026-07-14 実機診断で確認した対応。ローダーは `cafeDetailList` の `List` に付けた
     /// `.background(GeometryReader).task` が保持・駆動する）。
+    ///
+    /// `BannerViewRepresentable` には受信済みサイズ（`adLoader.loadedAdSize`）で明示
+    /// `.frame(width:height:)` を与える（公式 SwiftUI サンプル `BannerContentView.swift` と
+    /// 同じ構成）。サイズを明示しないと SwiftUI がレイアウト中に異なる frame を与えてしまい、
+    /// SDK 側のサイズ検証で "Invalid ad width or height" が発生し受信済み広告が無効化される
+    /// ことがある（2026-07-14 実機診断で確認）。行内でのセンタリングは外側の `HStack` + `Spacer`
+    /// で行い、representable 自体は伸縮させない。
     @ViewBuilder
     private var adSection: some View {
-        if adLoader.isLoaded, let bannerView = adLoader.bannerView {
+        if adLoader.isLoaded, let bannerView = adLoader.bannerView, let loadedAdSize = adLoader.loadedAdSize {
             Section {
-                BannerViewRepresentable(bannerView: bannerView)
-                    .frame(maxWidth: .infinity)
-                    .listRowInsets(EdgeInsets())
+                HStack {
+                    Spacer(minLength: 0)
+                    BannerViewRepresentable(bannerView: bannerView)
+                        .frame(width: loadedAdSize.width, height: loadedAdSize.height)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .listRowInsets(EdgeInsets())
             }
         }
     }

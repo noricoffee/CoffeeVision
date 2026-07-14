@@ -650,3 +650,23 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 非同期ロードのトリガー（`.task` / `.onAppear`）は「ロード結果で中身が変わるビュー」ではなく「常に実体化されるビュー」に付ける。切り分けでは「body 評価ログは出るのに task ログが出ない」が決定的証拠になる（body 評価 ≠ ビュー実体化）。UI 挙動の検証はビルド成功では不足で、親がシミュレータ起動 + `print` ログ採取（`simctl launch --console-pty`）まで行う
 - **発生源**: AdMob 広告導入の広告コンポーネント（2026-07-14、ユーザー報告「分析タブ以外表示されない」→ 診断ハーネス + ログで確定）。経緯は implementation_note 2026-07-14 広告コンポーネントエントリ
 - **横展開点検（2026-07-14）**: `grep -rn "Group {" iosApp/iosApp --include="*.swift"` で 16 箇所列挙 → 各 Group 直後 45 行に `.task` / `.onAppear` があるのは 3 箇所（`AnalysisView:33` / `CafeDetailView:32` / `PlacePhotoThumbnail:35`）で、**いずれも `else` 節を持ち中身が空になり得ない**ため非該当。**該当なし**
+
+## 2026-07-15
+
+### レイアウト実測駆動の非同期ロードで、再入ガード（`guard !isLoading`）が「最後の要求」を無言で破棄すると過渡値だけが処理されて回復不能になる
+
+- **症状**: 下部固定バナーがタブ切替後も表示されない。ログでは `task fired width=72` → リクエスト → `task fired width=402` → **再入ガードで破棄** → 72×100 のリクエストは「No ad to show」で失敗、以降幅が変化しないため `task(id: width)` が再発火せず回復不能
+- **原因の構造**: `GeometryReader` + `.task(id: size.width)` の計測はタブ切替等の過渡状態で**ゴミ幅（72 / 20pt 等）を先に報告**する。ゴミ幅で即ロードを開始すると、直後の正しい幅の要求が `guard !isLoading` に吸われて消える。「re-entrancy guard = 多重リクエスト防止」のつもりが、**「最後に要求された状態が最終的に反映される」保証を壊している**。id ベースの再発火はガードの存在を知らないため、両者の組み合わせで取りこぼしが恒久化する
+- **修正パターン**: ① 呼び出し側に**下限ガード**（`width >= minimumRequestableWidth`）で過渡値を弾く ② ローダー側は **pending 方式**（ロード中の新要求は破棄せず保存し、完了（成功 / 失敗どちらでも）後に追いかけて実行）で「最後の要求は必ず処理される」を保証 ③ 既に同一サイズでロード済みなら no-op（無限リロード防止）④ 一度成功した表示は後続の失敗で巻き戻さない
+- **教訓**: 「計測値の変化で再実行される処理」に再入ガードを入れるときは、**破棄した要求を誰が再送するのか**を必ず答えられること。答えがなければ pending / 最新値の再キック機構をセットで入れる。過渡値はガードで弾けるが、正しい値の取りこぼしはガードでは防げない
+- **発生源**: AdMob アダプティブバナーの `BannerAdLoader`（2026-07-14〜15、ユーザーの Xcode コンソールログで確定）
+- **横展開点検（2026-07-15）**: `grep -rn "guard !isLoading\|guard isLoading == false" iosApp shared --include="*.swift" --include="*.kt"` → 2 件。① `BannerAdLoader.swift:66`（本件、pending 方式で修正済み）② `MapTabView.swift:427` は `onChange(of: isLoading)` の**完了イベント検知**（false への変化に反応するフィルタ）で、要求を破棄する再入ガードではなく非該当。**他に該当なし**
+
+### UIKit SDK ビューを `UIViewRepresentable` で包むときはサイズを明示する（intrinsic 任せにすると SwiftUI の提案サイズで伸縮され、SDK のサイズ検証が作動する）
+
+- **症状**: バナー広告が受信成功（`didReceive`）した直後に、こちらの `load()` を経由しない「Invalid ad width or height」失敗が届き、表示が無効化される（受信したのに画面に出ない）
+- **原因の構造**: `UIViewRepresentable` はサイズ指定がないと SwiftUI の**提案サイズ**で UIView の frame を設定する（`maxWidth: .infinity` なら伸縮、レイアウト過渡では 0 もあり得る）。Google Mobile Ads の `BannerView` は自身の `adSize` と実 frame の不整合を検知して内部で再検証・再ロードを走らせるため、「受信 → SwiftUI が別サイズに伸縮 → SDK が invalid 判定」のループになる。**サイズに自己主張のある SDK ビューを intrinsic 任せで包んではいけない**
+- **修正パターン**: Google 公式 SwiftUI サンプル（googleads-mobile-ios-examples の `BannerViewContainer`）と同じく、representable に **adSize ちょうどの `.frame(width:height:)` を明示**する。インラインアダプティブのように返却サイズが可変の場合は、リクエスト時サイズではなく**受信後の実サイズ**（`bannerView.adSize.size` を didReceive で保存）を使う。センタリング等は外側のコンテナで行い、representable 自体は伸縮させない
+- **教訓**: サードパーティ SDK の UIKit ビューを SwiftUI に組み込むときは、**先に公式の SwiftUI サンプルを探して構成を一致させる**（今回も最終的に公式サンプル通りにして解決。3 サイクル目でようやく参照した）。「受信成功したのに表示されない」+「自分のコードを経由しない失敗コールバック」は SDK 内部の検証・再試行を疑う
+- **発生源**: `BannerViewRepresentable`（2026-07-15 修正）。経緯は implementation_note 2026-07-15 エントリ
+- **横展開点検（2026-07-15）**: `grep -rn "UIViewRepresentable\|UIViewControllerRepresentable" iosApp/iosApp --include="*.swift"` → representable は `BannerViewRepresentable`（修正済み）の 1 箇所のみ。**該当なし**

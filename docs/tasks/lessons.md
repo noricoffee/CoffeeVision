@@ -670,3 +670,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: サードパーティ SDK の UIKit ビューを SwiftUI に組み込むときは、**先に公式の SwiftUI サンプルを探して構成を一致させる**（今回も最終的に公式サンプル通りにして解決。3 サイクル目でようやく参照した）。「受信成功したのに表示されない」+「自分のコードを経由しない失敗コールバック」は SDK 内部の検証・再試行を疑う
 - **発生源**: `BannerViewRepresentable`（2026-07-15 修正）。経緯は implementation_note 2026-07-15 エントリ
 - **横展開点検（2026-07-15）**: `grep -rn "UIViewRepresentable\|UIViewControllerRepresentable" iosApp/iosApp --include="*.swift"` → representable は `BannerViewRepresentable`（修正済み）の 1 箇所のみ。**該当なし**
+
+## 2026-07-16
+
+### 深いネストの ViewBuilder 内に多分岐 if/else の let 代入を書くと、無関係に見える外側 ForEach の KeyPath 解決エラーとして誤誘導されることがある
+
+- **症状**: `Map`/`ForEach`/`Annotation` の深いネスト内に 3 分岐の `if/else` による `let pinOpacity` 代入を追加したところ、原因箇所ではなく**外側の** `ForEach(bridge.visitedCafes, id: \.cafe.placeId)` が「value of type `KotlinBase` has no member `cafe`」というエラーになった（エラー位置と原因箇所が一致しない）
+- **原因の構造**: Swift の型チェッカは複雑なクロージャで型推論が破綻すると、SKIE ブリッジ型の KeyPath を具象型（`VisitedCafe`）でなく基底型（`KotlinBase`）に解決してしまい、エラーを実際の原因（直近追加した多分岐 let 代入）ではなく外側の KeyPath に着地させる。SKIE 型 + 深いネスト ViewBuilder + 複数行 `if/else` の組み合わせで再現しやすい
+- **修正パターン**: 同じ分岐を 1 文の入れ子三項演算子式に書き換える（`let x: Double = a ? v1 : (b ? v2 : v3)`）。それで型チェッカが正しく推論する
+- **教訓**: SwiftUI ViewBuilder 内で「関係なさそうな外側の KeyPath / ForEach」のエラーが突然出たら、外側を疑う前に**直近で追加した多分岐の let 代入を三項演算子化して切り分ける**。エラー位置を信用しない
+- **発生源**: マップ「好み一致」チップのタップ対応（2026-07-16、ios-engineer）。再現条件の詳細はエージェントメモリ `ios-engineer/xcodebuild-verification.md`
+- **横展開点検（2026-07-16）**: この型はコンパイルエラーとして顕在化するため、ビルド green な現状に潜在該当は存在し得ない（override 無し xcodebuild BUILD SUCCEEDED を親確認済み）。予防観点で `grep -rn "= if " iosApp/iosApp --include="*.swift"`（if 式による let 代入）→ 0 件。**該当なし**

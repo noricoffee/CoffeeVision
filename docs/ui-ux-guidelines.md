@@ -39,12 +39,12 @@ CoffeeVision のアクセントカラーは **コーヒー由来のブラウン�
 
 | 概念 | 色 | 使用箇所 |
 |------|----|---------|
-| ブランド / 訪問済み | `Color.accentColor`（#8B5A2B） | visitedCafePin、`TagChip` 選択フィル、tint 全般 |
+| ブランド / 訪問済み | `Color.accentColor`（#8B5A2B） | visitedCafePin、`TagChip` 選択フィル（既定 `tint`）、tint 全般 |
 | 保存済み（行きたい） | `Color.indigo` | savedCafePin、保存ボタン / バッジ |
-| 好み一致 | `Color.pink` | recommendedCafePin、凡例チップ（**`accentColor` を「好み」の意味で使わない**） |
+| 好み一致 | `Color.pink` | recommendedCafePin、「好み一致」チップ（`TagChip` の `tint: .pink`）、`RecommendedCafeListSheet`（**`accentColor` を「好み」の意味で使わない**） |
 | 検索結果 | `Color.blue` | searchResultPin、検索 UI |
 
-共通チップ部品は `Components/TagChip.swift`（インタラクティブ `TagChip` + 凡例用 `TagLegendChip`）。画面ローカルにチップを再実装しない。
+共通チップ部品は `Components/TagChip.swift`（インタラクティブ `TagChip` + 凡例用 `TagLegendChip`）。画面ローカルにチップを再実装しない。`TagLegendChip` は 2026-07-16 の「好み一致」チップのタップ対応で production 上の使用箇所がゼロになった（凡例が必要になったら再利用する。次に触るタイミングで用途が生まれていなければ削除してよい）。
 
 ---
 

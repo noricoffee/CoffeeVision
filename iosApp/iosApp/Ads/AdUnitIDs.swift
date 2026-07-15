@@ -14,7 +14,8 @@ enum AdUnitIDs {
     /// マップ検索ドロップダウンのインラインアダプティブバナー（requirements.md §11-2）。
     static let mapSearchDropdown = value(forKey: "ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH")
 
-    /// コーヒー記録タブの下部固定アンカーアダプティブバナー（requirements.md §11-3）。
+    /// コーヒー記録タブのリスト先頭インラインアダプティブバナー（requirements.md §11-3。
+    /// 2026-07-15 上部固定 → リスト先頭インライン配置に変更。定数名は当時のまま維持）。
     static let coffeeListBottomBar = value(forKey: "ADMOB_BANNER_AD_UNIT_ID_COFFEE_LIST")
 
     /// 分析タブの下部固定アンカーアダプティブバナー（requirements.md §11-3）。

@@ -896,7 +896,7 @@ requirements.md §11-4 の「データ利用同意オンボーディングの直
 
 MediaView 必須判明によるネイティブ → バナー再編（requirements §11 改訂）の実装で確定した判断:
 
-- **アンカー面は `largeAnchoredAdaptiveBanner(width:)`**: ドキュメント記載の `currentOrientationAnchoredAdaptiveBanner` は現行 SDK ヘッダで非推奨のため置き換え（SDK ヘッダ実読み + 公式サンプルで裏取り）
+- **アンカー面のサイズ関数**: ドキュメント記載の `currentOrientationAnchoredAdaptiveBanner` は現行 SDK ヘッダで非推奨のため、当初 `largeAnchoredAdaptiveBanner(width:)` を採用（SDK ヘッダ実読み + 公式サンプルで裏取り）。その後 large の高さ（実測 126pt）が圧迫的との判断で、**`inlineAdaptiveBanner(width:maxHeight: 90)` に変更**（2026-07-15 同日）。SDK v13.6.0 のヘッダ確認で、アンカー系には非推奨でない「標準版」（高さ 50〜90pt）が存在しない（portrait / landscape / currentOrientation 版はすべて非推奨、非推奨でないのは large のみ）ため、同じ幅適応 + 高さ上限 90pt を実現できる inline 系で代替した。サイズ関数の分類（inline / anchored）は adSize の決定ロジックの違いだけで、配置場所（safeAreaInset）とは独立
 - **インライン面は `inlineAdaptiveBanner(width:maxHeight:)`**: 実測幅は `.background(GeometryReader)` + `.task` で取得（ロードトリガーは常在ビューに付ける原則を踏襲）
 - **カフェ詳細のバナー幅は List 実測幅 − 32pt の概算**: `.insetGrouped` の左右余白の保守的な見積もり（`CafeDetailView.adHorizontalMargin`）。実機で狭すぎ / 広すぎが見えたらこの定数を調整する
 - テスト用フォールバック ID はバナー用 `ca-app-pub-3940256099942544/2435281174`（アンカー / インライン共通）。xcconfig キー名は `ADMOB_BANNER_AD_UNIT_ID_*` にリネーム済み

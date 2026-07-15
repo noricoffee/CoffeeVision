@@ -23,9 +23,24 @@ import SwiftUI
 ///   "Invalid ad width or height" が発生し受信済み広告が無効化されることがある
 ///   （2026-07-14 実機診断で確認）。外側の `.frame(maxWidth: .infinity)` はスロット全体の
 ///   センタリング用で、representable 自体は伸縮させない。
+/// - サイズは `inlineAdaptiveBanner(width:maxHeight:)`（`Self.maxHeight = 90`）で計算する。
+///   2026-07-15: 当初は `largeAnchoredAdaptiveBanner(width:)` を使っていたが、実測で高さが
+///   126pt 程度まで育ち圧迫感があったため標準的な高さ（〜90pt）に抑える方針に変更した。
+///   **GADAdSize.h（v13.6.0）を実際に確認したところ、非 Large のアンカーアダプティブ関数
+///   （`portraitAnchoredAdaptiveBanner` / `landscapeAnchoredAdaptiveBanner` /
+///   `currentOrientationAnchoredAdaptiveBanner`）は全て非推奨で、代替として案内されているのは
+///   `largeAnchoredAdaptiveBanner` のみだった**（アンカー系に「非推奨でない標準版」は存在しない）。
+///   非推奨 API を使わずに高さを確実に抑える手段として、`inlineAdaptiveBanner(width:maxHeight:)`
+///   （非推奨ではない）を採用した。幅は実測値のまま渡すため画面幅適応は維持され、固定 320×50
+///   バナーへは落とさない。`maxHeight = 90` は非推奨版の標準アンカーアダプティブが返していた
+///   高さレンジ（50〜90pt）の上限に合わせた値
 struct AnchoredBannerAdView: View {
 
     var loader: BannerAdLoader
+
+    /// バナー高さの上限。非推奨の「標準」アンカーアダプティブバナーが返していた高さレンジ
+    /// （50〜90pt）の上限に合わせている（上記クラスコメント参照）。
+    private static let maxHeight: CGFloat = 90
 
     var body: some View {
         ZStack {
@@ -43,7 +58,9 @@ struct AnchoredBannerAdView: View {
                         // レイアウト測定の過渡状態（ゴミ幅）でリクエストしない
                         // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。
                         guard proxy.size.width >= BannerAdLoader.minimumRequestableWidth else { return }
-                        loader.load(adSize: largeAnchoredAdaptiveBanner(width: proxy.size.width))
+                        loader.load(
+                            adSize: inlineAdaptiveBanner(width: proxy.size.width, maxHeight: Self.maxHeight)
+                        )
                     }
             }
         )

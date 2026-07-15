@@ -16,23 +16,25 @@ struct CoffeeListView: View {
     /// FAB タップで開くエディタの表示状態。
     @State private var isPresentingEditor = false
 
-    /// 下部固定アンカーアダプティブバナー用ローダー（requirements.md §11-3）。
+    /// 上部固定アンカーアダプティブバナー用ローダー（requirements.md §11-3）。
+    ///
+    /// 2026-07-15: FAB との近接誤タップ懸念（AdMob ポリシーリスク）+ タブバー / 広告 / FAB の
+    /// 下部 3 段渋滞を解消するため、下部固定 → 上部固定（ナビゲーション / 検索バー直下）に変更した。
+    /// 分析タブは FAB が無いため下部固定のまま変更していない。
     @State private var adLoader = BannerAdLoader(adUnitID: AdUnitIDs.coffeeListBottomBar)
 
     var body: some View {
         // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）。
-        // `safeAreaInset` は同じ ZStack に直接適用する（分析タブと同じ方式に統一。iOS 26 の
-        // フローティングタブバー背後に隠れるのを避けるため。2026-07-14）。こうすることで
-        // `ZStack` 自身の安全域が広告分だけ縮まり、`.bottomTrailing` の FAB もその縮まった
-        // 安全域を基準に配置されるため、広告の上に自然に乗る。
-        ZStack(alignment: .bottomTrailing) {
-            content
+        // 広告が上部固定になったため、FAB の安全域を広告分縮める必要がなくなり、
+        // 通常の overlay 配置で足りる（2026-07-15）。
+        content
+        .overlay(alignment: .bottomTrailing) {
             addCoffeeFAB
                 .padding(.trailing, 16)
                 .padding(.bottom, 16)
         }
-        .safeAreaInset(edge: .bottom) {
-            // 下部固定広告（requirements.md §11-3）。ロード失敗時は高さ 0 に畳まれる。
+        .safeAreaInset(edge: .top) {
+            // 上部固定広告（requirements.md §11-3）。ロード失敗時は高さ 0 に畳まれる。
             AnchoredBannerAdView(loader: adLoader)
         }
         .navigationTitle(String(localized: "コーヒー記録"))

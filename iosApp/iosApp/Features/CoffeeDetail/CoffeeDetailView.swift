@@ -19,6 +19,8 @@ struct CoffeeDetailView: View {
     @State private var viewModel: CoffeeDetailViewModelBridge
     @State private var isPresentingEditor = false
     @State private var isPresentingDuplicateEditor = false
+    @State private var showDeleteConfirm = false
+    @Environment(\.dismiss) private var dismiss
 
     init(coffeeId: String, appState: AppState) {
         self.coffeeId = coffeeId
@@ -48,14 +50,38 @@ struct CoffeeDetailView: View {
                         } label: {
                             Label(String(localized: "これをもとに記録"), systemImage: "doc.on.doc")
                         }
+                        Divider()
+                        Button(role: .destructive) {
+                            showDeleteConfirm = true
+                        } label: {
+                            Label(String(localized: "削除"), systemImage: "trash")
+                        }
                     } label: {
                         Label(String(localized: "その他の操作"), systemImage: "ellipsis.circle")
                     }
                     .accessibilityLabel(String(localized: "その他の操作"))
                 }
             }
-            .task { viewModel.onAppear(coffeeId: coffeeId) }
+            .confirmationDialog(
+                String(localized: "コーヒー記録を削除"),
+                isPresented: $showDeleteConfirm,
+                titleVisibility: .visible
+            ) {
+                Button(String(localized: "削除"), role: .destructive) {
+                    viewModel.onDeleteTapped()
+                }
+                Button(String(localized: "キャンセル"), role: .cancel) {}
+            } message: {
+                Text(String(localized: "この記録と写真は完全に削除されます。この操作は取り消せません。"))
+            }
+            .task {
+                guard let uid = appState.uid else { return }
+                viewModel.onAppear(coffeeId: coffeeId, userId: uid)
+            }
             .onDisappear { viewModel.onDisappear() }
+            .onChange(of: viewModel.isDeleted) { _, isDeleted in
+                if isDeleted { dismiss() }
+            }
             .errorToast(message: viewModel.error) {
                 viewModel.onErrorDismissed()
             }
@@ -83,7 +109,11 @@ struct CoffeeDetailView: View {
 
     @ViewBuilder
     private var content: some View {
-        if viewModel.coffee == nil && viewModel.isLoading {
+        if viewModel.isDeleted {
+            // 削除成功から dismiss() までの一瞬に「見つかりません」を出さないためのつなぎ表示
+            ProgressView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+        } else if viewModel.coffee == nil && viewModel.isLoading {
             ProgressView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else if let coffee = viewModel.coffee {

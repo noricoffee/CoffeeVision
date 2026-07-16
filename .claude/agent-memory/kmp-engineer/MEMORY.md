@@ -16,3 +16,4 @@
 - [Mapper enum フォールバック + raw row テスト手法](mapper_enum_fallback_and_raw_row_test.md) — `valueOf`→`entries.firstOrNull` 置換の記録。ドメインモデルを経由せず SQLDelight クエリへ直接不正値を書き込むテストヘルパーの作り方
 - [OriginNormalizer シノニム辞書導入](origin_normalizer_synonym_dict.md) — origin 正規化 5 箇所の置換リスト + 辞書完全一致方式が複合語 contains テストを壊す既知トレードオフ
 - [SQLDelight migration のバージョン番号の実際の意味](sqldelight_migration_version_semantics.md) — `oldVersion<=N` の罠（N.sqm だけ実行するには oldVersion=N+1）/ `migrate(0,N)` が空DBで失敗する理由 / テーブル再作成 migration の PRAGMA foreign_keys は ON/OFF でなく 0/1 / iOS 版 migration テスト（NativeSqliteDriver 低レベル構築 + `klib dump-abi` での API 裏取り）/ sandbox でも `iosSimulatorArm64Test` が通った実績
+- [commonTest 新設時の手順](commontest_first_setup_in_feature_module.md) — build.gradle.kts の commonTest 依存追加漏れ（kotlinx.datetime 等）/ sandbox で assembleXCFramework は compile までは成功し link だけ xcodebuild 不在で失敗するのが正常

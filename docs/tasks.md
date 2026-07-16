@@ -42,6 +42,17 @@
 | [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
 | [x] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | 2026-07-15 完了。位置調整（記録タブ = リスト先頭インライン / 分析タブ = 高さ 90pt 上限）まで確認済み |
 
+#### コーヒー記録の削除動線 3 種（2026-07-16 起票）
+
+> 要件 2-3「CoffeeRecord の削除」の動線整備。リストスワイプ削除は実装済み（確認なし即削除、維持）。追加するのは **リスト長押し contextMenu（編集 + 削除）** と **詳細右上 Menu の削除**。確認ダイアログは詳細・長押しのみ（2026-07-16 ユーザー決定、Undo なし）。詳細からの削除は `CoffeeDetailViewModel.UIState.isDeleted` フラグで pop 通知（`coffee == null` 検知は同期削除の「見つかりません」表示用に温存）。プランは `.claude/plans/starry-greeting-bird.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `CoffeeDetailViewModel` に `onAppear(coffeeId, userId)` / `onDeleteTapped()` / `UIState.isDeleted` 追加 + commonTest 新設 | 2026-07-16 完了。commonTest 5 件 green（Android host + iosSimulatorArm64 は親実行） |
+| [x] | ios-engineer: 詳細 Bridge / View（削除 Menu + confirmationDialog + dismiss + 写真物理削除）、リスト contextMenu（編集 sheet + 削除 dialog） | 2026-07-16 完了。swipeActions 無変更 |
+| [x] | 親: verify-kmp-ios 再検証 + implementation_note 記録 + commit | 2026-07-16 検証完了。全モジュール 2 ターゲットテスト green + XCFramework link + override 無し xcodebuild BUILD SUCCEEDED を親確認。implementation_note 2026-07-16 記録済み |
+| [ ] | ユーザー: シミュレータで 3 動線 + スワイプ退行なし確認 | ビルド成功 ≠ 動作確認完了 |
+
 #### マップ「好み一致」チップのタップ対応（2026-07-16 起票）
 
 > ユーザー報告「好み一致タグをタップしても何も起きない」。現状は静的凡例チップ（`TagLegendChip`、意図的にインタラクションなし）だが、隣のタップ可能チップと同じ見た目で誤解を招く。**「保存済み」チップと同じ操作体系に変更する**（2026-07-16 ユーザー決定）: タップで強調 ON + 好み一致カフェ一覧シート表示、強調中の再タップは強調解除のみ。行には推薦理由サマリを表示し、行タップでカフェ詳細へ push。iosApp View 層完結・KMP 変更なし。

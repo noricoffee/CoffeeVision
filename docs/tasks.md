@@ -50,7 +50,7 @@
 |------|------|------|
 | [x] | ios-engineer: `AnalysisView.brewMethodSection` を横棒 BarMark 化（焙煎度セクションの軸構成を踏襲） | 2026-07-16 完了。データ順は `byBrewMethod`（件数降順）のまま = 最多の方法が最上段 |
 | [x] | 親: 検証（xcodebuild override 無し）+ commit | 2026-07-16 完了。ios-engineer が override 無し xcodebuild BUILD SUCCEEDED（error 0 件）を確認済み |
-| [ ] | ユーザー: シミュレータで表示確認（ラベル被りなし / 件数軸グリッド） | ビルド成功 ≠ 修正完了 |
+| [x] | ユーザー: シミュレータで表示確認（ラベル被りなし / 件数軸グリッド） | 2026-07-16 ユーザー確認完了 |
 
 #### 分析タブ「あなたの傾向」の再生成抑止（2026-07-16 起票）
 

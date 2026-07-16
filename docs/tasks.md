@@ -58,8 +58,8 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | ios-engineer: `ShareCard/` 新設（`CoffeeShareCardView` = 360×450pt 可変レイアウト / `ShareCardRenderer` = ImageRenderer scale 3 + ライト固定 + 一時 PNG / `ShareCardSheet` = プレビュー + ShareLink）+ `CoffeeDetailView` ツールバーに独立共有アイコン | 一時ファイル + `ShareLink(item: url)` は SettingsView のエクスポートパターン踏襲。`TastingRadarChart` 本体は改変しない |
-| [ ] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | |
+| [x] | ios-engineer: `ShareCard/` 新設（`CoffeeShareCardView` = 360×450pt 可変レイアウト / `ShareCardRenderer` = ImageRenderer scale 3 + ライト固定 + 一時 PNG / `ShareCardSheet` = プレビュー + ShareLink）+ `CoffeeDetailView` ツールバーに独立共有アイコン | 2026-07-16 完了。`TastingRadarChart` / `StarRatingView` / `PhotoFileStore` は無改変で再利用。カードの roastLevel はローカライズ表示（本体 Form と非対称 — implementation_note 2026-07-16） |
+| [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。設計判断 2 エントリを implementation_note に記録 |
 | [ ] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | |
 
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）

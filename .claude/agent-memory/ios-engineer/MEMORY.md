@@ -8,6 +8,7 @@
 - [Firebase SPM pbxproj 手動追加](firebase-spm-pbxproj.md) — 一般手順 + FirebaseAnalyticsWithoutAdIdSupport 廃止
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意
 - [AdMob アダプティブバナー実装パターン](admob-native-ads.md) — ネイティブ→バナー再編の経緯、SPM モジュール名の罠、BannerView/AdSize API、UMP をコードから呼ばない理由、`.task` 発火の罠と GeometryReader 幅計測
+- [ImageRenderer 共有カード画像生成パターン](image-renderer-share-card.md) — 固定フレーム+clipped、scaleEffect+frame での固定高さコンポーネント圧縮、可変レイアウトの高さ配分計算、PreviewSamples 4 種の使い回し
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 

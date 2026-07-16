@@ -19,6 +19,7 @@ struct CoffeeDetailView: View {
     @State private var viewModel: CoffeeDetailViewModelBridge
     @State private var isPresentingEditor = false
     @State private var isPresentingDuplicateEditor = false
+    @State private var isPresentingShareCard = false
     @State private var showDeleteConfirm = false
     @Environment(\.dismiss) private var dismiss
 
@@ -38,6 +39,15 @@ struct CoffeeDetailView: View {
             .navigationTitle(viewModel.coffee?.name ?? String(localized: "詳細"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button {
+                        isPresentingShareCard = true
+                    } label: {
+                        Label(String(localized: "カードを共有"), systemImage: "square.and.arrow.up")
+                    }
+                    .disabled(viewModel.coffee == nil)
+                    .accessibilityLabel(String(localized: "カードを共有"))
+                }
                 ToolbarItem(placement: .navigationBarTrailing) {
                     Menu {
                         Button {
@@ -101,6 +111,11 @@ struct CoffeeDetailView: View {
                         mode: CoffeeEditorViewModelModeDuplicate(sourceCoffeeId: coffeeId),
                         appState: appState
                     )
+                }
+            }
+            .sheet(isPresented: $isPresentingShareCard) {
+                if let coffee = viewModel.coffee {
+                    ShareCardSheet(coffee: coffee)
                 }
             }
     }

@@ -961,3 +961,25 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **「一度撤去」= 恒久廃止ではない**: 定着後の再導入余地は残す。`AnchoredBannerAdView`（分析タブ専用だった）はファイルごと削除したが git 履歴から復元可能。共通基盤（`BannerAdLoader` / `InlineBannerAdView` / `BannerViewRepresentable`）は残存 2 面が使うため健在で、再導入コストは低い
 - ユニット ID の定義（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`）も 2 面分を削除し、AdMob 本番ユニット発行タスクは 4 → 2 に縮小。`Secrets.xcconfig` は親セッションから読み取り不可（本番ユニット未発行のため該当キーは無い見込み。ユーザー確認推奨）
 - 収益化の方向性は「まず定着 → 熱量の高い層への課金（広告非表示 / 写真クラウド同期等のプレミアム）」への転換を検討中。requirements §11 の「広告非表示 IAP は見据えない」（2026-07-14）は将来見直し候補
+
+### 2026-07-16: 共有カード画像生成（2-12）の設計判断
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/`
+
+ユーザビリティレビュー「外向きの成長回路がゼロ」への対応第 1 弾。記録詳細のツールバー共有アイコン → プレビューシート → `ShareLink` で 4:5（1080×1350px）カード画像を共有する。
+
+- **可変レイアウト 1 テンプレート**: 写真 / レーダー / 評価は「あれば載せる」。テンプレートを複数持たず、欠けた要素の余白は Spacer で再配分（写真なし・テイスティングなし・未評価・セルフ抽出の全組み合わせで成立）。不採用: 写真主役 / レーダー主役の専用テンプレート（データが欠ける記録で導線ごと消えるため）
+- **メモ・タグは載せない**: notes は日記的内容の誤共有リスク。共有前にプレビューシートで内容を目視確認させる（外向き送信の確認原則）
+- **ライトテーマ固定**（`.environment(\.colorScheme, .light)`）: SNS 上での見た目を端末テーマ非依存に。ui-ux-guidelines のダークモード方針の意図的例外（カードは「アプリ画面」ではなく「出力物」）
+- **レンダリングは ImageRenderer（scale 3）+ 一時 PNG + `ShareLink(item: url)`**: SettingsView の JSON エクスポートと同型。`Transferable` 自作はしない（前例なし・URL ベースで足りる）
+- 全要素が揃うケースではレーダーが scaleEffect 約 0.5 まで縮む（ios-engineer メモリに計算根拠）。可読性 NG ならシミュレータ確認後に写真帯縮小 / チップ行削減で再配分
+
+### 2026-07-16: 共有カードの RoastLevel ローカライズは CoffeeDetailView 本体と非対称
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/CoffeeShareCardView.swift`
+
+共有カードは roastLevel を日本語ローカライズ（AnalysisView 等 3 箇所に既存の辞書と同実装を複製）して表示するが、`CoffeeDetailView` 本体の Form と `CoffeeEditorView` の Picker は raw Kotlin enum 名（例 "Medium"）のまま。外部共有物としての体裁を優先しカード側だけ先行対応した（ios-engineer 判断を親が追認）。`ProcessingMethod` は全画面でローカライズ未実装（カードの属性チップは産地 / 焙煎度 / 抽出方法の 3 種で対象外のため実害なし）。
+
+- 影響: app 全体の roastLevel / processing 表示ローカライズの統一（+ 辞書 4 箇所の一元化）は別タスク。必要になったら設計判断バックログへ起票

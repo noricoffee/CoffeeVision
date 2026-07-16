@@ -983,3 +983,14 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 共有カードは roastLevel を日本語ローカライズ（AnalysisView 等 3 箇所に既存の辞書と同実装を複製）して表示するが、`CoffeeDetailView` 本体の Form と `CoffeeEditorView` の Picker は raw Kotlin enum 名（例 "Medium"）のまま。外部共有物としての体裁を優先しカード側だけ先行対応した（ios-engineer 判断を親が追認）。`ProcessingMethod` は全画面でローカライズ未実装（カードの属性チップは産地 / 焙煎度 / 抽出方法の 3 種で対象外のため実害なし）。
 
 - 影響: app 全体の roastLevel / processing 表示ローカライズの統一（+ 辞書 4 箇所の一元化）は別タスク。必要になったら設計判断バックログへ起票
+
+### 2026-07-17: CuratedCafe の Firestore Mapper は「1 ドキュメント → List」で BeanProfile 型と非対称
+
+- 領域: KMP（data-firebase）
+- 関連: `shared/data-firebase/src/androidMain/.../CuratedCafeFirestoreMapper.kt`、data-model.md §1.10 / §3.2
+
+フェーズ 19 の `curatedCafes` は「1 都道府県 = 1 ドキュメント + カフェ埋め込み配列」（読み取り最大 47 reads/起動に抑えるスキーマ）のため、Mapper は BeanProfile の「1 ドキュメント → 1 エンティティ」ではなく `fromDocument(data): List<CuratedCafe>` を返す形にした（kmp-engineer 実装を親が追認）。
+
+- ドキュメント直下の `prefectureCode` 欠如時は**ドキュメント全体を空リスト扱い**（部分的に有効な `cafes` があっても県コード抜きでは domain モデルを構成できない）。`cafes` 配列の要素単位では必須フィールド欠落を mapNotNull で skip
+- 座標は Firestore の数値型ゆれ（Long/Double）を `Number.toDouble()` で吸収
+- ロード失敗時は `MapViewModel` がサイレントに空のまま（`error` に流さない）。おすすめピンは付加情報でありマップ本体の動作を阻害しない、という表示方針とセット

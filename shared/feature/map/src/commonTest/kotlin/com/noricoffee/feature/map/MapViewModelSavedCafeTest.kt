@@ -5,11 +5,13 @@ import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.model.CafeRecommendationProvider
+import com.noricoffee.domain.model.CuratedCafe
 import com.noricoffee.domain.model.RecommendedCafe
 import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
+import com.noricoffee.repository.CuratedCafeRepository
 import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -86,6 +88,10 @@ class MapViewModelSavedCafeTest {
         }
     }
 
+    private class FakeCuratedCafeRepository : CuratedCafeRepository {
+        override suspend fun getAll(): List<CuratedCafe> = emptyList()
+    }
+
     private companion object {
         fun makeCafe(placeId: String): Cafe = Cafe(
             placeId = placeId,
@@ -139,6 +145,7 @@ class MapViewModelSavedCafeTest {
             cafeRepository = FakeCafeRepository(),
             coffeeRepository = fakeCoffeeRepo,
             savedCafeRepository = fakeSavedCafeRepo,
+            curatedCafeRepository = FakeCuratedCafeRepository(),
             userId = "user-01",
             scope = this,
         )
@@ -161,6 +168,7 @@ class MapViewModelSavedCafeTest {
             cafeRepository = FakeCafeRepository(),
             coffeeRepository = fakeCoffeeRepo,
             savedCafeRepository = fakeSavedCafeRepo,
+            curatedCafeRepository = FakeCuratedCafeRepository(),
             userId = "user-01",
             scope = this,
         )
@@ -188,6 +196,7 @@ class MapViewModelSavedCafeTest {
             cafeRepository = FakeCafeRepository(),
             coffeeRepository = fakeCoffeeRepo,
             savedCafeRepository = fakeSavedCafeRepo,
+            curatedCafeRepository = FakeCuratedCafeRepository(),
             userId = "user-01",
             scope = this,
         )
@@ -214,6 +223,7 @@ class MapViewModelSavedCafeTest {
             cafeRepository = FakeCafeRepository(),
             coffeeRepository = fakeCoffeeRepo,
             savedCafeRepository = fakeSavedCafeRepo,
+            curatedCafeRepository = FakeCuratedCafeRepository(),
             userId = "user-01",
             scope = this,
         )
@@ -244,6 +254,7 @@ class MapViewModelSavedCafeTest {
             cafeRepository = FakeCafeRepository(),
             coffeeRepository = fakeCoffeeRepo,
             savedCafeRepository = fakeSavedCafeRepo,
+            curatedCafeRepository = FakeCuratedCafeRepository(),
             userId = "user-01",
             scope = this,
         )
@@ -272,6 +283,7 @@ class MapViewModelSavedCafeTest {
             cafeRepository = FakeCafeRepository(),
             coffeeRepository = fakeCoffeeRepo,
             savedCafeRepository = fakeSavedCafeRepo,
+            curatedCafeRepository = FakeCuratedCafeRepository(),
             userId = "user-01",
             scope = this,
         )

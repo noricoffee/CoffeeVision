@@ -551,6 +551,43 @@ data class SavedCafe(
 
 ---
 
+## 1.10 CuratedCafe（都道府県別おすすめカフェ / フェーズ 19）
+
+> サービス管理のキュレーション済みおすすめカフェ。マップに専用ピン（amber + star、トグルなし常時表示）で強調する。既存の `RecommendedCafe`（§1.7 = ユーザーの味覚プロファイル好み一致）とは**別概念**なので命名を curated で分離。
+
+**配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/CuratedCafe.kt`
+
+```kotlin
+data class CuratedCafe(
+    val placeId: String,        // Google Places ID（ピンタップ時の詳細解決キー）
+    val name: String,           // 表示名
+    val latitude: Double,       // 非 null（座標なし候補はシード時に弾く）
+    val longitude: Double,
+    val prefectureCode: String, // JIS X 0401 の 2 桁ゼロ埋め文字列（"01".."47"）
+)
+```
+
+### 設計上の決め事
+
+- **保持は最小 5 フィールドのみ（Places 規約対応）**: 評価・営業時間等の揮発データは保存せず、ピンタップ時にカフェ詳細画面が既存の `CafeRepository.getDetails` で解決する。placeId 以外の Places 由来データには 30 日キャッシュ規定があるため、シード再実行による定期リフレッシュを運用で担保する（`scripts/seed/README.md`）
+- **都道府県コードは JIS X 0401**: 標準規格でローマ字ゆれ（hyogo/hyougo 等）がなく、文字列ソート = 北から南の自然順、Firestore ドキュメント ID にそのまま使える。47 値の Kotlin enum は作らない（クライアントは全件一括ロードのみで県別ロジックを持たない）。コード → 県名対応はシードスクリプトの定数表と Firestore ドキュメントの `prefectureName` が持つ
+- **件数は県ごとの上限**: 東京 100 / 他県 30（初期スコープは東京のみ）
+- **SQLDelight には持たない**: Firestore one-shot get + メモリキャッシュで足りる。オフラインは Firestore 永続化キャッシュに委ねる（アーキテクチャ不変条件どおり独自同期は書かない）
+
+**Repository インターフェース**（`com.noricoffee.repository.CuratedCafeRepository`）:
+
+```kotlin
+interface CuratedCafeRepository {
+    suspend fun getAll(): List<CuratedCafe>
+}
+```
+
+`getAll()` はメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要 = BeanProfile と同じパターン）。全県分を flatten した 1 本のリストを返す。`MapViewModel` が init で一括ロードし、失敗時はサイレントに空のまま（おすすめは付加情報でありマップ本体を阻害しない）。
+
+> **将来課題**: 47 県フル展開時（約 1,400 件）は iOS 側 Annotation の可視領域フィルタ導入を検討する。
+
+---
+
 # 2. SQLDelight スキーマ
 
 ローカル DB は **検索・オフライン参照の高速化** が目的。Firestore のキャッシュとは別途に持つ。
@@ -731,6 +768,7 @@ users/{uid}                               # ユーザープロフィール（ana
   savedCafes/{placeId}                    # 行きたい店（フェーズ 15-A。ドキュメント ID = Places の place_id）
 
 beanProfiles/{beanId}                     # 豆ナレッジベース（サービス管理 / 全認証ユーザーが read-only）
+curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ（サービス管理 / 全認証ユーザーが read-only。フェーズ 19）
 ```
 
 > **2026-06-19 改訂**: 旧 `visits` コレクション + サブコレクション（`coffeeItems` / `foodItems` / `photos`）を廃止。`coffees` コレクションの 1 ドキュメントに `cafe`（任意）と `photos`（埋め込み配列）を含める。子サブコレクションは持たない。
@@ -869,6 +907,31 @@ beanProfiles/{beanId}                     # 豆ナレッジベース（サービ
 - `cafe` マップは `coffees` と同じスナップショット 8 フィールドのみ（揮発フィールドは書かない）。nullable フィールドは null 時にキー省略（`coffees` と同じ直列化規則）
 - Security Rules は既存の `users/{uid}` 配下ワイルドカード（`match /{document=**}`）でカバーされるため**変更不要**
 
+### `curatedCafes/{prefectureCode}`（都道府県別おすすめカフェ / フェーズ 19）
+
+```json
+{
+  "prefectureCode": "13",
+  "prefectureName": "東京都",
+  "cafes": [
+    {
+      "placeId": "ChIJ...",
+      "name": "コーヒー清澄白河",
+      "latitude": 35.681,
+      "longitude": 139.799
+    }
+  ],
+  "updatedAt": "<Timestamp>"
+}
+```
+
+- **1 都道府県 = 1 ドキュメント + カフェ埋め込み配列**: 全県読んでも最大 47 reads / 起動 1 回（メモリキャッシュ）。東京 100 件でも約 15KB で 1MB 上限に余裕
+- ドキュメント ID = `prefectureCode`（JIS X 0401、§1.10）
+- `cafes` 要素は placeId / name / latitude / longitude の 4 フィールドのみ（評価等の揮発データは書かない = Places 規約対応、§1.10）。必須フィールド欠落要素は decode 時に skip
+- `updatedAt` は最終シード日時（Places 規約のリフレッシュ判断用）
+- サービス管理データのため、ユーザーは read-only。write は Admin SDK のみ
+- **初期データ**: `scripts/seed/generate-curated-cafes.mjs`（Places Text Search で候補生成）→ 人手レビュー → `seed-curated-cafes.mjs`（ドキュメント ID = prefectureCode の冪等 upsert / 投入前バリデーション）の 2 段構成。手順は `scripts/seed/README.md`。実行はユーザー作業
+
 ---
 
 ## 3.3 Security Rules（概略）
@@ -892,11 +955,17 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if false;
     }
+
+    match /curatedCafes/{prefectureCode} {
+      // 都道府県別おすすめカフェ：認証済みユーザーは read-only。write は Admin SDK のみ
+      allow read: if request.auth != null;
+      allow write: if false;
+    }
   }
 }
 ```
 
-> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。`firebase deploy --only firestore:rules` はユーザー作業。
+> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。**フェーズ 19 更新**: `curatedCafes` グローバルコレクションを追加（同型）。`firebase deploy --only firestore:rules` はユーザー作業。
 
 ---
 

@@ -367,25 +367,27 @@ iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kot
 `AppContainer` 構築時に、Swift 側で作った Repository 実装を Kotlin の `AppContainer` コンストラクタに渡します。
 
 ```swift
-// iosApp 起動時（AppState）。coffeeInsightProvider を注入する 6 引数セカンダリコンストラクタ
+// iosApp 起動時（AppState）。coffeeInsightProvider を注入するセカンダリコンストラクタ
 let container = AppContainer(
     sqlDriver: DatabaseDriverFactory().create(),
     remoteCoffeeDataSource: RemoteCoffeeDataSourceIosImpl(),   // Swift 実装
     authRepository: AuthRepositoryIosImpl(),                   // Swift 実装
     placesApiKey: placesApiKey,
     coffeeInsightProvider: CoffeeInsightProviderIosImpl.makeIfAvailable(),  // 非対応端末は nil
-    beanProfileRepository: BeanProfileRepositoryIosImpl()      // Swift 実装
+    beanProfileRepository: BeanProfileRepositoryIosImpl(),     // Swift 実装
+    curatedCafeRepository: CuratedCafeRepositoryIosImpl()      // Swift 実装（フェーズ 19）
 )
 ```
 
 ```kotlin
-// Android（Application#onCreate など）。coffeeInsightProvider なしの 5 引数セカンダリコンストラクタ
+// Android（Application#onCreate など）。coffeeInsightProvider なしのセカンダリコンストラクタ
 val container = AppContainer(
     sqlDriver = DatabaseDriverFactory(this).create(),
     remoteCoffeeDataSource = RemoteCoffeeDataSourceAndroidImpl(),
     authRepository = AuthRepositoryAndroidImpl(),
     placesApiKey = BuildConfig.PLACES_API_KEY,
     beanProfileRepository = BeanProfileRepositoryAndroidImpl(),
+    curatedCafeRepository = CuratedCafeRepositoryAndroidImpl(FirebaseFirestore.getInstance()),
 )
 ```
 

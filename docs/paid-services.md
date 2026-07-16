@@ -18,7 +18,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 |---------------|--------------|------------------|
 | `places:searchText` | カフェ検索画面のキーワード検索（`CafeSearchViewModel`）/ マップ POI タップ解決（`MapViewModel.searchByNameNear`、型フィルタなし版） | ユーザー操作起点。検索実行・POI タップ毎に 1 リクエスト |
 | `places:searchNearby` | カフェ検索画面の周辺検索（`CafeSearchViewModel`）/ コーヒー記録エディタの周辺カフェ候補（`CoffeeEditorViewModel`、上位 3 件サジェスト） | ユーザー操作起点。エディタ側は位置取得毎に 1 リクエスト（`take(3)` は表示の絞り込みで課金は 1 リクエスト分） |
-| `places/{placeId}`（Place Details） | カフェ詳細のリフレッシュ（`CafeDetailViewModel`） | **抑制済み**: DB スナップショット由来で `googleRating == null` のときだけ 1 回取得（フェーズ 16）。検索 / POI 由来の新鮮な Cafe では叩かない |
+| `places/{placeId}`（Place Details） | カフェ詳細のリフレッシュ（`CafeDetailViewModel`）。おすすめカフェピン（curated、フェーズ 19）のタップも placeId 直渡しの詳細 push なのでこの経路（検索を経由せず Details 1 回のみ） | **抑制済み**: DB スナップショット由来で `googleRating == null` のときだけ 1 回取得（フェーズ 16）。検索 / POI 由来の新鮮な Cafe では叩かない |
 | `{photoName}/media`（Photo Media） | カフェ写真表示（`PlacePhotoLoader` → `PlacePhotoThumbnail`）。表示画面: マップ・カフェ検索結果・カフェ詳細ヘッダー | サムネイル 1 枚毎に 1 リクエスト。表示枚数は View 側で制限: カフェ詳細ヘッダーは段階読み込み（初期 3 枚 →「さらに表示」で 3 枚ずつ、上限 10 枚。maxWidthPx 400、LazyHStack で表示分のみ順次取得。2026-07-13）/ 検索結果行 1 枚（maxWidthPx 200）/ マップ選択カード 1 枚（maxWidthPx 150）。データ層は無制限で `photoReferences` に全件保持。返る URL は時限署名付きで**利用規約により永続キャッシュ禁止**（URLSession 標準キャッシュのみ。画面再表示のたびに再リクエスト） |
 
 ### SKU に影響する FieldMask（`PlacesClientImpl`）
@@ -30,6 +30,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 - Place Details は鮮度条件付きで最大 1 回（上表）
 - Photo Media はメモリキャッシュでセッション内の再取得を回避
 - API キーは iOS アプリ（Bundle ID）制限付き（`403 API_KEY_IOS_APP_BLOCKED` 診断が `PlacesClientImpl` に記載あり）
+- **アプリ外の一時コスト**: おすすめカフェのシード生成 `scripts/seed/generate-curated-cafes.mjs`（フェーズ 19）が Text Search を叩く（2 クエリ × subAreas 数。東京 = 約 28 回）。実行は初回シードと定期リフレッシュ時のみ
 
 ---
 
@@ -39,7 +40,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 
 | プロダクト | 課金 | 利用状況 |
 |-----------|------|---------|
-| **Cloud Firestore** | **従量課金**（read / write / delete / ストレージ / 帯域） | 同期の本体。`users/{uid}`（analyticsConsent）+ `users/{uid}/coffees`（コーヒー記録）+ `users/{uid}` 配下の savedCafes 等のサブコレクション、`beanProfiles`（豆ナレッジベース、クライアント read-only・write は Admin SDK のみ）。オフライン永続化に同期を委ねる設計で独自同期キューなし。SQLDelight ローカル DB が検索・参照を担うため読み取りは同期時中心 |
+| **Cloud Firestore** | **従量課金**（read / write / delete / ストレージ / 帯域） | 同期の本体。`users/{uid}`（analyticsConsent）+ `users/{uid}/coffees`（コーヒー記録）+ `users/{uid}` 配下の savedCafes 等のサブコレクション、`beanProfiles`（豆ナレッジベース、クライアント read-only・write は Admin SDK のみ）、`curatedCafes`（都道府県別おすすめカフェ、同型 read-only。フェーズ 19。マップ起動時に one-shot 全件 get = **最大 47 reads / 起動**、メモリキャッシュで再読なし。初期は東京 1 doc のみ）。オフライン永続化に同期を委ねる設計で独自同期キューなし。SQLDelight ローカル DB が検索・参照を担うため読み取りは同期時中心 |
 | Firebase Auth | 実質無料（電話認証なし） | 匿名認証 + Sign in with Apple のリンク。SMS を使わないため課金なし |
 | Cloud Storage for Firebase | **現状課金なし** | **採用見送り済み**。SDK リンクと `storage.rules` は残っているが、写真は端末ローカル（Documents/photos/）保存のみで `Photo.remoteUrl` は常に null。将来復活用にフィールド・rules を残置（data-model.md §1.4） |
 | Crashlytics / Analytics / Performance | 無料 | クラッシュレポート・利用分析・パフォーマンス計測 |

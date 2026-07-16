@@ -527,8 +527,9 @@ struct MapTabView: View {
     private func mapContent(bridge: MapViewModelBridge) -> some View {
         ZStack(alignment: .top) {
             Map(position: $cameraPosition) {
-                // 周辺カフェ（Apple 検索由来 / 低強調）ピン。既存 4 種と座標近接（約 40m 以内）の
-                // ものは重複排除済み（displayedAppleNearbyCafes）。最初に描画して他ピンの背面に回す。
+                // 周辺カフェ（Apple 検索由来 / 低強調）ピン。既存ピン（訪問済み / 保存済み / 検索結果 /
+                // おすすめ（curated））と座標近接（約 40m 以内）のものは重複排除済み
+                // （displayedAppleNearbyCafes）。最初に描画して他ピンの背面に回す。
                 ForEach(displayedAppleNearbyCafes(bridge)) { cafe in
                     Annotation(cafe.name, coordinate: cafe.coordinate) {
                         Button {
@@ -650,6 +651,31 @@ struct MapTabView: View {
                                 .opacity((savedEmphasisActive || recommendedEmphasisActive) ? 0.4 : 1.0)
                             }
                         }
+                    }
+                }
+
+                // おすすめカフェ（curated / amber + star.fill）ピン（フェーズ 19）。
+                // Google Maps の POI 強調のように常時表示（トグルなし）。
+                // 同一 placeId が訪問済み / 保存済み / 検索結果ピンと競合する場合はそちらを優先して除外する
+                // （優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）。表示切替チップの状態に
+                // 関わらず適用する）。タップで直接カフェ詳細へ push する（保存済みピンと同型）。
+                ForEach(displayedCuratedCafes(bridge), id: \.placeId) { curated in
+                    Annotation(
+                        curated.name,
+                        coordinate: CLLocationCoordinate2D(latitude: curated.latitude, longitude: curated.longitude)
+                    ) {
+                        NavigationLink(
+                            value: CafeDetailRoute(
+                                placeId: curated.placeId,
+                                initialCafe: minimalCafe(from: curated)
+                            )
+                        ) {
+                            curatedCafePin(cafe: curated)
+                        }
+                        .buttonStyle(.plain)
+                        // 「好み一致」/「保存済み」チップ強調中はおすすめピンも減光する
+                        // （推薦 / 保存対象外のため。検索結果ピンと同じ規則）。
+                        .opacity((savedEmphasisActive || recommendedEmphasisActive) ? 0.4 : 1.0)
                     }
                 }
 
@@ -1170,6 +1196,42 @@ struct MapTabView: View {
         }
     }
 
+    // MARK: - おすすめカフェ（curated）ピン競合解決（フェーズ 19）
+
+    /// 表示対象のおすすめカフェ（訪問済み / 行きたい / 検索結果と競合するものを除外。
+    /// 優先順位: 訪問済み > 行きたい > 検索結果 > おすすめ（curated）。表示切替チップの状態に関わらず適用する）。
+    private func displayedCuratedCafes(_ bridge: MapViewModelBridge) -> [CuratedCafe] {
+        let visited = visitedPlaceIds(bridge)
+        let saved = savedPlaceIds(bridge)
+        let searched = Set(bridge.searchResultPlaces.map { $0.placeId })
+        return bridge.curatedCafes.filter {
+            !visited.contains($0.placeId) && !saved.contains($0.placeId) && !searched.contains($0.placeId)
+        }
+    }
+
+    /// `CuratedCafe` から詳細画面遷移用の最小 `Cafe` を構築する。
+    ///
+    /// 揮発フィールド（評価 / 営業時間等）は保持していないため nil / 空のまま渡し、
+    /// 詳細画面の既存 getDetails リフレッシュ（`googleRating == null` 条件）に解決を委ねる。
+    private func minimalCafe(from curated: CuratedCafe) -> Cafe {
+        Cafe(
+            placeId: curated.placeId,
+            name: curated.name,
+            address: nil,
+            latitude: KotlinDouble(value: curated.latitude),
+            longitude: KotlinDouble(value: curated.longitude),
+            photoReferences: [],
+            websiteUrl: nil,
+            mapsUrl: nil,
+            openNow: nil,
+            weekdayDescriptions: [],
+            phoneNumber: nil,
+            priceLevel: nil,
+            googleRating: nil,
+            userRatingCount: nil
+        )
+    }
+
     // MARK: - フィルタチップ行
 
     private func filterChipRow(bridge: MapViewModelBridge) -> some View {
@@ -1361,6 +1423,25 @@ struct MapTabView: View {
         )
     }
 
+    /// おすすめカフェ（curated）ピン（amber/orange + star.fill。フェーズ 19）。
+    ///
+    /// Google Maps の POI 強調のような常時表示ピン。既存 5 色（accentColor / pink / indigo / blue /
+    /// secondaryLabel）と被らない amber 系を採用し、意味ピン（34〜38pt）と Apple 周辺ピン（28pt）の
+    /// 中間サイズ（30pt）+ 白フチ + 影で常時目立たせる。トグルなし（常時表示）。
+    private func curatedCafePin(cafe: CuratedCafe) -> some View {
+        ZStack {
+            Circle()
+                .fill(Color.orange)
+                .frame(width: 30, height: 30)
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
+                .shadow(color: Color.orange.opacity(0.4), radius: 4, x: 0, y: 2)
+            Image(systemName: "star.fill")
+                .font(.caption2)
+                .foregroundStyle(.white)
+        }
+        .accessibilityLabel(String(localized: "\(cafe.name)、おすすめのカフェ"))
+    }
+
     /// 周辺カフェ（Apple 検索由来）ピン。まだ記録も保存もしていない店を示す低強調ピン。
     ///
     /// 既存 4 種ピン（訪問済み=accentColor / 保存済み=indigo / 検索結果=blue / 好み一致=pink）より
@@ -1500,7 +1581,8 @@ struct MapTabView: View {
         }
     }
 
-    /// 既存 4 種ピンの座標一覧（表示トグルの状態に関わらず全件。Apple ピンの重複排除に使う）。
+    /// 既存ピンの座標一覧（訪問済み / 保存済み / 検索結果 / おすすめ（curated）。表示トグルの状態に
+    /// 関わらず全件。Apple ピンの重複排除に使う。フェーズ 19 で curated を追加）。
     private func existingPinCoordinates(_ bridge: MapViewModelBridge) -> [CLLocationCoordinate2D] {
         let visited = bridge.visitedCafes.compactMap { vc -> CLLocationCoordinate2D? in
             guard let lat = vc.cafe.latitude?.doubleValue, let lng = vc.cafe.longitude?.doubleValue else {
@@ -1520,14 +1602,17 @@ struct MapTabView: View {
             }
             return CLLocationCoordinate2D(latitude: lat, longitude: lng)
         }
-        return visited + saved + searched
+        let curated = bridge.curatedCafes.map {
+            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
+        }
+        return visited + saved + searched + curated
     }
 
     /// 表示対象の Apple 検索由来カフェ。
     ///
-    /// 既存 4 種ピンのいずれかと座標近接（約 40m 以内）のものを除外する
-    /// （優先順位: 訪問済み > 保存済み > 検索結果 > Apple 検索由来。名前一致はローカライズで
-    /// 不安定なため使わない）。
+    /// 既存ピン（訪問済み / 保存済み / 検索結果 / おすすめ（curated））のいずれかと座標近接
+    /// （約 40m 以内）のものを除外する（優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）
+    /// > Apple 検索由来。名前一致はローカライズで不安定なため使わない）。
     private func displayedAppleNearbyCafes(_ bridge: MapViewModelBridge) -> [ApplePoiCafe] {
         let proximityThresholdMeters: CLLocationDistance = 40
         let existingLocations = existingPinCoordinates(bridge).map {

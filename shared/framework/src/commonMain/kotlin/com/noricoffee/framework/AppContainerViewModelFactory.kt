@@ -84,7 +84,8 @@ fun AppContainer.makeCafeSearchViewModel(): CafeSearchViewModel =
  * [MapViewModel] を生成して返す。
  *
  * [AppContainer] が保持する [com.noricoffee.repository.CoffeeRepository] /
- * [com.noricoffee.repository.CafeRepository] と CoroutineScope（内部の MainScope）を自動配線する。
+ * [com.noricoffee.repository.CafeRepository] / [com.noricoffee.repository.CuratedCafeRepository]
+ * （都道府県別おすすめカフェ、フェーズ 19）と CoroutineScope（内部の MainScope）を自動配線する。
  * [ObserveVisitedCafesUseCase] のインスタンスはファクトリ内で都度生成する（DI コンテナ化は YAGNI）。
  *
  * ## Bridge のライフサイクル
@@ -102,6 +103,7 @@ fun AppContainer.makeMapViewModel(userId: String): MapViewModel =
         cafeRepository = cafeRepository,
         coffeeRepository = coffeeRepository,
         savedCafeRepository = savedCafeRepository,
+        curatedCafeRepository = curatedCafeRepository,
         userId = userId,
         scope = scope,
     )

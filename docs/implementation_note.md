@@ -950,3 +950,14 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **修正は commonMain の 2 ガードのみ**: ① `onAppear()` は `observeJob` が active なら no-op（購読はタブ非表示中も継続し、記録変更は従来どおり反映）② 直前と構造等価な `CoffeeStats` の再 emit では `launchInsightGeneration` をスキップ（SQLDelight query invalidation の同値再 emit への保険）。記録の追加・変更時は stats が変わるので従来どおり再生成される。不採用: 生成済み insight のディスク永続化（アプリ利用中の保持で要件を満たすため過剰）
 - **トレードオフ**: 同値判定は `CoffeeStats`（ネスト含め全 data class）の構造等価 `==` に依存。将来 non-data な参照型フィールドを足すと判定が壊れる点に留意
 - **テストの罠（kmp-engineer 報告）**: `StandardTestDispatcher` 上で Flow が同一コルーチンから連続 emit すると、先行 collect で launch した `insightJob` が未実行のまま次の collect の cancel に巻き込まれ `summarize` が 1 度も走らないことがある。テスト側は emit 間に `delay` を挟んで仮想時間を進めて回避（`AnalysisViewModelInsightRegenerationTest`）。他画面横断の `onAppear` は点検済みで、引数で対象が変わる画面単位 VM（coffee-list / coffee-detail / coffee-editor）は cancel-and-relaunch が正しく今回の対象外
+
+### 2026-07-16: 記録・分析タブの広告撤去（11-3 の一度撤去）
+
+- 領域: iOS / Docs
+- 関連: `iosApp/iosApp/Features/CoffeeList/CoffeeListView.swift`, `iosApp/iosApp/Features/Analysis/AnalysisView.swift`, `iosApp/iosApp/Ads/`
+
+ユーザビリティレビュー（2026-07-16）で「個人の記録・振り返り画面（定着の核）のバナーは、定着が命の初期にリテンションを削る割に収益が小さい（日本のバナー eCPM × 小規模 MAU では月数百円規模）」と判断し、requirements §11-3 の 2 面（記録タブ = リスト先頭インライン / 分析タブ = 下部固定）を撤去。カフェ詳細 / マップ検索ドロップダウンの 2 面と ATT フロー（残存面の NPA 判定に必要）は維持。
+
+- **「一度撤去」= 恒久廃止ではない**: 定着後の再導入余地は残す。`AnchoredBannerAdView`（分析タブ専用だった）はファイルごと削除したが git 履歴から復元可能。共通基盤（`BannerAdLoader` / `InlineBannerAdView` / `BannerViewRepresentable`）は残存 2 面が使うため健在で、再導入コストは低い
+- ユニット ID の定義（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`）も 2 面分を削除し、AdMob 本番ユニット発行タスクは 4 → 2 に縮小。`Secrets.xcconfig` は親セッションから読み取り不可（本番ユニット未発行のため該当キーは無い見込み。ユーザー確認推奨）
+- 収益化の方向性は「まず定着 → 熱量の高い層への課金（広告非表示 / 写真クラウド同期等のプレミアム）」への転換を検討中。requirements §11 の「広告非表示 IAP は見据えない」（2026-07-14）は将来見直し候補

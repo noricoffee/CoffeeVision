@@ -24,19 +24,18 @@
 
 ## AdMob App ID / バナー広告ユニット ID の設定手順（本番切り替え）
 
-アダプティブバナー広告 4 面（requirements.md §11）は `Base.xcconfig` に Google 公式のテスト用 ID が
-フォールバックとして設定済みのため、`Secrets.xcconfig` が無くてもテスト広告で動作する。
-本番 ID へ切り替えるときだけ以下を行う。
+アダプティブバナー広告 2 面（requirements.md §11。コーヒー記録タブ / 分析タブの 2 面は
+2026-07-16 にユーザビリティレビューで撤去済み。git 履歴で復元可能）は `Base.xcconfig` に
+Google 公式のテスト用 ID がフォールバックとして設定済みのため、`Secrets.xcconfig` が無くても
+テスト広告で動作する。本番 ID へ切り替えるときだけ以下を行う。
 
 1. AdMob（https://admob.google.com/）でアプリを登録し、App ID を発行する
-2. バナー広告ユニットを 4 つ発行する（カフェ詳細 / マップ検索ドロップダウン / コーヒー記録タブ下部固定 / 分析タブ下部固定）
+2. バナー広告ユニットを 2 つ発行する（カフェ詳細 / マップ検索ドロップダウン）
 3. `iosApp/Configuration/Secrets.xcconfig` に以下を追記（キーは `Base.xcconfig` のフォールバックと同名）:
    ```
    ADMOB_APP_ID = ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy
    ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
    ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
-   ADMOB_BANNER_AD_UNIT_ID_COFFEE_LIST = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
-   ADMOB_BANNER_AD_UNIT_ID_ANALYSIS = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
    ```
 4. Xcode でビルドすると `Info.plist` の `GADApplicationIdentifier` / 各 `ADMOB_BANNER_AD_UNIT_ID_*`
    エントリに本番値が反映される

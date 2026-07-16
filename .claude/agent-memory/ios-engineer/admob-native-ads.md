@@ -123,6 +123,19 @@ UIKit レンダリング知見（`NativeAdView` の headlineView 等）は不要
   （safeAreaInset 自身が定義済みの幅を content closure に渡すため、GeometryReader が
   unbounded になる心配はない）。
 
+## 広告面の撤去（2026-07-16、コーヒー記録タブ / 分析タブの 2 面を撤去し 4 面→2 面に）
+
+- ユーザビリティレビューでバナー 4 面中 2 面（コーヒー記録タブ先頭インライン / 分析タブ下部固定）を
+  撤去。カフェ詳細・マップ検索ドロップダウンの 2 面と ATT/プレプロンプトフローは維持。
+- `iosApp.xcodeproj` は `PBXFileSystemSynchronizedRootGroup`（Xcode 16 同期グループ）なので、
+  ファイル削除は `rm` だけで足り、`project.pbxproj` の手動編集は不要（ビルドログに
+  `note: Removed stale file '.../AnchoredBannerAdView.o'` が出て自動追随を確認できる）。
+- 削除順序: View 側の宣言・組み込み箇所を先に消してから専用コンポーネントファイルを `rm`。
+  共有コンポーネント（`BannerAdLoader.swift` 等）は残存面が使うため触らず、doc コメント中の
+  「4 面」「AnchoredBannerAdView」への言及だけ更新（コードには影響しない）。
+- `AdUnitIDs.swift` の定数削除と `Info.plist` の対応キー削除、`Base.xcconfig` のフォールバック
+  宣言削除はセットで行う（3 箇所は必ず揃える。1 つでも残すとダングリング参照になる）。
+
 ## xcodebuild 検証中に DerivedData の `rm -rf` を中断すると SPM checkout が壊れる
 
 - `rm -rf DerivedData/iosApp-*` の途中で `Directory not empty` エラーが出て中断されると、

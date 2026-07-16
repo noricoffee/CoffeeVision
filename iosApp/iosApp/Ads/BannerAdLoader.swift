@@ -1,10 +1,10 @@
 import GoogleMobileAds
 import Observation
 
-/// カフェ詳細 / マップ検索ドロップダウン / コーヒー記録・分析タブ下部固定の 4 面で共有する
-/// アダプティブバナー広告ローダー（requirements.md §11）。
+/// カフェ詳細 / マップ検索ドロップダウンの 2 面で共有するアダプティブバナー広告ローダー
+/// （requirements.md §11。コーヒー記録・分析タブの 2 面は 2026-07-16 に撤去済み。git 履歴で復元可能）。
 ///
-/// - 自動リフレッシュなし。呼び出し側（`InlineBannerAdView` / `AnchoredBannerAdView`）が
+/// - 自動リフレッシュなし。呼び出し側（`InlineBannerAdView`）が
 ///   画面表示（push / タブ遷移）のたびに `load(adSize:)` を呼ぶ
 /// - ロード失敗・オフライン時は `isLoaded` が `false` のままになり、呼び出し側が枠ごと畳む
 ///   （プレースホルダなし）
@@ -18,7 +18,7 @@ import Observation
 ///   何度も発火しうる。過渡幅で即リクエストすると「ゴミ幅でロード中に正しい幅の再発火が
 ///   `isLoading` ガードで破棄され、幅が変化しないので `task(id:)` が再発火せず回復不能になる」
 ///   実機バグが起きたため（2026-07-14）、以下の 2 段構えで堅牢化している:
-///   1. **呼び出し側**（`InlineBannerAdView` / `AnchoredBannerAdView` / `CafeDetailView`）が
+///   1. **呼び出し側**（`InlineBannerAdView` / `CafeDetailView`）が
 ///      `minimumRequestableWidth` 未満の幅ではそもそも `load(adSize:)` を呼ばない
 ///   2. **`pendingAdSize` 方式**: それでも `isLoading` 中に新しい `load(adSize:)` が来たら
 ///      破棄せず `pendingAdSize` に保存し、現在のロード完了（成功 / 失敗どちらでも）後に

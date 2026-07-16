@@ -47,12 +47,12 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 
 ---
 
-## 2b. Google AdMob — **収益側**（課金なし・導入決定済み / 実装前）
+## 2b. Google AdMob — **収益側**（課金なし・実装済み / 本番ユニット未発行）
 
 - 2026-07-14 に導入決定（仕様は [requirements.md §11](./requirements.md)）。Places 従量コストの回収手段。SDK 利用自体は無料（収益から Google が手数料控除）。
-- アダプティブバナー広告 4 面: カフェ詳細 / マップ検索ドロップダウン（インライン）+ コーヒー記録タブ・分析タブの下部固定（アンカー）。iosApp View 層完結・iOS のみ。当初ネイティブ広告だったが MediaView 必須制約で同日バナーに再編（requirements §11）。
+- アダプティブバナー広告 **2 面**: カフェ詳細 / マップ検索ドロップダウン（いずれもインライン）。iosApp View 層完結・iOS のみ。当初ネイティブ広告 4 面だったが MediaView 必須制約で同日バナーに再編 → **2026-07-16 にコーヒー記録タブ・分析タブの 2 面を撤去**（定着優先。requirements §11 11-3）。
 - **規約上の注意**: Places 由来のデータ（店名等）を広告リクエストのターゲティングシグナルに渡さないこと（Google Maps Platform Service Specific Terms）。実装・レビュー時に確認する。
-- App ID / 広告ユニット ID（4 ユニット）は `Secrets.xcconfig` → `Info.plist` 注入（Places キーと同経路）。
+- App ID / 広告ユニット ID（2 ユニット）は `Secrets.xcconfig` → `Info.plist` 注入（Places キーと同経路）。
 
 ---
 

@@ -1,4 +1,3 @@
-import GoogleMobileAds
 import SwiftUI
 import SharedLogic
 
@@ -22,14 +21,6 @@ struct CoffeeListView: View {
 
     /// 長押しコンテキストメニューから削除確認ダイアログの対象に選ばれたコーヒー記録。
     @State private var deletionTarget: CoffeeRecord?
-
-    /// 先頭インラインアダプティブバナー用ローダー（requirements.md §11-3）。
-    ///
-    /// 2026-07-15: 上部固定（`.safeAreaInset(edge: .top)`）はスクロールで消えず常に画面を占有する
-    /// ため、「スクロールで流れる」ユーザー要望を受けてリスト先頭のインライン配置に変更した
-    /// （`CafeDetailView.adSection` と同じパターン）。FAB との近接誤タップ懸念は先頭配置により
-    /// 解消済み。分析タブは引き続き下部固定（`AnchoredBannerAdView` + `.safeAreaInset(edge: .bottom)`）。
-    @State private var adLoader = BannerAdLoader(adUnitID: AdUnitIDs.coffeeListBottomBar)
 
     var body: some View {
         // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）。
@@ -119,7 +110,6 @@ struct CoffeeListView: View {
 
     private var coffeeList: some View {
         List {
-            adSection
             ForEach(viewModel.sections) { section in
                 Section {
                     ForEach(section.records) { coffee in
@@ -180,54 +170,6 @@ struct CoffeeListView: View {
             Button(String(localized: "キャンセル"), role: .cancel) {}
         } message: { _ in
             Text(String(localized: "この記録と写真は完全に削除されます。この操作は取り消せません。"))
-        }
-        .background(
-            // List 自体の実測幅からインラインアダプティブバナーの幅を計算する（iPad マルチタスキング
-            // でも正確な幅になる）。`.plain` リストの左右余白は概算値（`Self.adHorizontalMargin`）を
-            // 差し引く。Color.clear は常に実体化されるため `.task` は確実に発火する。
-            GeometryReader { proxy in
-                Color.clear
-                    .task(id: proxy.size.width) {
-                        let width = proxy.size.width - Self.adHorizontalMargin * 2
-                        // レイアウト測定の過渡状態（ゴミ幅・負値）でリクエストしない
-                        // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。
-                        guard width >= BannerAdLoader.minimumRequestableWidth else { return }
-                        adLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: Self.adMaxHeight))
-                    }
-            }
-        )
-    }
-
-    /// `.plain` リストの左右余白概算（実測値より狭めに見積もり、バナーがはみ出さないようにする）。
-    private static let adHorizontalMargin: CGFloat = 16
-    /// インラインアダプティブバナーの上限高さ（行の高さになじむ値）。
-    private static let adMaxHeight: CGFloat = 100
-
-    /// リスト先頭のインラインアダプティブバナー（requirements.md §11-3）。
-    ///
-    /// `List` の `Section` は中身が空でも行の余白・区切り線を描画しうるため、ここで
-    /// `adLoader.isLoaded` を直接見て**未ロード時は Section 自体を List の body に含めない**
-    /// （`CafeDetailView.adSection` と同じ対応。ローダーは `coffeeList` の `List` に付けた
-    /// `.background(GeometryReader).task` が保持・駆動する）。
-    ///
-    /// `BannerViewRepresentable` には受信済みサイズ（`adLoader.loadedAdSize`）で明示
-    /// `.frame(width:height:)` を与える（公式 SwiftUI サンプル `BannerContentView.swift` と
-    /// 同じ構成。サイズを明示しないと SDK 側のサイズ検証で "Invalid ad width or height" が
-    /// 発生し受信済み広告が無効化されることがある。2026-07-14 実機診断で確認）。行内での
-    /// センタリングは外側の `HStack` + `Spacer` で行い、representable 自体は伸縮させない。
-    @ViewBuilder
-    private var adSection: some View {
-        if adLoader.isLoaded, let bannerView = adLoader.bannerView, let loadedAdSize = adLoader.loadedAdSize {
-            Section {
-                HStack {
-                    Spacer(minLength: 0)
-                    BannerViewRepresentable(bannerView: bannerView)
-                        .frame(width: loadedAdSize.width, height: loadedAdSize.height)
-                    Spacer(minLength: 0)
-                }
-                .frame(maxWidth: .infinity)
-                .listRowInsets(EdgeInsets())
-            }
         }
     }
 

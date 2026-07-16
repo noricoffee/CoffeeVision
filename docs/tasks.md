@@ -38,9 +38,29 @@
 | [x] | ios-engineer: 4 面配線 — カフェ詳細（情報系の後・記録の前）/ 検索ドロップダウン（3 件目の後・結果 3 件未満は非表示）/ コーヒー記録タブ（下部固定、FAB を広告の上へ）/ 分析タブ（下部固定） | 2026-07-14 完了 |
 | [x] | 親: 検証（verify-kmp-ios、xcodebuild override 無し）+ Places データをターゲティングに渡していないかレビュー + implementation_note 記録 + commit | 2026-07-14 完了。override 無し BUILD SUCCEEDED + Gradle BUILD SUCCESSFUL 確認。Ads/ に Places 参照なし（コメントのみ）・素の Request + NPA フラグのみ確認 |
 | [x] | ios-engineer: **全面バナー化への再実装**（MediaView 必須判明による再編、requirements §11 改訂済み）— NativeAd 系 4 ファイル撤去、下部固定 2 面 = アンカーアダプティブバナー / インライン 2 面 = インラインアダプティブバナー（maxHeight 制限）、テスト用ユニット ID をバナー用に差し替え | 2026-07-14 完了。親再検証済み（build + Places 混入なし）。設計判断は implementation_note 2026-07-14 バナー再実装エントリ |
-| [ ] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット 4 つ発行 → `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備 |
+| [ ] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット **2 つ**発行（カフェ詳細 / マップ検索）→ `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備。2026-07-16 の 11-3 撤去で 4 → 2 ユニットに縮小 |
 | [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
 | [x] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | 2026-07-15 完了。位置調整（記録タブ = リスト先頭インライン / 分析タブ = 高さ 90pt 上限）まで確認済み |
+
+#### 記録・分析タブの広告撤去（2026-07-16 起票）
+
+> ユーザビリティレビュー採用分。定着の核となる記録・振り返り 2 画面のバナーはリテンションを削る割に収益が小さいため**一度撤去**（再導入余地は残す — コンポーネントは git 履歴から復元可能）。広告はカフェ詳細 / マップ検索の 2 面に縮小。**仕様の正は requirements.md §11（11-3 = ✕ 撤去、2026-07-16 改訂済み）**。ATT フローは残存 2 面のため維持。プランは `.claude/plans/agile-knitting-fern.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: 記録タブ（`CoffeeListView`）/ 分析タブ（`AnalysisView`）の広告配線削除 + `AnchoredBannerAdView.swift` 削除（分析タブ専用）+ ユニット ID 2 面分の定義削除（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`） | 2026-07-16 完了。撤去 5 識別子の grep 横断点検で残存なし。Configuration/README も 2 面に追随 |
+| [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。paid-services.md の面数記述も追随。`Secrets.xcconfig` のみ親から読み取り不可（本番ユニット未発行のため該当キー無しの見込み、ユーザー確認推奨） |
+| [ ] | ユーザー: シミュレータで確認（記録・分析タブに広告なし / カフェ詳細・マップ検索は従来どおり / ATT プレプロンプト維持） | |
+
+#### 共有カード画像生成（2026-07-16 起票）
+
+> ユーザビリティレビュー採用分（外向きの共有回路の新設）。記録詳細から 4:5（1080×1350px）のカード画像を生成し share sheet で共有。**仕様の正は requirements.md §2 2-12**（可変レイアウト 1 テンプレート / メモ・タグ非掲載 / ライトテーマ固定、2026-07-16 確定）。既存 `TastingRadarChart` を再利用、ImageRenderer は本リポジトリ初使用。iosApp View 層完結・KMP 変更なし。プランは `.claude/plans/agile-knitting-fern.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | ios-engineer: `ShareCard/` 新設（`CoffeeShareCardView` = 360×450pt 可変レイアウト / `ShareCardRenderer` = ImageRenderer scale 3 + ライト固定 + 一時 PNG / `ShareCardSheet` = プレビュー + ShareLink）+ `CoffeeDetailView` ツールバーに独立共有アイコン | 一時ファイル + `ShareLink(item: url)` は SettingsView のエクスポートパターン踏襲。`TastingRadarChart` 本体は改変しない |
+| [ ] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | |
+| [ ] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | |
 
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
 

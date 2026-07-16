@@ -50,7 +50,7 @@
 |------|------|------|
 | [x] | kmp-engineer: `AnalysisViewModel.onAppear()` の購読中ガード + 同値 stats での insight 再生成スキップ + commonTest 追加 | 2026-07-16 完了。`AnalysisViewModelInsightRegenerationTest` 3 件新規（計 22 件 green）。公開 API 変更なし・iOS Bridge 追随不要 |
 | [x] | 親: verify-kmp-ios 再検証 + commit | 2026-07-16 完了。testAndroidHostTest + iosSimulatorArm64Test（analysis 実行確認）+ assembleSharedLogicXCFramework すべて BUILD SUCCESSFUL。判断は implementation_note 2026-07-16 |
-| [ ] | ユーザー: シミュレータで確認（タブ往復で「傾向を分析中…」が再表示されない / 記録追加後は再生成される） | ビルド成功 ≠ 修正完了 |
+| [x] | ユーザー: シミュレータで確認（タブ往復で「傾向を分析中…」が再表示されない / 記録追加後は再生成される） | 2026-07-16 ユーザー確認完了 |
 
 #### コーヒー記録の削除動線 3 種（2026-07-16 起票）
 

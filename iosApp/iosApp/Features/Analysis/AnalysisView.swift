@@ -549,8 +549,8 @@ struct AnalysisView: View {
                 sectionHeader(String(localized: "抽出方法の内訳"))
                 Chart(stats.byBrewMethod, id: \.label) { item in
                     BarMark(
-                        x: .value(String(localized: "抽出方法"), localizedBrewMethod(item.label)),
-                        y: .value(String(localized: "件数"), item.count)
+                        x: .value(String(localized: "件数"), item.count),
+                        y: .value(String(localized: "抽出方法"), localizedBrewMethod(item.label))
                     )
                     .foregroundStyle(Color.accentColor)
                     .accessibilityLabel(
@@ -558,15 +558,15 @@ struct AnalysisView: View {
                         + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
                     )
                 }
-                .frame(height: 160)
+                .frame(height: CGFloat(stats.byBrewMethod.count) * 32)
                 .chartXAxis {
-                    AxisMarks { _ in
+                    AxisMarks(values: .automatic) { _ in
+                        AxisGridLine()
                         AxisValueLabel()
                     }
                 }
                 .chartYAxis {
-                    AxisMarks(values: .automatic) { _ in
-                        AxisGridLine()
+                    AxisMarks { _ in
                         AxisValueLabel()
                     }
                 }

@@ -939,3 +939,14 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **userId の取得は `onAppear(coffeeId, userId)` の引数拡張**（CoffeeListViewModel と同型の「onAppear で受けて保持 + 未確定時は黙殺」パターン）。不採用: コンストラクタ注入（ファクトリ変更が波及）/ AuthRepository 注入（feature VM で前例なし）
 - **写真物理削除は詳細 Bridge に独立実装**（リスト Bridge の pending 辞書方式は sections 監視というリスト固有形のため共通化せず）。「KMP 削除成功を確認してから `PhotoFileStore.delete`」の安全順序は両者同一。対象 1 レコードなので `pendingPhotoFileNames` 1 本で足りる
 - 専用 UseCase は作らず `CoffeeRepository.delete(userId, id)` を VM 直呼び（本プロジェクトの既存設計に準拠）。リスト長押し削除の確定時も既存 `onCoffeeDeleted(id:photoFileNames:)` を再利用（KMP 無変更）
+
+### 2026-07-16: 分析タブ「あなたの傾向」のタブ再表示時の再生成抑止
+
+- 領域: KMP
+- 関連: `shared/feature/analysis/.../AnalysisViewModel.kt`
+
+ユーザー報告「分析タブに遷移するたびに『あなたの傾向』が再計算される。アプリ利用中は保持したい」への対応。原因は `onAppear()` が無条件に `observeJob` を cancel → 再購読し、Flow の再 emit で Foundation Models 要約が毎回再生成されていたこと。VM は `AppState` 保持のタブ常駐でアプリ生存期間ずっと生きているため、購読を張り直す必要が元々ない。
+
+- **修正は commonMain の 2 ガードのみ**: ① `onAppear()` は `observeJob` が active なら no-op（購読はタブ非表示中も継続し、記録変更は従来どおり反映）② 直前と構造等価な `CoffeeStats` の再 emit では `launchInsightGeneration` をスキップ（SQLDelight query invalidation の同値再 emit への保険）。記録の追加・変更時は stats が変わるので従来どおり再生成される。不採用: 生成済み insight のディスク永続化（アプリ利用中の保持で要件を満たすため過剰）
+- **トレードオフ**: 同値判定は `CoffeeStats`（ネスト含め全 data class）の構造等価 `==` に依存。将来 non-data な参照型フィールドを足すと判定が壊れる点に留意
+- **テストの罠（kmp-engineer 報告）**: `StandardTestDispatcher` 上で Flow が同一コルーチンから連続 emit すると、先行 collect で launch した `insightJob` が未実行のまま次の collect の cancel に巻き込まれ `summarize` が 1 度も走らないことがある。テスト側は emit 間に `delay` を挟んで仮想時間を進めて回避（`AnalysisViewModelInsightRegenerationTest`）。他画面横断の `onAppear` は点検済みで、引数で対象が変わる画面単位 VM（coffee-list / coffee-detail / coffee-editor）は cancel-and-relaunch が正しく今回の対象外

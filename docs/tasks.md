@@ -42,6 +42,16 @@
 | [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
 | [x] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | 2026-07-15 完了。位置調整（記録タブ = リスト先頭インライン / 分析タブ = 高さ 90pt 上限）まで確認済み |
 
+#### 分析タブ「あなたの傾向」の再生成抑止（2026-07-16 起票）
+
+> ユーザー報告「分析タブに遷移するたびに『あなたの傾向』が再計算されてそう。一度計算したらアプリ利用中は保持したい」。原因は `AnalysisViewModel.onAppear()` が無条件に `observeJob` をキャンセル・再購読し、Flow の再 emit で `launchInsightGeneration` が毎回走ること（VM 自体は `AppState` でアプリ生存期間保持されており、購読を張り直す必要がない）。修正は commonMain のみ: ① `onAppear()` は購読中なら no-op、② 同値 stats の再 emit では要約を再生成しない。記録の追加・変更時は従来どおり再生成される。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `AnalysisViewModel.onAppear()` の購読中ガード + 同値 stats での insight 再生成スキップ + commonTest 追加 | 2026-07-16 完了。`AnalysisViewModelInsightRegenerationTest` 3 件新規（計 22 件 green）。公開 API 変更なし・iOS Bridge 追随不要 |
+| [x] | 親: verify-kmp-ios 再検証 + commit | 2026-07-16 完了。testAndroidHostTest + iosSimulatorArm64Test（analysis 実行確認）+ assembleSharedLogicXCFramework すべて BUILD SUCCESSFUL。判断は implementation_note 2026-07-16 |
+| [ ] | ユーザー: シミュレータで確認（タブ往復で「傾向を分析中…」が再表示されない / 記録追加後は再生成される） | ビルド成功 ≠ 修正完了 |
+
 #### コーヒー記録の削除動線 3 種（2026-07-16 起票）
 
 > 要件 2-3「CoffeeRecord の削除」の動線整備。リストスワイプ削除は実装済み（確認なし即削除、維持）。追加するのは **リスト長押し contextMenu（編集 + 削除）** と **詳細右上 Menu の削除**。確認ダイアログは詳細・長押しのみ（2026-07-16 ユーザー決定、Undo なし）。詳細からの削除は `CoffeeDetailViewModel.UIState.isDeleted` フラグで pop 通知（`coffee == null` 検知は同期削除の「見つかりません」表示用に温存）。プランは `.claude/plans/starry-greeting-bird.md`。

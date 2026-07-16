@@ -50,7 +50,7 @@
 |------|------|------|
 | [x] | ios-engineer: 記録タブ（`CoffeeListView`）/ 分析タブ（`AnalysisView`）の広告配線削除 + `AnchoredBannerAdView.swift` 削除（分析タブ専用）+ ユニット ID 2 面分の定義削除（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`） | 2026-07-16 完了。撤去 5 識別子の grep 横断点検で残存なし。Configuration/README も 2 面に追随 |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。paid-services.md の面数記述も追随。`Secrets.xcconfig` のみ親から読み取り不可（本番ユニット未発行のため該当キー無しの見込み、ユーザー確認推奨） |
-| [ ] | ユーザー: シミュレータで確認（記録・分析タブに広告なし / カフェ詳細・マップ検索は従来どおり / ATT プレプロンプト維持） | |
+| [x] | ユーザー: シミュレータで確認（記録・分析タブに広告なし / カフェ詳細・マップ検索は従来どおり / ATT プレプロンプト維持） | 2026-07-16 ユーザー確認完了 |
 
 #### 共有カード画像生成（2026-07-16 起票）
 
@@ -60,7 +60,7 @@
 |------|------|------|
 | [x] | ios-engineer: `ShareCard/` 新設（`CoffeeShareCardView` = 360×450pt 可変レイアウト / `ShareCardRenderer` = ImageRenderer scale 3 + ライト固定 + 一時 PNG / `ShareCardSheet` = プレビュー + ShareLink）+ `CoffeeDetailView` ツールバーに独立共有アイコン | 2026-07-16 完了。`TastingRadarChart` / `StarRatingView` / `PhotoFileStore` は無改変で再利用。カードの roastLevel はローカライズ表示（本体 Form と非対称 — implementation_note 2026-07-16） |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。設計判断 2 エントリを implementation_note に記録 |
-| [ ] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | |
+| [x] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | 2026-07-16 ユーザー確認完了（レーダー縮小時の可読性含め OK） |
 
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
 

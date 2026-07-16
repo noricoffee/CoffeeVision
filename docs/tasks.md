@@ -51,7 +51,7 @@
 | [x] | kmp-engineer: `CoffeeDetailViewModel` に `onAppear(coffeeId, userId)` / `onDeleteTapped()` / `UIState.isDeleted` 追加 + commonTest 新設 | 2026-07-16 完了。commonTest 5 件 green（Android host + iosSimulatorArm64 は親実行） |
 | [x] | ios-engineer: 詳細 Bridge / View（削除 Menu + confirmationDialog + dismiss + 写真物理削除）、リスト contextMenu（編集 sheet + 削除 dialog） | 2026-07-16 完了。swipeActions 無変更 |
 | [x] | 親: verify-kmp-ios 再検証 + implementation_note 記録 + commit | 2026-07-16 検証完了。全モジュール 2 ターゲットテスト green + XCFramework link + override 無し xcodebuild BUILD SUCCEEDED を親確認。implementation_note 2026-07-16 記録済み |
-| [ ] | ユーザー: シミュレータで 3 動線 + スワイプ退行なし確認 | ビルド成功 ≠ 動作確認完了 |
+| [x] | ユーザー: シミュレータで 3 動線 + スワイプ退行なし確認 | 2026-07-16 ユーザー確認完了 |
 
 #### マップ「好み一致」チップのタップ対応（2026-07-16 起票）
 

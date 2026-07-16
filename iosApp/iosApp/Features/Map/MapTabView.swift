@@ -3,6 +3,22 @@ import MapKit
 import CoreLocation
 import SharedLogic
 
+// MARK: - PreferenceMatchAxis 表示ラベル
+
+/// 好み一致の軸名の日本語ラベル。
+///
+/// `RecommendationMatchSheet` と `RecommendedCafeListSheet`（一覧行のサマリ表示）で共有する。
+func preferenceMatchAxisLabel(_ axis: PreferenceMatchAxis) -> String {
+    switch axis {
+    case .origin:
+        return String(localized: "産地")
+    case .roastLevel:
+        return String(localized: "焙煎度")
+    case .brewMethod:
+        return String(localized: "抽出方法")
+    }
+}
+
 // MARK: - RecommendationMatchSheet
 
 /// 好み一致カフェの推薦理由を表示するシート。
@@ -118,7 +134,7 @@ struct RecommendationMatchSheet: View {
 
     /// 推薦理由のタイトル文（例「好みの産地: エチオピア」）。
     private func matchTitle(_ match: RecommendationReasonTasteProfileMatch) -> String {
-        let axisLabel = axisName(match.axis)
+        let axisLabel = preferenceMatchAxisLabel(match.axis)
         return String(localized: "好みの\(axisLabel): \(match.matchedLabel)")
     }
 
@@ -130,23 +146,11 @@ struct RecommendationMatchSheet: View {
 
     /// アクセシビリティ用ラベル（VoiceOver 読み上げ）。
     private func matchAccessibilityLabel(_ match: RecommendationReasonTasteProfileMatch) -> String {
-        let axisLabel = axisName(match.axis)
+        let axisLabel = preferenceMatchAxisLabel(match.axis)
         let stars = formatRating(match.exampleRating)
         return String(
             localized: "好みの\(axisLabel) \(match.matchedLabel) を高評価で記録。\(match.exampleRecordName) \(stars)"
         )
-    }
-
-    /// 軸名の日本語ラベル。
-    private func axisName(_ axis: PreferenceMatchAxis) -> String {
-        switch axis {
-        case .origin:
-            return String(localized: "産地")
-        case .roastLevel:
-            return String(localized: "焙煎度")
-        case .brewMethod:
-            return String(localized: "抽出方法")
-        }
     }
 
     /// 評価値を「★4.5」形式の文字列に変換する。
@@ -250,6 +254,15 @@ struct MapTabView: View {
     /// 「行きたい店」一覧ハーフシートの表示状態。
     @State private var isPresentingSavedCafesSheet = false
 
+    // MARK: - 「好み一致」関連 State（2026-07-16、チップのタップ対応）
+
+    /// 「好み一致」チップの強調状態。「保存済み」と同じ操作体系（タップで強調 + 一覧シート、
+    /// 再タップで強調解除のみ）。「保存済み」強調とは排他（両方同時に ON にはしない）。
+    @State private var recommendedEmphasisActive: Bool = false
+
+    /// 「好み一致」一覧ハーフシートの表示状態。
+    @State private var isPresentingRecommendedCafesSheet = false
+
     // MARK: - 検索関連 State
 
     /// 検索バーのテキスト入力。
@@ -257,6 +270,9 @@ struct MapTabView: View {
 
     /// マップ上部検索バー用の CafeSearch ブリッジ。`.task` で 1 度だけ生成する。
     @State private var searchBridge: CafeSearchViewModelBridge? = nil
+
+    /// 検索ドロップダウンのインラインアダプティブバナー用ローダー（requirements.md §11-2）。
+    @State private var searchAdLoader = BannerAdLoader(adUnitID: AdUnitIDs.mapSearchDropdown)
 
     /// 検索結果ドロップダウンの表示フラグ。
     @State private var showingSearchResults: Bool = false
@@ -346,6 +362,20 @@ struct MapTabView: View {
                                 }
                             )
                         }
+                        .sheet(isPresented: $isPresentingRecommendedCafesSheet) {
+                            RecommendedCafeListSheet(
+                                recommendedCafes: bridge.recommendedCafes,
+                                onSelect: { recommended in
+                                    isPresentingRecommendedCafesSheet = false
+                                    navigationPath.append(
+                                        CafeDetailRoute(
+                                            placeId: recommended.cafe.placeId,
+                                            initialCafe: recommended.cafe
+                                        )
+                                    )
+                                }
+                            )
+                        }
                         .sheet(isPresented: $isPresentingTasteSearch) {
                             TasteSearchSheet { keywords in
                                 // 補完キーワードを検索クエリに付加して検索実行
@@ -418,6 +448,13 @@ struct MapTabView: View {
                             ApplePoiNegativeCache.add(name: tapped.name, coordinate: tapped.coordinate)
                             appleNearbyCafes.removeAll { $0.id == tapped.id }
                             lastTappedApplePoi = nil
+                        }
+                        // 好み一致カフェが 0 件になった（チップ消滅）ら強調 / シートをリセットする。
+                        .onChange(of: bridge.recommendedCafes.count) { _, count in
+                            if count == 0 {
+                                recommendedEmphasisActive = false
+                                isPresentingRecommendedCafesSheet = false
+                            }
                         }
                         // 検索完了（テキスト検索 / エリア検索の両方）を検知して全件ピン反映する
                         .onChange(of: searchBridge?.isLoading) { _, isLoading in
@@ -528,11 +565,13 @@ struct MapTabView: View {
                                 let isTasteMatch = bridge.tasteMatchedPlaceIds.contains(
                                     visitedCafe.cafe.placeId
                                 )
-                                // 「保存済み」チップ強調中は保存済みピン以外を一律減光する
-                                // （テイストフィルタの減光より優先）。
-                                let pinOpacity: Double = savedEmphasisActive
-                                    ? 0.4
-                                    : (isTasteActive && !isTasteMatch ? 0.25 : 1.0)
+                                // 「好み一致」/「保存済み」チップ強調中は対象以外を一律減光する
+                                // （テイストフィルタの減光より優先。両強調は排他のため同時 true にはならない）。
+                                let pinOpacity: Double = recommendedEmphasisActive
+                                    ? (isRecommended ? 1.0 : 0.4)
+                                    : (savedEmphasisActive
+                                        ? 0.4
+                                        : (isTasteActive && !isTasteMatch ? 0.25 : 1.0))
 
                                 Group {
                                     if isRecommended,
@@ -584,6 +623,8 @@ struct MapTabView: View {
                                 savedCafePin(savedCafe: savedCafe)
                             }
                             .buttonStyle(.plain)
+                            // 「好み一致」チップ強調中は保存済みピンも減光する（保存済みは推薦対象外のため）。
+                            .opacity(recommendedEmphasisActive ? 0.4 : 1.0)
                         }
                     }
                 }
@@ -606,7 +647,7 @@ struct MapTabView: View {
                                     searchResultPin(cafe: cafe)
                                 }
                                 .buttonStyle(.plain)
-                                .opacity(savedEmphasisActive ? 0.4 : 1.0)
+                                .opacity((savedEmphasisActive || recommendedEmphasisActive) ? 0.4 : 1.0)
                             }
                         }
                     }
@@ -708,7 +749,7 @@ struct MapTabView: View {
             } else if !sb.results.isEmpty {
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(sb.results, id: \.placeId) { cafe in
+                        ForEach(Array(sb.results.enumerated()), id: \.element.placeId) { index, cafe in
                             Button {
                                 selectSearchResult(cafe)
                             } label: {
@@ -739,6 +780,16 @@ struct MapTabView: View {
                             .buttonStyle(.plain)
                             if cafe.placeId != sb.results.last?.placeId {
                                 Divider().padding(.leading, 52)
+                            }
+                            // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
+                            // 到達しないため非表示。requirements.md §11-2）。
+                            if index == 2 {
+                                InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 8)
+                                if cafe.placeId != sb.results.last?.placeId {
+                                    Divider().padding(.leading, 52)
+                                }
                             }
                         }
                     }
@@ -1132,13 +1183,25 @@ struct MapTabView: View {
                     bridge.onShowVisitedToggled(!bridge.showVisited)
                 }
 
-                // 好み一致カフェが 1 件以上あるときのみ凡例チップを表示（インタラクションなし）
+                // 「好み一致」チップ（1 件以上あるときのみ表示。2026-07-16 タップ対応）
+                // 「保存済み」と同じ操作体系: タップで強調 ON + 一覧シート表示。強調中の再タップは強調解除のみ。
+                // 「保存済み」強調とは排他のため、ON にする際は必ず相手側を OFF にする。
                 if !bridge.recommendedCafes.isEmpty {
-                    TagLegendChip(
+                    TagChip(
                         label: String(localized: "好み一致"),
                         systemImage: "heart.fill",
+                        isOn: recommendedEmphasisActive,
+                        count: bridge.recommendedCafes.count,
                         tint: .pink
-                    )
+                    ) {
+                        if recommendedEmphasisActive {
+                            recommendedEmphasisActive = false
+                        } else {
+                            recommendedEmphasisActive = true
+                            savedEmphasisActive = false
+                            isPresentingRecommendedCafesSheet = true
+                        }
+                    }
                 }
 
                 // 「保存済み」チップ（1 件以上あるときのみ表示。フェーズ 15-A / 16）
@@ -1154,6 +1217,7 @@ struct MapTabView: View {
                             savedEmphasisActive = false
                         } else {
                             savedEmphasisActive = true
+                            recommendedEmphasisActive = false
                             isPresentingSavedCafesSheet = true
                         }
                     }
@@ -1477,10 +1541,10 @@ struct MapTabView: View {
 
     /// Apple 検索由来ピンの不透明度。
     ///
-    /// 既存 4 種より明確に低強調な意匠に加え、「保存済み」チップ強調中は 0.4、
+    /// 既存 4 種より明確に低強調な意匠に加え、「保存済み」/「好み一致」チップ強調中は 0.4、
     /// テイストフィルタ有効時（Apple 由来は常に非マッチ扱い）は 0.25 まで減光する。
     private func appleNearbyPinOpacity(_ bridge: MapViewModelBridge) -> Double {
-        if savedEmphasisActive { return 0.4 }
+        if savedEmphasisActive || recommendedEmphasisActive { return 0.4 }
         if !bridge.tasteMatchedPlaceIds.isEmpty { return 0.25 }
         return 1.0
     }

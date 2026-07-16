@@ -621,3 +621,63 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: バージョン番号が「状態」なのか「次に適用する差分」なのかを API ごとに確認する。off-by-one で赤くなる場合、テストの手組みスキーマではなくバージョン引数のセマンティクスを先に疑う
 - **発生源**: B-4 rating nullable 化の migration 5 テスト実装（2026-07-12、kmp-engineer）。詳細な API 裏取り手順はエージェントメモリ `sqldelight_migration_version_semantics.md`
 - **横展開点検（2026-07-13）**: `grep -rn "\.migrate(" --include="*.kt" shared androidApp`（build 除外）→ 呼び出しは migration テスト 2 箇所（androidHostTest / iosTest）のみで、いずれも `migrate(driver, 5L, 6L)` と正しく、セマンティクス解説コメント付き。本番経路はドライバ構築時の自動 migration（`user_version` 管理）で手動呼び出しなし。**該当なし**
+
+## 2026-07-14
+
+### SPM の `upToNextMajorVersion` に控えめな `minimumVersion` を渡すと古いメジャーで解決され、古い API 形状のまま実装してしまう
+
+- **症状**: Google Mobile Ads SDK を SPM 追加した際、`minimumVersion` を低く指定したため v11 系で解決され、Swift 向け `NS_SWIFT_NAME` リネーム（`GADNativeAd` → `NativeAd` 等）が入っていない古い API 形状に合わせてコードを書き始めてしまった（最新ドキュメントの API 名とコンパイルエラーで乖離が発覚）
+- **原因の構造**: `upToNextMajorVersion` は「指定メジャー内の最新」までしか上げない。「とりあえず低めの minimum を書いておけば SPM が最新を取る」という直感は**メジャーをまたがない**ため誤り。SDK 側がメジャーバージョンで API リネームを行っていると、ドキュメント（最新版準拠）と手元の解決バージョンで API 形状が食い違う
+- **修正パターン**: パッケージ追加前に GitHub Releases で実際の最新メジャーを確認し、`minimumVersion` にその最新メジャー（例: `13.0.0`）を明示してから実装に入る。追加後は `Package.resolved` の解決バージョンを実読みして想定メジャーか確認する
+- **教訓**: SPM 依存を追加するときは「バージョン指定 → resolve → `Package.resolved` 確認」までをセットにする。ドキュメントと API 名が合わないときは自分のコードより先に解決バージョンを疑う
+- **発生源**: AdMob 広告導入（2026-07-14、ios-engineer）。詳細はエージェントメモリ `admob-native-ads.md`
+- **横展開点検（2026-07-14）**: `grep -B2 -A4 "minimumVersion" iosApp/iosApp.xcodeproj/project.pbxproj` + `Package.resolved` 実読み → 直接依存は 2 つのみ。GoogleMobileAds（min 13.0.0 → 解決 13.6.0）/ firebase-ios-sdk（min 12.0.0 → 解決 12.14.0、現行メジャー）とも最新メジャーで解決済み。**該当なし**
+
+### 外部 SDK の「必要なら表示」系 API は、required 判定がコンソール / サーバー構成で決まるならクライアント側の条件ガードで制御できない — 使わない UI 経路は呼び出し自体を消す
+
+- **症状**: 自前の広告プレプロンプト + ATT ダイアログの後に、UMP の英語ダイアログ（"Our App wants to stay free…"）が二重表示。`consentStatus == .required` ガードを入れた 1 回目の修正でも**再発**した
+- **原因の構造**: UMP の `loadAndPresentIfRequired` は「required なら出す」API だが、その required 判定は AdMob **コンソール側のメッセージ構成**に依存する。ATT メッセージ（IDFA 説明）が構成されていると、GDPR 圏外でも ATT 未決定なら `consentStatus` が `.required` 扱いになり、ガードを素通りする。さらにフォールバック中の Google テスト用 App ID は**他人（Google デモアプリ）のコンソール構成**を継承するため、自アプリで制御する余地が構造的にない。「条件を狭めて呼ぶ」修正はこの外部状態への従属を解消しない
+- **修正パターン**: 自前 UI（プレプロンプト + 直接 ATT）が仕様の正である以上、UMP のメッセージ表示経路は条件ガードではなく**呼び出しを全撤去**する。撤去時は連動プロパティの残存参照も点検する（`canRequestAds` は `requestConsentInfoUpdate` を呼ばない構成では常に false になるため参照禁止 — `AdConsentCoordinator` のコメントに明記）
+- **教訓**: 「required / needed なら出す」系 API の判定材料がクライアント外（コンソール・サーバー構成・他者管理のテスト ID）にあるときは、ガード条件では自分の仕様を表現できない。**ガード追加の 1 回目が効かなかった時点で、条件調整の続行ではなく経路撤去へアプローチ系統を変える**
+- **発生源**: AdMob 広告導入の ATT フロー（2026-07-14、ユーザーのシミュレータ確認 2 回で発覚 → 同日 UMP 呼び出し全撤去で解消）。経緯詳細は implementation_note 2026-07-14 ATT エントリ
+- **横展開点検（2026-07-14）**: `grep -rn "UMP\|UserMessagingPlatform\|canRequestAds" iosApp/iosApp --include="*.swift"` → API 呼び出しの残存なし（`AdConsentCoordinator` の経緯説明コメントのみ）。陳腐化コメント 2 行（`AppState.swift` / `iOSApp.swift` の「UMP 同意更新」言及）は同時に消し込み済み。**該当なし**
+
+### `Group { if let x { View() } }` に `.task` / `.onAppear` を付けると、条件が偽で子ゼロの間はモディファイアの付け先が実体化されず永遠に発火しない
+
+- **症状**: 広告が 4 面中 3 面で表示されない。ビルドは成功、ビューの `body` は評価されている（print で確認）のに、非同期ロードを開始する `.task` が一度も発火せず、ロードが始まってすらいなかった
+- **原因の構造**: SwiftUI の `Group` はコンテナではなく**モディファイアを各子ビューに分配する**透過構造。`Group { if let ad { AdView(ad) } }.task { load() }` は「ロード完了後に現れる子」にしか `.task` が付かないため、初期状態（`ad == nil` = 子ゼロ）では付け先が存在せず発火しない。**「ロードが終わったら表示する」ビューのロードトリガーを、その表示条件の内側にしか実体化されないビューに付ける**という自己矛盾がバグの本体（鶏と卵）。List / LazyVStack / VStack の配置場所の問題に見えるが無関係
+- **修正パターン**: ① root を `ZStack` 等の**常に実体化される単一コンテナ**に変える（空でも `.task` が発火し、高さ 0 に畳まれる）② List の Section 内では空 Section の余白が残るため、ローダーを画面側 `@State` に持ち上げ、常在ビュー（`List` 自体）に `.task` を付けて「値があるときだけ Section を出す」構造にする
+- **教訓**: 非同期ロードのトリガー（`.task` / `.onAppear`）は「ロード結果で中身が変わるビュー」ではなく「常に実体化されるビュー」に付ける。切り分けでは「body 評価ログは出るのに task ログが出ない」が決定的証拠になる（body 評価 ≠ ビュー実体化）。UI 挙動の検証はビルド成功では不足で、親がシミュレータ起動 + `print` ログ採取（`simctl launch --console-pty`）まで行う
+- **発生源**: AdMob 広告導入の広告コンポーネント（2026-07-14、ユーザー報告「分析タブ以外表示されない」→ 診断ハーネス + ログで確定）。経緯は implementation_note 2026-07-14 広告コンポーネントエントリ
+- **横展開点検（2026-07-14）**: `grep -rn "Group {" iosApp/iosApp --include="*.swift"` で 16 箇所列挙 → 各 Group 直後 45 行に `.task` / `.onAppear` があるのは 3 箇所（`AnalysisView:33` / `CafeDetailView:32` / `PlacePhotoThumbnail:35`）で、**いずれも `else` 節を持ち中身が空になり得ない**ため非該当。**該当なし**
+
+## 2026-07-15
+
+### レイアウト実測駆動の非同期ロードで、再入ガード（`guard !isLoading`）が「最後の要求」を無言で破棄すると過渡値だけが処理されて回復不能になる
+
+- **症状**: 下部固定バナーがタブ切替後も表示されない。ログでは `task fired width=72` → リクエスト → `task fired width=402` → **再入ガードで破棄** → 72×100 のリクエストは「No ad to show」で失敗、以降幅が変化しないため `task(id: width)` が再発火せず回復不能
+- **原因の構造**: `GeometryReader` + `.task(id: size.width)` の計測はタブ切替等の過渡状態で**ゴミ幅（72 / 20pt 等）を先に報告**する。ゴミ幅で即ロードを開始すると、直後の正しい幅の要求が `guard !isLoading` に吸われて消える。「re-entrancy guard = 多重リクエスト防止」のつもりが、**「最後に要求された状態が最終的に反映される」保証を壊している**。id ベースの再発火はガードの存在を知らないため、両者の組み合わせで取りこぼしが恒久化する
+- **修正パターン**: ① 呼び出し側に**下限ガード**（`width >= minimumRequestableWidth`）で過渡値を弾く ② ローダー側は **pending 方式**（ロード中の新要求は破棄せず保存し、完了（成功 / 失敗どちらでも）後に追いかけて実行）で「最後の要求は必ず処理される」を保証 ③ 既に同一サイズでロード済みなら no-op（無限リロード防止）④ 一度成功した表示は後続の失敗で巻き戻さない
+- **教訓**: 「計測値の変化で再実行される処理」に再入ガードを入れるときは、**破棄した要求を誰が再送するのか**を必ず答えられること。答えがなければ pending / 最新値の再キック機構をセットで入れる。過渡値はガードで弾けるが、正しい値の取りこぼしはガードでは防げない
+- **発生源**: AdMob アダプティブバナーの `BannerAdLoader`（2026-07-14〜15、ユーザーの Xcode コンソールログで確定）
+- **横展開点検（2026-07-15）**: `grep -rn "guard !isLoading\|guard isLoading == false" iosApp shared --include="*.swift" --include="*.kt"` → 2 件。① `BannerAdLoader.swift:66`（本件、pending 方式で修正済み）② `MapTabView.swift:427` は `onChange(of: isLoading)` の**完了イベント検知**（false への変化に反応するフィルタ）で、要求を破棄する再入ガードではなく非該当。**他に該当なし**
+
+### UIKit SDK ビューを `UIViewRepresentable` で包むときはサイズを明示する（intrinsic 任せにすると SwiftUI の提案サイズで伸縮され、SDK のサイズ検証が作動する）
+
+- **症状**: バナー広告が受信成功（`didReceive`）した直後に、こちらの `load()` を経由しない「Invalid ad width or height」失敗が届き、表示が無効化される（受信したのに画面に出ない）
+- **原因の構造**: `UIViewRepresentable` はサイズ指定がないと SwiftUI の**提案サイズ**で UIView の frame を設定する（`maxWidth: .infinity` なら伸縮、レイアウト過渡では 0 もあり得る）。Google Mobile Ads の `BannerView` は自身の `adSize` と実 frame の不整合を検知して内部で再検証・再ロードを走らせるため、「受信 → SwiftUI が別サイズに伸縮 → SDK が invalid 判定」のループになる。**サイズに自己主張のある SDK ビューを intrinsic 任せで包んではいけない**
+- **修正パターン**: Google 公式 SwiftUI サンプル（googleads-mobile-ios-examples の `BannerViewContainer`）と同じく、representable に **adSize ちょうどの `.frame(width:height:)` を明示**する。インラインアダプティブのように返却サイズが可変の場合は、リクエスト時サイズではなく**受信後の実サイズ**（`bannerView.adSize.size` を didReceive で保存）を使う。センタリング等は外側のコンテナで行い、representable 自体は伸縮させない
+- **教訓**: サードパーティ SDK の UIKit ビューを SwiftUI に組み込むときは、**先に公式の SwiftUI サンプルを探して構成を一致させる**（今回も最終的に公式サンプル通りにして解決。3 サイクル目でようやく参照した）。「受信成功したのに表示されない」+「自分のコードを経由しない失敗コールバック」は SDK 内部の検証・再試行を疑う
+- **発生源**: `BannerViewRepresentable`（2026-07-15 修正）。経緯は implementation_note 2026-07-15 エントリ
+- **横展開点検（2026-07-15）**: `grep -rn "UIViewRepresentable\|UIViewControllerRepresentable" iosApp/iosApp --include="*.swift"` → representable は `BannerViewRepresentable`（修正済み）の 1 箇所のみ。**該当なし**
+
+## 2026-07-16
+
+### 深いネストの ViewBuilder 内に多分岐 if/else の let 代入を書くと、無関係に見える外側 ForEach の KeyPath 解決エラーとして誤誘導されることがある
+
+- **症状**: `Map`/`ForEach`/`Annotation` の深いネスト内に 3 分岐の `if/else` による `let pinOpacity` 代入を追加したところ、原因箇所ではなく**外側の** `ForEach(bridge.visitedCafes, id: \.cafe.placeId)` が「value of type `KotlinBase` has no member `cafe`」というエラーになった（エラー位置と原因箇所が一致しない）
+- **原因の構造**: Swift の型チェッカは複雑なクロージャで型推論が破綻すると、SKIE ブリッジ型の KeyPath を具象型（`VisitedCafe`）でなく基底型（`KotlinBase`）に解決してしまい、エラーを実際の原因（直近追加した多分岐 let 代入）ではなく外側の KeyPath に着地させる。SKIE 型 + 深いネスト ViewBuilder + 複数行 `if/else` の組み合わせで再現しやすい
+- **修正パターン**: 同じ分岐を 1 文の入れ子三項演算子式に書き換える（`let x: Double = a ? v1 : (b ? v2 : v3)`）。それで型チェッカが正しく推論する
+- **教訓**: SwiftUI ViewBuilder 内で「関係なさそうな外側の KeyPath / ForEach」のエラーが突然出たら、外側を疑う前に**直近で追加した多分岐の let 代入を三項演算子化して切り分ける**。エラー位置を信用しない
+- **発生源**: マップ「好み一致」チップのタップ対応（2026-07-16、ios-engineer）。再現条件の詳細はエージェントメモリ `ios-engineer/xcodebuild-verification.md`
+- **横展開点検（2026-07-16）**: この型はコンパイルエラーとして顕在化するため、ビルド green な現状に潜在該当は存在し得ない（override 無し xcodebuild BUILD SUCCEEDED を親確認済み）。予防観点で `grep -rn "= if " iosApp/iosApp --include="*.swift"`（if 式による let 代入）→ 0 件。**該当なし**

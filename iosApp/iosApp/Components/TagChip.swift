@@ -2,7 +2,7 @@ import SwiftUI
 
 /// マップ / 一覧画面で共通利用するフィルタ切替チップ。
 ///
-/// - 選択時: `Color.accentColor` で塗り潰し + 白文字
+/// - 選択時: `tint`（既定 `Color.accentColor`）で塗り潰し + 白文字
 /// - 非選択時: `.regularMaterial` 背景 + secondary テキスト
 /// - `count` を指定すると右上に件数バッジを表示する（100 以上は "99+"）
 struct TagChip: View {
@@ -11,6 +11,10 @@ struct TagChip: View {
     let systemImage: String
     let isOn: Bool
     var count: Int? = nil
+    /// 選択時の塗り色。既定は `Color.accentColor`。
+    /// `docs/ui-ux-guidelines.md` の色セマンティクス表に従い、意味付けされた概念（好み一致=pink 等）は
+    /// 呼び出し側で明示的に渡す（`accentColor` を流用しない）。
+    var tint: Color = .accentColor
     let action: () -> Void
 
     var body: some View {
@@ -24,7 +28,7 @@ struct TagChip: View {
                     .frame(minWidth: 44, minHeight: 44)
                     .background(
                         Capsule()
-                            .fill(isOn ? Color.accentColor : Color.clear)
+                            .fill(isOn ? tint : Color.clear)
                             .background(
                                 Capsule().fill(.regularMaterial)
                             )
@@ -57,10 +61,10 @@ struct TagChip: View {
     private func countBadge(_ count: Int) -> some View {
         Text(count >= 100 ? "99+" : "\(count)")
             .font(.caption2.bold())
-            .foregroundStyle(isOn ? Color.accentColor : .white)
+            .foregroundStyle(isOn ? tint : .white)
             .padding(.horizontal, 4)
             .frame(minWidth: 16, minHeight: 16)
-            .background(Circle().fill(isOn ? Color.white : Color.accentColor))
+            .background(Circle().fill(isOn ? Color.white : tint))
     }
 
     // MARK: - アクセシビリティ
@@ -107,6 +111,11 @@ struct TagLegendChip: View {
             TagChip(label: "訪問済み", systemImage: "cup.and.saucer.fill", isOn: true) {}
             TagChip(label: "保存済み", systemImage: "bookmark.fill", isOn: false, count: 3) {}
             TagChip(label: "保存済み", systemImage: "bookmark.fill", isOn: true, count: 128) {}
+        }
+        // `tint` 指定（マップの「好み一致」チップ、2026-07-16 タップ対応でインタラクティブ化）
+        HStack(spacing: 8) {
+            TagChip(label: "好み一致", systemImage: "heart.fill", isOn: false, count: 5, tint: .pink) {}
+            TagChip(label: "好み一致", systemImage: "heart.fill", isOn: true, count: 5, tint: .pink) {}
         }
         HStack(spacing: 8) {
             TagLegendChip(label: "好み一致", systemImage: "heart.fill", tint: .pink)

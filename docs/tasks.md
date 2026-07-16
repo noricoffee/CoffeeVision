@@ -26,6 +26,83 @@
 
 ### 未完・バックログ
 
+#### 広告導入: AdMob ネイティブ広告（2026-07-14 起票）
+
+> 収益化のため AdMob ネイティブ広告を 4 面（カフェ詳細 / マップ検索ドロップダウン / コーヒー記録タブ下部固定 / 分析タブ下部固定）+ ATT フロー（既存同意オンボーディング直後・拒否時 NPA）で導入する。**仕様の正は requirements.md §11**（2026-07-14 grilling で確定）。iosApp View 層完結・KMP 変更なし。本番ユニット発行前は Google 提供のテスト用ユニット ID で実装・検証を進められる。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: Google Mobile Ads SDK + UMP 導入（SPM）、`Info.plist`（`GADApplicationIdentifier` / `NSUserTrackingUsageDescription`）、`Secrets.xcconfig` 注入経路 | 2026-07-14 完了。v13.6.0（UMP は内部依存で自動リンク）。テスト用 ID フォールバックは `Base.xcconfig`、切替手順は `iosApp/Configuration/README.md` |
+| [x] | ios-engineer: ATT プレプロンプト（「広告により無料で提供」説明）→ ATT を既存同意オンボーディング直後に接続。拒否時 NPA 設定 | 2026-07-14 完了。既存ユーザーも UserDefaults フラグで 1 回到達（implementation_note 2026-07-14） |
+| [x] | ios-engineer: 共通ネイティブ広告コンポーネント 2 種（インライン用 / 下部固定用）。ロード失敗・オフライン時は枠ごと畳む。`maxAdContentRating = G`。「広告」ラベル / AdChoices 表示 | 2026-07-14 完了。`iosApp/iosApp/Ads/`。mediaView 非表示テンプレート（implementation_note 2026-07-14） |
+| [x] | ios-engineer: 4 面配線 — カフェ詳細（情報系の後・記録の前）/ 検索ドロップダウン（3 件目の後・結果 3 件未満は非表示）/ コーヒー記録タブ（下部固定、FAB を広告の上へ）/ 分析タブ（下部固定） | 2026-07-14 完了 |
+| [x] | 親: 検証（verify-kmp-ios、xcodebuild override 無し）+ Places データをターゲティングに渡していないかレビュー + implementation_note 記録 + commit | 2026-07-14 完了。override 無し BUILD SUCCEEDED + Gradle BUILD SUCCESSFUL 確認。Ads/ に Places 参照なし（コメントのみ）・素の Request + NPA フラグのみ確認 |
+| [x] | ios-engineer: **全面バナー化への再実装**（MediaView 必須判明による再編、requirements §11 改訂済み）— NativeAd 系 4 ファイル撤去、下部固定 2 面 = アンカーアダプティブバナー / インライン 2 面 = インラインアダプティブバナー（maxHeight 制限）、テスト用ユニット ID をバナー用に差し替え | 2026-07-14 完了。親再検証済み（build + Places 混入なし）。設計判断は implementation_note 2026-07-14 バナー再実装エントリ |
+| [ ] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット **2 つ**発行（カフェ詳細 / マップ検索）→ `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備。2026-07-16 の 11-3 撤去で 4 → 2 ユニットに縮小 |
+| [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
+| [x] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | 2026-07-15 完了。位置調整（記録タブ = リスト先頭インライン / 分析タブ = 高さ 90pt 上限）まで確認済み |
+
+#### 記録・分析タブの広告撤去（2026-07-16 起票）
+
+> ユーザビリティレビュー採用分。定着の核となる記録・振り返り 2 画面のバナーはリテンションを削る割に収益が小さいため**一度撤去**（再導入余地は残す — コンポーネントは git 履歴から復元可能）。広告はカフェ詳細 / マップ検索の 2 面に縮小。**仕様の正は requirements.md §11（11-3 = ✕ 撤去、2026-07-16 改訂済み）**。ATT フローは残存 2 面のため維持。プランは `.claude/plans/agile-knitting-fern.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: 記録タブ（`CoffeeListView`）/ 分析タブ（`AnalysisView`）の広告配線削除 + `AnchoredBannerAdView.swift` 削除（分析タブ専用）+ ユニット ID 2 面分の定義削除（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`） | 2026-07-16 完了。撤去 5 識別子の grep 横断点検で残存なし。Configuration/README も 2 面に追随 |
+| [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。paid-services.md の面数記述も追随。`Secrets.xcconfig` のみ親から読み取り不可（本番ユニット未発行のため該当キー無しの見込み、ユーザー確認推奨） |
+| [x] | ユーザー: シミュレータで確認（記録・分析タブに広告なし / カフェ詳細・マップ検索は従来どおり / ATT プレプロンプト維持） | 2026-07-16 ユーザー確認完了 |
+
+#### 共有カード画像生成（2026-07-16 起票）
+
+> ユーザビリティレビュー採用分（外向きの共有回路の新設）。記録詳細から 4:5（1080×1350px）のカード画像を生成し share sheet で共有。**仕様の正は requirements.md §2 2-12**（可変レイアウト 1 テンプレート / メモ・タグ非掲載 / ライトテーマ固定、2026-07-16 確定）。既存 `TastingRadarChart` を再利用、ImageRenderer は本リポジトリ初使用。iosApp View 層完結・KMP 変更なし。プランは `.claude/plans/agile-knitting-fern.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `ShareCard/` 新設（`CoffeeShareCardView` = 360×450pt 可変レイアウト / `ShareCardRenderer` = ImageRenderer scale 3 + ライト固定 + 一時 PNG / `ShareCardSheet` = プレビュー + ShareLink）+ `CoffeeDetailView` ツールバーに独立共有アイコン | 2026-07-16 完了。`TastingRadarChart` / `StarRatingView` / `PhotoFileStore` は無改変で再利用。カードの roastLevel はローカライズ表示（本体 Form と非対称 — implementation_note 2026-07-16） |
+| [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。設計判断 2 エントリを implementation_note に記録 |
+| [x] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | 2026-07-16 ユーザー確認完了（レーダー縮小時の可読性含め OK） |
+
+#### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
+
+> ユーザー報告「抽出方法の文字列が被って読めない」。`brewMethodSection` が縦棒（x=抽出方法ラベル）のため、方法数が増えると X 軸ラベルが重なる。焙煎度の内訳と同じ横棒（x=件数、y=抽出方法）に変更する。高さは項目数 × 32pt の可変。iosApp View 層完結・KMP 変更なし。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `AnalysisView.brewMethodSection` を横棒 BarMark 化（焙煎度セクションの軸構成を踏襲） | 2026-07-16 完了。データ順は `byBrewMethod`（件数降順）のまま = 最多の方法が最上段 |
+| [x] | 親: 検証（xcodebuild override 無し）+ commit | 2026-07-16 完了。ios-engineer が override 無し xcodebuild BUILD SUCCEEDED（error 0 件）を確認済み |
+| [x] | ユーザー: シミュレータで表示確認（ラベル被りなし / 件数軸グリッド） | 2026-07-16 ユーザー確認完了 |
+
+#### 分析タブ「あなたの傾向」の再生成抑止（2026-07-16 起票）
+
+> ユーザー報告「分析タブに遷移するたびに『あなたの傾向』が再計算されてそう。一度計算したらアプリ利用中は保持したい」。原因は `AnalysisViewModel.onAppear()` が無条件に `observeJob` をキャンセル・再購読し、Flow の再 emit で `launchInsightGeneration` が毎回走ること（VM 自体は `AppState` でアプリ生存期間保持されており、購読を張り直す必要がない）。修正は commonMain のみ: ① `onAppear()` は購読中なら no-op、② 同値 stats の再 emit では要約を再生成しない。記録の追加・変更時は従来どおり再生成される。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `AnalysisViewModel.onAppear()` の購読中ガード + 同値 stats での insight 再生成スキップ + commonTest 追加 | 2026-07-16 完了。`AnalysisViewModelInsightRegenerationTest` 3 件新規（計 22 件 green）。公開 API 変更なし・iOS Bridge 追随不要 |
+| [x] | 親: verify-kmp-ios 再検証 + commit | 2026-07-16 完了。testAndroidHostTest + iosSimulatorArm64Test（analysis 実行確認）+ assembleSharedLogicXCFramework すべて BUILD SUCCESSFUL。判断は implementation_note 2026-07-16 |
+| [x] | ユーザー: シミュレータで確認（タブ往復で「傾向を分析中…」が再表示されない / 記録追加後は再生成される） | 2026-07-16 ユーザー確認完了 |
+
+#### コーヒー記録の削除動線 3 種（2026-07-16 起票）
+
+> 要件 2-3「CoffeeRecord の削除」の動線整備。リストスワイプ削除は実装済み（確認なし即削除、維持）。追加するのは **リスト長押し contextMenu（編集 + 削除）** と **詳細右上 Menu の削除**。確認ダイアログは詳細・長押しのみ（2026-07-16 ユーザー決定、Undo なし）。詳細からの削除は `CoffeeDetailViewModel.UIState.isDeleted` フラグで pop 通知（`coffee == null` 検知は同期削除の「見つかりません」表示用に温存）。プランは `.claude/plans/starry-greeting-bird.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `CoffeeDetailViewModel` に `onAppear(coffeeId, userId)` / `onDeleteTapped()` / `UIState.isDeleted` 追加 + commonTest 新設 | 2026-07-16 完了。commonTest 5 件 green（Android host + iosSimulatorArm64 は親実行） |
+| [x] | ios-engineer: 詳細 Bridge / View（削除 Menu + confirmationDialog + dismiss + 写真物理削除）、リスト contextMenu（編集 sheet + 削除 dialog） | 2026-07-16 完了。swipeActions 無変更 |
+| [x] | 親: verify-kmp-ios 再検証 + implementation_note 記録 + commit | 2026-07-16 検証完了。全モジュール 2 ターゲットテスト green + XCFramework link + override 無し xcodebuild BUILD SUCCEEDED を親確認。implementation_note 2026-07-16 記録済み |
+| [x] | ユーザー: シミュレータで 3 動線 + スワイプ退行なし確認 | 2026-07-16 ユーザー確認完了 |
+
+#### マップ「好み一致」チップのタップ対応（2026-07-16 起票）
+
+> ユーザー報告「好み一致タグをタップしても何も起きない」。現状は静的凡例チップ（`TagLegendChip`、意図的にインタラクションなし）だが、隣のタップ可能チップと同じ見た目で誤解を招く。**「保存済み」チップと同じ操作体系に変更する**（2026-07-16 ユーザー決定）: タップで強調 ON + 好み一致カフェ一覧シート表示、強調中の再タップは強調解除のみ。行には推薦理由サマリを表示し、行タップでカフェ詳細へ push。iosApp View 層完結・KMP 変更なし。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: 「好み一致」チップを `TagLegendChip` → `TagChip` 化（強調トグル + 一覧シート、保存済みパターン踏襲）+ `RecommendedCafeListSheet` 新設 + 強調中の他ピン減光 | 2026-07-16 完了。`TagChip` に `tint` パラメータ追加（好み一致のみ `.pink`）。保存済み強調と排他 |
+| [x] | 親: verify-kmp-ios で再検証 + implementation_note 記録 + commit | 2026-07-16 完了。override 無し xcodebuild BUILD SUCCEEDED を親確認。implementation_note 2026-07-16 + lessons 2026-07-16（型チェッカ誤誘導）記録済み |
+| [x] | ユーザー: シミュレータで挙動確認（タップ → シート / 再タップ → 解除 / 行タップ → 詳細 / 減光） | 2026-07-16 ユーザー確認完了 |
+
 #### 分析タブ可視化改善: 焙煎度チャート + テイスティングレーダー（2026-07-13 起票）
 
 > 分析タブの可視化レビューから 2 件を採用（プラン承認済み）。① 焙煎度チャートを件数降順・単色縦棒 → **全 8 段階を焙煎順（浅→深）の横棒 + アクセント基準のブラウン明暗ランプ**に変更（`byRoastLevel` の KMP 契約は件数降順のまま、Swift 側で表示用マージ）。② テイスティング 5 軸の横棒を **カスタムレーダーチャート**（`Canvas`/`Path`、Swift Charts 非対応のため）に置き換え、各軸ラベルに平均値を添える。iOS のみで完結（KMP 変更なし）。

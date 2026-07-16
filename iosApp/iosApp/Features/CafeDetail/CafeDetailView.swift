@@ -1,3 +1,4 @@
+import GoogleMobileAds
 import SwiftUI
 import SharedLogic
 
@@ -20,6 +21,11 @@ struct CafeDetailView: View {
 
     @State private var bridge: CafeDetailViewModelBridge?
     @State private var isPresentingEditor = false
+
+    /// インラインアダプティブバナー（requirements.md §11-1）のローダー。`cafeDetailList` の
+    /// `List` 自体に `.background(GeometryReader)` + `.task` を付けてロードする
+    /// （常に実体化されるビューに付けるため確実に発火する。詳細は `adSection` のコメント参照）。
+    @State private var adLoader = BannerAdLoader(adUnitID: AdUnitIDs.cafeDetail)
 
     // MARK: - Body
 
@@ -76,10 +82,31 @@ struct CafeDetailView: View {
                 cafeLinksSection(cafe: cafe)
                 cafeHoursSection(cafe: cafe)
             }
+            adSection
             coffeesSection(bridge: bridge)
         }
         .listStyle(.insetGrouped)
+        .background(
+            // List 自体の実測幅からインラインアダプティブバナーの幅を計算する（iPad マルチタスキング
+            // でも正確な幅になる）。`.insetGrouped` の左右余白は概算値（`Self.adHorizontalMargin`）を
+            // 差し引く。Color.clear は常に実体化されるため `.task` は確実に発火する。
+            GeometryReader { proxy in
+                Color.clear
+                    .task(id: proxy.size.width) {
+                        let width = proxy.size.width - Self.adHorizontalMargin * 2
+                        // レイアウト測定の過渡状態（ゴミ幅・負値）でリクエストしない
+                        // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。
+                        guard width >= BannerAdLoader.minimumRequestableWidth else { return }
+                        adLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: Self.adMaxHeight))
+                    }
+            }
+        )
     }
+
+    /// `.insetGrouped` リストの左右余白概算（実測値より狭めに見積もり、バナーがはみ出さないようにする）。
+    private static let adHorizontalMargin: CGFloat = 32
+    /// インラインアダプティブバナーの上限高さ（行の高さになじむ値）。
+    private static let adMaxHeight: CGFloat = 100
 
     // MARK: - 視覚ヘッダー（写真帯 + 店名 + 評価 / 営業状態 / 価格帯 + 保存ボタン）
 
@@ -264,6 +291,38 @@ struct CafeDetailView: View {
         case "PRICE_LEVEL_EXPENSIVE":     return "¥¥¥"
         case "PRICE_LEVEL_VERY_EXPENSIVE": return "¥¥¥¥"
         default:                          return nil
+        }
+    }
+
+    // MARK: - 広告セクション
+
+    /// 情報系セクション（カフェ情報 / 外部リンク / 営業時間）とコーヒー記録セクションの間の
+    /// インラインアダプティブバナー（requirements.md §11-1）。
+    ///
+    /// `List` の `Section` は中身が空でも行の余白・区切り線を描画しうるため、ここで
+    /// `adLoader.isLoaded` を直接見て**未ロード時は Section 自体を List の body に含めない**
+    /// （2026-07-14 実機診断で確認した対応。ローダーは `cafeDetailList` の `List` に付けた
+    /// `.background(GeometryReader).task` が保持・駆動する）。
+    ///
+    /// `BannerViewRepresentable` には受信済みサイズ（`adLoader.loadedAdSize`）で明示
+    /// `.frame(width:height:)` を与える（公式 SwiftUI サンプル `BannerContentView.swift` と
+    /// 同じ構成）。サイズを明示しないと SwiftUI がレイアウト中に異なる frame を与えてしまい、
+    /// SDK 側のサイズ検証で "Invalid ad width or height" が発生し受信済み広告が無効化される
+    /// ことがある（2026-07-14 実機診断で確認）。行内でのセンタリングは外側の `HStack` + `Spacer`
+    /// で行い、representable 自体は伸縮させない。
+    @ViewBuilder
+    private var adSection: some View {
+        if adLoader.isLoaded, let bannerView = adLoader.bannerView, let loadedAdSize = adLoader.loadedAdSize {
+            Section {
+                HStack {
+                    Spacer(minLength: 0)
+                    BannerViewRepresentable(bannerView: bannerView)
+                        .frame(width: loadedAdSize.width, height: loadedAdSize.height)
+                    Spacer(minLength: 0)
+                }
+                .frame(maxWidth: .infinity)
+                .listRowInsets(EdgeInsets())
+            }
         }
     }
 

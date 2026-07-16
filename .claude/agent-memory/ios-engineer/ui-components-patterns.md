@@ -7,7 +7,8 @@ metadata:
 
 ## 共通 `TagChip` コンポーネント（フェーズ 16 で新設、`Components/TagChip.swift`）
 
-- マップ / 一覧で使う「選択トグル可能なチップ」は `TagChip`（`label:systemImage:isOn:count:action:`、選択時 accentColor 塗り、`count` 指定で右上に件数バッジ）と、非インタラクティブな凡例表示用 `TagLegendChip`（`label:systemImage:tint:`）の 2 種に共通化済み。新しいフィルタ/凡例 UI が必要になったらここに追加する（画面ごとに private struct を再実装しない）。
+- マップ / 一覧で使う「選択トグル可能なチップ」は `TagChip`（`label:systemImage:isOn:count:tint:action:`、選択時 `tint`（既定 `.accentColor`）塗り、`count` 指定で右上に件数バッジ）と、非インタラクティブな凡例表示用 `TagLegendChip`（`label:systemImage:tint:`）の 2 種に共通化済み。新しいフィルタ/凡例 UI が必要になったらここに追加する（画面ごとに private struct を再実装しない）。
+- `tint` は 2026-07-16（マップ「好み一致」チップのタップ対応）で追加したオプショナルパラメータ。選択時の塗り・バッジ配色すべてが `tint` に連動する。意味付けされた概念色（`docs/ui-ux-guidelines.md` の色セマンティクス表: 好み一致=pink 等）を持つチップは `accentColor` を流用せず明示的に `tint:` を渡す。
 - **`.offset(x:y:)` でバッジ等をはみ出させる実装は、`ScrollView` 内では上/右端がクリップされる**（`offset` は描画位置だけ動かし、親へ伝わるレイアウトサイズには寄与しないため）。対策は「はみ出す量ぶんの padding をコンポーネント自身に対称に確保する」パターン: 上下は `isOn` 状態に関わらず同じ padding（0 or 対称値）にして、はみ出す辺（上・右）は非対称に、対辺（下・左）はゼロのままにする。実例: `TagChip` の `badgeReservedInsets`（`count` があるときだけ `top:6, trailing:6, bottom:6` を確保）。
 
 ## Xcode AccentColor（カスタムカラー）の Contents.json は hex バイト文字列（`"0x8B"`）形式（2026-07-07、フェーズ 16 で確認）
@@ -34,6 +35,12 @@ metadata:
 - KMP 側データ（`cafe.photoReferences` 等）はそのまま `prefix(visibleCount)` で間引くだけでよく、Kotlin 側に変更は不要（純粋な表示制御は View 内 `@State` に閉じる）。
 - `isEmpty`（呼び出し側がヘッダー全体を隠すかの判定）は**元データ基準**にし、`visibleCount` に依存させない。段階読み込みの表示上限（例: 全体で最大 10 件）とは別に判定すること。
 - 「さらに表示」ボタンは既存セルと同じ `Identifiable` enum（`Item`）に `case loadMore` を追加し、`items` 配列の末尾（次セクションの手前）に条件付きで挿入するのが素直。ボタン自体は `.frame(width:height:)` を既存の写真セルと揃えれば ScrollView 内でレイアウトが崩れない。
+
+## 詳細画面（対象 1 レコード）の削除は「pending 写真ファイル名を Optional 1 個で保持」+ `isDeleted` フラグで pop する（2026-07-16、コーヒー詳細削除で確認）
+
+- `CoffeeListViewModelBridge` の `pendingPhotoDeletions: [String: [String]]`（複数レコード分の辞書）と同じ安全順序（KMP 削除成功確認後にのみ物理削除）だが、詳細画面は対象が常に 1 件なので `pendingPhotoFileNames: [String]?` の単一 Optional で足りる。`onDeleteTapped()` 呼び出し時点で `coffee?.photos.compactMap(\.fileName)` を控えてから Kotlin 側を呼び、`apply(_:)` で `state.isDeleted == true` を見て解放する。
+- View 側は `@Environment(\.dismiss)` + `.onChange(of: viewModel.isDeleted) { _, v in if v { dismiss() } }` で一覧へ pop。`content` の `@ViewBuilder` 分岐は **`isDeleted` を最優先で判定**し `ProgressView()` を返す（dismiss アニメーションが効くまでの一瞬に「見つかりません」の `ContentUnavailableView` がちらつくのを防ぐ）。
+- リスト側の長押し `.contextMenu` からの削除確認は `confirmationDialog(_:isPresented:titleVisibility:presenting:actions:message:)`（`presenting:` 付きオーバーロード）を使うと、`@State private var deletionTarget: CoffeeRecord?` を `Binding(get: { != nil }, set: { if !$0 { nil にする } })` で `isPresented` に渡しつつ、`actions`/`message` クロージャに non-optional な対象データを渡せる。スワイプ削除（確認なし）とは別導線として共存させる。
 
 ## `ShareLink` で「生成 → 共有」の 2 フェーズ導線を作るときは enum 状態（idle/exporting/ready(URL)）で Section 内容を丸ごと差し替える（2026-07-07、設定画面データエクスポートで確認）
 

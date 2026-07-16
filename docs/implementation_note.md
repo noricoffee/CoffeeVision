@@ -859,3 +859,127 @@ Apple `.cafe` 誤分類の非カフェ（法人本社「株式会社 アニメ�
 - **`userId` は `--uid` 引数で全レコード上書き**: エクスポート元と投入先のアカウントが違っても付け替えて投入できる（doc 内 `userId` とパス uid の不一致を作らない）
 - bean-profiles と同じ流儀（`--dry-run` は firebase-admin 不要 / 投入前バリデーション / ドキュメント ID = record.id の `set()` 冪等 upsert）。enum 名リスト（BrewMethod / ProcessingMethod / RoastLevel）は shared/domain と一致させる必要がある（bean-profiles 同様の複製。enum 追加時に追随）
 - 投入後は実機のサインイン中リスナー（`startSync`）が自動反映。投入したレコードは `DummyCoffeeData` と違い「本物のレコード」として全端末に同期される点に注意（削除はコンソールかアプリから）
+
+### 2026-07-14: 広告プレプロンプト / ATT フローは既存ユーザーにも 1 回到達させる（UserDefaults フラグ方式）
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/AdConsentCoordinator.swift`, `iosApp/iosApp/AppState.swift`, requirements.md §11-4
+
+requirements.md §11-4 の「データ利用同意オンボーディングの直後に ATT」を文字どおり実装すると、Firestore に `users/{uid}` が既にあるユーザー（オンボーディングが二度と出ない）は ATT フローに永久に到達しない。実装では `UserDefaults` の `hasCompletedAdConsentFlow` フラグを導入し、「未実施なら `bootstrap()` 完了時に 1 回だけ表示」に拡張した（新規はオンボーディング直後、既存は次回起動時に到達）。未リリースのため現時点の実害はないが、意図的な仕様拡張（requirements §11-4 の備考にも反映済み）。
+
+追記（同日）: 初版は UMP `loadAndPresentIfRequired` を無条件に呼んでいたため、フォールバックの Google テスト用 App ID に構成済みの IDFA 説明メッセージ（"Our App wants to stay free…"）が自前プレプロンプト + ATT と**二重表示**された（ユーザーのシミュレータ確認で発覚）。1 回目の修正で `consentStatus == .required` ガードを入れたが解消せず — **ATT メッセージがコンソールに構成されていると、GDPR 圏外でも ATT 未決定なら UMP は required 扱いにする**ため、ガードを素通りする。「条件を狭めて呼ぶ」系はコンソール構成に挙動が依存して制御できないと判断し、最終的に **UMP の呼び出し（`requestConsentInfoUpdate` / `loadAndPresentIfRequired`）をコードから全撤去**した（SDK リンク自体は Google Mobile Ads SDK の内部依存で残る）。同意 UI は自前プレプロンプト + 直接 ATT で完結。`canRequestAds` は requestConsentInfoUpdate を呼ばない構成では常に false のため**参照禁止**。EU 配信を始める場合は GDPR フォーム実装として UMP を再導入する。
+
+### 2026-07-14: ネイティブ広告は mediaView 非表示・icon + text + CTA テンプレートで統一
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/NativeAdContainerView.swift`
+
+4 面とも既存 UI（検索結果行・List セクション・下部固定枠）の行の高さに揃えるため、ネイティブ広告の `mediaView`（画像 / 動画アセット）を表示しないテキスト主体テンプレートにした。AdMob ポリシー上は headline 以外のアセットは任意のため問題ないが、動画中心のインベントリからの fill 率に影響しうる（収益が想定より低い場合の見直しポイント）。UMP SDK は Google Mobile Ads SDK（SPM）の内部依存として自動リンクされるため個別導入は不要。
+
+追記（同日）: テスト広告の AdMob native ad validator が「1 implementation issue」を検出し、ユーザー確認の結果 **MediaView（最小 120×120pt）が必須アセット**と判明（「headline 以外は任意」という当初の理解が誤り）。コンパクト枠に 120pt メディアを組み込むとバナー（50〜60pt）より大きく悪目立ちし「溶け込むからネイティブ」の前提が崩れたため、**全面アダプティブバナーへ再編**（同日ユーザー確定。requirements §11 改訂済み）。本エントリのテンプレート判断はこの時点で廃止。ネイティブ実装で得た教訓（Group+task 発火 / safeAreaInset 統一）はバナー実装にも引き継ぐ。
+
+### 2026-07-14: 広告コンポーネントの task 発火バグ修正（Group → ZStack / ローダー持ち上げ / safeAreaInset 統一）
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/InlineNativeAdCard.swift`, `iosApp/iosApp/Ads/BottomBarNativeAdView.swift`, `CafeDetailView.swift`, `CoffeeListView.swift`
+
+「広告が分析タブ以外表示されない」報告の修正で確定した 3 判断（バグ機構の詳細は lessons 2026-07-14）:
+
+- **広告コンポーネントの root は `ZStack`**: `Group { if let }` + `.task` は子ゼロの間 task が発火しない。ZStack は常に実体化されるため空でも発火し、空時は高さ 0 に畳まれる（畳み仕様は維持）
+- **カフェ詳細はローダーを画面側へ持ち上げ**: List の Section 内で空 ZStack を置くと空 Section の余白・区切り線が残るため、`CafeDetailView` が `@State` でローダーを持ち、`List` 自体の `.task` でロード駆動、`nativeAd != nil` のときだけ `adSection` を List に含める
+- **下部固定広告は `.safeAreaInset(edge: .bottom)` に統一**: コーヒー記録タブの VStack 末尾直置きは iOS 26 のフローティングタブバー背後に隠れる。分析タブと同方式に統一し、FAB は `ZStack(alignment: .bottomTrailing)` + safeAreaInset で縮んだ安全域基準となり広告の上に自然に乗る（広告が畳まれれば FAB も下がる）
+
+### 2026-07-14: 全面アダプティブバナーへの再実装で確定した判断
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/BannerAdLoader.swift`, `InlineBannerAdView.swift`, `AnchoredBannerAdView.swift`, `CafeDetailView.swift`
+
+MediaView 必須判明によるネイティブ → バナー再編（requirements §11 改訂）の実装で確定した判断:
+
+- **アンカー面のサイズ関数**: ドキュメント記載の `currentOrientationAnchoredAdaptiveBanner` は現行 SDK ヘッダで非推奨のため、当初 `largeAnchoredAdaptiveBanner(width:)` を採用（SDK ヘッダ実読み + 公式サンプルで裏取り）。その後 large の高さ（実測 126pt）が圧迫的との判断で、**`inlineAdaptiveBanner(width:maxHeight: 90)` に変更**（2026-07-15 同日）。SDK v13.6.0 のヘッダ確認で、アンカー系には非推奨でない「標準版」（高さ 50〜90pt）が存在しない（portrait / landscape / currentOrientation 版はすべて非推奨、非推奨でないのは large のみ）ため、同じ幅適応 + 高さ上限 90pt を実現できる inline 系で代替した。サイズ関数の分類（inline / anchored）は adSize の決定ロジックの違いだけで、配置場所（safeAreaInset）とは独立
+- **インライン面は `inlineAdaptiveBanner(width:maxHeight:)`**: 実測幅は `.background(GeometryReader)` + `.task` で取得（ロードトリガーは常在ビューに付ける原則を踏襲）
+- **カフェ詳細のバナー幅は List 実測幅 − 32pt の概算**: `.insetGrouped` の左右余白の保守的な見積もり（`CafeDetailView.adHorizontalMargin`）。実機で狭すぎ / 広すぎが見えたらこの定数を調整する
+- テスト用フォールバック ID はバナー用 `ca-app-pub-3940256099942544/2435281174`（アンカー / インライン共通）。xcconfig キー名は `ADMOB_BANNER_AD_UNIT_ID_*` にリネーム済み
+- ネイティブ実装（NativeAd 系 4 ファイル）は完全撤去。NPA / 畳み挙動 / 4 面配置は不変
+
+### 2026-07-15: バナーローダーの安定化（pending 方式 / 実サイズ明示 / 既知の過渡エラー）
+
+- 領域: iOS / Ads
+- 関連: `iosApp/iosApp/Ads/BannerAdLoader.swift`, `BannerViewRepresentable.swift`, `InlineBannerAdView.swift`, `AnchoredBannerAdView.swift`, `CafeDetailView.swift`
+
+バナー再実装後の「カフェ詳細以外表示されない」報告（ユーザーの Xcode コンソールログで診断）の修正で確定した判断。バグ機構の一般形は lessons 2026-07-15 の 2 エントリ。
+
+- **`BannerAdLoader` は pending 方式**: ロード中の新要求は `pendingAdSize` に保存し完了後に追いかけ実行（最後の要求の保証）。同一サイズロード済みは no-op。`hasEverReceivedAd` 後の失敗では表示を巻き戻さない。呼び出し側は `minimumRequestableWidth`（150pt）未満の過渡幅でロードしない
+- **表示は受信後の実サイズで明示 frame**: `loadedAdSize`（didReceive 時の `bannerView.adSize.size`）で `.frame(width:height:)`。Google 公式 SwiftUI サンプル（BannerViewContainer）準拠 + インラインアダプティブの可変返却サイズ対応（リクエスト時サイズではなく実サイズを使う点が公式サンプルとの意図的な差分）
+- **既知の過渡エラー（許容）**: 受信直後に `load()` 非経由の「Invalid ad width or height」失敗ログが 1 回出ることがあるが、直後に再受信して表示は正常維持される。テスト段階では 4 面が**同一テストユニット ID を共有**しており切り分け不能なノイズと判断。**本番の面別ユニット ID 発行後も継続して出る場合は再調査する**（観察ポイント）
+
+追記（同日）: コーヒー記録タブの固定広告を**下部 → 上部 → リスト先頭インライン**と 2 段階で変更（いずれもユーザー確定）。①下部→上部: FAB と広告の近接（16pt）は誤タップを誘発し AdMob ポリシー上もリスク + タブバー / 広告 / FAB の下部 3 段渋滞 + 畳み挙動で FAB が動く副作用。②上部→リスト先頭インライン: 上部固定は常時画面を占有するため「スクロールで流れる」要望を受け、最初の月セクション前のインラインアダプティブバナー（`CafeDetailView.adSection` と同じパターン）へ。**常時表示でなくなる分インプレッションは減るが閲覧体験を優先**。分析タブは FAB がないため下部固定のまま（非対称は意図的）。`AnchoredBannerAdView` は分析タブ専用となったがコンポーネントは上下どちらにも載る汎用のまま。
+
+### 2026-07-16: マップ「好み一致」チップのタップ対応（TagChip 化）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Map/MapTabView.swift`, `iosApp/iosApp/Features/Map/RecommendedCafeListSheet.swift`, `iosApp/iosApp/Components/TagChip.swift`
+
+ユーザー報告「好み一致タグをタップしても何も起きない」への対応。旧実装は静的凡例チップ（`TagLegendChip`、意図的にインタラクションなし）だったが、隣のタップ可能チップと同じカプセル見た目で誤解を招くため、**「保存済み」チップと同じ操作体系に変更**（タップで強調 ON + 一覧シート `RecommendedCafeListSheet` 表示、強調中の再タップは強調解除のみ。行タップでカフェ詳細へ push）。挙動 3 案（一覧シート / 見た目のみ非タップ化 / 強調トグルのみ）からユーザーが一覧シート案を選択。
+
+- **`TagChip` に `tint` パラメータ追加**（既定 `.accentColor`）: 色セマンティクス表（ui-ux-guidelines）の「accentColor を『好み』の意味で使わない」を守るため、好み一致チップだけ `.pink` を渡す。塗り + 件数バッジの前景 / 背景を `tint` に連動
+- **「保存済み」強調と排他**: 片方 ON でもう片方を OFF（両立させると減光対象が曖昧になるため）。減光は 4 種ピン（訪問済み / 保存済み / 検索結果 / Apple 周辺）すべてに `recommendedEmphasisActive` 分岐を追加。`recommendedCafes` が 0 件化したら強調 / シートを `onChange` でリセット
+- **一覧行の推薦理由は 1 行サマリ**（例「産地・焙煎度が好みに一致」、軸名の重複除去列挙）に留め、詳細（一致ラベル・代表記録・評価）はピンタップの `RecommendationMatchSheet` に譲る。軸名ラベルはトップレベル関数 `preferenceMatchAxisLabel` に共通化
+- **`TagLegendChip` は production 未使用化したが削除見送り**: 凡例という用途自体は汎用のため部品は残置（ui-ux-guidelines に未使用の旨と削除条件を記載済み）
+- 好み一致ピンは強調中もサイズ据え置き（保存済みピンの 34→38pt 拡大パターンには追随せず。要望が出たら検討）
+
+### 2026-07-16: コーヒー記録の削除動線 3 種（詳細削除は isDeleted フラグで pop 通知）
+
+- 領域: KMP / iOS
+- 関連: `shared/feature/coffee-detail/.../CoffeeDetailViewModel.kt`, `iosApp/iosApp/Features/CoffeeDetail/**`, `iosApp/iosApp/Features/CoffeeList/CoffeeListView.swift`
+
+削除動線を 3 種に整備（要件 2-3）: 既存のリストスワイプ（確認なし即削除、無変更）+ 新規のリスト長押し contextMenu（編集 + 削除）+ 詳細右上 Menu の削除。**確認ダイアログは詳細・長押しのみ**（スワイプ即削除は据え置き。メール系アプリと同じ操作感、ユーザー決定）。Undo なし。
+
+- **詳細からの削除成功は `UIState.isDeleted` フラグで通知し、View が `.onChange` + `dismiss()` で pop**。`coffee == null` を pop トリガーにしない理由: (a) 他画面・リモート同期由来の削除では従来どおり「見つかりません」表示を維持する仕様のため（自己操作と外部要因の削除を区別）、(b) onAppear 直後の「未ロード null」との race 回避。pop までの一瞬に「見つかりません」が出ないよう `content` 分岐先頭に `isDeleted → ProgressView` を追加
+- **userId の取得は `onAppear(coffeeId, userId)` の引数拡張**（CoffeeListViewModel と同型の「onAppear で受けて保持 + 未確定時は黙殺」パターン）。不採用: コンストラクタ注入（ファクトリ変更が波及）/ AuthRepository 注入（feature VM で前例なし）
+- **写真物理削除は詳細 Bridge に独立実装**（リスト Bridge の pending 辞書方式は sections 監視というリスト固有形のため共通化せず）。「KMP 削除成功を確認してから `PhotoFileStore.delete`」の安全順序は両者同一。対象 1 レコードなので `pendingPhotoFileNames` 1 本で足りる
+- 専用 UseCase は作らず `CoffeeRepository.delete(userId, id)` を VM 直呼び（本プロジェクトの既存設計に準拠）。リスト長押し削除の確定時も既存 `onCoffeeDeleted(id:photoFileNames:)` を再利用（KMP 無変更）
+
+### 2026-07-16: 分析タブ「あなたの傾向」のタブ再表示時の再生成抑止
+
+- 領域: KMP
+- 関連: `shared/feature/analysis/.../AnalysisViewModel.kt`
+
+ユーザー報告「分析タブに遷移するたびに『あなたの傾向』が再計算される。アプリ利用中は保持したい」への対応。原因は `onAppear()` が無条件に `observeJob` を cancel → 再購読し、Flow の再 emit で Foundation Models 要約が毎回再生成されていたこと。VM は `AppState` 保持のタブ常駐でアプリ生存期間ずっと生きているため、購読を張り直す必要が元々ない。
+
+- **修正は commonMain の 2 ガードのみ**: ① `onAppear()` は `observeJob` が active なら no-op（購読はタブ非表示中も継続し、記録変更は従来どおり反映）② 直前と構造等価な `CoffeeStats` の再 emit では `launchInsightGeneration` をスキップ（SQLDelight query invalidation の同値再 emit への保険）。記録の追加・変更時は stats が変わるので従来どおり再生成される。不採用: 生成済み insight のディスク永続化（アプリ利用中の保持で要件を満たすため過剰）
+- **トレードオフ**: 同値判定は `CoffeeStats`（ネスト含め全 data class）の構造等価 `==` に依存。将来 non-data な参照型フィールドを足すと判定が壊れる点に留意
+- **テストの罠（kmp-engineer 報告）**: `StandardTestDispatcher` 上で Flow が同一コルーチンから連続 emit すると、先行 collect で launch した `insightJob` が未実行のまま次の collect の cancel に巻き込まれ `summarize` が 1 度も走らないことがある。テスト側は emit 間に `delay` を挟んで仮想時間を進めて回避（`AnalysisViewModelInsightRegenerationTest`）。他画面横断の `onAppear` は点検済みで、引数で対象が変わる画面単位 VM（coffee-list / coffee-detail / coffee-editor）は cancel-and-relaunch が正しく今回の対象外
+
+### 2026-07-16: 記録・分析タブの広告撤去（11-3 の一度撤去）
+
+- 領域: iOS / Docs
+- 関連: `iosApp/iosApp/Features/CoffeeList/CoffeeListView.swift`, `iosApp/iosApp/Features/Analysis/AnalysisView.swift`, `iosApp/iosApp/Ads/`
+
+ユーザビリティレビュー（2026-07-16）で「個人の記録・振り返り画面（定着の核）のバナーは、定着が命の初期にリテンションを削る割に収益が小さい（日本のバナー eCPM × 小規模 MAU では月数百円規模）」と判断し、requirements §11-3 の 2 面（記録タブ = リスト先頭インライン / 分析タブ = 下部固定）を撤去。カフェ詳細 / マップ検索ドロップダウンの 2 面と ATT フロー（残存面の NPA 判定に必要）は維持。
+
+- **「一度撤去」= 恒久廃止ではない**: 定着後の再導入余地は残す。`AnchoredBannerAdView`（分析タブ専用だった）はファイルごと削除したが git 履歴から復元可能。共通基盤（`BannerAdLoader` / `InlineBannerAdView` / `BannerViewRepresentable`）は残存 2 面が使うため健在で、再導入コストは低い
+- ユニット ID の定義（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`）も 2 面分を削除し、AdMob 本番ユニット発行タスクは 4 → 2 に縮小。`Secrets.xcconfig` は親セッションから読み取り不可（本番ユニット未発行のため該当キーは無い見込み。ユーザー確認推奨）
+- 収益化の方向性は「まず定着 → 熱量の高い層への課金（広告非表示 / 写真クラウド同期等のプレミアム）」への転換を検討中。requirements §11 の「広告非表示 IAP は見据えない」（2026-07-14）は将来見直し候補
+
+### 2026-07-16: 共有カード画像生成（2-12）の設計判断
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/`
+
+ユーザビリティレビュー「外向きの成長回路がゼロ」への対応第 1 弾。記録詳細のツールバー共有アイコン → プレビューシート → `ShareLink` で 4:5（1080×1350px）カード画像を共有する。
+
+- **可変レイアウト 1 テンプレート**: 写真 / レーダー / 評価は「あれば載せる」。テンプレートを複数持たず、欠けた要素の余白は Spacer で再配分（写真なし・テイスティングなし・未評価・セルフ抽出の全組み合わせで成立）。不採用: 写真主役 / レーダー主役の専用テンプレート（データが欠ける記録で導線ごと消えるため）
+- **メモ・タグは載せない**: notes は日記的内容の誤共有リスク。共有前にプレビューシートで内容を目視確認させる（外向き送信の確認原則）
+- **ライトテーマ固定**（`.environment(\.colorScheme, .light)`）: SNS 上での見た目を端末テーマ非依存に。ui-ux-guidelines のダークモード方針の意図的例外（カードは「アプリ画面」ではなく「出力物」）
+- **レンダリングは ImageRenderer（scale 3）+ 一時 PNG + `ShareLink(item: url)`**: SettingsView の JSON エクスポートと同型。`Transferable` 自作はしない（前例なし・URL ベースで足りる）
+- 全要素が揃うケースではレーダーが scaleEffect 約 0.5 まで縮む（ios-engineer メモリに計算根拠）。可読性 NG ならシミュレータ確認後に写真帯縮小 / チップ行削減で再配分
+
+### 2026-07-16: 共有カードの RoastLevel ローカライズは CoffeeDetailView 本体と非対称
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/CoffeeShareCardView.swift`
+
+共有カードは roastLevel を日本語ローカライズ（AnalysisView 等 3 箇所に既存の辞書と同実装を複製）して表示するが、`CoffeeDetailView` 本体の Form と `CoffeeEditorView` の Picker は raw Kotlin enum 名（例 "Medium"）のまま。外部共有物としての体裁を優先しカード側だけ先行対応した（ios-engineer 判断を親が追認）。`ProcessingMethod` は全画面でローカライズ未実装（カードの属性チップは産地 / 焙煎度 / 抽出方法の 3 種で対象外のため実害なし）。
+
+- 影響: app 全体の roastLevel / processing 表示ローカライズの統一（+ 辞書 4 箇所の一元化）は別タスク。必要になったら設計判断バックログへ起票

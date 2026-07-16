@@ -16,40 +16,53 @@ struct CoffeeListView: View {
     /// FAB タップで開くエディタの表示状態。
     @State private var isPresentingEditor = false
 
+    /// 長押しコンテキストメニューから編集対象に選ばれたコーヒー記録（sheet アンカー、FAB 用とは別）。
+    @State private var editingCoffee: CoffeeRecord?
+
+    /// 長押しコンテキストメニューから削除確認ダイアログの対象に選ばれたコーヒー記録。
+    @State private var deletionTarget: CoffeeRecord?
+
     var body: some View {
+        // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）。
         content
-            .navigationTitle(String(localized: "コーヒー記録"))
-            .navigationBarTitleDisplayMode(.large)
-            .searchable(
-                text: Binding(
-                    get: { viewModel.searchQuery },
-                    set: { viewModel.searchQuery = $0 }
-                ),
-                prompt: String(localized: "コーヒー名・カフェ名・メモで検索")
+        .overlay(alignment: .bottomTrailing) {
+            addCoffeeFAB
+                .padding(.trailing, 16)
+                .padding(.bottom, 16)
+        }
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+        .searchable(
+            text: Binding(
+                get: { viewModel.searchQuery },
+                set: { viewModel.searchQuery = $0 }
+            ),
+            prompt: String(localized: "コーヒー名・カフェ名・メモで検索")
+        )
+        .task {
+            guard let uid = appState.uid else { return }
+            viewModel.onAppear(userId: uid)
+        }
+        .onDisappear {
+            viewModel.onDisappear()
+        }
+        .errorToast(message: viewModel.error) {
+            viewModel.onErrorDismissed()
+        }
+        .sheet(isPresented: $isPresentingEditor) {
+            CoffeeEditorView(
+                mode: CoffeeEditorViewModelModeCreate.shared,
+                appState: appState,
+                initialCafe: nil
             )
-            .task {
-                guard let uid = appState.uid else { return }
-                viewModel.onAppear(userId: uid)
-            }
-            .onDisappear {
-                viewModel.onDisappear()
-            }
-            .errorToast(message: viewModel.error) {
-                viewModel.onErrorDismissed()
-            }
-            .sheet(isPresented: $isPresentingEditor) {
-                CoffeeEditorView(
-                    mode: CoffeeEditorViewModelModeCreate.shared,
-                    appState: appState,
-                    initialCafe: nil
-                )
-            }
-            // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）
-            .overlay(alignment: .bottomTrailing) {
-                addCoffeeFAB
-                    .padding(.trailing, 16)
-                    .padding(.bottom, 16)
-            }
+        }
+        .sheet(item: $editingCoffee) { coffee in
+            CoffeeEditorView(
+                mode: CoffeeEditorViewModelModeEdit(coffeeId: coffee.id),
+                appState: appState,
+                initialCafe: coffee.cafe
+            )
+        }
     }
 
     // MARK: - 追加 FAB
@@ -118,6 +131,18 @@ struct CoffeeListView: View {
                                 )
                             }
                         }
+                        .contextMenu {
+                            Button {
+                                editingCoffee = coffee
+                            } label: {
+                                Label(String(localized: "編集"), systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                deletionTarget = coffee
+                            } label: {
+                                Label(String(localized: "削除"), systemImage: "trash")
+                            }
+                        }
                     }
                 } header: {
                     Text(Self.monthHeaderText(yearMonth: section.yearMonth))
@@ -126,6 +151,26 @@ struct CoffeeListView: View {
             }
         }
         .listStyle(.plain)
+        .confirmationDialog(
+            String(localized: "コーヒー記録を削除"),
+            isPresented: Binding(
+                get: { deletionTarget != nil },
+                set: { isPresented in if !isPresented { deletionTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: deletionTarget
+        ) { coffee in
+            Button(String(localized: "削除"), role: .destructive) {
+                viewModel.onCoffeeDeleted(
+                    id: coffee.id,
+                    photoFileNames: coffee.photos.compactMap(\.fileName)
+                )
+                deletionTarget = nil
+            }
+            Button(String(localized: "キャンセル"), role: .cancel) {}
+        } message: { _ in
+            Text(String(localized: "この記録と写真は完全に削除されます。この操作は取り消せません。"))
+        }
     }
 
     // MARK: - 月ヘッダ文字列の生成

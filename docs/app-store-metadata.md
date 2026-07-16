@@ -142,12 +142,13 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | メールアドレス | する（任意。Apple でサインイン時のみ） | アプリ機能（アカウントのアップグレード / 引き継ぎ） | 紐付ける | しない | Sign in with Apple での匿名アカウントアップグレード時に Firebase Auth が保持。ユーザーは Apple の「メールを非公開」を選択可。**申告要否はリリース前に再確認** |
 | 診断情報（クラッシュ / パフォーマンス） | する（**常時**） | アプリ機能（安定性・技術品質の改善） | 紐付ける（匿名 uid / Firebase Installation ID） | しない | Firebase Crashlytics + Performance。同意不要（安定性・技術品質の正当利益）。クラッシュスタック・非致命的エラー・起動/描画/ネットワークの遅延など。広告なし・IDFA なし |
 | 使用状況データ（製品インタラクション: `screen_view` / 自動収集イベント） | する（**同意時のみ**） | サービス改善のための分析 | 紐付ける（匿名 uid） | しない | Firebase Analytics（素の `FirebaseAnalytics` プロダクト。現行 SDK は既定で IDFA 非依存）。`analyticsConsent = true` の場合のみ収集を有効化。既定（未同意）は収集停止。カスタムイベントは未導入（自動収集 + `screen_view` のみ） |
+| 識別子（広告 ID / IDFA）・広告データ | する（**ATT 許諾時のみ**） | 第三者広告（デベロッパーの広告 / マーケティング） | 紐付ける | **する**（許諾時のみ） | Google Mobile Ads SDK（AdMob）。ATT 許諾時はパーソナライズ広告に IDFA を利用、拒否時は非パーソナライズ（NPA）配信で IDFA 不使用。広告インタラクションデータは AdMob が収集（requirements.md §11） |
 
 > 分析タブの AI 機能（傾向要約・Q&A・好み検索）は Apple の Foundation Models による**オンデバイス処理**で、記録データを外部サーバに送信しない（App Privacy の申告対象にならない）。
 
 ### 6.2 トラッキング
 
-- **App Tracking Transparency（ATT）**: 不要。広告 SDK を使わず、Firebase Analytics も IDFA 非依存（素の `FirebaseAnalytics` プロダクト。IDFA を使う `FirebaseAnalyticsIdentitySupport` は追加していない）でクロスアプリ・クロスサイト追跡を行わないため。
+- **App Tracking Transparency（ATT）**: **必要**（2026-07-14 広告導入決定に伴い変更）。AdMob のパーソナライズ広告に IDFA を利用するため、既存のデータ利用同意オンボーディング直後にプレプロンプト → ATT ダイアログを表示（requirements.md §11-4）。拒否時は非パーソナライズ広告（NPA）にフォールバックし IDFA 不使用。`NSUserTrackingUsageDescription` の記載が必要。Firebase Analytics は引き続き IDFA 非依存（素の `FirebaseAnalytics` プロダクト、`FirebaseAnalyticsIdentitySupport` 未追加）。
 - サードパーティとのデータ共有: Google Places API へ検索クエリ / 座標を送信（カフェ検索機能の実現に必要な範囲のみ）。Firebase（Google）にユーザーコンテンツを保存。
 
 ### 6.3 第三者 SDK
@@ -161,6 +162,8 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
 | Firebase Analytics | Google | 製品利用分析（**同意時のみ**） | `screen_view`・自動収集イベント（起動/セッション等）。IDFA なし・クロスアプリ追跡なし |
 | Firebase Remote Config | Google | マップ POI 除外キーワードの設定値配信（**常時**、同意不要） | 設定値取得のためのリクエスト（Firebase Installation ID・アプリバージョン/デバイス構成）。ユーザーデータの送信なし（SDK 同梱マニフェストは Other Diagnostic Data / 非トラッキングを自己申告） |
+| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（カフェ詳細 / マップ検索ドロップダウン / コーヒー記録・分析タブ下部固定。requirements.md §11） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
+| UMP SDK（User Messaging Platform） | Google | （コードから未使用） | Google Mobile Ads SDK の内部依存としてリンクされるのみで、API は一切呼ばない（同意 UI は自前プレプロンプト + ATT で完結。requirements.md §11）。EU 配信を始める場合に GDPR フォームとして再導入 |
 
 > Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
 
@@ -240,7 +243,7 @@ CoffeeVision を初めてリリースしました。
 ### App Store Connect 設定
 - [ ] App のプライバシー（§6）を申告
 - [ ] 年齢制限アンケート（§7）を回答
-- [ ] 価格・配信地域の設定（無料 / 配信国）
+- [ ] 価格・配信地域の設定（無料 / **配信国は日本のみで確定**。2026-07-14 広告仕様 grilling にて。GDPR 同意フォーム不要の前提条件なので、将来 EU へ拡大する場合は UMP の GDPR フォーム実装が先）
 - [x] 輸出コンプライアンス（暗号化）: 標準 HTTPS + Apple 標準の SHA256 nonce のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済み → App Store Connect の暗号化アンケートは自動スキップされる
 
 ### ビルド / 技術
@@ -265,3 +268,4 @@ CoffeeVision を初めてリリースしました。
 | 2026-07-08 | Firebase テレメトリ導入に伴いプライバシー申告を更新。Crashlytics / Performance を「診断情報（常時収集・トラッキング不使用）」、Analytics（素の `FirebaseAnalytics`・IDFA なし）を「使用状況データ（`analyticsConsent` 同意時のみ）」として 6.1 / 6.3 に追加。「Analytics / Crashlytics 未導入」の注記を撤去。ATT は引き続き不要（IDFA 非依存）。`PrivacyInfo.xcprivacy` 追加済み（実装で反映）|
 | 2026-07-12 | コピーを「過去から未来までのコーヒー体験」軸に刷新（ユーザー確定）: サブタイトル「コーヒー記録・分析・行きたい店」/ プロモテキスト（107 字）/ 説明文リード・締めを差し替え。あわせてフェーズ 15〜17 機能を原稿に追随: 説明文に「行きたいお店を保存する」ブロック + 抽出レシピ・複製・現在地サジェスト・周辺ピン・未経験豆提案・一覧検索/月別・JSON エクスポートの各行（計 1014 字）、キーワード 5 語追加（計 79 字）、スクショ #7（行きたいピン + 保存リスト）追加 |
 | 2026-07-13 | Firebase Remote Config 導入（マップ POI 除外キーワードの配信）に伴い 6.3 SDK 一覧に行を追加。ユーザーデータの送信はなく ASC 申告のデータ種別に変更なし（SDK 同梱マニフェストが Other Diagnostic Data / 非トラッキングを自己申告、アプリ側 `PrivacyInfo.xcprivacy` 変更不要を確認済み） |
+| 2026-07-14 | **AdMob 広告導入決定（requirements.md §11）に伴う更新**: 6.1 に「識別子（広告 ID / IDFA）・広告データ」行（ATT 許諾時のみトラッキング「する」）、6.2 の ATT を不要 → **必要**（プレプロンプト + 拒否時 NPA、`NSUserTrackingUsageDescription` 要）、6.3 に Google Mobile Ads SDK / UMP SDK を追加。配信地域を日本のみで確定（チェックリスト反映）。実装完了時に `PrivacyInfo.xcprivacy` の追随を要確認 |

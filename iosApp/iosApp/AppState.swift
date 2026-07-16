@@ -73,6 +73,14 @@ final class AppState {
     /// `onConsentGranted()` / `onConsentDeclined()` で `false` に戻る。
     var showConsentOnboarding: Bool = false
 
+    /// 広告プレプロンプト（`AdPrePromptView`）→ ATT フローを表示するか（requirements.md §11-4）。
+    ///
+    /// データ共有同意オンボーディングの直後に一度だけ表示する。既にフローを完了済み
+    /// （`UserDefaults` の `hasCompletedAdConsentFlow` フラグ）のときは以後表示しない。
+    var showAdConsentFlow: Bool = false
+
+    private static let adConsentFlowShownKey = "hasCompletedAdConsentFlow"
+
     /// データ共有への同意状態。Firestore `users/{uid}.analyticsConsent` と同期する。
     ///
     /// `didSet` で Firebase Analytics の収集可否（`applyTelemetryConsent(_:)`）へ一元的に反映する。
@@ -141,6 +149,7 @@ final class AppState {
     /// ユーザーがデータ共有に同意したときに呼ぶ。
     func onConsentGranted() {
         showConsentOnboarding = false
+        presentAdConsentFlowIfNeeded()
         Task { [weak self] in
             await self?.writeAnalyticsConsent(true)
         }
@@ -149,6 +158,7 @@ final class AppState {
     /// ユーザーがデータ共有を断ったときに呼ぶ。
     func onConsentDeclined() {
         showConsentOnboarding = false
+        presentAdConsentFlowIfNeeded()
         Task { [weak self] in
             await self?.writeAnalyticsConsent(false)
         }
@@ -158,6 +168,25 @@ final class AppState {
     func updateAnalyticsConsent(_ consent: Bool) {
         Task { [weak self] in
             await self?.writeAnalyticsConsent(consent)
+        }
+    }
+
+    // MARK: - 広告プレプロンプト / ATT
+
+    /// データ共有同意オンボーディングの直後（新規ユーザー）、または `bootstrap()` 時点で
+    /// オンボーディング自体が不要だった既存ユーザーに対して、未実施のときだけ広告プレプロンプトを表示する。
+    private func presentAdConsentFlowIfNeeded() {
+        guard !UserDefaults.standard.bool(forKey: Self.adConsentFlowShownKey) else { return }
+        showAdConsentFlow = true
+    }
+
+    /// `AdPrePromptView` の「続ける」タップで呼ぶ。シートを閉じ、ATT 許諾ダイアログを実行する
+    /// （UMP は呼ばない — `AdConsentCoordinator` 参照。Google Mobile Ads SDK 自体は `iOSApp.init()` で起動済み）。
+    func onAdPrePromptContinue() {
+        showAdConsentFlow = false
+        UserDefaults.standard.set(true, forKey: Self.adConsentFlowShownKey)
+        Task {
+            await AdConsentCoordinator.run()
         }
     }
 
@@ -201,6 +230,11 @@ final class AppState {
                 analysisBridge = AnalysisViewModelBridge(viewModel: container.makeAnalysisViewModel(userId: uid))
             }
             await checkConsentOnboarding(uid: uid)
+            // 既存ユーザー（データ共有同意オンボーディング自体が出ない）でも、広告プレプロンプトは
+            // 未実施なら表示する。新規ユーザーは onConsentGranted/onConsentDeclined 側で表示する。
+            if !showConsentOnboarding {
+                presentAdConsentFlowIfNeeded()
+            }
             // 状態の公開はここで最後に行う（uid != nil が RootTabView への切り替えトリガーのため）
             self.uid = uid
             self.status = .ready

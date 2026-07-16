@@ -182,7 +182,7 @@ class AnalysisViewModel(
     )
     val state: StateFlow<UIState> = _state.asStateFlow()
 
-    // 統計購読 Job。onAppear が複数回呼ばれても二重購読しないために保持する。
+    // 統計購読 Job。onAppear が複数回呼ばれても再購読しない（isActive なら no-op）ために保持する。
     private var observeJob: Job? = null
 
     // 要約生成 Job。統計が更新されるたびにキャンセルして再起動する（連打耐性 / 重複起動防止）。
@@ -200,15 +200,20 @@ class AnalysisViewModel(
     /**
      * 画面表示時に呼ぶ。[userId] を使ってコーヒー記録の統計購読を開始する。
      *
-     * 既に購読中の場合は前回の購読をキャンセルして再購読する。
+     * [AnalysisViewModel] はタブ常駐 VM でアプリ生存期間ずっと生きているため、
+     * 既に購読中（[observeJob] が active）の場合は何もしない（再購読しない）。
+     * タブが非表示の間も購読自体は継続しており、コーヒー記録の変更は Flow 経由で引き続き
+     * [UIState.stats] に反映される。これによりタブ再表示のたびに要約（階層3）が
+     * 不要に再生成されるのを防ぐ。
      * userId が [AnalysisViewModel] のコンストラクタで渡されているため、
      * [onAppear] は引数なし（[CoffeeListViewModel.onAppear] とは異なり、uid はコンストラクタ確定）。
      */
     fun onAppear() {
-        observeJob?.cancel()
+        if (observeJob?.isActive == true) return
         observeJob = viewModelScope.launch {
             _state.update { it.copy(isLoading = true) }
             observeCoffeeStatsUseCase(userId).collect { stats ->
+                val isUnchanged = stats == latestStats
                 latestStats = stats
                 _state.update {
                     it.copy(
@@ -217,8 +222,11 @@ class AnalysisViewModel(
                         readiness = buildReadiness(stats),
                     )
                 }
-                // 統計が確定 / 更新されたら要約を再生成する
-                launchInsightGeneration(stats)
+                // 統計が確定 / 更新されたら要約を再生成する。
+                // 前回と同値の stats（SQLDelight query invalidation 等での再 emit）では再生成しない。
+                if (!isUnchanged) {
+                    launchInsightGeneration(stats)
+                }
             }
         }
     }

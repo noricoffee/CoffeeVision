@@ -73,7 +73,7 @@
 | [x] | ios-engineer: `CuratedCafeRepositoryIosImpl.swift` / `AppState.swift` / `MapViewModelBridge` / `MapTabView`（curated ピンレイヤー + 重複除外 + 減光 + 詳細 push） | 2026-07-17 完了。ピン = orange 円 30pt + star.fill + 白フチ。優先順位: 訪問済み > 保存済み > 検索結果 > curated > Apple 周辺。override なし BUILD SUCCEEDED（Gradle タスク実行込みでログ確認） |
 | [x] | 親: `firestore.rules` に curatedCafes ブロック追加 + シードスクリプト 2 本（`generate-curated-cafes.mjs` / `seed-curated-cafes.mjs`）+ README 追記 | 2026-07-17 完了。`--dry-run` を scratchpad で正常系 + 異常系 9 パターン検証済み（コード不正 / 名前空 / 未知フィールド / placeId 重複・空 / 座標域外 / 件数 0）。rating は JSON に保存しない |
 | [x] | 親: docs 更新（data-model.md / paid-services.md / requirements.md / kmp-bridge.md）+ 検証 + commit | 2026-07-17 完了。親が verify-kmp-ios の全マトリクス（2 ターゲットテスト + override なし xcodebuild）を再実行し green。47 県フル展開時の可視領域フィルタは将来課題として data-model.md §1.10 に明記 |
-| [ ] | ユーザー: rules デプロイ（`firebase deploy --only firestore:rules`）→ `generate-curated-cafes.mjs --prefectures 13` 実行 + JSON 目視レビュー → seed 投入 → シミュレータ / 実機確認（東京で 100 ピン表示・密度 / タップで詳細解決 / 訪問済み・保存済みとの重複除外 / チップ強調中の減光 / 機内モード表示） | 手順は `scripts/seed/README.md` |
+| [ ] | ユーザー: rules デプロイ（`firebase deploy --only firestore:rules`）→ `generate-curated-cafes.mjs --prefectures 13` 実行 + JSON 目視レビュー → seed 投入 → シミュレータ / 実機確認（東京で 100 ピン表示・密度 / タップで詳細解決 / 訪問済み・保存済みとの重複除外 / チップ強調中の減光 / 機内モード表示） | 手順は `scripts/seed/README.md`。**rules デプロイは 2026-07-17 完了**（初回 403 → 対処後成功）。残り: 生成 → レビュー → 投入 → 表示確認 |
 
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
 

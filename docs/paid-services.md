@@ -30,7 +30,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 - Place Details は鮮度条件付きで最大 1 回（上表）
 - Photo Media はメモリキャッシュでセッション内の再取得を回避
 - API キーは iOS アプリ（Bundle ID）制限付き（`403 API_KEY_IOS_APP_BLOCKED` 診断が `PlacesClientImpl` に記載あり）
-- **アプリ外の一時コスト**: おすすめカフェのシード生成 `scripts/seed/generate-curated-cafes.mjs`（フェーズ 19）が Text Search を叩く（2 クエリ × subAreas 数。東京 = 約 28 回）。実行は初回シードと定期リフレッシュ時のみ
+- **アプリ外の一時コスト**: おすすめカフェのシード生成 `scripts/seed/generate-curated-cafes.mjs`（フェーズ 19）が Text Search を叩く（2 クエリ × subAreas 数。東京 = 16 エリアで約 32 回）。実行は初回シードと定期リフレッシュ時のみ
 
 ---
 

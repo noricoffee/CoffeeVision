@@ -11,7 +11,7 @@
 //   PLACES_API_KEY=... node generate-curated-cafes.mjs --prefectures 13
 //   PLACES_API_KEY=... node generate-curated-cafes.mjs --prefectures 13,27 --min-rating 4.3 --min-reviews 50
 //
-// コスト注意: Text Search（Pro SKU）を「2 クエリ × subAreas 数」回呼ぶ。東京（14 エリア）で約 28 回。
+// コスト注意: Text Search（Pro SKU）を「2 クエリ × subAreas 数」回呼ぶ。東京（16 エリア）で約 32 回。
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -39,6 +39,7 @@ const PREFECTURES = [
     subAreas: [
       "渋谷", "新宿", "清澄白河", "蔵前", "吉祥寺", "銀座", "下北沢",
       "中目黒", "表参道", "神保町", "谷中", "自由が丘", "高円寺", "立川",
+      "池袋", "代々木",
     ],
   },
   { code: "14", name: "神奈川県" },

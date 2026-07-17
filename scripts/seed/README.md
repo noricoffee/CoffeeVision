@@ -31,7 +31,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/coffeevision-service-account.json node s
 `curatedCafes/{prefectureCode}` コレクション（サービス管理 / クライアント read-only、JIS X 0401 コードで 1 県 1 ドキュメント）への投入。**生成 → 人手レビュー → 投入の 2 段構成**。モデル定義の正本は [`docs/data-model.md`](../../docs/data-model.md)。
 
 ```sh
-# 1. 候補生成（Places API Text Search を叩く。東京 = 約 28 回で一回きりのコスト）
+# 1. 候補生成（Places API Text Search を叩く。東京 = 約 32 回で一回きりのコスト）
 PLACES_API_KEY=... node generate-curated-cafes.mjs --prefectures 13
 
 # 2. curated-cafes.json を目視レビュー（不適切な候補・閉店済みを削除。件数調整）

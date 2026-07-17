@@ -1,0 +1,584 @@
+[
+  {
+    "prefectureCode": "13",
+    "prefectureName": "東京都",
+    "cafes": [
+      {
+        "placeId": "ChIJkcIVBQCNGGAR4HTNwqfRUS4",
+        "name": "富久栄珈琲 FUKUEI Coffee and Chocolate 新宿 東京店（Tokyo・コーヒー・Matcha）",
+        "latitude": 35.690953,
+        "longitude": 139.70404399999998
+      },
+      {
+        "placeId": "ChIJw47GgEeNGGAR8F6RMcBz46c",
+        "name": "coffee swamp",
+        "latitude": 35.6949274,
+        "longitude": 139.6950661
+      },
+      {
+        "placeId": "ChIJZYCsFjaNGGARA2-ihZBjYr4",
+        "name": "AOYAMA COFFEE ROASTER",
+        "latitude": 35.7215858,
+        "longitude": 139.7635968
+      },
+      {
+        "placeId": "ChIJSZNJhruLGGARD61BiSwqjw4",
+        "name": "Brewman Tokyo - GINZA",
+        "latitude": 35.6715462,
+        "longitude": 139.7700901
+      },
+      {
+        "placeId": "ChIJb1hXkiXzGGARICfWkwkCVLM",
+        "name": "Lam Cafe（ラムカフェ）",
+        "latitude": 35.7089719,
+        "longitude": 139.64976959999998
+      },
+      {
+        "placeId": "ChIJoQz8-EuPGGARzGzJW0cnDYI",
+        "name": "Lonich,",
+        "latitude": 35.7012377,
+        "longitude": 139.7895126
+      },
+      {
+        "placeId": "ChIJozhgx6eMGGARPcUi_SpPrAs",
+        "name": "ダブルトール・コーヒーバー 渋谷cocoti店",
+        "latitude": 35.661986399999996,
+        "longitude": 139.7025759
+      },
+      {
+        "placeId": "ChIJzbvwPD_zGGARKMfOO_XF0o4",
+        "name": "ウォルナッツコーヒー",
+        "latitude": 35.701071299999995,
+        "longitude": 139.6477617
+      },
+      {
+        "placeId": "ChIJO08dXVyNGGARZeiHWwFpJqA",
+        "name": "AIR DRIP COFFEE SHIBUYA",
+        "latitude": 35.659658,
+        "longitude": 139.6936742
+      },
+      {
+        "placeId": "ChIJozYhh9eNGGAR7P2hPJsdSc8",
+        "name": "マーメイドコーヒーロースターズ 池袋本店",
+        "latitude": 35.7290224,
+        "longitude": 139.7154428
+      },
+      {
+        "placeId": "ChIJJ_6cvAGNGGAR8SvSYZfpyes",
+        "name": "LATTE ART MANIA TOKYO / ラテアートマニア東京店",
+        "latitude": 35.6711984,
+        "longitude": 139.7164832
+      },
+      {
+        "placeId": "ChIJn6O0XACLGGARxlbXTWVgLko",
+        "name": "X coffee GINZA",
+        "latitude": 35.6727318,
+        "longitude": 139.7692513
+      },
+      {
+        "placeId": "ChIJk6NCIUmLGGARpQNy4FV9_eY",
+        "name": "豆虎 中目黒焙煎所",
+        "latitude": 35.644152600000005,
+        "longitude": 139.6984738
+      },
+      {
+        "placeId": "ChIJC8_I1naNGGARpbudBGIBjeQ",
+        "name": "PAP.COFFEE",
+        "latitude": 35.6703981,
+        "longitude": 139.7043205
+      },
+      {
+        "placeId": "ChIJ7xaheQCLGGARnvx9jK2KpYY",
+        "name": "表参道珈琲館",
+        "latitude": 35.6573584,
+        "longitude": 139.7085375
+      },
+      {
+        "placeId": "ChIJC5-ZVUjzGGAR9nSrK8ySsG4",
+        "name": "KISSA RAY",
+        "latitude": 35.6639883,
+        "longitude": 139.6697543
+      },
+      {
+        "placeId": "ChIJE8ECQD_zGGARuXHnSQAmRqQ",
+        "name": "INCredible COFFEE",
+        "latitude": 35.7074152,
+        "longitude": 139.6504635
+      },
+      {
+        "placeId": "ChIJCXHcr8KNGGAR5sEtuiXUQ6Y",
+        "name": "Acid Coffee Tokyo",
+        "latitude": 35.668352,
+        "longitude": 139.679981
+      },
+      {
+        "placeId": "ChIJOyUMVLmOGGAR2-HkMWCmPt0",
+        "name": "石川珈琲焙煎所",
+        "latitude": 35.708521999999995,
+        "longitude": 139.788515
+      },
+      {
+        "placeId": "ChIJ1fv1-WjzGGARrYodWXk3JJw",
+        "name": "COFFEA EXLIBRIS",
+        "latitude": 35.6575197,
+        "longitude": 139.6678399
+      },
+      {
+        "placeId": "ChIJ-1uyWi_zGGARkPHcYiSD344",
+        "name": "G☆P COFFEE ROASTER",
+        "latitude": 35.683563,
+        "longitude": 139.68152949999998
+      },
+      {
+        "placeId": "ChIJ79RPfxqJGGAR6D7K9kqHet4",
+        "name": "sunday zoo coffee & beans",
+        "latitude": 35.6760047,
+        "longitude": 139.8035731
+      },
+      {
+        "placeId": "ChIJAz_NBX7yGGARCIzByemG5tU",
+        "name": "COFFEE コーラル",
+        "latitude": 35.7083479,
+        "longitude": 139.6498179
+      },
+      {
+        "placeId": "ChIJkUEKXADvGGARO1Dole0Lht0",
+        "name": "01COFFEE",
+        "latitude": 35.702292,
+        "longitude": 139.5767414
+      },
+      {
+        "placeId": "ChIJsVS_UR3vGGARPwNQXIrgCiw",
+        "name": "andoh coffee",
+        "latitude": 35.7080306,
+        "longitude": 139.57737559999998
+      },
+      {
+        "placeId": "ChIJV5Z8cgCJGGARatYG7RM7Qys",
+        "name": "First Crop Coffee Roastery",
+        "latitude": 35.6830125,
+        "longitude": 139.80274749999998
+      },
+      {
+        "placeId": "ChIJnflEs52NGGARM2qM_R1DRzg",
+        "name": "MINUTES COFFEE",
+        "latitude": 35.6950286,
+        "longitude": 139.7629083
+      },
+      {
+        "placeId": "ChIJB1oleKOMGGAR_10GNeoySkY",
+        "name": "KOFFEE MAMEYA",
+        "latitude": 35.668368,
+        "longitude": 139.71088799999998
+      },
+      {
+        "placeId": "ChIJiXocb7WNGGAReVVBhRwWLoQ",
+        "name": "ブルーボトルコーヒー渋谷カフェ",
+        "latitude": 35.664094399999996,
+        "longitude": 139.69951749999998
+      },
+      {
+        "placeId": "ChIJs6V_Zb-PGGARLvtCEv8EFYo",
+        "name": "Coffee by Jalana",
+        "latitude": 35.7089461,
+        "longitude": 139.7751394
+      },
+      {
+        "placeId": "ChIJZ8QE4eCLGGARHg-VllzKjbA",
+        "name": "Ken's珈琲店",
+        "latitude": 35.6710609,
+        "longitude": 139.7692151
+      },
+      {
+        "placeId": "ChIJT4FXetuLGGARQQMpiMCcZRA",
+        "name": "NORTHERNWOOD GINZA",
+        "latitude": 35.6673621,
+        "longitude": 139.7628847
+      },
+      {
+        "placeId": "ChIJY-BUE33yGGARAdMmsjpllYo",
+        "name": "PortaCoffeeStand ポルタコーヒースタンド",
+        "latitude": 35.7043606,
+        "longitude": 139.6489341
+      },
+      {
+        "placeId": "ChIJdcc7EL6LGGAR3x0MGxHis6A",
+        "name": "REC COFFEE | レックコーヒー渋谷東店",
+        "latitude": 35.6571905,
+        "longitude": 139.7079508
+      },
+      {
+        "placeId": "ChIJxQRxsGiLGGARr3z1D84wI0w",
+        "name": "ROAR COFFEE Parkside Ginza Tokyo",
+        "latitude": 35.6743161,
+        "longitude": 139.77013
+      },
+      {
+        "placeId": "ChIJs_03VgCPGGARKN4unUiFzv4",
+        "name": "dotcom coffee 浅草橋",
+        "latitude": 35.699762799999995,
+        "longitude": 139.78187269999998
+      },
+      {
+        "placeId": "ChIJF3a-UK-JGGARMfhSmGZE27c",
+        "name": "Tiny Paradise Coffee",
+        "latitude": 35.6702033,
+        "longitude": 139.7994087
+      },
+      {
+        "placeId": "ChIJJ6C2wQLzGGARoQemuRU2V9A",
+        "name": "Look Up Coffee",
+        "latitude": 35.6638047,
+        "longitude": 139.6675785
+      },
+      {
+        "placeId": "ChIJmWJUeQCNGGAR0d4_tJ9QCT0",
+        "name": "PHILOCOFFEA表参道店",
+        "latitude": 35.6652876,
+        "longitude": 139.709951
+      },
+      {
+        "placeId": "ChIJG-8tO3HhGGARiNS4y8swgFg",
+        "name": "桜乃",
+        "latitude": 35.7016105,
+        "longitude": 139.412309
+      },
+      {
+        "placeId": "ChIJRWeZ93uNGGARPN9JYVQpOKs",
+        "name": "On a slow boat to ...",
+        "latitude": 35.6980119,
+        "longitude": 139.7600617
+      },
+      {
+        "placeId": "ChIJkSRhpGqNGGARtZTZXgfR2WE",
+        "name": "RULE COFFEE&ROASTERS",
+        "latitude": 35.7258256,
+        "longitude": 139.720695
+      },
+      {
+        "placeId": "ChIJf9ZFRILzGGARpYpZ0q8SqVM",
+        "name": "PostCoffee® Offline Store",
+        "latitude": 35.66312740000001,
+        "longitude": 139.66591979999998
+      },
+      {
+        "placeId": "ChIJUQ0fGI3yGGARQGozHzqTqs4",
+        "name": "喫茶生活",
+        "latitude": 35.6990824,
+        "longitude": 139.65858889999998
+      },
+      {
+        "placeId": "ChIJUyaS0ErzGGAR6_mFuqndQ9o",
+        "name": "Little Nap COFFEE STAND",
+        "latitude": 35.6720937,
+        "longitude": 139.6905932
+      },
+      {
+        "placeId": "ChIJj2s6QgCLGGARilhiinl95b0",
+        "name": "ROAR COFFEE Tokyo Ginza",
+        "latitude": 35.6707746,
+        "longitude": 139.7692614
+      },
+      {
+        "placeId": "ChIJXVNv51WLGGARAFLANNXRSoo",
+        "name": "ABOUT LIFE COFFEE BREWERS",
+        "latitude": 35.6567022,
+        "longitude": 139.6958093
+      },
+      {
+        "placeId": "ChIJAQD8z7KMGGAR6rUl3gbCh_I",
+        "name": "ROSTRO",
+        "latitude": 35.667043199999995,
+        "longitude": 139.6917939
+      },
+      {
+        "placeId": "ChIJ9f0aP7iJGGAR3BB7LqfZdhE",
+        "name": "KOFFEE MAMEYA Kakeru",
+        "latitude": 35.6764735,
+        "longitude": 139.804184
+      },
+      {
+        "placeId": "ChIJmWGyICjzGGARCnAWeg1AyCM",
+        "name": "COUNTERPART COFFEE GALLERY",
+        "latitude": 35.6891254,
+        "longitude": 139.6825762
+      },
+      {
+        "placeId": "ChIJv_q2e8yNGGARpA8LeTGzvik",
+        "name": "KOPI KALYAN Tokyo（コピカリアン トーキョー）",
+        "latitude": 35.6660746,
+        "longitude": 139.7047227
+      },
+      {
+        "placeId": "ChIJxbhOqUaPGGARoUhTM81BRoI",
+        "name": "LUCENT COFFEE",
+        "latitude": 35.7076528,
+        "longitude": 139.7907993
+      },
+      {
+        "placeId": "ChIJq6pWibeOGGARpfMbbmRwQjo",
+        "name": "コフィノワ",
+        "latitude": 35.7051669,
+        "longitude": 139.7917099
+      },
+      {
+        "placeId": "ChIJs73IqKGPGGAR8vR56OnCUD4",
+        "name": "Leaves Coffee Roasters",
+        "latitude": 35.702705099999996,
+        "longitude": 139.7978326
+      },
+      {
+        "placeId": "ChIJAQAN07aOGGARSmAqLtTUc28",
+        "name": "SOL'S COFFEE ROASTERY",
+        "latitude": 35.7013958,
+        "longitude": 139.7883723
+      },
+      {
+        "placeId": "ChIJ6_VrNnuNGGARQcYySZQZITA",
+        "name": "EIGHT COFFEE 新宿店",
+        "latitude": 35.6897768,
+        "longitude": 139.7100733
+      },
+      {
+        "placeId": "ChIJjxLfCsaNGGAR_i2eeS9L7ug",
+        "name": "Flip Flip Coffee Supply",
+        "latitude": 35.680581499999995,
+        "longitude": 139.7029279
+      },
+      {
+        "placeId": "ChIJr_F3I9qMGGARctfLLcB6a3I",
+        "name": "ヤマモトコーヒー店 新宿",
+        "latitude": 35.6923104,
+        "longitude": 139.7028753
+      },
+      {
+        "placeId": "ChIJBeNP9mmPGGAR9q0G4IA1IQw",
+        "name": "WESTSIDE COFFEE",
+        "latitude": 35.6998871,
+        "longitude": 139.7889625
+      },
+      {
+        "placeId": "ChIJr9Fi582NGGARca1L7-5aNFU",
+        "name": "エスプレッソファクトリー",
+        "latitude": 35.7250538,
+        "longitude": 139.7613998
+      },
+      {
+        "placeId": "ChIJyUMmD8eNGGARIV9c3qGLY1M",
+        "name": "Alternative Coffee Works",
+        "latitude": 35.7063592,
+        "longitude": 139.6941766
+      },
+      {
+        "placeId": "ChIJw-tt_bjzGGARukcVjJZh4Y0",
+        "name": "ザ・モスク・コーヒー THE MOSQUE COFFEE",
+        "latitude": 35.6635985,
+        "longitude": 139.6706218
+      },
+      {
+        "placeId": "ChIJtYD3RL-NGGAR-O0aXMkBLvE",
+        "name": "QUARO",
+        "latitude": 35.6691804,
+        "longitude": 139.708272
+      },
+      {
+        "placeId": "ChIJSa9uB3rzGGAR_PCb8mo94r0",
+        "name": "COFFEE COUNTY Tokyo",
+        "latitude": 35.6624273,
+        "longitude": 139.6722475
+      },
+      {
+        "placeId": "ChIJd_ppeG7zGGARRscN4OftxJg",
+        "name": "LIGHT UP COFFEE Shimokitazawa",
+        "latitude": 35.6581331,
+        "longitude": 139.66257629999998
+      },
+      {
+        "placeId": "ChIJgaPNVhCMGGARILh-OhDkTn8",
+        "name": "Pharos Coffee Jimbocho",
+        "latitude": 35.6949579,
+        "longitude": 139.7605297
+      },
+      {
+        "placeId": "ChIJQbLDBliNGGAR9EykiSqQKng",
+        "name": "ぼうず 'n coffee",
+        "latitude": 35.733179,
+        "longitude": 139.7018645
+      },
+      {
+        "placeId": "ChIJTWs-NfDvGGARzZYkdpto-Ys",
+        "name": "OVER COFFEE HUB (Coffee & Coworking)",
+        "latitude": 35.704525,
+        "longitude": 139.57705199999998
+      },
+      {
+        "placeId": "ChIJUV3zKJiNGGARJcnhb1CoioA",
+        "name": "オールシーズンズコーヒー 池袋店",
+        "latitude": 35.732671599999996,
+        "longitude": 139.7025697
+      },
+      {
+        "placeId": "ChIJQRIO7nyNGGAR95A2sKoElBA",
+        "name": "AUNG COFFEE-Myanmar Coffee Lab新宿御苑前店",
+        "latitude": 35.6910368,
+        "longitude": 139.70982590000003
+      },
+      {
+        "placeId": "ChIJUy0WbP3zGGAR4flTK6uJgqk",
+        "name": "Menotti’s Coffee Stop Tokyo",
+        "latitude": 35.671566899999995,
+        "longitude": 139.66804109999998
+      },
+      {
+        "placeId": "ChIJb-d5jquNGGAR-AeyKiLER6c",
+        "name": "豆虎 神保町焙煎所",
+        "latitude": 35.6961651,
+        "longitude": 139.7600326
+      },
+      {
+        "placeId": "ChIJCUOVY0mLGGARTdF79q1QK20",
+        "name": "TINTO COFFEE",
+        "latitude": 35.6606101,
+        "longitude": 139.707527
+      },
+      {
+        "placeId": "ChIJB7UU1fjgGGARv3Vr0ilX3FY",
+        "name": "珈琲豆焙煎工房 まめ吉",
+        "latitude": 35.7296135,
+        "longitude": 139.408408
+      },
+      {
+        "placeId": "ChIJYwGZGt6NGGAR5UEScEF6sB8",
+        "name": "pásele",
+        "latitude": 35.7230616,
+        "longitude": 139.7640106
+      },
+      {
+        "placeId": "ChIJVVWhE4fyGGAR5hm6fFTeUcc",
+        "name": "CLOUDS GALLERY+COFFEE",
+        "latitude": 35.7051277,
+        "longitude": 139.6519248
+      },
+      {
+        "placeId": "ChIJQ9h1XgbvGGARqJeqtVkbJb0",
+        "name": "猿田彦珈琲 吉祥寺 井の頭公園前店",
+        "latitude": 35.7008584,
+        "longitude": 139.5785036
+      },
+      {
+        "placeId": "ChIJ9XNLV33yGGARxshNi-JcnZA",
+        "name": "Poppins Coffee and Tea",
+        "latitude": 35.704089499999995,
+        "longitude": 139.6500685
+      },
+      {
+        "placeId": "ChIJDxYKIhCMGGARScnqzc-T-TU",
+        "name": "GLITCH COFFEE&ROASTERS",
+        "latitude": 35.693742799999995,
+        "longitude": 139.76130469999998
+      },
+      {
+        "placeId": "ChIJP2BtW-CLGGAR_-5-Dk9pFoE",
+        "name": "BONGENCOFFEE Tokyo Ginza",
+        "latitude": 35.6710713,
+        "longitude": 139.77080379999998
+      },
+      {
+        "placeId": "ChIJq6rxNsOMGGARKn8-OyTuyls",
+        "name": "オールシーズンズコーヒー",
+        "latitude": 35.6897966,
+        "longitude": 139.7079209
+      },
+      {
+        "placeId": "ChIJvbYOsEaLGGARszQEtIIvb54",
+        "name": "WOODBERRY COFFEE 渋谷店",
+        "latitude": 35.6539429,
+        "longitude": 139.7094
+      },
+      {
+        "placeId": "ChIJGTP74RaJGGARy5Fp3vNCwn4",
+        "name": "アライズ コーヒー ロースターズ",
+        "latitude": 35.6783899,
+        "longitude": 139.8009705
+      },
+      {
+        "placeId": "ChIJ2QzuEhCMGGAR_GwijOC6vao",
+        "name": "眞踏珈琲店",
+        "latitude": 35.6945729,
+        "longitude": 139.7619257
+      },
+      {
+        "placeId": "ChIJe-TeakzuGGAR7ZrlpUdY69g",
+        "name": "LIGHT UP COFFEE Kichijoji",
+        "latitude": 35.7054544,
+        "longitude": 139.5725176
+      },
+      {
+        "placeId": "ChIJuziVM6KNGGARf8D_CEUyVFI",
+        "name": "KITASANDO COFFEE",
+        "latitude": 35.678944,
+        "longitude": 139.7064308
+      },
+      {
+        "placeId": "ChIJ0d-kZ06LGGARf1bwpXWCUGU",
+        "name": "AMAZING COFFEE 中目黒店",
+        "latitude": 35.6473083,
+        "longitude": 139.69732779999998
+      },
+      {
+        "placeId": "ChIJITxLMDnuGGARKgK4ZPMbbyA",
+        "name": "リュモンコーヒースタンド",
+        "latitude": 35.701271,
+        "longitude": 139.5835
+      },
+      {
+        "placeId": "ChIJI--Sfn7zGGARXnHT99w5aGU",
+        "name": "DIMLIGHT ESPRESSO Coffee Roasters",
+        "latitude": 35.6823973,
+        "longitude": 139.6996532
+      },
+      {
+        "placeId": "ChIJT52xaLeOGGAR6ZstEJFAmF0",
+        "name": "Coffee Wrights 蔵前 ロースタリー＆カフェ",
+        "latitude": 35.7040789,
+        "longitude": 139.7897193
+      },
+      {
+        "placeId": "ChIJQ4KyM8mNGGARx7UDIN0vfeU",
+        "name": "猿田彦珈琲 渋谷 道玄坂通店",
+        "latitude": 35.6601898,
+        "longitude": 139.6973463
+      },
+      {
+        "placeId": "ChIJza6mlp7zGGAReVCRBKxHWqI",
+        "name": "yoshida coffee sangubashi",
+        "latitude": 35.6802199,
+        "longitude": 139.6907655
+      },
+      {
+        "placeId": "ChIJucQ-H-aPGGAR-ix7xDxPNys",
+        "name": "feb’s coffee&scone Blucca店",
+        "latitude": 35.7062587,
+        "longitude": 139.7919937
+      },
+      {
+        "placeId": "ChIJO4gcRG6NGGAR-30kIN07308",
+        "name": "ignis",
+        "latitude": 35.7287059,
+        "longitude": 139.76437610000002
+      },
+      {
+        "placeId": "ChIJA7ODiPCNGGARPJFZOP3iayI",
+        "name": "Kimi Natural 73+cafe",
+        "latitude": 35.7333958,
+        "longitude": 139.7075918
+      },
+      {
+        "placeId": "ChIJYRk_8ciNGGARhfRszMyqspU",
+        "name": "珈琲工場 お休み処 & 庭",
+        "latitude": 35.7280155,
+        "longitude": 139.7648514
+      }
+    ]
+  }
+]

@@ -152,6 +152,10 @@ async function searchText(query) {
       textQuery: query,
       languageCode: "ja",
       maxResultCount: 20,
+      // cafe タイプはシーシャラウンジ・猫カフェ等も含む広いカテゴリのため、
+      // コーヒー主体の coffee_shop（Google マップ表記「コーヒーショップ」）に厳格に絞る
+      includedType: "coffee_shop",
+      strictTypeFiltering: true,
     }),
   });
   if (!response.ok) {
@@ -161,7 +165,9 @@ async function searchText(query) {
   return body.places ?? [];
 }
 
-const CAFE_TYPES = new Set(["cafe", "coffee_shop"]);
+const REQUIRED_TYPE = "coffee_shop";
+// タイプ誤登録の店がすり抜けたときの保険（名前ベースの除外）
+const EXCLUDED_NAME_KEYWORDS = ["シーシャ", "shisha", "hookah", "保護猫", "猫カフェ"];
 
 const output = [];
 for (const pref of targets) {
@@ -170,7 +176,7 @@ for (const pref of targets) {
   const candidates = new Map(); // placeId -> place
 
   for (const area of subAreas) {
-    for (const query of [`スペシャルティコーヒー ${area}`, `カフェ ${area}`]) {
+    for (const query of [`スペシャルティコーヒー ${area}`, `コーヒーショップ ${area}`]) {
       console.log(`検索: ${query}`);
       const places = await searchText(query);
       for (const place of places) {
@@ -183,7 +189,9 @@ for (const pref of targets) {
   const selected = [...candidates.values()]
     .filter((place) => {
       const types = place.types ?? [];
-      if (!types.some((type) => CAFE_TYPES.has(type))) return false; // ホテル等の混入を除外
+      if (!types.includes(REQUIRED_TYPE)) return false; // coffee_shop 以外（カフェ全般・ホテル等）を除外
+      const lowerName = (place.displayName?.text ?? "").toLowerCase();
+      if (EXCLUDED_NAME_KEYWORDS.some((keyword) => lowerName.includes(keyword.toLowerCase()))) return false;
       if ((place.rating ?? 0) < args.minRating) return false;
       if ((place.userRatingCount ?? 0) < args.minReviews) return false;
       if (!(place.formattedAddress ?? "").includes(pref.name)) return false; // 県外を除外

@@ -12,7 +12,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const PREFECTURE_CODE_PATTERN = /^(0[1-9]|[1-3][0-9]|4[0-7])$/; // JIS X 0401 "01".."47"
-const MAX_CAFES = 100; // 東京の上限（フェーズ 19 確定仕様。他県は生成側で 30 に絞る）
+const MAX_CAFES = 200; // 東京 = 基準上位 100 + 人気枠（3.7/500 該当店、枠外全件）の余裕を見た上限。他県は生成側で 30 に絞る
 // 日本域内チェック（沖ノ鳥島〜択捉島をゆるくカバー）
 const LAT_RANGE = [20, 46];
 const LNG_RANGE = [122, 154];

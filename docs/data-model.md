@@ -571,7 +571,7 @@ data class CuratedCafe(
 
 - **保持は最小 5 フィールドのみ（Places 規約対応）**: 評価・営業時間等の揮発データは保存せず、ピンタップ時にカフェ詳細画面が既存の `CafeRepository.getDetails` で解決する。placeId 以外の Places 由来データには 30 日キャッシュ規定があるため、シード再実行による定期リフレッシュを運用で担保する（`scripts/seed/README.md`）
 - **都道府県コードは JIS X 0401**: 標準規格でローマ字ゆれ（hyogo/hyougo 等）がなく、文字列ソート = 北から南の自然順、Firestore ドキュメント ID にそのまま使える。47 値の Kotlin enum は作らない（クライアントは全件一括ロードのみで県別ロジックを持たない）。コード → 県名対応はシードスクリプトの定数表と Firestore ドキュメントの `prefectureName` が持つ
-- **件数は県ごとの上限**: 東京 100 / 他県 30（初期スコープは東京のみ）
+- **件数は県ごとの上限 + 人気枠**: 基準上位（評価 4.4 / レビュー 100 件以上）は東京 100 / 他県 30 を上限とし、加えて人気枠（評価 3.7 / レビュー 500 件以上）を上限の枠外で全件採用（2026-07-18 追加。初期スコープは東京のみ）
 - **SQLDelight には持たない**: Firestore one-shot get + メモリキャッシュで足りる。オフラインは Firestore 永続化キャッシュに委ねる（アーキテクチャ不変条件どおり独自同期は書かない）
 
 **Repository インターフェース**（`com.noricoffee.repository.CuratedCafeRepository`）:

@@ -82,6 +82,10 @@ const DEFAULT_MAX_CAFES = 30;
 const DEFAULT_MIN_RATING = 4.4;
 const DEFAULT_MIN_REVIEWS = 100;
 
+// 人気枠: 評価は基準未満でもレビュー数が多い定番店を maxCafes の枠外で全件追加する
+const POPULAR_MIN_RATING = 3.7;
+const POPULAR_MIN_REVIEWS = 500;
+
 // 評価・レビュー数は選別にのみ使い、出力には含めない（Places 規約対応）
 const FIELD_MASK = [
   "places.id",
@@ -166,8 +170,12 @@ async function searchText(query) {
 }
 
 const REQUIRED_TYPE = "coffee_shop";
-// タイプ誤登録の店がすり抜けたときの保険（名前ベースの除外）
-const EXCLUDED_NAME_KEYWORDS = ["シーシャ", "shisha", "hookah", "保護猫", "猫カフェ"];
+// タイプ誤登録の店がすり抜けたときの保険 + レビューで除外確定した店・ブランド
+// （再生成・定期リフレッシュで再混入させない。2026-07-17 レビュー: コンセプト系 + どこにでもある大手チェーン）
+const EXCLUDED_NAME_KEYWORDS = [
+  "シーシャ", "shisha", "hookah", "保護猫", "猫カフェ",
+  "anakuma cafe", "禁断果実", "スターバックス", "むさしの森珈琲",
+];
 
 const output = [];
 for (const pref of targets) {
@@ -186,23 +194,41 @@ for (const pref of targets) {
     }
   }
 
-  const selected = [...candidates.values()]
-    .filter((place) => {
-      const types = place.types ?? [];
-      if (!types.includes(REQUIRED_TYPE)) return false; // coffee_shop 以外（カフェ全般・ホテル等）を除外
-      const lowerName = (place.displayName?.text ?? "").toLowerCase();
-      if (EXCLUDED_NAME_KEYWORDS.some((keyword) => lowerName.includes(keyword.toLowerCase()))) return false;
-      if ((place.rating ?? 0) < args.minRating) return false;
-      if ((place.userRatingCount ?? 0) < args.minReviews) return false;
-      if (!(place.formattedAddress ?? "").includes(pref.name)) return false; // 県外を除外
-      const lat = place.location?.latitude;
-      const lng = place.location?.longitude;
-      return typeof lat === "number" && typeof lng === "number";
-    })
-    .sort((a, b) => (b.rating - a.rating) || (b.userRatingCount - a.userRatingCount))
-    .slice(0, maxCafes);
+  // 共通の足切り（タイプ / 除外名 / 県内 / 座標）を通した候補プール
+  const qualified = [...candidates.values()].filter((place) => {
+    const types = place.types ?? [];
+    if (!types.includes(REQUIRED_TYPE)) return false; // coffee_shop 以外（カフェ全般・ホテル等）を除外
+    const lowerName = (place.displayName?.text ?? "").toLowerCase();
+    if (EXCLUDED_NAME_KEYWORDS.some((keyword) => lowerName.includes(keyword.toLowerCase()))) return false;
+    if (!(place.formattedAddress ?? "").includes(pref.name)) return false; // 県外を除外
+    const lat = place.location?.latitude;
+    const lng = place.location?.longitude;
+    return typeof lat === "number" && typeof lng === "number";
+  });
+  const byRating = (a, b) => (b.rating - a.rating) || (b.userRatingCount - a.userRatingCount);
 
-  console.log(`${pref.name}: 候補 ${candidates.size} 件 → 採用 ${selected.length} 件（上限 ${maxCafes}）`);
+  // 1 段目: 評価基準（既定 4.4 / 100 件）の上位 maxCafes 件
+  const primary = qualified
+    .filter((place) => (place.rating ?? 0) >= args.minRating && (place.userRatingCount ?? 0) >= args.minReviews)
+    .sort(byRating)
+    .slice(0, maxCafes);
+  const primaryIds = new Set(primary.map((place) => place.id));
+
+  // 2 段目（人気枠）: レビュー数の多い定番店を上限の枠外で全件追加
+  const popular = qualified
+    .filter(
+      (place) =>
+        !primaryIds.has(place.id) &&
+        (place.rating ?? 0) >= POPULAR_MIN_RATING &&
+        (place.userRatingCount ?? 0) >= POPULAR_MIN_REVIEWS,
+    )
+    .sort(byRating);
+
+  const selected = [...primary, ...popular];
+  console.log(
+    `${pref.name}: 候補 ${candidates.size} 件 → 採用 ${selected.length} 件` +
+      `（基準上位 ${primary.length} / 上限 ${maxCafes} + 人気枠 ${popular.length}）`,
+  );
   output.push({
     prefectureCode: pref.code,
     prefectureName: pref.name,

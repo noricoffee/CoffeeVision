@@ -654,8 +654,10 @@ struct MapTabView: View {
                     }
                 }
 
-                // おすすめカフェ（curated / burnt orange + cup.and.saucer.fill）ピン（フェーズ 19）。
-                // Google Maps の POI 強調のように常時表示（トグルなし）。
+                // おすすめカフェ（curated / system orange + cup.and.saucer.fill）ピン（フェーズ 19）。
+                // Google Maps の POI 強調のように表示切替チップの対象外（トグルなし）だが、
+                // Apple 周辺ピンと同じズームゲートでズームアウト時は非表示にする
+                // （`displayedCuratedCafes` 参照）。
                 // 同一 placeId が訪問済み / 保存済み / 検索結果ピンと競合する場合はそちらを優先して除外する
                 // （優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）。表示切替チップの状態に
                 // 関わらず適用する）。タップで直接カフェ詳細へ push する（保存済みピンと同型）。
@@ -1200,7 +1202,17 @@ struct MapTabView: View {
 
     /// 表示対象のおすすめカフェ（訪問済み / 行きたい / 検索結果と競合するものを除外。
     /// 優先順位: 訪問済み > 行きたい > 検索結果 > おすすめ（curated）。表示切替チップの状態に関わらず適用する）。
+    ///
+    /// ズームゲート: Apple 周辺ピン（`scheduleAppleNearbyFetch`）と同じしきい値
+    /// `applePoiZoomGateRadiusMeters`（可視半径 3000m）を再利用し、`appState.mapSearchCenter` の
+    /// 直近確定値がしきい値を超える（ズームアウトしている）場合は空配列を返して非表示にする
+    /// （東京全域規模の引きの地図で常時表示になり煩雑という確認フィードバックへの対応）。
+    /// 独自のしきい値は新設しない。
     private func displayedCuratedCafes(_ bridge: MapViewModelBridge) -> [CuratedCafe] {
+        guard let radiusMeters = appState.mapSearchCenter?.radiusMeters,
+              radiusMeters <= Self.applePoiZoomGateRadiusMeters else {
+            return []
+        }
         let visited = visitedPlaceIds(bridge)
         let saved = savedPlaceIds(bridge)
         let searched = Set(bridge.searchResultPlaces.map { $0.placeId })
@@ -1423,24 +1435,24 @@ struct MapTabView: View {
         )
     }
 
-    /// おすすめカフェ（curated）ピン（burnt orange + cup.and.saucer.fill。フェーズ 19 意匠変更）。
+    /// おすすめカフェ（curated）ピン（system orange + cup.and.saucer.fill。フェーズ 19 意匠変更）。
     ///
     /// Google Maps の「人気 POI 強調」表現に寄せ、Apple 周辺ピン（`appleNearbyCafePin`）と
     /// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、サイズ（34pt。Apple 周辺ピンの
-    /// 28pt よりひとまわり大きい）と色の濃さ・彩度だけで「同じカフェだが特に推されている」ことを
+    /// 28pt よりひとまわり大きい）と色の彩度だけで「同じカフェだが特に推されている」ことを
     /// 表現する。色は既存 5 色（accentColor / pink / indigo / blue / secondaryLabel）と被らない
-    /// burnt orange（システムカラー `Color.orange` を黒側にミックスして濃くした色。手法は
-    /// `AnalysisView` のレーダーチャート配色と同じ `mix(with:by:)` パターンを踏襲）。
-    /// トグルなし（常時表示）。
+    /// システムカラー `Color.orange` をそのまま使う（黒ミックスなし）。訪問済みピン（`accentColor`
+    /// = 茶 #8B5A2B）と一目で区別できるよう明るいオレンジを維持する判断（シミュレータ確認
+    /// フィードバックで黒ミックス濃色は茶に寄って見分けにくいと判定されたため）。
+    /// トグルなし。ズームゲート（`applePoiZoomGateRadiusMeters`）を Apple 周辺ピンと共用し、
+    /// 可視領域が一定以上広い（ズームアウトした）ときは非表示にする（`displayedCuratedCafes` 参照）。
     private func curatedCafePin(cafe: CuratedCafe) -> some View {
-        let burntOrange = Color.orange.mix(with: .black, by: 0.25)
-
-        return ZStack {
+        ZStack {
             Circle()
-                .fill(burntOrange)
+                .fill(Color.orange)
                 .frame(width: 34, height: 34)
                 .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
-                .shadow(color: burntOrange.opacity(0.5), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.orange.opacity(0.5), radius: 4, x: 0, y: 2)
             Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)
                 .foregroundStyle(.white)

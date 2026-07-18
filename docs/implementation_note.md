@@ -994,3 +994,15 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - ドキュメント直下の `prefectureCode` 欠如時は**ドキュメント全体を空リスト扱い**（部分的に有効な `cafes` があっても県コード抜きでは domain モデルを構成できない）。`cafes` 配列の要素単位では必須フィールド欠落を mapNotNull で skip
 - 座標は Firestore の数値型ゆれ（Long/Double）を `Number.toDouble()` で吸収
 - ロード失敗時は `MapViewModel` がサイレントに空のまま（`error` に流さない）。おすすめピンは付加情報でありマップ本体の動作を阻害しない、という表示方針とセット
+
+### 2026-07-18: curated ピンの色とズームゲート改訂（フェーズ 19 追加調整）
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Map/MapTabView.swift`、ui-ux-guidelines.md 色セマンティクス表
+
+ユーザーのシミュレータ確認フィードバック 2 件による改訂。
+
+- **色**: star 意匠廃止時に採用した burnt orange（`orange.mix(black, 0.25)`）が訪問済みピン（accentColor #8B5A2B 茶）と誤認されたため、**素の `Color.orange`** に変更。彩度・色相とも茶と明確に離れ、ライト/ダーク両対応（システムカラーのため）
+- **ズームゲート**: 常時表示だと引きの地図で東京 157 本が煩雑なため、**Apple 周辺ピンの `applePoiZoomGateRadiusMeters`（可視半径 3000m）をそのまま再利用**して `displayedCuratedCafes` でフィルタ。ズームイン時のみ表示（Google Maps の POI 間引きと同じ挙動）。しきい値は新設せず 1 定数を 2 用途で共有 — **将来この値を変えると Apple 周辺 fetch と curated 表示の両方が連動する**点に注意
+- `existingPinCoordinates`（Apple 周辺ピンとの 40m 近接排除）は意図的にゲート非依存で全 curated 座標を参照するが、curated 非表示のズーム域では Apple 周辺 fetch 自体も走らないため実害なし（ios-engineer 確認済み）
+- 副次効果: ズームゲートにより「47 県フル展開時の Annotation 数」将来課題（data-model.md §1.10）の描画負荷面は実質解消。UIState には全件保持のままなのでメモリ面のみ残課題

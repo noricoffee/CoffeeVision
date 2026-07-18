@@ -75,7 +75,9 @@
 | [x] | 親: docs 更新（data-model.md / paid-services.md / requirements.md / kmp-bridge.md）+ 検証 + commit | 2026-07-17 完了。親が verify-kmp-ios の全マトリクス（2 ターゲットテスト + override なし xcodebuild）を再実行し green。47 県フル展開時の可視領域フィルタは将来課題として data-model.md §1.10 に明記 |
 | [x] | ユーザー: rules デプロイ（`firebase deploy --only firestore:rules`）→ `generate-curated-cafes.mjs --prefectures 13` 実行 + JSON 目視レビュー → seed 投入 → シミュレータ / 実機確認（東京で 100 ピン表示・密度 / タップで詳細解決 / 訪問済み・保存済みとの重複除外 / チップ強調中の減光 / 機内モード表示） | 2026-07-18 完了。coffee_shop 厳格化 + 人気枠追加を経て**東京 157 件**（基準上位 100 + 人気枠 57）で投入・表示確認 OK |
 | [x] | ios-engineer: curated ピンの意匠変更 — star をやめ通常カフェピン（Apple 周辺）と同じアイコンで一回り大きく + 色を濃く（Google Maps の強調表現に寄せる） | 2026-07-18 完了。`cup.and.saucer.fill` 34pt + burnt orange（`orange.mix(black, 0.25)`）。親が override なしビルド再検証 green。色セマンティクスは ui-ux-guidelines の表に第 5 概念として追加 |
-| [ ] | ユーザー: 新ピン意匠のシミュレータ確認（通常グレーピンとの対比 / accentColor 訪問済みピンとの識別 / 密集地帯での見え方） | 意匠フィードバックの再確認 |
+| [x] | ユーザー: 新ピン意匠のシミュレータ確認（通常グレーピンとの対比 / accentColor 訪問済みピンとの識別 / 密集地帯での見え方） | 2026-07-18 確認 → フィードバック 2 件（下行） |
+| [x] | ios-engineer: curated ピン再調整 — ① burnt orange が訪問済みの茶と紛れる → 明るいオレンジ寄りに ② 常時表示が煩雑 → Apple 周辺ピンと同じズームゲートでズームイン時のみ表示 | 2026-07-18 完了。素の `Color.orange` + `applePoiZoomGateRadiusMeters`（3000m）再利用。親が override なしビルド再検証 green。判断は implementation_note 2026-07-18 |
+| [ ] | ユーザー: 再調整後のシミュレータ確認（訪問済み茶ピンとの識別 / ズームイン・アウトでピンが出没すること / タップ・減光の従来動作） | 確認できたらフェーズ 19 クローズ |
 
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
 

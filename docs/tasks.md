@@ -62,23 +62,6 @@
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。設計判断 2 エントリを implementation_note に記録 |
 | [x] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | 2026-07-16 ユーザー確認完了（レーダー縮小時の可読性含め OK） |
 
-#### フェーズ 19: 都道府県別おすすめカフェのマップ常時強調表示（2026-07-16 起票）
-
-> キュレーション済みおすすめカフェ（初期スコープ = **東京のみ 100 件**、他県は将来 20〜30 件）を Firestore `curatedCafes/{prefectureCode}`（JIS X 0401、1 県 1 ドキュメント + 埋め込み配列）で配信し、マップに専用ピン（amber 系 + star.fill、トグルなし常時表示）で強調する。BeanProfile パターン踏襲（read-only + one-shot get + メモリキャッシュ + Admin SDK シード）。Places 規約対応で保存は placeId + 名前 + 座標 + 県コードの最小限、評価等はピンタップ時に getDetails で解決。命名は既存 recommendedCafes（好み一致）と区別して **CuratedCafe / curated**。プランは `.claude/plans/magical-drifting-river.md`。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [x] | kmp-engineer: `CuratedCafe` モデル / `CuratedCafeRepository` IF / Android 実装 + Mapper / `AppContainer` / `AppContainerViewModelFactory` / `MapViewModel`（UIState + init 一括ロード、失敗時サイレント）/ commonTest 新規 + 既存 Map テスト修正 | 2026-07-17 完了。全 Gradle テスト + androidApp ビルド + override フラグなし XCFramework 生成 green。親が `iosSimulatorArm64Test` も実行し green。Mapper 設計判断は implementation_note 2026-07-17 |
-| [x] | 親: SKIE 境界の合意書固定（`__getAll(completionHandler:)` / AppContainer 新コンストラクタ / UIState 新フィールド） | 2026-07-17 完了。kmp-bridge.md の AppContainer サンプルを新シグネチャに更新（kmp-engineer が生成 XCFramework の Obj-C ヘッダで裏取り済み） |
-| [x] | ios-engineer: `CuratedCafeRepositoryIosImpl.swift` / `AppState.swift` / `MapViewModelBridge` / `MapTabView`（curated ピンレイヤー + 重複除外 + 減光 + 詳細 push） | 2026-07-17 完了。ピン = orange 円 30pt + star.fill + 白フチ。優先順位: 訪問済み > 保存済み > 検索結果 > curated > Apple 周辺。override なし BUILD SUCCEEDED（Gradle タスク実行込みでログ確認） |
-| [x] | 親: `firestore.rules` に curatedCafes ブロック追加 + シードスクリプト 2 本（`generate-curated-cafes.mjs` / `seed-curated-cafes.mjs`）+ README 追記 | 2026-07-17 完了。`--dry-run` を scratchpad で正常系 + 異常系 9 パターン検証済み（コード不正 / 名前空 / 未知フィールド / placeId 重複・空 / 座標域外 / 件数 0）。rating は JSON に保存しない |
-| [x] | 親: docs 更新（data-model.md / paid-services.md / requirements.md / kmp-bridge.md）+ 検証 + commit | 2026-07-17 完了。親が verify-kmp-ios の全マトリクス（2 ターゲットテスト + override なし xcodebuild）を再実行し green。47 県フル展開時の可視領域フィルタは将来課題として data-model.md §1.10 に明記 |
-| [x] | ユーザー: rules デプロイ（`firebase deploy --only firestore:rules`）→ `generate-curated-cafes.mjs --prefectures 13` 実行 + JSON 目視レビュー → seed 投入 → シミュレータ / 実機確認（東京で 100 ピン表示・密度 / タップで詳細解決 / 訪問済み・保存済みとの重複除外 / チップ強調中の減光 / 機内モード表示） | 2026-07-18 完了。coffee_shop 厳格化 + 人気枠追加を経て**東京 157 件**（基準上位 100 + 人気枠 57）で投入・表示確認 OK |
-| [x] | ios-engineer: curated ピンの意匠変更 — star をやめ通常カフェピン（Apple 周辺）と同じアイコンで一回り大きく + 色を濃く（Google Maps の強調表現に寄せる） | 2026-07-18 完了。`cup.and.saucer.fill` 34pt + burnt orange（`orange.mix(black, 0.25)`）。親が override なしビルド再検証 green。色セマンティクスは ui-ux-guidelines の表に第 5 概念として追加 |
-| [x] | ユーザー: 新ピン意匠のシミュレータ確認（通常グレーピンとの対比 / accentColor 訪問済みピンとの識別 / 密集地帯での見え方） | 2026-07-18 確認 → フィードバック 2 件（下行） |
-| [x] | ios-engineer: curated ピン再調整 — ① burnt orange が訪問済みの茶と紛れる → 明るいオレンジ寄りに ② 常時表示が煩雑 → Apple 周辺ピンと同じズームゲートでズームイン時のみ表示 | 2026-07-18 完了。素の `Color.orange` + `applePoiZoomGateRadiusMeters`（3000m）再利用。親が override なしビルド再検証 green。判断は implementation_note 2026-07-18 |
-| [ ] | ユーザー: 再調整後のシミュレータ確認（訪問済み茶ピンとの識別 / ズームイン・アウトでピンが出没すること / タップ・減光の従来動作） | 確認できたらフェーズ 19 クローズ |
-
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
 
 > ユーザー報告「抽出方法の文字列が被って読めない」。`brewMethodSection` が縦棒（x=抽出方法ラベル）のため、方法数が増えると X 軸ラベルが重なる。焙煎度の内訳と同じ横棒（x=件数、y=抽出方法）に変更する。高さは項目数 × 32pt の可変。iosApp View 層完結・KMP 変更なし。
@@ -260,6 +243,15 @@
 > - **17-D** 真因 = Google 型フィルタそのもの（Apple の cafe 分類と食い違い候補にすら入らない）→ **型フィルタなし `searchByNameNear`（名前 + 位置バイアス）→ タップ座標最近傍（名前一致優先）、見つからなければ「該当なし」**
 >
 > 判断は implementation_note 2026-07-07 フェーズ 17 エントリ、教訓（表示⇄解決の集合ズレ / 同系統 2 回失敗で再計画）は lessons 2026-07-08。最終目視は verification-checklist.md「マップ / カフェ探索」。
+
+#### フェーズ 19: 都道府県別おすすめカフェのマップ強調表示（2026-07-16 起票）
+
+> 完了（2026-07-16〜07-18、全ステップのユーザー確認済み）: キュレーション済みおすすめカフェを Firestore `curatedCafes/{prefectureCode}`（JIS X 0401、1 県 1 ドキュメント + 埋め込み配列、read-only）で配信し、マップに専用ピンで強調。要件は requirements.md §5-6、モデルは data-model.md §1.10、プランは `.claude/plans/magical-drifting-river.md`。
+>
+> - **KMP / iOS**: `CuratedCafe` + `CuratedCafeRepository`（BeanProfile パターン、one-shot + メモリキャッシュ、失敗時サイレント）。ピン優先順位: 訪問済み > 保存済み > 検索結果 > curated > Apple 周辺。Mapper は 1 ドキュメント → List で BeanProfile 型と非対称（implementation_note 2026-07-17）
+> - **ピン意匠（ユーザーフィードバックで 2 回改訂）**: star 意匠 → 通常カフェピンと同アイコン（`cup.and.saucer.fill`）の 34pt 拡大 + 素の `Color.orange`、Apple 周辺ピンと同じズームゲート（3000m）でズームイン時のみ表示（implementation_note 2026-07-18、色セマンティクスは ui-ux-guidelines 第 5 概念）
+> - **データ**: 東京 157 件投入済み（基準上位 100 = 評価 4.4/レビュー 100 件以上 + 人気枠 57 = 3.7/500 以上を枠外全件）。生成 → 人手レビュー → 投入の 2 段構成（`scripts/seed/generate-curated-cafes.mjs` / `seed-curated-cafes.mjs`）。coffee_shop タイプ厳格化でシーシャ・コンセプト店を排除、レビュー除外店は `EXCLUDED_NAME_KEYWORDS` で再混入防止。保存は placeId + 名前 + 座標 + 県コードのみ（Places 規約、詳細はタップ時 getDetails）
+> - **残課題（将来）**: 他県展開時は該当県の `subAreas` 定義 + 生成 → レビュー → 投入のみ（コード変更不要）。47 県フル展開時のメモリ面は UIState 全件保持のまま（描画はズームゲートで解消済み）
 
 #### フェーズ 6 既知バグ: エディタ buildCafe の Edit/Duplicate 分岐（2026-07-08 着手）
 

@@ -1006,3 +1006,15 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **ズームゲート**: 常時表示だと引きの地図で東京 157 本が煩雑なため、**Apple 周辺ピンの `applePoiZoomGateRadiusMeters`（可視半径 3000m）をそのまま再利用**して `displayedCuratedCafes` でフィルタ。ズームイン時のみ表示（Google Maps の POI 間引きと同じ挙動）。しきい値は新設せず 1 定数を 2 用途で共有 — **将来この値を変えると Apple 周辺 fetch と curated 表示の両方が連動する**点に注意
 - `existingPinCoordinates`（Apple 周辺ピンとの 40m 近接排除）は意図的にゲート非依存で全 curated 座標を参照するが、curated 非表示のズーム域では Apple 周辺 fetch 自体も走らないため実害なし（ios-engineer 確認済み）
 - 副次効果: ズームゲートにより「47 県フル展開時の Annotation 数」将来課題（data-model.md §1.10）の描画負荷面は実質解消。UIState には全件保持のままなのでメモリ面のみ残課題
+
+### 2026-07-18: 周辺カフェピンは MKLocalSearch スロットリング時に直前の結果を保持
+
+- 領域: iOS
+- 関連: `iosApp/iosApp/Features/Map/MapTabView.swift`（`fetchAppleNearbyCafes`）、tasks.md「周辺カフェピンのスロットリング耐性（2026-07-18 起票）」
+
+長時間のパン・ズームで `MKLocalSearch` が Apple 側にスロットリングされると（`MKError.loadingThrottled`、閾値は非公開）、従来の catch は一律 `appleNearbyCafes = []` でクリアするため周辺カフェピンが一斉に消えていた（ユーザー報告: 「しばらく使うと POI が表示されないことが 1 回だけあった」）。
+
+- 対応: catch で `mkError.code == .loadingThrottled` のときのみ early return し既存ピンを保持。それ以外のエラー（ネットワーク断等）は従来どおりクリア。理由: スロットリングは一時的で次の fetch（カメラ移動 + 300ms デバウンス後）で回復するため、空白より古いピンを残す方が自然
+- トースト等のユーザー通知は出さない方針を維持（低優先の補助表示のため）
+- `MKLocalSearch` の利用箇所はこの 1 関数のみで同型箇所なし（ios-engineer が grep 確認）。なお MapKit の地図表示自体（タイル / 標準 POI ラベル）にはネイティブアプリの利用制限はなく、制限があるのは検索系 API のみ
+- Swift の `MKError.loadingThrottled` は `MKError.Code` を返す（`as? MKError` 直接比較はコンパイルエラー）— 詳細は ios-engineer メモリ `location-mapkit.md`

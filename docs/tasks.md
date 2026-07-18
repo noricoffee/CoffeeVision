@@ -146,6 +146,16 @@
 | [x] | 親: 検証（xcodebuild override 無し）+ docs 更新（implementation_note / paid-services 棚卸し行）+ commit | 2026-07-13 完了。PrivacyInfo は SDK 同梱マニフェスト確認でアプリ側変更不要、app-store-metadata 6.3 に SDK 行追加 |
 | [ ] | ユーザー: Firebase コンソールで `map_poi_excluded_name_keywords` パラメータ作成 → コンソール変更が次回起動で反映されることを実機確認 | パラメータ未作成でも bundled デフォルトで動作する |
 
+#### 周辺カフェピンのスロットリング耐性（2026-07-18 起票）
+
+> 長時間のパン・ズームで `MKLocalSearch` が Apple 側にスロットリングされると（`MKError.loadingThrottled`）、`fetchAppleNearbyCafes` の catch が一律 `appleNearbyCafes = []` するため周辺カフェピンが一斉に消える（ユーザー報告 2026-07-18: 「しばらく使うと POI が表示されないことが 1 回だけあった」）。修正方針: **throttled のときだけ直前の結果を保持**する（古いピンが残る方が空白より自然。それ以外のエラーは現行どおりクリア）。iosApp 1 ファイル完結・KMP 変更なし。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `MapTabView.fetchAppleNearbyCafes` の catch で `MKError.loadingThrottled` を判別し、その場合は `appleNearbyCafes` を保持（クリアしない） | 2026-07-18 完了。`mkError.code == .loadingThrottled` で判別（`MKError.Code` の落とし穴は ios-engineer メモリに記録済み） |
+| [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-18 完了。親が override 無し BUILD SUCCEEDED + Gradle `:shared:framework:` タスク実行を確認 |
+| [ ] | ユーザー: 実機で長時間パン・ズーム時にピンが消えないことを確認（スロットリングは意図的再現が困難なため通常利用の中で観察） | |
+
 #### フェーズ 6（任意 / 後続）
 
 > 旧行の縮約（2026-07-09）: Android 実装は取り下げ（リリース対象外）/ エクスポートは 15-E-2 へ統合 / buildCafe バグは専用セクション「フェーズ 6 既知バグ」で解消済み。詳細は git 履歴。

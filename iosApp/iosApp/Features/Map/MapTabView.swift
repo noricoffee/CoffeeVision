@@ -1565,8 +1565,11 @@ struct MapTabView: View {
     }
 
     /// `MKLocalPointsOfInterestRequest`（`MKLocalSearch` 経由）で表示範囲内のカフェを
-    /// Apple 地図データから取得する。失敗時は低優先度の補助表示のため静かにクリアするのみで、
-    /// トースト等のユーザー通知は出さない。
+    /// Apple 地図データから取得する。失敗時は低優先度の補助表示のため静かに処理するのみで、
+    /// トースト等のユーザー通知は出さない。長時間のパン・ズームで Apple 側にスロットリングされた
+    /// 場合（`MKError.loadingThrottled`）は一時的な失敗であり次の fetch で回復するため、
+    /// 空白より古いピンを残す方が自然と判断し `appleNearbyCafes` を保持する。それ以外のエラーは
+    /// 従来どおりクリアする（周辺カフェピンのスロットリング耐性、2026-07-18）。
     /// ベーカリー（`.bakery`）は Google Places 側の解決（`onPoiTapped` → `searchNearby`、
     /// `includedPrimaryTypes=[cafe, coffee_shop]`）に一致せずタップ解決できないため取得対象から
     /// 除外している（「表示＝解決可能」を揃える。フェーズ 17-B）。
@@ -1595,6 +1598,10 @@ struct MapTabView: View {
             }
         } catch {
             guard !Task.isCancelled else { return }
+            if let mkError = error as? MKError, mkError.code == .loadingThrottled {
+                // 一時的なスロットリング: 次の fetch で回復するため既存ピンを保持する。
+                return
+            }
             appleNearbyCafes = []
         }
     }

@@ -244,6 +244,15 @@
 >
 > 判断は implementation_note 2026-07-07 フェーズ 17 エントリ、教訓（表示⇄解決の集合ズレ / 同系統 2 回失敗で再計画）は lessons 2026-07-08。最終目視は verification-checklist.md「マップ / カフェ探索」。
 
+#### フェーズ 19: 都道府県別おすすめカフェのマップ強調表示（2026-07-16 起票）
+
+> 完了（2026-07-16〜07-18、全ステップのユーザー確認済み）: キュレーション済みおすすめカフェを Firestore `curatedCafes/{prefectureCode}`（JIS X 0401、1 県 1 ドキュメント + 埋め込み配列、read-only）で配信し、マップに専用ピンで強調。要件は requirements.md §5-6、モデルは data-model.md §1.10、プランは `.claude/plans/magical-drifting-river.md`。
+>
+> - **KMP / iOS**: `CuratedCafe` + `CuratedCafeRepository`（BeanProfile パターン、one-shot + メモリキャッシュ、失敗時サイレント）。ピン優先順位: 訪問済み > 保存済み > 検索結果 > curated > Apple 周辺。Mapper は 1 ドキュメント → List で BeanProfile 型と非対称（implementation_note 2026-07-17）
+> - **ピン意匠（ユーザーフィードバックで 2 回改訂）**: star 意匠 → 通常カフェピンと同アイコン（`cup.and.saucer.fill`）の 34pt 拡大 + 素の `Color.orange`、Apple 周辺ピンと同じズームゲート（3000m）でズームイン時のみ表示（implementation_note 2026-07-18、色セマンティクスは ui-ux-guidelines 第 5 概念）
+> - **データ**: 東京 157 件投入済み（基準上位 100 = 評価 4.4/レビュー 100 件以上 + 人気枠 57 = 3.7/500 以上を枠外全件）。生成 → 人手レビュー → 投入の 2 段構成（`scripts/seed/generate-curated-cafes.mjs` / `seed-curated-cafes.mjs`）。coffee_shop タイプ厳格化でシーシャ・コンセプト店を排除、レビュー除外店は `EXCLUDED_NAME_KEYWORDS` で再混入防止。保存は placeId + 名前 + 座標 + 県コードのみ（Places 規約、詳細はタップ時 getDetails）
+> - **残課題（将来）**: 他県展開時は該当県の `subAreas` 定義 + 生成 → レビュー → 投入のみ（コード変更不要）。47 県フル展開時のメモリ面は UIState 全件保持のまま（描画はズームゲートで解消済み）
+
 #### フェーズ 6 既知バグ: エディタ buildCafe の Edit/Duplicate 分岐（2026-07-08 着手）
 
 > 完了（2026-07-08）: セルフ抽出記録（元 cafe = null）の編集 / 複製で手入力カフェ名が無言で捨てられるバグ（`CoffeeEditorViewModel.buildCafe`）を、cafe 採用の状態ベース 3 段判定への一本化（mode 分岐削除・手入力は新規 UUID 採番）で修正 + 簡素化。回帰テスト 2 件追加、iOS / Android green。判断は implementation_note / lessons 2026-07-08。

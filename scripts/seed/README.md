@@ -26,6 +26,31 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/coffeevision-service-account.json node s
 
 ---
 
+## curatedCafes seed（都道府県別おすすめカフェ）
+
+`curatedCafes/{prefectureCode}` コレクション（サービス管理 / クライアント read-only、JIS X 0401 コードで 1 県 1 ドキュメント）への投入。**生成 → 人手レビュー → 投入の 2 段構成**。モデル定義の正本は [`docs/data-model.md`](../../docs/data-model.md)。
+
+```sh
+# 1. 候補生成（Places API Text Search を叩く。東京 = 約 32 回で一回きりのコスト）
+PLACES_API_KEY=... node generate-curated-cafes.mjs --prefectures 13
+
+# 2. curated-cafes.json を目視レビュー（不適切な候補・閉店済みを削除。件数調整）
+
+# 3. 検証（鍵不要）: コード形式 / 座標の日本域内 / 件数 1〜200 / placeId 重複 / 未知フィールド
+node seed-curated-cafes.mjs --dry-run
+
+# 4. 本番投入
+GOOGLE_APPLICATION_CREDENTIALS=/path/to/coffeevision-service-account.json node seed-curated-cafes.mjs
+```
+
+- 保存するのは **placeId + 名前 + 座標 + 県コードの最小限のみ**。評価・レビュー数は生成時の選別にだけ使い JSON に残さない（Places 規約対応）。アプリはピンタップ時に getDetails で揮発データを解決する
+- **定期リフレッシュ**: Places 規約のキャッシュ規定（placeId 以外は 30 日）対応として、generate → seed を定期的に再実行してデータを更新する運用（`updatedAt` で最終シード日時を確認できる）
+- 選定は 2 段構成: **基準上位**（評価 4.4 / レビュー 100 件以上、上限 = 東京 100 / 他県 30）+ **人気枠**（評価 3.7 / レビュー 500 件以上、上限の枠外で全件追加）。上限・エリアは `generate-curated-cafes.mjs` の `PREFECTURES` 定数。東京以外を追加する際は該当県に `subAreas`（主要エリア）を定義してカバレッジを確保する
+- レビューで除外確定した店・ブランド（コンセプト系 / 大手チェーン等）は同スクリプトの `EXCLUDED_NAME_KEYWORDS` に追記する（再生成・定期リフレッシュでの再混入防止）
+- 投入後の確認: マップを東京に移動しておすすめピン（burnt orange の大きめカフェピン）が出ること。アプリはメモリキャッシュ（one-shot get）のため、投入後はアプリを再起動する
+
+---
+
 ## coffees seed（エクスポート JSON の開発用投入）
 
 アプリのエクスポート JSON（設定 → データのエクスポート。`{ exportedAt, version: 1, records: [] }`）を `users/{uid}/coffees` へ投入する開発用スクリプト。エクスポートしたデータの再投入・別アカウントへの付け替え投入・手書きダミーデータの投入に使う。

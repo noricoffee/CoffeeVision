@@ -14,6 +14,7 @@ import com.noricoffee.repository.BeanProfileRepository
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
 import com.noricoffee.repository.CoffeeRepositoryImpl
+import com.noricoffee.repository.CuratedCafeRepository
 import com.noricoffee.repository.LocalCoffeeRepository
 import com.noricoffee.repository.LocalSavedCafeRepository
 import com.noricoffee.repository.RemoteCoffeeDataSource
@@ -55,6 +56,7 @@ class AppContainer(
     val placesApiKey: String,
     val coffeeInsightProvider: CoffeeInsightProvider?,
     val beanProfileRepository: BeanProfileRepository,
+    val curatedCafeRepository: CuratedCafeRepository,
     val scope: CoroutineScope,
 ) {
 
@@ -65,7 +67,7 @@ class AppContainer(
      * コンストラクタに委譲する。Swift からはこのシグネチャを使うこと。
      *
      * Swift 側の呼び出しシグネチャ:
-     * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:coffeeInsightProvider:beanProfileRepository:)`
+     * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:coffeeInsightProvider:beanProfileRepository:curatedCafeRepository:)`
      *
      * ## iOS での使い方
      * - Phase A-4 まで: `coffeeInsightProvider: nil` を渡す（分析タブは統計のみ表示）
@@ -88,6 +90,7 @@ class AppContainer(
         placesApiKey: String,
         coffeeInsightProvider: CoffeeInsightProvider?,
         beanProfileRepository: BeanProfileRepository,
+        curatedCafeRepository: CuratedCafeRepository,
     ) : this(
         sqlDriver = sqlDriver,
         remoteCoffeeDataSource = remoteCoffeeDataSource,
@@ -96,6 +99,7 @@ class AppContainer(
         placesApiKey = placesApiKey,
         coffeeInsightProvider = coffeeInsightProvider,
         beanProfileRepository = beanProfileRepository,
+        curatedCafeRepository = curatedCafeRepository,
         scope = MainScope(),
     )
 
@@ -106,10 +110,10 @@ class AppContainer(
      * 引数変更なしでコンパイルを通せるよう `coffeeInsightProvider` を省略可能にしている。
      *
      * Swift 側の呼び出しシグネチャ:
-     * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:beanProfileRepository:)`
+     * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:beanProfileRepository:curatedCafeRepository:)`
      *
      * iOS では Phase A-4 以降に `CoffeeInsightProvider` 実装を注入するため、
-     * iOS の `AppState.swift` では上の 7 引数セカンダリコンストラクタを使うこと。
+     * iOS の `AppState.swift` では上の 8 引数セカンダリコンストラクタを使うこと。
      */
     constructor(
         sqlDriver: SqlDriver,
@@ -118,6 +122,7 @@ class AppContainer(
         authRepository: AuthRepository,
         placesApiKey: String,
         beanProfileRepository: BeanProfileRepository,
+        curatedCafeRepository: CuratedCafeRepository,
     ) : this(
         sqlDriver = sqlDriver,
         remoteCoffeeDataSource = remoteCoffeeDataSource,
@@ -126,6 +131,7 @@ class AppContainer(
         placesApiKey = placesApiKey,
         coffeeInsightProvider = null,
         beanProfileRepository = beanProfileRepository,
+        curatedCafeRepository = curatedCafeRepository,
         scope = MainScope(),
     )
 

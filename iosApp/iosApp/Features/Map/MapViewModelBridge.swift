@@ -40,6 +40,10 @@ final class MapViewModelBridge {
     private(set) var savedCafes: [SavedCafe] = []
     /// 記録済み（コーヒー記録が 1 件以上ある）カフェの placeId 集合。一覧シートの「記録あり」バッジ用。
     private(set) var recordedPlaceIds: Set<String> = []
+    /// 都道府県別おすすめカフェ（マップ常時強調ピン用。フェーズ 19）。init 時に一括ロード、失敗時は空のまま。
+    private(set) var curatedCafes: [CuratedCafe] = []
+    /// おすすめカフェの placeId 集合（既存ピンとの重複除外 / 一覧判定を O(1) にする）。
+    private(set) var curatedPlaceIds: Set<String> = []
 
     // MARK: - POI ルックアップ状態
 
@@ -175,5 +179,7 @@ final class MapViewModelBridge {
         self.activeTastingMax = state.activeTastingMax
         self.savedCafes = state.savedCafes
         self.recordedPlaceIds = state.recordedPlaceIds
+        self.curatedCafes = state.curatedCafes
+        self.curatedPlaceIds = state.curatedPlaceIds
     }
 }

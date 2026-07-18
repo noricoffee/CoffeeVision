@@ -5,12 +5,14 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
 import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.CafeRecommendationProvider
+import com.noricoffee.domain.model.CuratedCafe
 import com.noricoffee.domain.model.RecommendedCafe
 import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.domain.model.VisitedCafe
 import com.noricoffee.domain.usecase.ObserveVisitedCafesUseCase
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
+import com.noricoffee.repository.CuratedCafeRepository
 import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +36,8 @@ import kotlin.math.cos
  * - [CafeRecommendationProvider] を常時購読し、好み一致カフェのピン強調を [UIState.recommendedCafes] で管理
  * - [onPoiTapped] で Apple Maps POI タップ時に Places 解決（searchNearby 経路 + 名前による曖昧性解消）を実行する
  * - [onShowVisitedToggled] でマップ上の訪問済みピン表示 / 非表示を切り替える
+ * - [curatedCafeRepository] から都道府県別おすすめカフェを one-shot 一括ロードし、
+ *   [UIState.curatedCafes] / [UIState.curatedPlaceIds] で管理する（フェーズ 19。トグルなし常時表示）
  *
  * ## CoroutineScope の注意
  *
@@ -45,6 +49,7 @@ import kotlin.math.cos
  * @param cafeRepository POI タップ時の Places 座標近傍検索を担うリポジトリ
  * @param coffeeRepository タグフィルタ用のコーヒー記録リポジトリ
  * @param savedCafeRepository 「行きたい店」の購読 / 解除を担うリポジトリ（フェーズ 15-A）
+ * @param curatedCafeRepository 都道府県別おすすめカフェの取得を担うリポジトリ（フェーズ 19）
  * @param userId 現在サインイン中のユーザー ID
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
  */
@@ -54,6 +59,7 @@ class MapViewModel(
     private val cafeRepository: CafeRepository,
     private val coffeeRepository: CoffeeRepository,
     private val savedCafeRepository: SavedCafeRepository,
+    private val curatedCafeRepository: CuratedCafeRepository,
     private val userId: String,
     scope: CoroutineScope,
 ) {
@@ -121,6 +127,20 @@ class MapViewModel(
          * 全件ベースの集合で、行きたい一覧の「記録あり」バッジ判定に使う。
          */
         val recordedPlaceIds: Set<String> = emptySet(),
+        /**
+         * 都道府県別おすすめカフェ一覧（フェーズ 19）。マップ上の専用ピン（amber + star、トグルなし常時表示）用。
+         * 起動時に [CuratedCafeRepository.getAll] で一括ロードし、以降は不変（購読なし。one-shot）。
+         * 失敗時は空リストのまま（[UIState.error] には流さない。おすすめは付加情報でマップ本体を阻害しない）。
+         *
+         * 47 県フル展開時（約 1,400 件）は Annotation 描画数の観点から iOS 側で可視領域フィルタを
+         * 導入する必要がある（v1 の初期スコープは東京のみ・100 件なので本 UIState は未フィルタで返す）。
+         */
+        val curatedCafes: List<CuratedCafe> = emptyList(),
+        /**
+         * [curatedCafes] から導出した placeId の集合。iOS 側のピン重複判定
+         * （訪問済み・保存済み・検索結果との placeId 競合時の表示優先順位判定）に使う。
+         */
+        val curatedPlaceIds: Set<String> = emptySet(),
     )
 
     /**
@@ -203,6 +223,24 @@ class MapViewModel(
         viewModelScope.launch {
             savedCafeRepository.observeAll(userId).collect { savedCafes ->
                 _state.update { it.copy(savedCafes = savedCafes) }
+            }
+        }
+
+        // 都道府県別おすすめカフェの一括ロード（フェーズ 19）。one-shot（購読なし）。
+        // 失敗時は黙って空のまま（おすすめは付加情報。UIState.error には流さない）。
+        viewModelScope.launch {
+            try {
+                val curatedCafes = curatedCafeRepository.getAll()
+                _state.update {
+                    it.copy(
+                        curatedCafes = curatedCafes,
+                        curatedPlaceIds = curatedCafes.map { cc -> cc.placeId }.toSet(),
+                    )
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // サイレント失敗（意図的）。詳細は UIState.curatedCafes の KDoc を参照。
             }
         }
     }

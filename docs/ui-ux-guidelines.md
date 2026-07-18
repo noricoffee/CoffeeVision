@@ -35,7 +35,7 @@ CoffeeVision のアクセントカラーは **コーヒー由来のブラウン�
 
 ### マップ概念の色セマンティクス（フェーズ 16 確定）
 
-マップのピン・チップ・バッジは以下の 4 概念の色割り当てを正とする。新しい UI を足すときもこの表に従う（勝手に色を増やさない）。
+マップのピン・チップ・バッジは以下の 5 概念の色割り当てを正とする。新しい UI を足すときもこの表に従う（勝手に色を増やさない）。
 
 | 概念 | 色 | 使用箇所 |
 |------|----|---------|
@@ -43,6 +43,7 @@ CoffeeVision のアクセントカラーは **コーヒー由来のブラウン�
 | 保存済み（行きたい） | `Color.indigo` | savedCafePin、保存ボタン / バッジ |
 | 好み一致 | `Color.pink` | recommendedCafePin、「好み一致」チップ（`TagChip` の `tint: .pink`）、`RecommendedCafeListSheet`（**`accentColor` を「好み」の意味で使わない**） |
 | 検索結果 | `Color.blue` | searchResultPin、検索 UI |
+| おすすめ（キュレーション、フェーズ 19） | `Color.orange`（システムカラー） | curatedCafePin。Apple 周辺の低強調グレーピンと**同じアイコン（`cup.and.saucer.fill`）を一回り大きく（28 → 34pt）+ 高彩度**にした Google Maps 風 POI 強調。表示は Apple 周辺ピンと同じズームゲート（可視半径 3000m 以内）でズームイン時のみ。当初の burnt orange（黒 25% mix）は訪問済みの茶と誤認されたため素の orange に改訂（implementation_note 2026-07-18） |
 
 共通チップ部品は `Components/TagChip.swift`（インタラクティブ `TagChip` + 凡例用 `TagLegendChip`）。画面ローカルにチップを再実装しない。`TagLegendChip` は 2026-07-16 の「好み一致」チップのタップ対応で production 上の使用箇所がゼロになった（凡例が必要になったら再利用する。次に触るタイミングで用途が生まれていなければ削除してよい）。
 

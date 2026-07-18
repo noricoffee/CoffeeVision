@@ -47,7 +47,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/coffeevision-service-account.json node s
 - **定期リフレッシュ**: Places 規約のキャッシュ規定（placeId 以外は 30 日）対応として、generate → seed を定期的に再実行してデータを更新する運用（`updatedAt` で最終シード日時を確認できる）
 - 選定は 2 段構成: **基準上位**（評価 4.4 / レビュー 100 件以上、上限 = 東京 100 / 他県 30）+ **人気枠**（評価 3.7 / レビュー 500 件以上、上限の枠外で全件追加）。上限・エリアは `generate-curated-cafes.mjs` の `PREFECTURES` 定数。東京以外を追加する際は該当県に `subAreas`（主要エリア）を定義してカバレッジを確保する
 - レビューで除外確定した店・ブランド（コンセプト系 / 大手チェーン等）は同スクリプトの `EXCLUDED_NAME_KEYWORDS` に追記する（再生成・定期リフレッシュでの再混入防止）
-- 投入後の確認: マップを東京に移動しておすすめピン（amber の star ピン）が出ること。アプリはメモリキャッシュ（one-shot get）のため、投入後はアプリを再起動する
+- 投入後の確認: マップを東京に移動しておすすめピン（burnt orange の大きめカフェピン）が出ること。アプリはメモリキャッシュ（one-shot get）のため、投入後はアプリを再起動する
 
 ---
 

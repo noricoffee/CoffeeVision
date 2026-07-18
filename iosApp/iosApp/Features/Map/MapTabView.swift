@@ -654,7 +654,7 @@ struct MapTabView: View {
                     }
                 }
 
-                // おすすめカフェ（curated / amber + star.fill）ピン（フェーズ 19）。
+                // おすすめカフェ（curated / burnt orange + cup.and.saucer.fill）ピン（フェーズ 19）。
                 // Google Maps の POI 強調のように常時表示（トグルなし）。
                 // 同一 placeId が訪問済み / 保存済み / 検索結果ピンと競合する場合はそちらを優先して除外する
                 // （優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）。表示切替チップの状態に
@@ -1423,19 +1423,25 @@ struct MapTabView: View {
         )
     }
 
-    /// おすすめカフェ（curated）ピン（amber/orange + star.fill。フェーズ 19）。
+    /// おすすめカフェ（curated）ピン（burnt orange + cup.and.saucer.fill。フェーズ 19 意匠変更）。
     ///
-    /// Google Maps の POI 強調のような常時表示ピン。既存 5 色（accentColor / pink / indigo / blue /
-    /// secondaryLabel）と被らない amber 系を採用し、意味ピン（34〜38pt）と Apple 周辺ピン（28pt）の
-    /// 中間サイズ（30pt）+ 白フチ + 影で常時目立たせる。トグルなし（常時表示）。
+    /// Google Maps の「人気 POI 強調」表現に寄せ、Apple 周辺ピン（`appleNearbyCafePin`）と
+    /// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、サイズ（34pt。Apple 周辺ピンの
+    /// 28pt よりひとまわり大きい）と色の濃さ・彩度だけで「同じカフェだが特に推されている」ことを
+    /// 表現する。色は既存 5 色（accentColor / pink / indigo / blue / secondaryLabel）と被らない
+    /// burnt orange（システムカラー `Color.orange` を黒側にミックスして濃くした色。手法は
+    /// `AnalysisView` のレーダーチャート配色と同じ `mix(with:by:)` パターンを踏襲）。
+    /// トグルなし（常時表示）。
     private func curatedCafePin(cafe: CuratedCafe) -> some View {
-        ZStack {
+        let burntOrange = Color.orange.mix(with: .black, by: 0.25)
+
+        return ZStack {
             Circle()
-                .fill(Color.orange)
-                .frame(width: 30, height: 30)
+                .fill(burntOrange)
+                .frame(width: 34, height: 34)
                 .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
-                .shadow(color: Color.orange.opacity(0.4), radius: 4, x: 0, y: 2)
-            Image(systemName: "star.fill")
+                .shadow(color: burntOrange.opacity(0.5), radius: 4, x: 0, y: 2)
+            Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)
                 .foregroundStyle(.white)
         }

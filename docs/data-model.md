@@ -553,7 +553,7 @@ data class SavedCafe(
 
 ## 1.10 CuratedCafe（都道府県別おすすめカフェ / フェーズ 19）
 
-> サービス管理のキュレーション済みおすすめカフェ。マップに専用ピン（amber + star、トグルなし常時表示）で強調する。既存の `RecommendedCafe`（§1.7 = ユーザーの味覚プロファイル好み一致）とは**別概念**なので命名を curated で分離。
+> サービス管理のキュレーション済みおすすめカフェ。マップに専用ピン（通常カフェピンと同アイコンの拡大 + burnt orange 濃色、トグルなし常時表示 = Google Maps 風 POI 強調）で強調する。既存の `RecommendedCafe`（§1.7 = ユーザーの味覚プロファイル好み一致）とは**別概念**なので命名を curated で分離。
 
 **配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/CuratedCafe.kt`
 

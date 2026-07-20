@@ -681,3 +681,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: SwiftUI ViewBuilder 内で「関係なさそうな外側の KeyPath / ForEach」のエラーが突然出たら、外側を疑う前に**直近で追加した多分岐の let 代入を三項演算子化して切り分ける**。エラー位置を信用しない
 - **発生源**: マップ「好み一致」チップのタップ対応（2026-07-16、ios-engineer）。再現条件の詳細はエージェントメモリ `ios-engineer/xcodebuild-verification.md`
 - **横展開点検（2026-07-16）**: この型はコンパイルエラーとして顕在化するため、ビルド green な現状に潜在該当は存在し得ない（override 無し xcodebuild BUILD SUCCEEDED を親確認済み）。予防観点で `grep -rn "= if " iosApp/iosApp --include="*.swift"`（if 式による let 代入）→ 0 件。**該当なし**
+
+## 2026-07-20
+
+### Xcode プロジェクトの Release 用ビルド設定に Debug と同じ `CODE_SIGN_IDENTITY = "Apple Development"` がハードコードされていると、CI の archive が証明書上限で失敗する。1 回目の対処（command-line 上書き）は Automatic signing や SPM 依存ターゲットと衝突しさらに悪化させた
+
+- **症状**: `release-testflight.yml`（cloud signing、`-allowProvisioningUpdates`）の archive が「Choose a certificate to revoke. Your account has reached the maximum number of certificates.」で失敗。使い捨て CI ランナーごとに Development 証明書を新規発行し続けたことが原因と判断し、1 回目の対処として `xcodebuild archive` に `CODE_SIGN_IDENTITY="Apple Distribution"` を command-line で追加したところ、**別のエラーに変わって再発**：iosApp ターゲット（Automatic signing）とは「conflicting provisioning settings」で衝突し、さらに SPM 依存の全パッケージターゲット（Firebase / gRPC 等、`DEVELOPMENT_TEAM` 未設定）に上書きが伝播して「requires a development team」を大量発生させた
+- **原因の構造**: 根本原因は `project.pbxproj` の iosApp ターゲット **Release** 用ビルド設定に `CODE_SIGN_IDENTITY = "Apple Development"` が Debug と同じ値でハードコードされていたこと（Release/Archive でも Development 証明書を要求 → 使い捨てランナーごとに新規発行され上限到達）。1 回目の対処は症状（証明書上限）から直接 command-line 引数に飛びついたが、`xcodebuild` の command-line ビルド設定上書きは**ビルド対象の全ターゲットにグローバル適用される**（メインアプリだけでなく SPM 依存パッケージも含む）ことを見落とし、Automatic signing のターゲットに対する明示指定という新たな衝突を生んだ。「症状に対する最短の当て方」ではなく「値がどこでどう決まっているか」を先に特定すべきだった
+- **修正パターン**: command-line 上書きは撤回し、`project.pbxproj` の **Release 設定のみ** `CODE_SIGN_IDENTITY` を `"Apple Distribution"` に変更（Debug はそのまま `"Apple Development"`）。設定はビルド設定の階層構造（ターゲット別 × Debug/Release 別の `XCBuildConfiguration` ブロック、`XCConfigurationList` で紐付け）を `grep -n "buildConfigurationList\|isa = PBXNativeTarget\|isa = PBXProject"` で辿って正しいブロックを特定してから直接修正した
+- **教訓**: CI ビルドの署名エラーは、command-line 引数での即席上書きではなく、**まず設定がプロジェクトファイルのどのブロック（ターゲット × Debug/Release）に属するかを特定してから、その箇所を直接修正する**。command-line でのビルド設定上書きはビルド対象の全ターゲット（依存パッケージ含む）に及ぶことを忘れない。1 回目の対処でエラーメッセージが変わった＝別の問題を踏んだ signal であり、同じ系統（command-line 上書きの微調整）を続けず、対処の層を変える
+- **発生源**: `release-testflight.yml` archive 失敗の修正（2026-07-18〜20、親が直接対応）。コミット: c473cf7（誤った command-line 上書き）→ 7695687（撤回 + pbxproj 側の正しい修正）
+- **横展開点検（2026-07-20）**: ① `grep -rn "CODE_SIGN_IDENTITY\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE" .github/workflows/` → 上書きの残存なし。② `grep -n "CODE_SIGN_IDENTITY\|name = Debug\|name = Release" iosApp/iosApp.xcodeproj/project.pbxproj` → `Apple Distribution` は Release ブロック、`Apple Development` は Debug ブロックに正しく対応。③ `find . -name "*.xcodeproj"` → プロジェクトは `iosApp.xcodeproj` の 1 つのみ（他ターゲット・extension 無し）。**該当なし**

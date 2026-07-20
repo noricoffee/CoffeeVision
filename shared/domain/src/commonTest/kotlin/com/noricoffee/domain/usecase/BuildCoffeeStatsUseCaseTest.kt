@@ -93,6 +93,7 @@ class BuildCoffeeStatsUseCaseTest {
         assertNull(stats.favoriteSignals.bestBrewMethod)
         assertNull(stats.favoriteSignals.bestOrigin)
         assertNull(stats.favoriteSignals.bestRoastLevel)
+        assertNull(stats.favoriteSignals.bestProcessing)
         assertNull(stats.favoriteSignals.dominantTastingAxis)
         assertEquals(3, stats.favoriteSignals.minSampleSize)
         // tastingAverages は全 null・ratedCount = 0
@@ -575,6 +576,7 @@ class BuildCoffeeStatsUseCaseTest {
         assertNull(stats.favoriteSignals.bestBrewMethod)
         assertNull(stats.favoriteSignals.bestOrigin)
         assertNull(stats.favoriteSignals.bestRoastLevel)
+        assertNull(stats.favoriteSignals.bestProcessing)
         assertNull(stats.favoriteSignals.dominantTastingAxis)
     }
 
@@ -710,6 +712,30 @@ class BuildCoffeeStatsUseCaseTest {
 
         assertNotNull(stats.favoriteSignals.bestRoastLevel)
         assertEquals("Light", stats.favoriteSignals.bestRoastLevel!!.label)
+    }
+
+    @Test
+    fun favoriteSignals_bestProcessing_nullProcessingIsExcluded_symmetricWithRoastLevel() {
+        // processing=null のレコードは bestProcessing の集計から除外（bestRoastLevel と対称ロジック）
+        // Natural n=10, null processing n=10（集計対象外）
+        // globalMean = (4.5×10 + 3.0×10) / 20 = 3.75
+        // globalStd = 0.75
+        // Natural: mean=4.5, n=10, zThreshold = 2.0 * 0.75 / sqrt(10) ≈ 0.474
+        //   mean - globalMean = 0.75 > 0.474 → z ゲート通過
+        // shrunk(Natural, n=10) = (10×4.5 + 5×3.75) / 15 = 4.25
+        //   shrunkMean - globalMean = 0.50 > 0.20(δ) → 採用
+        val records = (1..10).map { i ->
+            record("r-natural-$i", rating = 4.5, processing = ProcessingMethod.Natural)
+        } + (1..10).map { i ->
+            record("r-null-$i", rating = 3.0, processing = null)
+        }
+
+        val stats = useCase(records)
+
+        assertNotNull(stats.favoriteSignals.bestProcessing)
+        assertEquals("Natural", stats.favoriteSignals.bestProcessing!!.label)
+        assertEquals(10, stats.favoriteSignals.bestProcessing!!.count)
+        assertEquals(4.5, stats.favoriteSignals.bestProcessing!!.averageRating)
     }
 
     @Test

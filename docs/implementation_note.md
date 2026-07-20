@@ -1029,3 +1029,18 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - 経緯: cloud signing（Automatic signing + ASC API キー）は署名用の秘密鍵をランナーに保持しないため、GitHub-hosted の使い捨てランナーでは実行のたびに新規の Development 証明書 + 鍵ペアを発行する。これがアカウントの証明書上限到達の直接原因
 - トレードオフ: p8 のみを維持する場合、証明書はいずれ再び上限に達し得る。発生時は developer.apple.com で不要な Development 証明書を手動 revoke する運用が必要（p12 永続化なら鍵を使い回すためこの再発自体を防げるが、Apple ID を使った手元でのキー作成・エクスポート作業が追加で必要になる）
 - 判断: リリース頻度が高くない前提で、追加の秘密情報管理（p12 の作成・ローテーション・Secrets 管理）を避け、上限到達時の手動 revoke で対応する運用を選択
+
+### 2026-07-20: 好み一致に精製方法軸を追加（3→4 軸）+ ダミーデータ人格再設計
+
+- 領域: KMP + iOS
+- 関連: `FavoriteSignals` / `PreferenceMatchAxis` / `ObserveTasteMatchedCafesUseCase` / `BuildCoffeeStatsUseCase` / `DummyCoffeeData`、`AnalysisView.swift`（好みの傾向カード）、`MapTabView.swift`、data-model.md §1.6/§1.7、tasks.md「好み一致の作り込み（2026-07-20 起票）」
+
+「好み一致」（`RecommendedCafe`）のマッチ軸を **産地 / 焙煎度 / 抽出方法の 3 軸 → + 精製方法の 4 軸**に拡張。あわせて開発用ダミーデータを人格中心に再設計した。
+
+- **なぜテイスティングを外し精製方法を選んだか**: ユーザーは当初「マッチ軸を増やす」を選択。テイスティング 5 要素は `dominantTastingAxis`（評価との相関）として集計済みだが、これは連続値の相関であり「この 1 杯がその軸に一致」という per-record の categorical 一致に変換できない（理由表示も曖昧になる）。一方、精製方法は既存 3 軸と**完全対称**（`selectBestCategory` の再利用のみ・新定数なし）で低リスク。よって今回は精製方法のみ採用、テイスティング軸一致は別途とした。
+- **なぜダミーを「焙煎度しか一致しない」状態から人格再設計したか**: 旧ダミー 30 件は「全グラフが映えるよう全 enum に分散」設計で、好み信号が立つ条件（特定カテゴリへの高評価集中）と逆方向。実測 `globalMean=4.0 / globalStd≈0.58` で 2σ の z ゲート（`CATEGORY_Z=2.0`）に産地・抽出が届かず、Light 焙煎だけが信号化していた（ユーザー観測の真因）。ゲートは B-1d の winner's curse 対策で意図的に厳しく、緩めると偽陽性が戻るため**データ側で解決**した。
+- **人格の選定（grilling で確定）**: 王道の喫茶店ブレンド像 = 産地ブラジル（信号勝ち）/ 焙煎 City / 抽出 NelDrip / 精製 Natural。`FavoriteSignals.bestOrigin` は**単一勝者しか出せない**制約があるため、ユーザーの「ケニア・ブラジル両方好き」からブラジルを勝たせ、ケニアは高評価だが件数・集中度で負ける「二番手」として配置。
+- **デモ設計のトレードオフ**: 好みクラスタ 6 件（ブラジル × City × NelDrip × Natural を同一レコードに同居、rating 4.5〜5.0）を cafe1/2/3 に 2 件ずつ分散。1 レコードで 4 軸すべてを兼ねるため、**3 カフェすべてが 4 軸完全一致ピン**になる。「1 カフェだけ完全一致」よりデモ映えを優先した（`DummyCoffeeDataPersonaTest` で 4 軸信号化 + 4 軸一致カフェ ≥1 を固定 = 将来ダミーを触っても demo が壊れない）。
+- **横断点検で拾った回帰**: `AnalysisViewModel.FavoriteSignals.hasAnySignal()`（分析空状態の readiness 判定）が `bestProcessing` を見落とすと「精製のみ信号あり」の場合に「データ不足」表示のまま固まる。kmp-engineer が grep 点検で発見・修正（他の `best*` 列挙箇所に見落としなしを確認）。
+- **iOS 側の bridge 注意点**: SKIE はデフォルト引数を Swift に出さないため、`FavoriteSignals` に `bestProcessing` を足すと Swift の init が必須引数化し既存の構築 2 箇所がコンパイルエラーになる（`AnalysisView` プレビュー + `PreviewSamples`）。SKIE 生成 enum に `.processing` が乗るため網羅 switch（`preferenceMatchAxisLabel` / `axisIcon`）も追随必須。精製方法はアプリ内で enum 名を素表示（ローカライズ辞書は分析カードのみ）で、マップ理由表示は既存の焙煎度と同じ扱い。軸アイコンは `leaf.fill`。
+- **残課題（別タスク）**: `CoffeeStats.byProcessing`（精製方法別集計）は既存だが分析タブに棒グラフ表示がない（ios-engineer の申し送り）。要件で求められれば別 dispatch。

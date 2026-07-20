@@ -19,3 +19,5 @@
 - [commonTest 新設時の手順](commontest_first_setup_in_feature_module.md) — build.gradle.kts の commonTest 依存追加漏れ（kotlinx.datetime 等）/ sandbox で assembleXCFramework は compile までは成功し link だけ xcodebuild 不在で失敗するのが正常
 - [タブ常駐 VM の onAppear 冪等化パターン](tab_resident_vm_onappear_idempotency.md) — 無引数 onAppear + タブ常駐 VM の再購読ガード / 同値 emit スキップ / Job 未実行キャンセルによるテストの罠
 - [Repository 1 段構成（グローバル read-only）の追加手順](repository_1stage_global_readonly_addition.md) — BeanProfile 型（SQLDelight なし・one-shot get + メモリキャッシュ）の新規 Repository（例: CuratedCafe）を足すときのファイル一覧。`.h`（Obj-C ヘッダ）での Swift API 裏取り方法
+- [FavoriteSignals 対称軸追加チェックリスト](favoritesignals_symmetric_axis_addition.md) — bestRoastLevel 等と同型の新カテゴリ軸（例 bestProcessing）追加で触る4レイヤー。AnalysisViewModel の `hasAnySignal()` 見落とし注意
+- [DummyCoffeeData 人格再設計の統計設計](dummydata_persona_redesign.md) — 単一人格中心データにするときの z ゲート通過設計手順 + printline 実測検算のやり方 + commonTest の kotlinx.datetime 継承の実際

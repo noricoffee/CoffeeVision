@@ -20,16 +20,29 @@ import kotlinx.datetime.todayIn
  * - **LocalDB 限定**: Firestore には流さない（dev データで本番を汚染しない）
  * - **DEBUG 専用**: iOS 側 Scheme の環境変数 `SEED_DUMMY_DATA=1` で起動した場合のみ使用する
  *
- * ## データの幅（分析タブの全グラフが映えるよう分散）
+ * ## 人格設計（好み一致デモが機能する固定ペルソナ）
  *
- * - 産地: Ethiopia / Kenya / Colombia / Guatemala / Brazil / Costa Rica / Panama /
- *         Indonesia / Rwanda / Honduras を複数回登場させる
- * - 抽出方法: [BrewMethod] 全 8 enum を分散
- * - 焙煎度: [RoastLevel] 全 8 enum + null 数件
- * - 精製方法: [ProcessingMethod] 全 5 enum + null 数件
- * - 評価: 3.0〜5.0 中心（0.5 刻み）+ null（未評価）を 2 件混入
- * - 日付: 今日から逆算して直近 12 ヶ月に分散
- * - カフェ: 約 2/3 に固定ダミーカフェ（5 件）を割り当て / 約 1/3 は cafe = null（セルフ抽出）
+ * 「王道の喫茶店ブレンド好き」という 1 人格を軸に構成する。分析タブの好み判定
+ * （[com.noricoffee.domain.usecase.BuildCoffeeStatsUseCase.buildFavoriteSignals]、経験ベイズ収縮 + n連動 z ゲート）と
+ * カフェ一致（[com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase]）が
+ * **4 軸すべて（産地 / 焙煎度 / 抽出方法 / 精製方法）**で確実に信号化するよう、以下の 3 層で構成する:
+ *
+ * 1. **好みクラスタ（6 件、評価 4.5〜5.0）**: 産地=ブラジル・焙煎度=City・抽出=ネルドリップ・精製=ナチュラル
+ *    を核レコード全件が同時に満たす。cafe1 / cafe2 / cafe3 に 2 件ずつ分散し、3 カフェすべてが
+ *    4 軸すべての `PreferenceMatchAxis` で一致する「好み一致ピン」になる
+ * 2. **二番手ケニア（4 件、評価 3.5〜4.0）**: 産地はケニアだが評価・件数ともブラジルに及ばず、
+ *    産地の好み信号はブラジルが勝つ（好きだが二番手、という設計上の対比）
+ * 3. **その他（18 件、評価 3.0〜3.5）**: 産地 8 種・焙煎度 7 種（+ null）・抽出方法 7 種・精製方法 4 種を
+ *    分散させ、全体平均を約 3.6 まで下げつつ分析タブの各グラフ（産地ランキング・月次推移・カフェ別等）
+ *    が退化しないだけの幅を残す。好みクラスタの 4 属性（ブラジル / City / ネルドリップ / ナチュラル）は
+ *    信号のクリーンさを保つためこの層では使わない
+ *
+ * ## エッジケースの網羅
+ *
+ * - 未評価（`rating = null`）: 2 件
+ * - 焙煎度 null: 3 件
+ * - セルフ抽出（`cafe = null`）: 約 1/3（11/30）。ただし**好みクラスタの核レコードは全件カフェ付き**
+ *   （セルフ抽出はカフェ一致の対象外のため）
  */
 object DummyCoffeeData {
 
@@ -67,7 +80,7 @@ object DummyCoffeeData {
         }
     }
 
-    // ---- ダミーカフェ（同一カフェを複数レコードに使い回し、topCafes が出るよう設計）----
+    // ---- ダミーカフェ（同一カフェを複数レコードに使い回し、topCafes / 好み一致ピンが出るよう設計）----
 
     private val cafe1 = Cafe(
         placeId = "dummy-place-001",
@@ -138,417 +151,420 @@ object DummyCoffeeData {
     )
 
     private val rawData: List<RawData> = listOf(
-        // 001: Ethiopia / HandDrip / Light / cafe1 — 全要素設定
+        // ============================================================
+        // 好みクラスタ（6件）: ブラジル × City × ネルドリップ × ナチュラル
+        // 全 4 軸を同時に満たす核レコード。cafe1/cafe2/cafe3 に 2 件ずつ分散。
+        // ============================================================
+        // 001
         RawData(
-            name = "エチオピア イルガチェフェ G1",
+            name = "ブラジル セラード ナチュラル ネルドリップ",
             cafe = cafe1,
             rating = 4.5,
-            notes = "ジャスミンのような花の香りと明るいベリー系の酸味。余韻が長い。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Ethiopia",
-            variety = "Heirloom",
+            notes = "香ばしいナッツとカカオ。ネルの丸みでコクが引き立つ、まさに喫茶店の味。",
+            brewMethod = BrewMethod.NelDrip,
+            origin = "Brazil",
+            variety = "Mundo Novo",
             processing = ProcessingMethod.Natural,
-            roastLevel = RoastLevel.Light,
-            cup = null,
-            tasting = TastingScores(sweetness = 8, body = 4, acidity = 9, flavor = 9, aftertaste = 8),
+            roastLevel = RoastLevel.City,
+            cup = "ネル生地",
+            tasting = TastingScores(sweetness = 8, body = 8, acidity = 3, flavor = 7, aftertaste = 7),
         ),
-        // 002: Kenya / Espresso / Medium / cafe2 — 全要素設定
+        // 002
         RawData(
-            name = "ケニア カグモイニ AA",
+            name = "ブラジル モジアナ ナチュラル",
+            cafe = cafe1,
+            rating = 5.0,
+            notes = "焦がしキャラメルのような甘香ばしさ。何杯でも飲める安心感のあるバランス。",
+            brewMethod = BrewMethod.NelDrip,
+            origin = "Brazil",
+            variety = "Catuai",
+            processing = ProcessingMethod.Natural,
+            roastLevel = RoastLevel.City,
+            cup = "ネル生地",
+            tasting = TastingScores(sweetness = 9, body = 8, acidity = 3, flavor = 8, aftertaste = 8),
+        ),
+        // 003
+        RawData(
+            name = "ブラジル イパネマ ダイヤモンドマウンテン",
             cafe = cafe2,
-            rating = 4.0,
-            notes = "ブラックカラントの凝縮感と力強い酸。エスプレッソでも個性が際立つ。",
-            brewMethod = BrewMethod.Espresso,
+            rating = 4.5,
+            notes = "ミルクチョコとローストナッツ。ネルドリップの質感がしっとり心地よい。",
+            brewMethod = BrewMethod.NelDrip,
+            origin = "Brazil",
+            variety = "Yellow Bourbon",
+            processing = ProcessingMethod.Natural,
+            roastLevel = RoastLevel.City,
+            cup = "ネル生地",
+        ),
+        // 004
+        RawData(
+            name = "ブラジル カルモデミナス ナチュラル",
+            cafe = cafe2,
+            rating = 5.0,
+            notes = "王道の喫茶店ブレンドそのもの。甘さと苦味のバランスが完璧で毎回頼みたくなる。",
+            brewMethod = BrewMethod.NelDrip,
+            origin = "Brazil",
+            variety = "Icatu",
+            processing = ProcessingMethod.Natural,
+            roastLevel = RoastLevel.City,
+            cup = "ネル生地",
+            tasting = TastingScores(sweetness = 9, body = 9, acidity = 2, flavor = 8, aftertaste = 9),
+        ),
+        // 005
+        RawData(
+            name = "ブラジル スルデミナス ピーベリー",
+            cafe = cafe3,
+            rating = 4.5,
+            notes = "ピーベリーらしい凝縮感。ネルの油脂感がコクを底上げしてくれる。",
+            brewMethod = BrewMethod.NelDrip,
+            origin = "Brazil",
+            variety = "Peaberry",
+            processing = ProcessingMethod.Natural,
+            roastLevel = RoastLevel.City,
+            cup = "ネル生地",
+        ),
+        // 006
+        RawData(
+            name = "ブラジル ショコラ農園 ナチュラル",
+            cafe = cafe3,
+            rating = 4.5,
+            notes = "ダークチョコレートの余韻。中煎りらしい香ばしさが鼻に抜ける。",
+            brewMethod = BrewMethod.NelDrip,
+            origin = "Brazil",
+            variety = "Acaia",
+            processing = ProcessingMethod.Natural,
+            roastLevel = RoastLevel.City,
+            cup = "ネル生地",
+            tasting = TastingScores(sweetness = 8, body = 7, acidity = 3, flavor = 7, aftertaste = 7),
+        ),
+
+        // ============================================================
+        // 二番手ケニア（4件）: 好きだが評価・件数でブラジルに次ぐ
+        // ============================================================
+        // 007
+        RawData(
+            name = "ケニア キリニャガ ウォッシュド",
+            cafe = cafe4,
+            rating = 3.5,
+            notes = "グレープフルーツのような明るい酸。ブラジルの丸さとはまた違う魅力。",
+            brewMethod = BrewMethod.HandDrip,
             origin = "Kenya",
             variety = "SL28",
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
-            tasting = TastingScores(sweetness = 5, body = 7, acidity = 8, flavor = 7, aftertaste = 6),
         ),
-        // 003: Colombia / HandDrip / City / null(セルフ抽出) — tasting あり（5 要素）
+        // 008
         RawData(
-            name = "コロンビア ウイラ ウォッシュド",
-            cafe = null,
-            rating = 3.5,
-            notes = "マイルドなチョコレート感。ガトーショコラを思わせる丸さ。自宅抽出。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Colombia",
-            variety = null,
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.City,
-            cup = null,
-            tasting = TastingScores(sweetness = 7, body = 8, acidity = 4, flavor = 6, aftertaste = 5),
-        ),
-        // 004: Guatemala / FrenchPress / FullCity / cafe3 — 全要素設定
-        RawData(
-            name = "グアテマラ アンティグア SHB",
-            cafe = cafe3,
-            rating = 4.5,
-            notes = "ブラウンシュガーとスモーキーなコク。フレンチプレスの油脂感と相性抜群。",
-            brewMethod = BrewMethod.FrenchPress,
-            origin = "Guatemala",
-            variety = null,
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.FullCity,
-            cup = "波佐見焼",
-            tasting = TastingScores(sweetness = 6, body = 9, acidity = 4, flavor = 7, aftertaste = 7),
-        ),
-        // 005: Brazil / Espresso / French / cafe4 — tasting 未設定（全 null）
-        RawData(
-            name = "ブラジル セラード ナチュラル",
+            name = "ケニア ニエリ AA",
             cafe = cafe4,
-            rating = 3.0,
-            notes = "ナッツとチョコレートの王道ブラジル。エスプレッソのベースに最適。",
-            brewMethod = BrewMethod.Espresso,
-            origin = "Brazil",
-            variety = "Yellow Bourbon",
-            processing = ProcessingMethod.Natural,
-            roastLevel = RoastLevel.French,
-            cup = null,
-        ),
-        // 006: Ethiopia / AeroPress / Cinnamon / cafe1 — 全要素設定（高評価）
-        RawData(
-            name = "エチオピア グジ ハニー",
-            cafe = cafe1,
-            rating = 5.0,
-            notes = "ピーチとアプリコットの甘い香り。シナモンローストでフルーツ感が全開。これは最高傑作。",
-            brewMethod = BrewMethod.AeroPress,
-            origin = "Ethiopia",
-            variety = "Heirloom",
-            processing = ProcessingMethod.Honey,
-            roastLevel = RoastLevel.Cinnamon,
-            cup = null,
-            tasting = TastingScores(sweetness = 9, body = 5, acidity = 7, flavor = 10, aftertaste = 9),
-        ),
-        // 007: Costa Rica / NelDrip / Light / cafe5 — tasting あり（5 要素）
-        RawData(
-            name = "コスタリカ タラス ホワイトハニー",
-            cafe = cafe5,
             rating = 4.0,
-            notes = "柔らかな甘さとシルキーな口当たり。ネルドリップの丸みと好相性。",
-            brewMethod = BrewMethod.NelDrip,
-            origin = "Costa Rica",
-            variety = null,
-            processing = ProcessingMethod.Honey,
-            roastLevel = RoastLevel.Light,
-            cup = null,
-            tasting = TastingScores(sweetness = 7, body = 5, acidity = 5, flavor = 8, aftertaste = 7),
-        ),
-        // 008: Panama / HandDrip / Light / null(セルフ抽出) — 全要素設定（高評価）
-        RawData(
-            name = "パナマ ゲイシャ ボケテ",
-            cafe = null,
-            rating = 5.0,
-            notes = "ベルガモットとジャスミンの芳香。まるでティーのように繊細。自宅抽出だが最高品質。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Panama",
-            variety = "Geisha",
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.Light,
-            cup = "ノリタケ",
-            brewRecipe = "豆 18g / 湯 220ml / 93℃ / 3:00",
-            tasting = TastingScores(sweetness = 7, body = 3, acidity = 6, flavor = 10, aftertaste = 9),
-        ),
-        // 009: Indonesia / Syphon / High / cafe2 — tasting 未設定（全 null）
-        RawData(
-            name = "インドネシア マンデリン G1",
-            cafe = cafe2,
-            rating = 3.5,
-            notes = "アーシーなコクと独特のハーブ感。ゆっくり飲むほど深みが増す。",
-            brewMethod = BrewMethod.Syphon,
-            origin = "Indonesia",
-            variety = null,
-            processing = ProcessingMethod.Other,
-            roastLevel = RoastLevel.High,
-            cup = null,
-        ),
-        // 010: Rwanda / ColdBrew / Medium / cafe3 — 全要素設定
-        RawData(
-            name = "ルワンダ ニャマシェケ ウォッシュド",
-            cafe = cafe3,
-            rating = 4.0,
-            notes = "ストーンフルーツとブラックティー。コールドブリューで甘さが際立つ。",
-            brewMethod = BrewMethod.ColdBrew,
-            origin = "Rwanda",
-            variety = null,
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.Medium,
-            cup = null,
-            tasting = TastingScores(sweetness = 8, body = 6, acidity = 5, flavor = 7, aftertaste = 6),
-        ),
-        // 011: Honduras / HandDrip / City / cafe4 — tasting null
-        RawData(
-            name = "ホンジュラス サンタバルバラ SHG",
-            cafe = cafe4,
-            rating = 3.5,
-            notes = "バランスよくマイルド。初めてコーヒーを飲む人にも勧めやすい味わい。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Honduras",
-            variety = null,
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.City,
-            cup = null,
-        ),
-        // 012: Kenya / HandDrip / Light / cafe5 — 全要素設定
-        RawData(
-            name = "ケニア キリニャガ ウォッシュド",
-            cafe = cafe5,
-            rating = 4.5,
-            notes = "グレープフルーツとレッドカラント。ケニアらしい明快な酸が気持ちいい。",
+            notes = "ブラックカラントの凝縮感。酸が好きな日はこれを選びたくなる。",
             brewMethod = BrewMethod.HandDrip,
             origin = "Kenya",
-            variety = "Batian",
+            variety = "SL34",
             processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.Light,
+            roastLevel = RoastLevel.Medium,
             cup = null,
-            tasting = TastingScores(sweetness = 6, body = 5, acidity = 9, flavor = 8, aftertaste = 7),
+            tasting = TastingScores(sweetness = 5, body = 6, acidity = 8, flavor = 7, aftertaste = 6),
         ),
-        // 013: Ethiopia / Espresso / Medium / cafe1 — 未評価（null）、tasting 未設定
+        // 009
         RawData(
-            name = "エチオピア シダマ ナチュラル",
-            cafe = cafe1,
-            rating = null,
-            notes = "まだメモが書けていない。いつか振り返ろう。",
-            brewMethod = BrewMethod.Espresso,
-            origin = "Ethiopia",
-            variety = null,
-            processing = ProcessingMethod.Natural,
+            name = "ケニア カグモイニ AA",
+            cafe = cafe5,
+            rating = 3.5,
+            notes = "力強い酸とベリー感。単体だと少し好みが分かれるかもしれない。",
+            brewMethod = BrewMethod.HandDrip,
+            origin = "Kenya",
+            variety = "SL28",
+            processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
         ),
-        // 014: Colombia / AeroPress / Cinnamon / null(セルフ抽出) — 全要素設定
+        // 010
         RawData(
-            name = "コロンビア エルパライソ アナエロビック",
-            cafe = null,
-            rating = 4.5,
-            notes = "アナエロビック特有の濃密なトロピカルフレーバー。桃とパイナップル。",
-            brewMethod = BrewMethod.AeroPress,
-            origin = "Colombia",
-            variety = "Castillo",
-            processing = ProcessingMethod.Anaerobic,
-            roastLevel = RoastLevel.Cinnamon,
-            cup = null,
-            tasting = TastingScores(sweetness = 9, body = 6, acidity = 6, flavor = 9, aftertaste = 8),
-        ),
-        // 015: Brazil / HandDrip / FullCity / cafe2 — tasting 未設定（全 null）
-        RawData(
-            name = "ブラジル カーモデミナス ボルボン",
-            cafe = cafe2,
-            rating = 3.0,
-            notes = "ヘーゼルナッツとダークチョコ。あと味にほのかな苦味が残る。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Brazil",
-            variety = "Bourbon",
-            processing = ProcessingMethod.Natural,
-            roastLevel = RoastLevel.FullCity,
-            cup = null,
-        ),
-        // 016: Guatemala / NelDrip / High / cafe3 — 全要素設定
-        RawData(
-            name = "グアテマラ フエゴ ブラックハニー",
-            cafe = cafe3,
-            rating = 4.0,
-            notes = "ドライフルーツとバタースコッチ。ネルドリップの甘みが引き立てる。",
-            brewMethod = BrewMethod.NelDrip,
-            origin = "Guatemala",
-            variety = null,
-            processing = ProcessingMethod.Honey,
-            roastLevel = RoastLevel.High,
-            cup = "有田焼",
-            tasting = TastingScores(sweetness = 7, body = 8, acidity = 4, flavor = 7, aftertaste = 6),
-        ),
-        // 017: Costa Rica / FrenchPress / Italian / cafe1 — tasting あり（5 要素）
-        RawData(
-            name = "コスタリカ ブルマス デル スルコ",
-            cafe = cafe1,
-            rating = 3.5,
-            notes = "フレンチローストの強い苦味とロースト感。深煎り好きには満足。",
-            brewMethod = BrewMethod.FrenchPress,
-            origin = "Costa Rica",
-            variety = null,
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.Italian,
-            cup = null,
-            tasting = TastingScores(sweetness = 4, body = 9, acidity = 3, flavor = 5, aftertaste = 4),
-        ),
-        // 018: Rwanda / HandDrip / null(roast) / null(cafe=セルフ) — tasting 未設定（全 null）
-        RawData(
-            name = "ルワンダ カロンビ ナチュラル",
+            name = "ケニア ルイル11 ウォッシュド",
             cafe = null,
             rating = 4.0,
-            notes = "ワイン的な発酵感とダークベリー。焙煎度表示なしのロット。",
+            notes = "自宅でハンドドリップ。トマトのような旨みのある珍しいロット。",
             brewMethod = BrewMethod.HandDrip,
-            origin = "Rwanda",
-            variety = null,
-            processing = ProcessingMethod.Natural,
-            roastLevel = null,
-            cup = null,
-            brewRecipe = "豆 15g / 湯 240ml / 90℃ / 2:45",
-        ),
-        // 019: Indonesia / HandDrip / City / cafe4 — 全要素設定
-        RawData(
-            name = "インドネシア アチェ ゲイシャ",
-            cafe = cafe4,
-            rating = 4.5,
-            notes = "インドネシアのテロワールにゲイシャの繊細さが融合。甘さと余韻が長い。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Indonesia",
-            variety = "Geisha",
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.City,
-            cup = null,
-            tasting = TastingScores(sweetness = 7, body = 7, acidity = 5, flavor = 8, aftertaste = 9),
-        ),
-        // 020: Kenya / ColdBrew / Medium / null(cafe=セルフ) — tasting null
-        RawData(
-            name = "ケニア ルイル11 コールドブリュー",
-            cafe = null,
-            rating = 3.5,
-            notes = "12時間水出し。ブラックカラントが冷えると甘みとして広がる。",
-            brewMethod = BrewMethod.ColdBrew,
             origin = "Kenya",
             variety = "Ruiru 11",
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
+            brewRecipe = "豆 16g / 湯 240ml / 92℃ / 2:30",
+            tasting = TastingScores(sweetness = 6, body = 6, acidity = 7, flavor = 7, aftertaste = 6),
         ),
-        // 021: Panama / Syphon / Light / cafe5 — 全要素設定（最高評価）
+
+        // ============================================================
+        // 未評価（2件）
+        // ============================================================
+        // 011
         RawData(
-            name = "パナマ エスメラルダ ゲイシャ",
-            cafe = cafe5,
-            rating = 5.0,
-            notes = "ティーライクでフローラル。サイフォンでの昇華が絶妙。記録に残しておくべき一杯。",
-            brewMethod = BrewMethod.Syphon,
-            origin = "Panama",
-            variety = "Geisha",
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.Light,
-            cup = "ウェッジウッド",
-            tasting = TastingScores(sweetness = 8, body = 4, acidity = 6, flavor = 10, aftertaste = 10),
-        ),
-        // 022: Ethiopia / HandDrip / null(roast) / cafe2 — 全要素設定
-        RawData(
-            name = "エチオピア コンガ ナチュラル",
-            cafe = cafe2,
-            rating = 4.0,
-            notes = "ブルーベリーとシトラス。焙煎度不明ロットだが口当たりは浅煎り系。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Ethiopia",
-            variety = null,
-            processing = ProcessingMethod.Natural,
-            roastLevel = null,
-            cup = null,
-            tasting = TastingScores(sweetness = 7, body = 4, acidity = 8, flavor = 8, aftertaste = 7),
-        ),
-        // 023: Honduras / Espresso / FullCity / cafe3 — tasting 未設定（全 null）
-        RawData(
-            name = "ホンジュラス ラス ラハス",
-            cafe = cafe3,
-            rating = 3.0,
-            notes = "クリーンでバランス型。エスプレッソのアフターテイストが心地よい。",
-            brewMethod = BrewMethod.Espresso,
-            origin = "Honduras",
-            variety = null,
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.FullCity,
-            cup = null,
-        ),
-        // 024: Colombia / HandDrip / Medium / null(cafe=セルフ) — 未評価（null）、tasting 未設定
-        RawData(
-            name = "コロンビア ナリーニョ スプレモ",
+            name = "ベトナム ロブスタ ダークロースト",
             cafe = null,
             rating = null,
-            notes = "サンプルとして購入。評価は後日。",
+            notes = "サンプルでもらったロット。まだ淹れて評価できていない。",
             brewMethod = BrewMethod.HandDrip,
+            origin = "Vietnam",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.Medium,
+            cup = null,
+        ),
+        // 012
+        RawData(
+            name = "コロンビア ナリーニョ スプレモ",
+            cafe = cafe2,
+            rating = null,
+            notes = "購入したばかり。今度ゆっくり淹れて記録する予定。",
+            brewMethod = BrewMethod.Espresso,
+            origin = "Colombia",
+            variety = null,
+            processing = null,
+            roastLevel = null,
+            cup = null,
+        ),
+
+        // ============================================================
+        // その他（18件）: 評価 3.0〜3.5。産地・焙煎度・抽出・精製を分散し
+        // 好みクラスタの 4 属性（ブラジル/City/ネルドリップ/ナチュラル）は使わない
+        // ============================================================
+        // 013
+        RawData(
+            name = "エチオピア イルガチェフェ G2 ウォッシュド",
+            cafe = cafe4,
+            rating = 3.5,
+            notes = "レモンティーのような軽やかな酸。すっきりした後味。",
+            brewMethod = BrewMethod.HandDrip,
+            origin = "Ethiopia",
+            variety = "Heirloom",
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.Light,
+            cup = null,
+        ),
+        // 014
+        RawData(
+            name = "エチオピア グジ ハニー",
+            cafe = cafe1,
+            rating = 3.0,
+            notes = "エスプレッソにすると香りが強すぎて少し扱いにくかった。",
+            brewMethod = BrewMethod.Espresso,
+            origin = "Ethiopia",
+            variety = null,
+            processing = ProcessingMethod.Honey,
+            roastLevel = RoastLevel.Cinnamon,
+            cup = null,
+        ),
+        // 015
+        RawData(
+            name = "エチオピア シダモ アナエロビック",
+            cafe = null,
+            rating = 3.5,
+            notes = "発酵感のあるトロピカルフレーバー。好みが分かれそうな個性派。",
+            brewMethod = BrewMethod.AeroPress,
+            origin = "Ethiopia",
+            variety = null,
+            processing = ProcessingMethod.Anaerobic,
+            roastLevel = null,
+            cup = null,
+        ),
+        // 016
+        RawData(
+            name = "コロンビア ウイラ ウォッシュド",
+            cafe = cafe2,
+            rating = 3.0,
+            notes = "マイルドでクセがない。日常使いにはちょうど良い。",
+            brewMethod = BrewMethod.FrenchPress,
             origin = "Colombia",
             variety = null,
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,
             cup = null,
         ),
-        // 025: Guatemala / AeroPress / City / cafe4 — 全要素設定
+        // 017
         RawData(
-            name = "グアテマラ エル インヘルト ウォッシュド",
-            cafe = cafe4,
-            rating = 4.0,
-            notes = "ミルクチョコとキャラメル。アエロプレスで甘さの輪郭がはっきりする。",
-            brewMethod = BrewMethod.AeroPress,
-            origin = "Guatemala",
-            variety = "Bourbon",
-            processing = ProcessingMethod.Washed,
-            roastLevel = RoastLevel.City,
-            cup = null,
-            tasting = TastingScores(sweetness = 8, body = 7, acidity = 4, flavor = 7, aftertaste = 6),
-        ),
-        // 026: Brazil / HandDrip / null(roast) / cafe1 — tasting あり（5 要素）
-        RawData(
-            name = "ブラジル イパネマ ディアモンド",
-            cafe = cafe1,
-            rating = 3.5,
-            notes = "焙煎度表記なし。ナッツとバター感、飲みやすいブラジル。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Brazil",
-            variety = null,
-            processing = ProcessingMethod.Natural,
-            roastLevel = null,
-            cup = null,
-            tasting = TastingScores(sweetness = 6, body = 7, acidity = 3, flavor = 6, aftertaste = 5),
-        ),
-        // 027: Indonesia / HandDrip / Italian / null(cafe=セルフ) — tasting 未設定（全 null）
-        RawData(
-            name = "インドネシア スラウェシ トラジャ",
+            name = "コロンビア トリマ ハニー",
             cafe = null,
             rating = 3.5,
-            notes = "深煎りのダークチョコとスパイシーな余韻。ブラックで楽しむ一杯。",
+            notes = "サイフォンで淹れると甘みが少し立つ。まずまずの満足感。",
+            brewMethod = BrewMethod.Syphon,
+            origin = "Colombia",
+            variety = null,
+            processing = ProcessingMethod.Honey,
+            roastLevel = RoastLevel.High,
+            cup = null,
+        ),
+        // 018
+        RawData(
+            name = "グアテマラ アンティグア コールドブリュー",
+            cafe = null,
+            rating = 3.0,
+            notes = "夏場に作った水出し。スモーキーさが冷えると少しぼやける。",
+            brewMethod = BrewMethod.ColdBrew,
+            origin = "Guatemala",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.FullCity,
+            cup = null,
+        ),
+        // 019
+        RawData(
+            name = "グアテマラ フエゴ アナエロビック",
+            cafe = cafe3,
+            rating = 3.5,
+            notes = "スパイシーで独特な発酵香。深煎りとの相性はまずまず。",
+            brewMethod = BrewMethod.Other,
+            origin = "Guatemala",
+            variety = null,
+            processing = ProcessingMethod.Anaerobic,
+            roastLevel = RoastLevel.French,
+            cup = null,
+        ),
+        // 020
+        RawData(
+            name = "コスタリカ タラス ホワイトハニー",
+            cafe = null,
+            rating = 3.0,
+            notes = "上品な甘さだが自宅の抽出だと少し薄くなってしまった。",
             brewMethod = BrewMethod.HandDrip,
+            origin = "Costa Rica",
+            variety = null,
+            processing = ProcessingMethod.Honey,
+            roastLevel = RoastLevel.Italian,
+            cup = null,
+            brewRecipe = "豆 14g / 湯 220ml / 90℃ / 2:15",
+        ),
+        // 021
+        RawData(
+            name = "コスタリカ ウエストバレー ウォッシュド",
+            cafe = null,
+            rating = 3.5,
+            notes = "バランス型で飲みやすい。特筆すべき個性は少なめ。",
+            brewMethod = BrewMethod.Espresso,
+            origin = "Costa Rica",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = null,
+            cup = null,
+        ),
+        // 022
+        RawData(
+            name = "パナマ ボケテ ウォッシュド",
+            cafe = cafe5,
+            rating = 3.0,
+            notes = "ゲイシャではない通常品種。悪くはないが特別感はない。",
+            brewMethod = BrewMethod.AeroPress,
+            origin = "Panama",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.Light,
+            cup = null,
+        ),
+        // 023
+        RawData(
+            name = "パナマ ドンパチ ハニー",
+            cafe = null,
+            rating = 3.5,
+            notes = "フレンチプレスでとろみのある口当たり。まあまあ好み。",
+            brewMethod = BrewMethod.FrenchPress,
+            origin = "Panama",
+            variety = null,
+            processing = ProcessingMethod.Honey,
+            roastLevel = null,
+            cup = null,
+        ),
+        // 024
+        RawData(
+            name = "インドネシア マンデリン G1",
+            cafe = cafe4,
+            rating = 3.0,
+            notes = "アーシーなコクだが少し土っぽさが強すぎた。",
+            brewMethod = BrewMethod.Syphon,
             origin = "Indonesia",
             variety = null,
             processing = ProcessingMethod.Other,
+            roastLevel = RoastLevel.Medium,
+            cup = null,
+        ),
+        // 025
+        RawData(
+            name = "インドネシア アチェ ウォッシュド",
+            cafe = null,
+            rating = 3.5,
+            notes = "水出しでハーブ感が和らいで飲みやすくなった。",
+            brewMethod = BrewMethod.ColdBrew,
+            origin = "Indonesia",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.High,
+            cup = null,
+        ),
+        // 026
+        RawData(
+            name = "ルワンダ ニャマシェケ ウォッシュド",
+            cafe = cafe1,
+            rating = 3.0,
+            notes = "ストーンフルーツ感はあるがやや薄め。次はもう少し粉量を増やしたい。",
+            brewMethod = BrewMethod.HandDrip,
+            origin = "Rwanda",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.Cinnamon,
+            cup = null,
+        ),
+        // 027
+        RawData(
+            name = "ルワンダ カロンビ ハニー",
+            cafe = null,
+            rating = 3.5,
+            notes = "ワイン的な発酵感。エスプレッソだと個性が少し強すぎるかもしれない。",
+            brewMethod = BrewMethod.Espresso,
+            origin = "Rwanda",
+            variety = null,
+            processing = ProcessingMethod.Honey,
+            roastLevel = RoastLevel.FullCity,
+            cup = null,
+        ),
+        // 028
+        RawData(
+            name = "ホンジュラス サンタバルバラ ウォッシュド",
+            cafe = cafe2,
+            rating = 3.0,
+            notes = "クリーンでバランス型。悪くはないが記憶に残りにくい。",
+            brewMethod = BrewMethod.AeroPress,
+            origin = "Honduras",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.French,
+            cup = null,
+        ),
+        // 029
+        RawData(
+            name = "ホンジュラス ラス ラハス アナエロビック",
+            cafe = null,
+            rating = 3.5,
+            notes = "スパイシーで濃厚。深煎り好きにはもう少し評価が上がるかもしれない。",
+            brewMethod = BrewMethod.Other,
+            origin = "Honduras",
+            variety = null,
+            processing = ProcessingMethod.Anaerobic,
             roastLevel = RoastLevel.Italian,
             cup = null,
         ),
-        // 028: Costa Rica / ColdBrew / Light / cafe5 — 全要素設定
+        // 030
         RawData(
-            name = "コスタリカ ロス アルチリョス ゲイシャ",
-            cafe = cafe5,
-            rating = 4.5,
-            notes = "コールドブリューでもゲイシャの花感が残る。甘くて冷たくて最高。",
-            brewMethod = BrewMethod.ColdBrew,
-            origin = "Costa Rica",
-            variety = "Geisha",
-            processing = ProcessingMethod.Honey,
-            roastLevel = RoastLevel.Light,
-            cup = null,
-            tasting = TastingScores(sweetness = 8, body = 5, acidity = 5, flavor = 9, aftertaste = 8),
-        ),
-        // 029: Kenya / Other / Cinnamon / cafe2 — 全要素設定
-        RawData(
-            name = "ケニア チェボリット ナチュラル",
-            cafe = cafe2,
-            rating = 4.0,
-            notes = "ケニアナチュラルの珍しいロット。ストロベリーとブルーベリーが全開。",
-            brewMethod = BrewMethod.Other,
-            origin = "Kenya",
-            variety = null,
-            processing = ProcessingMethod.Natural,
-            roastLevel = RoastLevel.Cinnamon,
-            cup = null,
-            tasting = TastingScores(sweetness = 7, body = 5, acidity = 7, flavor = 8, aftertaste = 7),
-        ),
-        // 030: Ethiopia / HandDrip / High / cafe3 — 全要素設定（高評価）
-        RawData(
-            name = "エチオピア ウォルカ コチェレ",
+            name = "ホンジュラス コパン ウォッシュド",
             cafe = cafe3,
-            rating = 4.5,
-            notes = "ストーンフルーツとフラワー。中深煎りで甘みと酸のバランスが絶妙。",
-            brewMethod = BrewMethod.HandDrip,
-            origin = "Ethiopia",
-            variety = "Heirloom",
-            processing = ProcessingMethod.Natural,
-            roastLevel = RoastLevel.High,
+            rating = 3.0,
+            notes = "マイルドで飲みやすいが個性は控えめ。日常使いのローテーション候補。",
+            brewMethod = BrewMethod.FrenchPress,
+            origin = "Honduras",
+            variety = null,
+            processing = ProcessingMethod.Washed,
+            roastLevel = RoastLevel.Medium,
             cup = null,
-            tasting = TastingScores(sweetness = 8, body = 6, acidity = 7, flavor = 9, aftertaste = 8),
         ),
     )
 }

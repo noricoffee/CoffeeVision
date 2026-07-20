@@ -27,6 +27,7 @@ import kotlinx.coroutines.flow.map
  *   - **origin**: [OriginNormalizer] 正規化で `bestOrigin.label` の正規化結果と一致
  *   - **roastLevel**: enum 名一致（`bestRoastLevel.label == record.roastLevel?.name`）
  *   - **brewMethod**: enum 名一致（`bestBrewMethod.label == record.brewMethod.name`）
+ *   - **processing**: enum 名一致（`bestProcessing.label == record.processing?.name`）
  * - [RecommendedCafe.cafe] は最新記録（visitedOn 最大）のカフェスナップショット
  * - `matches`: 一致した軸ごとに 1 つの [RecommendationReason.TasteProfileMatch]。
  *   同軸に複数の一致記録があれば**評価最高**を代表に採用（タイは visitedOn 新しい順 → name 昇順）
@@ -82,8 +83,13 @@ class ObserveTasteMatchedCafesUseCase(
         val stats = buildCoffeeStatsUseCase(records)
         val signals = stats.favoriteSignals
 
-        // カテゴリ好み 3 軸すべて null なら空リスト（データ不足）
-        if (signals.bestOrigin == null && signals.bestRoastLevel == null && signals.bestBrewMethod == null) {
+        // カテゴリ好み 4 軸すべて null なら空リスト（データ不足）
+        if (
+            signals.bestOrigin == null &&
+            signals.bestRoastLevel == null &&
+            signals.bestBrewMethod == null &&
+            signals.bestProcessing == null
+        ) {
             return emptyList()
         }
 
@@ -169,6 +175,19 @@ class ObserveTasteMatchedCafesUseCase(
             buildBestMatch(
                 axis = PreferenceMatchAxis.BrewMethod,
                 matchedLabel = bestBrewLabel,
+                matchingRecords = matchingRecords,
+            )?.let { matches.add(it) }
+        }
+
+        // --- processing 軸 ---
+        val bestProcessingLabel = signals.bestProcessing?.label
+        if (bestProcessingLabel != null) {
+            val matchingRecords = highRatedRecords.filter {
+                it.processing?.name == bestProcessingLabel
+            }
+            buildBestMatch(
+                axis = PreferenceMatchAxis.Processing,
+                matchedLabel = bestProcessingLabel,
                 matchingRecords = matchingRecords,
             )?.let { matches.add(it) }
         }

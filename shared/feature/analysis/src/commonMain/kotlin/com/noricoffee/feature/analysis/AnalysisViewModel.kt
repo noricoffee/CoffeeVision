@@ -416,7 +416,11 @@ class AnalysisViewModel(
 }
 
 /**
- * [FavoriteSignals] のいずれかの信号（カテゴリ 3 種 + 相関軸）が既に出ているかを判定する（内部ヘルパ）。
+ * [FavoriteSignals] のいずれかの信号（カテゴリ 4 種 + 相関軸）が既に出ているかを判定する（内部ヘルパ）。
  */
 private fun FavoriteSignals.hasAnySignal(): Boolean =
-    bestBrewMethod != null || bestOrigin != null || bestRoastLevel != null || dominantTastingAxis != null
+    bestBrewMethod != null ||
+        bestOrigin != null ||
+        bestRoastLevel != null ||
+        bestProcessing != null ||
+        dominantTastingAxis != null

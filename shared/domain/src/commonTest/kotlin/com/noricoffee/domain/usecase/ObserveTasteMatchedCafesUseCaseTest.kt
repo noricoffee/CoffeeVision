@@ -3,6 +3,7 @@ package com.noricoffee.domain.usecase
 import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.model.PreferenceMatchAxis
 import com.noricoffee.domain.model.RecommendationReason
@@ -70,6 +71,7 @@ class ObserveTasteMatchedCafesUseCaseTest {
         origin: String? = null,
         roastLevel: RoastLevel? = null,
         brewMethod: BrewMethod = BrewMethod.HandDrip,
+        processing: ProcessingMethod? = null,
         coffeeName: String = "Coffee $id",
     ) = CoffeeRecord(
         id = id,
@@ -83,7 +85,7 @@ class ObserveTasteMatchedCafesUseCaseTest {
         brewMethod = brewMethod,
         origin = origin,
         variety = null,
-        processing = null,
+        processing = processing,
         roastLevel = roastLevel,
         cup = null,
         brewRecipe = null,
@@ -243,6 +245,40 @@ class ObserveTasteMatchedCafesUseCaseTest {
             .firstOrNull { it.axis == PreferenceMatchAxis.BrewMethod }
         assertNotNull(brewMatch, "BrewMethod axis match should be present")
         assertEquals("AeroPress", brewMatch.matchedLabel)
+    }
+
+    @Test
+    fun processingAxis_detected_whenHighRatedRecordsMatchBestProcessing() = runTest {
+        // Natural(n=6, mean=4.5) vs Washed(n=6, mean=1.5) 構成
+        val naturalHighRated = (1..6).map { i ->
+            record(
+                id = "natural$i",
+                placeId = "cafe-processing",
+                visitedOn = LocalDate(2026, 6, i),
+                rating = 4.5,
+                processing = ProcessingMethod.Natural,
+            )
+        }
+        val washedLowRated = (1..6).map { i ->
+            record(
+                id = "washed$i",
+                placeId = "other",
+                visitedOn = LocalDate(2026, 1, i),
+                rating = 1.5,
+                processing = ProcessingMethod.Washed,
+            )
+        }
+        val useCase = makeUseCase(naturalHighRated + washedLowRated)
+
+        val result = useCase.observeRecommendedCafes("user-1").first()
+
+        val recommended = result.find { it.cafe.placeId == "cafe-processing" }
+        assertNotNull(recommended, "cafe-processing should be recommended via processing")
+        val processingMatch = recommended.matches
+            .filterIsInstance<RecommendationReason.TasteProfileMatch>()
+            .firstOrNull { it.axis == PreferenceMatchAxis.Processing }
+        assertNotNull(processingMatch, "Processing axis match should be present")
+        assertEquals("Natural", processingMatch.matchedLabel)
     }
 
     // ============================================================

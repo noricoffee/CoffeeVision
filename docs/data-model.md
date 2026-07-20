@@ -247,6 +247,7 @@ data class FavoriteSignals(
     val bestBrewMethod: CategoryStat?,         // 収縮平均で全体平均を最も上回る抽出方法（弱い好み信号。閾値・正方向のみ）
     val bestOrigin: CategoryStat?,
     val bestRoastLevel: CategoryStat?,
+    val bestProcessing: CategoryStat? = null,  // 同上、精製方法（bestRoastLevel と対称。default null で加算的）
     val dominantTastingAxis: TastingAxisCorrelation?,  // 評価と最も相関するテイスティング軸（|r| 閾値以上のみ）
     val minSampleSize: Int,                    // この件数未満の群は信号にしない（既定 3）
 )
@@ -275,7 +276,7 @@ data class PreferredBeanTraits(
 
 - **平均評価**: `rating == null`（未評価）は常に母数から除外。対象が 0 件なら `null`。
 - **`favoriteSignals`（階層2 / 好み判定）**: 「複数の評価から好みを統計的に抽出する」層。**生平均のランキングはサンプル数の罠に弱い**（n=1 の 5.0 が最上位に来る）ため、以下の補正を入れる。出力は常に **「弱い傾向」止まり**（断定しない。理由は交絡 = 下記）。
-  - **カテゴリ好み（`bestBrewMethod` / `bestOrigin` / `bestRoastLevel`）= 収縮平均による選定**:
+  - **カテゴリ好み（`bestBrewMethod` / `bestOrigin` / `bestRoastLevel` / `bestProcessing`）= 収縮平均による選定**（4 軸すべて同一ロジック。`bestProcessing` は `processing != null` のレコードを enum 名でグループ化して選定）:
     1. 母数: `rating != null` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
     2. 候補: 各軸で件数 `>= minSampleSize`（既定 3）かつ平均評価ありの label。
     3. **経験ベイズ収縮**: 各候補の評価を `shrunkMean = (n·mean + k·globalMean) / (n + k)` で全体平均へ寄せる（`k = SHRINKAGE_PRIOR_WEIGHT`、既定 5 ＝「全体平均を 5 杯ぶん事前に混ぜる」）。少数群の極端値を抑える。
@@ -401,15 +402,15 @@ data class RecommendedCafe(
 sealed interface RecommendationReason {
     // v1（コンテンツベース）: 自分の好み属性に一致する高評価記録があった
     data class TasteProfileMatch(
-        val axis: PreferenceMatchAxis,    // Origin / RoastLevel / BrewMethod
-        val matchedLabel: String,         // "Ethiopia" / "Light" / "AeroPress"（表示用ラベル）
+        val axis: PreferenceMatchAxis,    // Origin / RoastLevel / BrewMethod / Processing
+        val matchedLabel: String,         // "Ethiopia" / "Light" / "AeroPress" / "Natural"（表示用ラベル）
         val exampleRecordName: String,    // 代表記録のコーヒー名
         val exampleRating: Double,        // その記録の評価
     ) : RecommendationReason
     // 将来（9-6 協調フィルタ）: SimilarUsers(count, ...) 等をここに追加（UI/VM/FM は不変のまま種類追加）
 }
 
-enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod }
+enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 ```
 
 ### 推薦ソースの抽象化（将来の差し替えポイント）
@@ -430,13 +431,14 @@ interface CafeRecommendationProvider {
 あるカフェ（`cafe.placeId` でグループ化、`cafe == null` のセルフ抽出は座標が無いため対象外）に、次を**両方**満たす `CoffeeRecord` が 1 件以上あれば `RecommendedCafe` として返す:
 
 1. `rating >= HIGHLIGHTS_MIN_RATING`（= 4.0。`recentHighlights` と統一）
-2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` のうち **非 null のもの**）のいずれかに一致:
+2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` / `bestProcessing` のうち **非 null のもの**）のいずれかに一致:
    - `origin`: `OriginNormalizer.normalize`（trim + lowercase + シノニム辞書）で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
    - `roastLevel`: enum 一致（`bestRoastLevel.label == record.roastLevel?.name`）
    - `brewMethod`: enum 一致（`bestBrewMethod.label == record.brewMethod.name`）
+   - `processing`: enum 一致（`bestProcessing.label == record.processing?.name`）
 
 - **`matches` の構築**: 一致した軸ごとに 1 つの `TasteProfileMatch` を作る。同じ軸に複数の一致記録があれば**評価最高の記録**を代表（`exampleRecordName` / `exampleRating`）に採用。タイは `visitedOn` 新しい順 → コーヒー名昇順で決定論化。
-- **`dominantTastingAxis`（相関軸）は v1 では一致条件に使わない**: 相関は per-record の categorical 一致に変換できず、理由表示も曖昧になるため。カテゴリ好み 3 軸に限定。
+- **`dominantTastingAxis`（相関軸）は一致条件に使わない**: 相関は per-record の categorical 一致に変換できず、理由表示も曖昧になるため。カテゴリ好み 4 軸（産地 / 焙煎度 / 抽出方法 / 精製方法）に限定。
 - **`FavoriteSignals` が全 null（データ不足）** なら一致 0 件 → 空リスト（マップは強調なし）。
 - **並び順**: `matches` 件数降順 → 代表記録評価の最大降順 → placeId 昇順（決定論）。
 

@@ -49,11 +49,11 @@ sealed interface RecommendationReason {
 /**
  * 好み属性の一致軸。
  *
- * v1 はカテゴリ好み 3 軸に限定。
+ * v1 はカテゴリ好み 4 軸（産地 / 焙煎度 / 抽出方法 / 精製方法）に限定。
  * [FavoriteSignals.dominantTastingAxis]（相関軸）は per-record の categorical 一致に変換できないため
  * v1 の対象外とする（data-model.md §1.7 一致ルール参照）。
  */
-enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod }
+enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 /**
  * カフェ推薦の供給元インターフェース。

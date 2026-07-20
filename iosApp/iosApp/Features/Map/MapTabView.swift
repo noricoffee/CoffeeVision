@@ -16,6 +16,8 @@ func preferenceMatchAxisLabel(_ axis: PreferenceMatchAxis) -> String {
         return String(localized: "焙煎度")
     case .brewMethod:
         return String(localized: "抽出方法")
+    case .processing:
+        return String(localized: "精製方法")
     }
 }
 
@@ -129,6 +131,8 @@ struct RecommendationMatchSheet: View {
             return "flame"
         case .brewMethod:
             return "cup.and.saucer"
+        case .processing:
+            return "leaf.fill"
         }
     }
 

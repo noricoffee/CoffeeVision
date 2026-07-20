@@ -134,6 +134,7 @@ data class TastingAxisCorrelation(
  * @param bestBrewMethod 収縮平均で全体平均を最も上回る抽出方法（正方向のみ。閾値未満なら null）
  * @param bestOrigin 同上、産地
  * @param bestRoastLevel 同上、焙煎度
+ * @param bestProcessing 同上、精製方法（[bestRoastLevel] と対称のロジック）
  * @param dominantTastingAxis 評価と最も相関するテイスティング軸（|r| 閾値以上のみ。母数不足なら null）
  * @param minSampleSize この件数未満の群は信号にしない（既定 3）。サンプル不足の過大解釈を防ぐガード
  *
@@ -146,6 +147,7 @@ data class FavoriteSignals(
     val bestBrewMethod: CategoryStat? = null,
     val bestOrigin: CategoryStat? = null,
     val bestRoastLevel: CategoryStat? = null,
+    val bestProcessing: CategoryStat? = null,
     val dominantTastingAxis: TastingAxisCorrelation? = null,
     val minSampleSize: Int = 3,
 )

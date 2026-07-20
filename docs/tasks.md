@@ -26,6 +26,19 @@
 
 ### 未完・バックログ
 
+#### 好み一致の作り込み: 精製方法軸の追加 + ダミー人格再設計（2026-07-20 起票）
+
+> 「好み一致」（`ObserveTasteMatchedCafesUseCase` → `RecommendedCafe`）のマッチ軸を **3 軸（産地/焙煎/抽出）→ 4 軸（+ 精製方法）** に拡張。ダミーデータが全 enum 分散設計のため 2σ z ゲートに届かず焙煎度 Light しか信号化しない問題を、**人格中心の再設計**で解消（人格 = 産地ブラジル勝ち・焙煎 City・抽出 NelDrip・精製 Natural / ケニアは二番手）。`bestProcessing` はマップの好み一致と分析タブ「好みの傾向」カードの両方に出す。仕様は data-model.md §1.6/§1.7・requirements 9-5、プランは `.claude/plans/inherited-coalescing-eich.md`。テイスティング軸の一致は per-record 変換が非自明のため今回対象外（別途）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: data-model.md §1.6/§1.7 + requirements 9-5 に精製方法軸を追記（合意書固定） | 2026-07-20 完了 |
+| [x] | kmp-engineer: `FavoriteSignals.bestProcessing` + `PreferenceMatchAxis.Processing` 追加 / `buildFavoriteSignals` + `ObserveTasteMatchedCafesUseCase` に processing 軸 / `DummyCoffeeData` 人格再設計 / commonTest（processing 一致 + 人格固定テスト） | 2026-07-20 完了。横断点検で `AnalysisViewModel.hasAnySignal()` の回帰も修正。人格固定テスト（`DummyCoffeeDataPersonaTest`、`shared/core` に commonTest 初設置）green。実測: 4 軸すべて Brazil/City/NelDrip/Natural で信号化・cafe1/2/3 が 4 軸一致 |
+| [x] | 親: KMP 公開 API 差分確認 + `:shared:domain`/`:shared:core` の 2 ターゲットテスト再検証 | 2026-07-20 完了。Android host + iosSimulatorArm64Test 全 green + XCFramework link 完走 + SKIE enum に `.processing` 生成確認 |
+| [x] | ios-engineer: 網羅 switch 追随（`preferenceMatchAxisLabel`/`axisIcon`）+ 分析カードに精製行 + `localizedProcessingStatic` + `FavoriteSignals` 構築 2 箇所修正 | 2026-07-20 完了。axisIcon = `leaf.fill`。`RecommendedCafeListSheet` は自動追随（無改修） |
+| [x] | 親: 統合検証（verify-kmp-ios、xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-20 完了。親が override 無し BUILD SUCCEEDED を再確認 |
+| [ ] | ユーザー: Dummy Data Scheme で目視（マップに複数の好み一致ピン + 4 軸理由表示 / 分析カードに精製行 / ダーク・VoiceOver） | ビルド成功 ≠ 確認完了 |
+
 #### 広告導入: AdMob ネイティブ広告（2026-07-14 起票）
 
 > 収益化のため AdMob ネイティブ広告を 4 面（カフェ詳細 / マップ検索ドロップダウン / コーヒー記録タブ下部固定 / 分析タブ下部固定）+ ATT フロー（既存同意オンボーディング直後・拒否時 NPA）で導入する。**仕様の正は requirements.md §11**（2026-07-14 grilling で確定）。iosApp View 層完結・KMP 変更なし。本番ユニット発行前は Google 提供のテスト用ユニット ID で実装・検証を進められる。

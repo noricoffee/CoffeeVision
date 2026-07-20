@@ -370,6 +370,7 @@ enum PreviewSamples {
             bestBrewMethod: CategoryStat(label: "HandDrip", count: 7, averageRating: KotlinDouble(value: 4.3)),
             bestOrigin: CategoryStat(label: "エチオピア", count: 5, averageRating: KotlinDouble(value: 4.4)),
             bestRoastLevel: CategoryStat(label: "Light", count: 5, averageRating: KotlinDouble(value: 4.4)),
+            bestProcessing: CategoryStat(label: "Natural", count: 5, averageRating: KotlinDouble(value: 4.6)),
             dominantTastingAxis: TastingAxisCorrelation(
                 axis: TastingAxis.acidity,
                 correlation: 0.62,

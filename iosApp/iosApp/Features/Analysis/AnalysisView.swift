@@ -1092,6 +1092,16 @@ private struct FavoriteSignalsCard: View {
                         accessibilitySuffix: String(localized: "抽出方法")
                     )
                 }
+                if let processing = signals.bestProcessing {
+                    FavoriteSignalRow(
+                        systemImage: "leaf.fill",
+                        label: "精製方法",
+                        value: localizedProcessingStatic(processing.label),
+                        count: Int(processing.count),
+                        averageRating: processing.averageRating?.doubleValue,
+                        accessibilitySuffix: String(localized: "精製方法")
+                    )
+                }
                 if let axis = signals.dominantTastingAxis {
                     TastingAxisSignalRow(axis: axis)
                 }
@@ -1137,6 +1147,17 @@ private struct FavoriteSignalsCard: View {
         case "ColdBrew":    return String(localized: "コールドブリュー")
         case "Other":       return String(localized: "その他")
         default:            return name
+        }
+    }
+
+    private func localizedProcessingStatic(_ name: String) -> String {
+        switch name {
+        case "Natural":   return String(localized: "ナチュラル")
+        case "Washed":    return String(localized: "ウォッシュド")
+        case "Honey":     return String(localized: "ハニー")
+        case "Anaerobic": return String(localized: "アナエロビック")
+        case "Other":     return String(localized: "その他")
+        default:          return name
         }
     }
 }
@@ -1713,6 +1734,7 @@ private struct AnalysisViewPreviewContent: View {
                 let hasAnySignal = signals.bestOrigin != nil
                     || signals.bestRoastLevel != nil
                     || signals.bestBrewMethod != nil
+                    || signals.bestProcessing != nil
                     || signals.dominantTastingAxis != nil
                 if hasAnySignal {
                     FavoriteSignalsCard(signals: signals)
@@ -1877,6 +1899,7 @@ private struct AnalysisViewPreviewContent: View {
             bestBrewMethod: nil,
             bestOrigin: CategoryStat(label: "エチオピア", count: 3, averageRating: KotlinDouble(value: 4.5)),
             bestRoastLevel: nil,
+            bestProcessing: nil,
             dominantTastingAxis: nil,
             minSampleSize: 3
         ))

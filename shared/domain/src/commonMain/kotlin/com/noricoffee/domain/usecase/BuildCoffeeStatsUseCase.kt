@@ -363,7 +363,7 @@ class BuildCoffeeStatsUseCase {
     /**
      * 階層2（傾向抽出）の [FavoriteSignals] を算出する。
      *
-     * ## カテゴリ好み（bestBrewMethod / bestOrigin / bestRoastLevel）
+     * ## カテゴリ好み（bestBrewMethod / bestOrigin / bestRoastLevel / bestProcessing）
      *
      * 1. 評価済み（rating != null）レコードの全体平均 globalMean と
      *    全体母標準偏差 globalStd（`sqrt(Σ(r-globalMean)²/N)`）を算出。
@@ -409,6 +409,15 @@ class BuildCoffeeStatsUseCase {
                 candidateGroups = ratedRecords
                     .filter { it.roastLevel != null }
                     .groupBy { it.roastLevel!!.name },
+                ratingExtractor = { it.rating!! }, // ratedRecords は rating != null フィルタ済み
+                globalMean = globalMean,
+                globalStd = globalStd,
+                minSampleSize = minSample,
+            ),
+            bestProcessing = selectBestCategory(
+                candidateGroups = ratedRecords
+                    .filter { it.processing != null }
+                    .groupBy { it.processing!!.name },
                 ratingExtractor = { it.rating!! }, // ratedRecords は rating != null フィルタ済み
                 globalMean = globalMean,
                 globalStd = globalStd,

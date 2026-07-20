@@ -1018,3 +1018,14 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - トースト等のユーザー通知は出さない方針を維持（低優先の補助表示のため）
 - `MKLocalSearch` の利用箇所はこの 1 関数のみで同型箇所なし（ios-engineer が grep 確認）。なお MapKit の地図表示自体（タイル / 標準 POI ラベル）にはネイティブアプリの利用制限はなく、制限があるのは検索系 API のみ
 - Swift の `MKError.loadingThrottled` は `MKError.Code` を返す（`as? MKError` 直接比較はコンパイルエラー）— 詳細は ios-engineer メモリ `location-mapkit.md`
+
+### 2026-07-20: リリース CI の署名は p8（ASC API キー）のみを維持、p12 証明書の永続化は不採用
+
+- 領域: Build
+- 関連: `.github/workflows/release-testflight.yml`、`docs/tasks/lessons.md` 2026-07-20 エントリ
+
+`release-testflight.yml` の archive が証明書上限エラーで失敗した件（詳細な誤診断の経緯は lessons.md 参照）を developer.apple.com 側での証明書 revoke で解消した後、恒久対策として certificate + 秘密鍵を p12 化して GitHub Secrets に永続化する案を提示したが、ユーザーは「p8 のままで」と判断し不採用。
+
+- 経緯: cloud signing（Automatic signing + ASC API キー）は署名用の秘密鍵をランナーに保持しないため、GitHub-hosted の使い捨てランナーでは実行のたびに新規の Development 証明書 + 鍵ペアを発行する。これがアカウントの証明書上限到達の直接原因
+- トレードオフ: p8 のみを維持する場合、証明書はいずれ再び上限に達し得る。発生時は developer.apple.com で不要な Development 証明書を手動 revoke する運用が必要（p12 永続化なら鍵を使い回すためこの再発自体を防げるが、Apple ID を使った手元でのキー作成・エクスポート作業が追加で必要になる）
+- 判断: リリース頻度が高くない前提で、追加の秘密情報管理（p12 の作成・ローテーション・Secrets 管理）を避け、上限到達時の手動 revoke で対応する運用を選択

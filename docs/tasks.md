@@ -37,7 +37,7 @@
 | [x] | 親: KMP 公開 API 差分確認 + `:shared:domain`/`:shared:core` の 2 ターゲットテスト再検証 | 2026-07-20 完了。Android host + iosSimulatorArm64Test 全 green + XCFramework link 完走 + SKIE enum に `.processing` 生成確認 |
 | [x] | ios-engineer: 網羅 switch 追随（`preferenceMatchAxisLabel`/`axisIcon`）+ 分析カードに精製行 + `localizedProcessingStatic` + `FavoriteSignals` 構築 2 箇所修正 | 2026-07-20 完了。axisIcon = `leaf.fill`。`RecommendedCafeListSheet` は自動追随（無改修） |
 | [x] | 親: 統合検証（verify-kmp-ios、xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-20 完了。親が override 無し BUILD SUCCEEDED を再確認 |
-| [ ] | ユーザー: Dummy Data Scheme で目視（マップに複数の好み一致ピン + 4 軸理由表示 / 分析カードに精製行 / ダーク・VoiceOver） | ビルド成功 ≠ 確認完了 |
+| [x] | ユーザー: Dummy Data Scheme で目視（マップに複数の好み一致ピン + 4 軸理由表示 / 分析カードに精製行 / ダーク・VoiceOver） | 2026-07-21 ユーザー判断で目視スキップ・完了扱い。requirements 9-5 △→○ 昇格。9-5 のコア実装はこれで完了（テイスティング 5 軸一致は将来拡張・別要件） |
 
 #### カフェ検索の補完語を「カフェ」→「コーヒー」に変更（2026-07-21 起票）
 

@@ -69,3 +69,10 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 ## `Cafe`（8 フィールド + デフォルト値付き 6 フィールド）は Swift 側で 14 引数の designated initializer 1 本しかない（2026-07-17、CuratedCafe → 最小 Cafe 構築で確認）
 
 Kotlin `data class Cafe(placeId, name, address, latitude, longitude, photoReferences, websiteUrl, mapsUrl, openNow = null, weekdayDescriptions = emptyList(), phoneNumber = null, priceLevel = null, googleRating = null, userRatingCount = null)` は、末尾 6 フィールドが Kotlin 側でデフォルト値を持っていても **SKIE は defaultArgumentInterop 非対応（既存ルール参照）のため 8 引数の短縮 init は生成されない**。`Cafe(placeId:...:mapsUrl:)` のような呼び出しはビルドエラーになる。他のドメインモデル（`CuratedCafe` 等）から最小限のフィールドだけで `Cafe` を組み立てたい場合は、`openNow: nil, weekdayDescriptions: [], phoneNumber: nil, priceLevel: nil, googleRating: nil, userRatingCount: nil` を明示的にすべて渡す（`grep -n "instancetype)initWithPlaceId" SharedLogic.h` で該当クラスの init が 1 本だけか確認してから使う。似た名前の `CafeExportDto` は別クラスで 8 引数版しか持たないため取り違えに注意）。
+
+## Kotlin `object` の `val List<String>` カタログ + `const val` 特殊値を Swift `Picker` の選択肢にする際、legacy 自由入力値のフォールバック表示は「動的に選択肢へ追加」で native Picker のまま解決できる（2026-07-22、産地ドロップダウン化で確認）
+
+- `CoffeeOriginCatalog.shared.countries: [String]` / `.BLEND` / `.OTHER` は SKIE 経由でそのまま `[String]` / `String` として読める（`docs/kmp-bridge.md` の記載どおり、追加のブリッジコード不要）。
+- 「Edit モードで catalog に無い legacy 値でも壊れない」要件は、**Menu で自前ラベルを出す**より、**Picker の選択肢配列に legacy 値を動的追加する**方が既存の Picker パターン（`brewMethod`/`processing` 等）と統一でき、アクセシビリティも native のまま乗る。`options = ["", ...countries, BLEND] + (legacy値があれば追加) + [OTHER]` を組み、`selection: Binding<String>` の `set` で `newValue == OTHER` のときだけ「その他モード」用の別 `@State` フラグを立てて自由入力 `TextField` を出す（Picker の `get` はフラグが立っている間 `OTHER` を固定で返す）。
+- 「その他」選択時は literal を保存しない仕様のため、フラグを立てるのと同時に `onXxxChanged("")` で一旦空にしてから自由入力に委ねると、選択直後に前の値が誤って保存される事故を防げる。
+- `CoffeeRecord` に `origin` + `region`（表示専用の別フィールド）が両方あるケースの表示結合は、`CoffeeRecord` に `extension` で computed property（`originDisplayText`）を生やして複数 View（詳細画面 / シェアカード）から共有するのが最小实装（`iosApp/iosApp/Utilities/` 配下に新規ファイルを置くパターン）。

@@ -107,7 +107,7 @@ class CoffeeEditorViewModel(
         /**
          * 既存記録を複製元にした新規作成モード（要件 2-10）。
          *
-         * 引き継ぐ: cafe / name / brewMethod / origin / variety / processing / roastLevel / cup / brewRecipe / tags。
+         * 引き継ぐ: cafe / name / brewMethod / origin / region / variety / processing / roastLevel / cup / brewRecipe / tags。
          * 引き継がない: rating（null = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
          * `visitedOn` は今日、保存時の id / createdAt は [Create] と同様に新規採番する。
          *
@@ -131,7 +131,8 @@ class CoffeeEditorViewModel(
      * @property photos 写真アイテム一覧
      * @property name コーヒー名（必須。最大 200 文字）
      * @property brewMethod 抽出方法
-     * @property origin 産地（任意）
+     * @property origin 産地（国名。空文字 = 未選択。`CoffeeOriginCatalog` からのドロップダウン選択値）
+     * @property region エリア / 農園（任意自由入力。空文字 = 未入力。origin から分離。2026-07-22 追加）
      * @property variety 品種（任意）
      * @property processing 精製方法（任意）
      * @property roastLevel 焙煎度（任意）
@@ -152,6 +153,7 @@ class CoffeeEditorViewModel(
         val name: String,
         val brewMethod: BrewMethod,
         val origin: String,
+        val region: String,
         val variety: String,
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,
@@ -349,9 +351,14 @@ class CoffeeEditorViewModel(
         _state.update { it.copy(draft = it.draft.copy(brewMethod = brewMethod)) }
     }
 
-    /** 産地を更新する。 */
+    /** 産地（国名）を更新する。`CoffeeOriginCatalog` からのドロップダウン選択値、または「その他」選択時の自由入力国名。 */
     fun onOriginChanged(origin: String) {
         _state.update { it.copy(draft = it.draft.copy(origin = origin)) }
+    }
+
+    /** 産地のエリア / 農園（任意自由入力）を更新する。 */
+    fun onRegionChanged(region: String) {
+        _state.update { it.copy(draft = it.draft.copy(region = region)) }
     }
 
     /** 品種を更新する。 */
@@ -711,6 +718,7 @@ class CoffeeEditorViewModel(
             name = draft.name,
             brewMethod = draft.brewMethod,
             origin = draft.origin.takeIf { it.isNotBlank() },
+            region = draft.region.takeIf { it.isNotBlank() },
             variety = draft.variety.takeIf { it.isNotBlank() },
             processing = draft.processing,
             roastLevel = draft.roastLevel,
@@ -797,6 +805,7 @@ class CoffeeEditorViewModel(
             name = DEFAULT_COFFEE_NAME,
             brewMethod = BrewMethod.HandDrip,
             origin = "",
+            region = "",
             variety = "",
             processing = null,
             roastLevel = null,
@@ -827,6 +836,7 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
         name = name,
         brewMethod = brewMethod,
         origin = origin ?: "",
+        region = region ?: "",
         variety = variety ?: "",
         processing = processing,
         roastLevel = roastLevel,
@@ -840,7 +850,7 @@ private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
  * [CoffeeRecord] を複製（[CoffeeEditorViewModel.Mode.Duplicate]）の初期 draft に変換する。
  *
  * 引き継ぐ: cafe（表示用フィールドのみ。placeId / 座標 / photoReferences は `currentInitialRecord` 経由で
- * [CoffeeEditorViewModel.buildCafe] が引き継ぐ）/ name / brewMethod / origin / variety / processing /
+ * [CoffeeEditorViewModel.buildCafe] が引き継ぐ）/ name / brewMethod / origin / region / variety / processing /
  * roastLevel / cup / brewRecipe / tags。
  * 引き継がない: rating（null = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
  * `visitedOn` は今日にする（元記録の日付は使わない）。
@@ -858,6 +868,7 @@ private fun CoffeeRecord.toDuplicateDraft(): CoffeeEditorViewModel.CoffeeDraft =
         name = name,
         brewMethod = brewMethod,
         origin = origin ?: "",
+        region = region ?: "",
         variety = variety ?: "",
         processing = processing,
         roastLevel = roastLevel,

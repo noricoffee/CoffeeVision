@@ -25,11 +25,12 @@ import kotlin.test.assertTrue
  * 直接構築されてしまい、v4 相当（migration 5 適用前）の状態を再現できない。
  * そこで `NativeSqliteDriver(configuration: DatabaseConfiguration)` の低レベルコンストラクタを使い、
  * `create` を no-op にした生ドライバを取得し、`androidHostTest` 版と同じく生 DDL で
- * v4 スキーマを直接構築してから `AppDatabase.Schema.migrate(driver, 5L, 6L)` を呼ぶ。
+ * v4 スキーマを直接構築してから `AppDatabase.Schema.migrate(driver, 5L, 7L)` を呼ぶ。
  *
- * バージョン番号の意味（`oldVersion=5, newVersion=6`）は `androidHostTest` 版と同じ
- * （`sqldelight_migration_version_semantics.md` 参照。`.sqm` が 5 個 → `Schema.version = 6`、
- * `N.sqm` は `version N → N+1` の遷移。migration 5 だけを走らせるには oldVersion=5 が必要）。
+ * バージョン番号の意味（`oldVersion=5, newVersion=7`）は `androidHostTest` 版と同じ
+ * （`sqldelight_migration_version_semantics.md` 参照。`N.sqm` は `version N → N+1` の遷移。
+ * 型付き `coffeeRecordQueries` は常に現行 head スキーマ（region 列を含む）基準のため、
+ * migration 5 だけでなく 6（region 列追加）まで通して head バージョンに揃える）。
  */
 class CoffeeRecordMigration5IosTest {
 
@@ -76,6 +77,7 @@ class CoffeeRecordMigration5IosTest {
             name = "raw",
             brew_method = "HandDrip",
             origin = null,
+            region = null,
             variety = null,
             processing = null,
             roast_level = null,
@@ -108,6 +110,7 @@ class CoffeeRecordMigration5IosTest {
             name = "raw-rated",
             brew_method = "HandDrip",
             origin = null,
+            region = null,
             variety = null,
             processing = null,
             roast_level = null,
@@ -136,10 +139,11 @@ class CoffeeRecordMigration5IosTest {
             sort_order = 0,
         )
 
-        // migration 5 を適用（rating nullable 化 + テーブル再作成）。
+        // migration 5（rating nullable 化 + テーブル再作成）+ migration 6（region 列追加）を適用する。
         // sqliter は FK 有効なままこの一連の DDL/DML を実行することになるため、
         // ここで FOREIGN KEY constraint 違反例外が飛ぶかどうかが本テストの核心の懸念点。
-        AppDatabase.Schema.migrate(driver, 5L, 6L)
+        // newVersion を head（7）まで進める理由は androidHostTest 版と同じ（region 列の復元が必要）。
+        AppDatabase.Schema.migrate(driver, 5L, 7L)
 
         val zeroRow = db.coffeeRecordQueries.selectById("r-zero").executeAsOne()
         assertNull(zeroRow.rating, "旧 sentinel rating=0.0 は migration 5 で NULL に変換されるべき（sqliter）")
@@ -162,8 +166,9 @@ class CoffeeRecordMigration5IosTest {
 
     /**
      * migration 4 適用後（= migration 5 適用前）の `coffee_record` / `photo` テーブルを
-     * 生 DDL で構築する。`coffee_record.rating` が `NOT NULL` である点が現行 `.sq` との唯一の差分。
-     * `CoffeeRecordMigration5Test.kt`（androidHostTest）の `createV4Schema()` と同一内容。
+     * 生 DDL で構築する。`coffee_record.rating` が `NOT NULL` である点が現行 `.sq` との差分。
+     * `CoffeeRecordMigration5Test.kt`（androidHostTest）の `createV4Schema()` と同一内容
+     * （`region` 列を含める理由も同じ。型付き `coffeeRecordQueries` が head スキーマ基準のため）。
      */
     private fun createV4Schema() {
         driver.execute(
@@ -186,6 +191,7 @@ class CoffeeRecordMigration5IosTest {
                 name TEXT NOT NULL,
                 brew_method TEXT NOT NULL,
                 origin TEXT,
+                region TEXT,
                 variety TEXT,
                 processing TEXT,
                 roast_level TEXT,

@@ -103,6 +103,11 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onOriginChanged(origin: origin)
     }
 
+    /// エリア / 農園（任意自由入力）を変更する。origin から分離（2026-07-22 追加）。
+    func onRegionChanged(_ region: String) {
+        kotlin.onRegionChanged(region: region)
+    }
+
     func onVarietyChanged(_ variety: String) {
         kotlin.onVarietyChanged(variety: variety)
     }

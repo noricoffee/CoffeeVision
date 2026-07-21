@@ -67,6 +67,7 @@ class LocalCoffeeRepository(
                 name = row.name,
                 brew_method = row.brew_method,
                 origin = row.origin,
+                region = row.region,
                 variety = row.variety,
                 processing = row.processing,
                 roast_level = row.roast_level,

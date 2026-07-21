@@ -66,6 +66,7 @@ class AnalysisViewModelReadinessTest {
         name = "Test Coffee $id",
         brewMethod = brewMethod,
         origin = null,
+        region = null,
         variety = null,
         processing = null,
         roastLevel = null,

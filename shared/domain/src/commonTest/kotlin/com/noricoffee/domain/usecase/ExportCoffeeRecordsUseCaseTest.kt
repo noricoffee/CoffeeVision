@@ -89,6 +89,7 @@ class ExportCoffeeRecordsUseCaseTest {
         name = "本日のコーヒー",
         brewMethod = BrewMethod.HandDrip,
         origin = "ケニア",
+        region = null,
         variety = "SL28",
         processing = null,
         roastLevel = null,

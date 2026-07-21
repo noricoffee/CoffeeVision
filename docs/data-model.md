@@ -52,7 +52,8 @@ data class CoffeeRecord(
     // --- コーヒー属性（旧 CoffeeItem から昇格）---
     val name: String,                     // コーヒー名（必須）
     val brewMethod: BrewMethod,
-    val origin: String?,                  // 産地（国 / エリア）
+    val origin: String?,                  // 産地（国名）。ドロップダウン選択（CoffeeOriginCatalog）。「ブレンド」/「その他で入力した国名」も可。null = 未選択。2026-07-22 に自由入力 → 国ドロップダウン化（§1.3a）
+    val region: String?,                  // エリア / 農園（任意自由入力。例「イルガチェフェ」「ウエウエテナンゴ」）。origin から分離（2026-07-22 追加）。表示専用で分析には使わない（§1.6）
     val variety: String?,                 // 品種
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度
@@ -149,6 +150,41 @@ enum class RoastLevel {
     Italian,
 }
 ```
+
+## 1.3a CoffeeOriginCatalog（産地の国ドロップダウン / 2026-07-22）
+
+`CoffeeRecord.origin` を自由入力から**国ドロップダウン選択**に変更するための、コーヒー生産国の**日本語国名カタログ**。記録入力の手間削減が目的（[`requirements.md`](./requirements.md) 2-1）。
+
+**配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/CoffeeOriginCatalog.kt`
+
+```kotlin
+object CoffeeOriginCatalog {
+    // 表示順 = このリスト順（アフリカ・中東 → 中南米 → アジア太平洋）。全て日本語表記。
+    val countries: List<String> = listOf(
+        // アフリカ・中東
+        "エチオピア", "ケニア", "タンザニア", "ルワンダ", "ブルンジ", "ウガンダ",
+        "コンゴ民主共和国", "マラウイ", "ザンビア", "カメルーン", "コートジボワール", "イエメン",
+        // 中南米
+        "ブラジル", "コロンビア", "グアテマラ", "コスタリカ", "エルサルバドル", "ホンジュラス",
+        "ニカラグア", "パナマ", "メキシコ", "ペルー", "ボリビア", "エクアドル", "ベネズエラ",
+        "ジャマイカ", "ドミニカ共和国", "ハイチ", "キューバ", "プエルトリコ",
+        // アジア・太平洋
+        "インドネシア", "ベトナム", "インド", "パプアニューギニア", "東ティモール", "タイ",
+        "フィリピン", "ラオス", "ミャンマー", "中国", "台湾", "ネパール", "ハワイ",
+    )
+
+    const val BLEND: String = "ブレンド"   // 複数産地。単一国に落とし込めないコーヒー
+    const val OTHER: String = "その他"     // リスト外の産地。UI は選択時に国名の自由入力欄を出す
+}
+```
+
+### 設計上の決め事
+
+- **origin は `String?` のまま（enum 化しない）**: 「ブレンド」「その他で入力した国名」「未選択（null）」「クリーンブレイク前の legacy 自由文字列」を型で表現でき、`OriginNormalizer` / `BeanProfile` 突合 / `originRanking`（すべて String ベース）を無改修で流用できる（Simplicity First）。カタログは選択肢の提示元であって格納型の制約ではない
+- **正規形との一致（不変条件）**: `countries` の各要素は `OriginNormalizer.normalize` の**正規形（＝ normalize が自身を返す固定点）**であること。日本語表記はシノニム辞書のキー（英語綴り / サブ地域）に含まれず lowercase でも不変のため自然に成立する。**`OriginNormalizer` のシノニム値（RHS）は全て `countries` に含まれる**ことをテストで担保する（`OriginNormalizerTest` に catalog ⊇ synonymValues を追加）。新規追加国には英語綴りシノニム（`vietnam` → `ベトナム` 等）も `OriginNormalizer` へ追加し、カタログと正規化のカバレッジを揃える
+- **「その他」で入力した国名の扱い**: literal「その他」を保存せず、ユーザーが入力した実際の国名文字列を `origin` に保存する（データ欠損回避）。「ブレンド」は literal「ブレンド」を保存する（実体が単一国でないため）
+- **カタログの真実点は domain**: iOS ピッカーは SKIE ブリッジ経由で `CoffeeOriginCatalog` を読む（[`kmp-bridge.md`](./kmp-bridge.md)）。iOS 側でリストを二重管理しない
+- **`region`（エリア / 農園）は分析非対象**: サブ地域の粒度は交絡分離不能で統計に使えない（§1.6 の confounding 方針）ため、`region` は詳細表示・シェアカード等の**表示専用**。`originRanking` / `FavoriteSignals` は従来どおり `origin`（国）のみを見る
 
 ## 1.4 Photo
 
@@ -289,7 +325,7 @@ data class PreferredBeanTraits(
   - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
   - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（カテゴリ z ゲート係数 ≈95% 信頼区間。B-1d sweep で確定。heavy-skew 偽陽性 9.3%・検出力 P2–P4 維持。`globalStd==0` は z ゲートをスキップしδ下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20`（z ゲートと AND する絶対下限）/ テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_MIN_ABS = 0.3` と `CORRELATION_ABS_FLOOR_C = 1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。値は `FavoriteSignalsPersonaTest` の sweep（150 シード）で検出力 P1–P4・P7 維持を確認して確定。
   - **既知の限界 / 経緯**: tasting 軸の偽陽性は 40%→22%（c 連動 floor、B-1c）。カテゴリ信号は固定 δ では下がらず（均等 100% / heavy-skew 86.7%、B-1d 前段実測）、**n 連動 z ゲートで根治**（B-1d 本体）。winner's curse は固定オフセットでなくばらつき連動の閾値で抑えるのが要点。詳細経緯は実装ノート 2026-06-22 B-1b〜B-1d。
-- **産地（自由文字列）**: グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`、2026-07-08 導入）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
+- **産地**: 分析が見るのは `origin`（国名）**のみ**。`region`（エリア / 農園）は表示専用で集計に使わない（2026-07-22 分離）。origin は国ドロップダウン（`CoffeeOriginCatalog` §1.3a）由来で概ね正規形に揃うが、`BeanProfile.origin` や legacy 自由文字列との名寄せのため引き続き `OriginNormalizer` を通す。グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`、2026-07-08 導入）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
@@ -638,7 +674,8 @@ CREATE TABLE coffee_record (
     -- コーヒー属性
     name TEXT NOT NULL,
     brew_method TEXT NOT NULL,             -- enum 文字列
-    origin TEXT,
+    origin TEXT,                           -- 国名（CoffeeOriginCatalog 選択値 / 「ブレンド」/ legacy 自由文字列）
+    region TEXT,                           -- エリア / 農園（自由入力。migration 6.sqm で ALTER TABLE ADD COLUMN。2026-07-22 追加）
     variety TEXT,
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
@@ -674,11 +711,11 @@ INSERT OR REPLACE INTO coffee_record (
     cafe_latitude, cafe_longitude, cafe_photo_references,
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
-    name, brew_method, origin, variety, processing, roast_level, cup,
+    name, brew_method, origin, region, variety, processing, roast_level, cup,
     sweetness, body, acidity, flavor, aftertaste,
     tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;
@@ -733,6 +770,7 @@ DELETE FROM photo WHERE id = ?;
 - 写真の参照配列やタグ（`tags`）など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する。`tags` は空文字（旧行）も空リストとして読む
 - `cafe_place_id` が null の行は `cafe = null` で組み立てる。非 null の行のみ `Cafe(...)` を構築する
 - **`brew_recipe`（フェーズ 15-E）**: migration `4.sqm` で `ALTER TABLE coffee_record ADD COLUMN brew_recipe TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `brew_recipe` を追加する。Mapper は他の nullable TEXT 列と同じ扱い
+- **`region`（産地の国ドロップダウン化、2026-07-22）**: migration `6.sqm` で `ALTER TABLE coffee_record ADD COLUMN region TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `region` を追加する（`brew_recipe` と同じ nullable TEXT 扱い）。Mapper は他の nullable TEXT 列と同様に read/write する
 - **`rating` nullable 化（B-4、2026-07-12）**: migration `5.sqm`。SQLite は NOT NULL 撤廃の ALTER をサポートしないため**テーブル再作成方式**（新テーブル CREATE → `NULLIF(rating, 0.0)` で INSERT SELECT → 旧テーブル DROP → RENAME → インデックス再作成）。photo テーブルの FK（`record_id` → `coffee_record.id`、2026-07-03 本番有効化）をトランザクション内で壊さない手順にすること
 
 ## 2.4 SavedCafe.sq（フェーズ 15-A）
@@ -870,6 +908,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
   "name": "本日のコーヒー（ケニア カグモイニ）",
   "brewMethod": "HandDrip",
   "origin": "ケニア",
+  "region": "ニエリ",
   "variety": "SL28",
   "processing": "Washed",
   "roastLevel": "Medium",
@@ -900,7 +939,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 - **cafe**: セルフ抽出（`cafe == null`）の場合は `cafe` キーごと省略する。decode 時にキーが欠如していたら `cafe = null`
 - **rating**（2026-07-12 B-4 で nullable 化）: `rating == null`（未評価）なら他の nullable フィールドと同じく**キーごと省略**。decode 時は **キー欠如 / null / `0.0`（nullable 化以前の legacy sentinel）をすべて `null` に正規化**する（iOS / Android 対称。リモートの既存 0.0 ドキュメントは migration せず読み側で吸収）
-- **nullable なコーヒー属性**（origin / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。`brewRecipe` はフェーズ 15-E 追加（decode 時にキー欠如は null 扱い）
+- **nullable なコーヒー属性**（origin / region / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。`brewRecipe` はフェーズ 15-E 追加、`region` は 2026-07-22 追加（いずれも decode 時にキー欠如は null 扱い）
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
 - **cafe** に書くのはスナップショット 8 フィールドのみ（§1.2 の注記参照。`openNow` 等の表示用フィールドは書かない）

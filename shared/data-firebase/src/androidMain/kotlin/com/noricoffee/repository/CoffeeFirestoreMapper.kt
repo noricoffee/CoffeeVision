@@ -21,7 +21,7 @@ import kotlinx.datetime.LocalDate
  * ## フィールド規則
  * - `rating`（2026-07-12 B-4 で nullable 化）: null（未評価）なら他の nullable フィールドと同じくキーごと省略。
  *   decode 時はキー欠如 / null / `0.0`（nullable 化以前の legacy sentinel）をすべて null に正規化する
- * - nullable なコーヒー属性（origin / variety / processing / roastLevel / cup / brewRecipe）は null ならキーごと省略
+ * - nullable なコーヒー属性（origin / region / variety / processing / roastLevel / cup / brewRecipe）は null ならキーごと省略
  * - cafe が null（セルフ抽出）の場合は `cafe` キーごと省略
  * - photos は埋め込み配列。`localPath` / `remoteUrl` は端末固有値または未使用のため Firestore に書かない
  * - `sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番。decode 時はソートに使い破棄
@@ -69,6 +69,7 @@ object CoffeeFirestoreMapper {
 
         // nullable コーヒー属性は null ならキーごと省略
         record.origin?.let { doc["origin"] = it }
+        record.region?.let { doc["region"] = it }
         record.variety?.let { doc["variety"] = it }
         record.processing?.let { doc["processing"] = it.name }
         record.roastLevel?.let { doc["roastLevel"] = it.name }
@@ -164,6 +165,7 @@ object CoffeeFirestoreMapper {
 
         // nullable コーヒー属性
         val origin = data["origin"] as? String
+        val region = data["region"] as? String
         val variety = data["variety"] as? String
         val processing = (data["processing"] as? String)?.let { processingName ->
             ProcessingMethod.entries.firstOrNull { it.name == processingName }
@@ -198,6 +200,7 @@ object CoffeeFirestoreMapper {
             name = name,
             brewMethod = brewMethod,
             origin = origin,
+            region = region,
             variety = variety,
             processing = processing,
             roastLevel = roastLevel,

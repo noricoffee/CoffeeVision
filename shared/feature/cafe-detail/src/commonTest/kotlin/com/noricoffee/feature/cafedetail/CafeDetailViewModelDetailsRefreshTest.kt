@@ -101,6 +101,7 @@ class CafeDetailViewModelDetailsRefreshTest {
             name = "コーヒー",
             brewMethod = com.noricoffee.domain.BrewMethod.HandDrip,
             origin = null,
+            region = null,
             variety = null,
             processing = null,
             roastLevel = null,

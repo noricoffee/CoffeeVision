@@ -62,6 +62,7 @@ class BuildCoffeeStatsUseCaseTest {
         name = name,
         brewMethod = brewMethod,
         origin = origin,
+        region = null,
         variety = null,
         processing = processing,
         roastLevel = roastLevel,

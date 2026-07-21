@@ -65,7 +65,7 @@ struct CoffeeShareCardView: View {
     /// 産地 / 焙煎度 / 抽出方法の属性チップ。`brewMethod` は非 Optional のため必ず 1 件以上になる。
     private var attributeChips: [(label: String, systemImage: String)] {
         var chips: [(label: String, systemImage: String)] = []
-        if let origin = coffee.origin, !origin.isEmpty {
+        if let origin = coffee.originDisplayText {
             chips.append((origin, "globe.asia.australia"))
         }
         if let roastLevel = coffee.roastLevel {

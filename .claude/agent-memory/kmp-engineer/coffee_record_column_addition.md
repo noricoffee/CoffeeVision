@@ -43,3 +43,23 @@ metadata:
 `repository_2stage_addition.md` と同様だが、このパターン特有の一次チェックとして
 `:shared:data-local:compileKotlinIosSimulatorArm64`（`LocalCoffeeRepository.kt` の upsert 呼び出し漏れは
 ここで検出される。`compileCommonMainKotlinMetadata` では検出されない可能性があるので過信しない）。
+
+## 既存の「中間バージョン再現」migration テストが道連れで壊れる（2026-07-22 region 追加で発覚）
+
+`CoffeeRecordMigration5Test.kt` / `CoffeeRecordMigration5IosTest.kt`
+（`sqldelight_migration_version_semantics.md` の「中間バージョン再現」パターン）のように、
+生 DDL で古いスキーマを構築してから `db.coffeeRecordQueries.upsert(...)`（型付き API）で
+シード行を挿入するテストは、**新しい列を追加するたびにコンパイルエラーになるだけでなく
+放置すると実行時エラーにもなる**。
+
+- 型付き `coffeeRecordQueries` は常に**現行 head の `.sq`** から生成されるため、`upsert()` の
+  SQL 文には新しい列（`region` 等）が含まれる。生 DDL で組んだ「旧バージョンのテーブル」に
+  その列が無いと `INSERT` が `no such column` で失敗する
+- **対策**: (1) 生 DDL の中間スキーマにも新しい列を追加する（テスト対象の migration 自体が
+  その列に触れなければ実害なし）、(2) `AppDatabase.Schema.migrate(driver, oldVersion, newVersion)`
+  の `newVersion` を head バージョン（`.sqm` 数 + 1）まで引き上げ、追加した列を作る migration
+  （今回なら 6.sqm）まで実行させる。これで migrate 後の `selectById` 等（型付き SELECT）が
+  実際のテーブル列と一致する
+- 新しい列を追加したら `grep -rn "coffeeRecordQueries.upsert(" shared/data-local` で
+  この種のテストヘルパー（`insertRawRecord` 等の名前が付いていることが多い）を洗い出し、
+  同じ要領で追随させる

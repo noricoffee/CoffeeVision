@@ -67,6 +67,7 @@ class CoffeeDetailViewModelTest {
         name = "コーヒー",
         brewMethod = BrewMethod.HandDrip,
         origin = null,
+        region = null,
         variety = null,
         processing = null,
         roastLevel = null,

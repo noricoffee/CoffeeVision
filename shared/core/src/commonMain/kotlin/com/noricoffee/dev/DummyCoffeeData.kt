@@ -68,6 +68,7 @@ object DummyCoffeeData {
                 name = raw.name,
                 brewMethod = raw.brewMethod,
                 origin = raw.origin,
+                region = raw.region,
                 variety = raw.variety,
                 processing = raw.processing,
                 roastLevel = raw.roastLevel,
@@ -142,6 +143,7 @@ object DummyCoffeeData {
         val notes: String,
         val brewMethod: BrewMethod,
         val origin: String?,
+        val region: String? = null,          // エリア / 農園（2026-07-22 追加。既存データに混在文字列は無いため既定 null）
         val variety: String?,
         val processing: ProcessingMethod?,
         val roastLevel: RoastLevel?,

@@ -1,0 +1,2 @@
+-- 2026-07-22: 産地を国ドロップダウン + 任意エリアに分離する（region 列を追加）。既存行は NULL。
+ALTER TABLE coffee_record ADD COLUMN region TEXT;

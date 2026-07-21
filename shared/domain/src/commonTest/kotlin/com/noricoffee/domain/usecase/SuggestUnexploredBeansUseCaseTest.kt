@@ -39,6 +39,7 @@ class SuggestUnexploredBeansUseCaseTest {
         name = "Test Coffee $id",
         brewMethod = BrewMethod.HandDrip,
         origin = origin,
+        region = null,
         variety = variety,
         processing = null,
         roastLevel = null,

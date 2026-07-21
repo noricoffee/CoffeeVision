@@ -26,6 +26,19 @@
 
 ### 未完・バックログ
 
+#### 産地を国ドロップダウン + 任意エリアに刷新（記録の手間削減 / 2026-07-22 起票）
+
+> `CoffeeRecord.origin` を自由入力 → `CoffeeOriginCatalog`（コーヒー生産国 ~43 か国 + 「ブレンド」/「その他」）の国ドロップダウン選択に。粒度は新フィールド `region`（エリア/農園・任意自由入力）で保持。origin は `String?` のまま（`OriginNormalizer`/`BeanProfile`突合/分析を無改修流用）、region は表示専用で分析非対象。iOS の BeanProfile 産地サジェストは撤去。未リリースのためクリーンブレイク。仕様は data-model §1.3a / requirements 2-1 / kmp-bridge「定数カタログの共有」/ implementation_note 2026-07-22。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: docs 確定（data-model §1.1/§1.3a/§1.6/§2.1/§2.3/§3.2 / requirements 2-1・2-10・画面一覧・未決・変更履歴 / kmp-bridge / implementation_note） | 2026-07-22 完了 |
+| [x] | kmp-engineer: `CoffeeRecord.region` 追加 / `CoffeeOriginCatalog` 新設 / `OriginNormalizer` を ~43 か国へ拡張（英語綴りシノニム含む）+ カタログ ⊇ シノニム値のテスト / data-local（migration 6 で `region` 列 + `CoffeeRecord.sq` upsert + `Mapper`）/ data-firebase Mapper / feature-coffee-editor（`CoffeeDraft.region`/`onRegionChanged`/build/toDraft/toDuplicate）/ `DummyCoffeeData` の混在産地を国+エリアに分割 / commonTest 更新 | 2026-07-22 完了。DummyData は origin が全て単一英語国名で混在文字列なし → region は null 据え置き。migration5 テストは head スキーマ基準のため v4 DDL に region 追加 + migrate(5→7) 追随 |
+| [x] | 親: KMP 公開 API 差分確認 + `:shared:*` テスト override 無し再検証（`iosSimulatorArm64Test` 含む） | 2026-07-22 完了。親が override 無しで `verifySqlDelightMigration` + `OriginNormalizer` テスト + `:shared:domain`/`data-local`/`coffee-editor` の `iosSimulatorArm64Test` を独立に BUILD SUCCESSFUL 再確認 |
+| [x] | ios-engineer: `CoffeeEditorView` の産地 UI を国 Picker + エリア TextField に置換（BeanProfile 産地サジェスト撤去 / 「その他」で国名自由入力欄）/ カタログをブリッジ受領 / `CoffeeFirestoreMapper.swift` に region / 詳細・シェアカードの産地表示に region 連結 / ローカライズ | 2026-07-22 完了。legacy origin は Picker 選択肢に動的追加でフォールバック。「その他」選択時は onOriginChanged("") で一旦空に。`CoffeeRecordDisplay.swift`（`originDisplayText`）新設で連結表示を共通化 |
+| [ ] | 親: 2 レポート統合 + 統合検証（verify-kmp-ios / xcodebuild override 無し）+ commit | 検証済み。親が override 無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認。SourceKit の `No such module` は xcframework 未インデックスの IDE 偽陽性。commit のみ残 |
+| [ ] | ユーザー: シミュレータで目視（国ドロップダウン選択 / エリア入力 / 「その他」自由入力 / 「ブレンド」/ 詳細・シェアカード表示 / 分析の産地ランキング / ダーク・VoiceOver） | UI 挙動はビルド成功≠完了 |
+
 #### マップ検索結果を「マップ主体 + 下部ドラッグシート」に刷新（2026-07-22 起票）
 
 > 検索結果の位置がマップで見えづらい問題を解消。上部ドロップダウンを廃し、結果一覧を下部の自前ドラッグシート（2 detent）へ移設。テキスト検索完了時のみ全結果ピンにカメラ自動フィット。行/ピンタップは既存 `cafeSelectionCard` と排他表示（未選択=シート/選択=カード）。選択ピンを scale 1.3 で強調。iosApp `MapTabView.swift` 完結（KMP 変更なし）。native `.sheet` は ✨ `TasteSearchSheet` と競合するため不採用。仕様は ui-ux-guidelines「マップ検索結果の提示」・requirements §11-2/§5・プラン `.claude/plans/shiny-brewing-dongarra.md`。

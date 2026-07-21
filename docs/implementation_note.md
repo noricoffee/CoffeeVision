@@ -1096,3 +1096,24 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **選択ピン強調を追加**: 選択中の検索結果ピンを scale 1.3 + 影で強調。色は既存 `Color.blue` を維持（色セマンティクス表は増やさない）。
 
 **影響範囲**: iosApp `MapTabView.swift` のみ（KMP 変更なし。`searchResultPlaces` / `searchBridge.results` を流用）。§11-2 広告は上部ドロップダウン → 下部シート内へ提示先が移動（3 件目後・3 件未満非表示の配置ルールは不変）。requirements §11-2 / §5 マップ行・ui-ux-guidelines・app-store-metadata の「ドロップダウン」表記を同時改訂。
+
+### 2026-07-22: 産地を国ドロップダウン + 任意エリアに分離（記録の手間削減）
+
+- 領域: Shared / KMP / iOS / Docs
+- 関連: `shared/domain/.../CoffeeOriginCatalog.kt`（新規）/ `OriginNormalizer.kt` / `CoffeeRecord`（`region` 追加）/ `CoffeeEditorView.swift`
+
+**背景**: ユーザー要望「コーヒー記録の手間を減らしたい。産地はドロップダウン形式（国名を選択）にする」。産地は従来 `String?` の自由入力 + `BeanProfile` ファジーサジェストだったが、都度タイプする摩擦があった。
+
+**確定した設計（AskUserQuestion で 3 点確定）**:
+- **国 + 任意エリアの 2 フィールド化**: `origin`（国名）を `CoffeeOriginCatalog`（コーヒー生産国 ~43 か国 + 「ブレンド」/「その他」）からのドロップダウン選択に。粒度（イルガチェフェ等）は新フィールド `region`（エリア/農園・任意自由入力）で保持。
+- **国リストはコーヒー生産国を厳選**（全世界 ~200 か国は選択が遅くなるため不採用）。
+- **特殊項目「ブレンド」+「その他」**の両方を用意。
+
+**トレードオフ / 設計判断**:
+- **origin は `String?` のまま（enum 化しない）**: 「ブレンド」「その他で入力した実国名」「null」「legacy 自由文字列」を型で表現でき、`OriginNormalizer` / `BeanProfile` 突合 / `originRanking`（全て String ベース）を無改修で流用できる（Simplicity First）。enum 化は data-model / SQLDelight / Firestore / 分析へ広く波及するため不採用。
+- **カタログの真実点は domain**（iOS はブリッジ経由で読む）。`OriginNormalizer` のシノニム値 ⊇ 関係をテストで担保し、正規化とカタログのカバレッジずれを防ぐ。新規追加国には英語綴りシノニムも追加。
+- **「その他」は実国名を保存**（literal「その他」を保存しない）。データ欠損回避。「ブレンド」は単一国でないため literal 保存。
+- **`region` は分析非対象（表示専用）**: サブ地域粒度は交絡分離不能で統計に使えない（§1.6 confounding 方針）。`originRanking` / `FavoriteSignals` は従来どおり国のみ。
+- **BeanProfile 産地サジェストは撤去**: 国がピッカーで制約されサジェスト不要に。品種サジェストは今回スコープ外（据え置き）。
+
+**影響範囲**: domain（`CoffeeRecord.region` / `CoffeeOriginCatalog` / `OriginNormalizer` 拡張）/ data-local（migration 6 で `region` 列 + upsert + Mapper）/ data-firebase（Firestore `region` キー、null 省略）/ feature-coffee-editor（`CoffeeDraft.region` / `onRegionChanged` / build/toDraft/toDuplicate）/ `DummyCoffeeData`（混在産地を国 + エリアに分割）/ iOS（エディタ UI = 国 Menu + エリア TextField、詳細 / シェアカードの産地表示に region 連結）。未リリースのためクリーンブレイク（ユーザーデータ移行なし）。

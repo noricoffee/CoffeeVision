@@ -38,12 +38,10 @@ struct CoffeeEditorView: View {
     /// 写真保存処理中の error（保存失敗時に alert 表示）。
     @State private var photoSaveError: String?
 
-    // MARK: - 産地サジェスト
+    // MARK: - 産地ドロップダウン
 
-    /// 産地 TextField のフォーカス状態。サジェストパネルの表示制御に使う。
-    @FocusState private var originFocused: Bool
-    /// `fetchBeanSuggestions` の結果（最大 5 件）。入力 2 文字以上でポピュレートされる。
-    @State private var originSuggestions: [BeanProfile] = []
+    /// 「その他」選択中かどうか（国名自由入力 TextField の表示制御。2026-07-22 産地ドロップダウン化）。
+    @State private var isOtherOriginActive: Bool = false
 
     // MARK: - Init
 
@@ -128,27 +126,6 @@ struct CoffeeEditorView: View {
                 guard !newItems.isEmpty else { return }
                 Task {
                     await handlePickerSelection(newItems)
-                }
-            }
-            // 産地サジェスト: 入力 2 文字以上で fetchBeanSuggestions を呼ぶ
-            .onChange(of: viewModel.draft.origin) { _, newValue in
-                guard newValue.count >= 2 else {
-                    originSuggestions = []
-                    return
-                }
-                Task {
-                    if let suggestions = try? await appState.container.fetchBeanSuggestions(
-                        origin: newValue,
-                        processing: viewModel.draft.processing
-                    ) {
-                        originSuggestions = Array(suggestions.prefix(5))
-                    }
-                }
-            }
-            // フォーカスアウト時は候補を消去する
-            .onChange(of: originFocused) { _, focused in
-                if !focused {
-                    originSuggestions = []
                 }
             }
             .alert(
@@ -269,64 +246,45 @@ struct CoffeeEditorView: View {
             }
             .accessibilityLabel(String(localized: "抽出方法"))
 
-            // 産地入力 + サジェストパネル
+            // 産地ドロップダウン（国選択。2026-07-22 自由入力 → ドロップダウン化）
             //
-            // Form の list row 内で VStack を使い、TextField の直下にサジェストを展開する。
-            // フォーカス中 かつ 候補が 1 件以上あるときだけ表示される。
-            // ZStack でのオーバーレイは Form 行のクリッピングで候補が隠れるため VStack を採用。
-            VStack(alignment: .leading, spacing: 0) {
+            // Picker の選択肢は「未選択」+ CoffeeOriginCatalog.countries + 「ブレンド」+「その他」。
+            // catalog に無い legacy 値（Edit モードの旧自由入力データ）は選択肢の末尾に動的追加し、
+            // Menu の現在値表示が壊れないようにフォールバックする。
+            Picker(String(localized: "産地（任意）"), selection: originSelection) {
+                Text(String(localized: "未選択")).tag("")
+                ForEach(CoffeeOriginCatalog.shared.countries, id: \.self) { country in
+                    Text(country).tag(country)
+                }
+                Text(CoffeeOriginCatalog.shared.BLEND).tag(CoffeeOriginCatalog.shared.BLEND)
+                if let legacyOrigin {
+                    Text(legacyOrigin).tag(legacyOrigin)
+                }
+                Text(CoffeeOriginCatalog.shared.OTHER).tag(CoffeeOriginCatalog.shared.OTHER)
+            }
+            .accessibilityLabel(String(localized: "産地"))
+
+            // 「その他」選択時のみ国名の自由入力欄を表示する。literal「その他」は保存しない
+            if isOtherOriginActive {
                 TextField(
-                    String(localized: "産地（任意）"),
+                    String(localized: "国名を入力"),
                     text: Binding(
                         get: { viewModel.draft.origin },
                         set: { viewModel.onOriginChanged($0) }
                     )
                 )
-                .focused($originFocused)
-                .accessibilityLabel(String(localized: "産地"))
-
-                if originFocused && !originSuggestions.isEmpty {
-                    Divider()
-                        .padding(.top, 8)
-
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ForEach(originSuggestions, id: \.beanId) { bean in
-                            Button {
-                                viewModel.onOriginChanged(bean.origin)
-                                if let v = bean.variety {
-                                    viewModel.onVarietyChanged(v)
-                                }
-                                originSuggestions = []
-                                originFocused = false
-                            } label: {
-                                HStack {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(bean.origin)
-                                            .font(.body)
-                                        if let v = bean.variety {
-                                            Text(v)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                        }
-                                    }
-                                    Spacer()
-                                    if !bean.flavorNotes.isEmpty {
-                                        Text(Array(bean.flavorNotes.prefix(2)).joined(separator: " · "))
-                                            .font(.caption2)
-                                            .foregroundStyle(.tertiary)
-                                    }
-                                }
-                                .padding(.horizontal, 12)
-                                .padding(.vertical, 8)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            .accessibilityLabel(String(localized: "産地候補: \(bean.origin)"))
-                        }
-                    }
-                    .padding(.top, 4)
-                }
+                .accessibilityLabel(String(localized: "産地（その他・国名を入力）"))
             }
+
+            TextField(
+                String(localized: "エリア（任意）"),
+                text: Binding(
+                    get: { viewModel.draft.region },
+                    set: { viewModel.onRegionChanged($0) }
+                ),
+                prompt: Text(String(localized: "イルガチェフェ"))
+            )
+            .accessibilityLabel(String(localized: "エリア"))
 
             TextField(
                 String(localized: "品種（任意）"),
@@ -380,6 +338,42 @@ struct CoffeeEditorView: View {
             .lineLimit(1...4)
             .accessibilityLabel(String(localized: "抽出レシピ"))
         }
+    }
+
+    // MARK: - 産地ドロップダウン ヘルパー
+
+    /// catalog に無い legacy な産地値（Edit モードの旧自由入力データ）。
+    /// 「その他」入力中や catalog / ブレンドに一致する値は対象外（Picker の tag 重複を避ける）。
+    private var legacyOrigin: String? {
+        let origin = viewModel.draft.origin
+        guard !origin.isEmpty,
+              !isOtherOriginActive,
+              !CoffeeOriginCatalog.shared.countries.contains(origin),
+              origin != CoffeeOriginCatalog.shared.BLEND
+        else {
+            return nil
+        }
+        return origin
+    }
+
+    /// 産地 Picker の選択 Binding。「その他」選択中は Picker 上は OTHER 固定表示にし、
+    /// 実際の入力は下の TextField（`viewModel.draft.origin` 直結）に委ねる。
+    private var originSelection: Binding<String> {
+        Binding(
+            get: {
+                isOtherOriginActive ? CoffeeOriginCatalog.shared.OTHER : viewModel.draft.origin
+            },
+            set: { newValue in
+                if newValue == CoffeeOriginCatalog.shared.OTHER {
+                    isOtherOriginActive = true
+                    // literal「その他」は保存しない。自由入力欄を空から始める
+                    viewModel.onOriginChanged("")
+                } else {
+                    isOtherOriginActive = false
+                    viewModel.onOriginChanged(newValue)
+                }
+            }
+        )
     }
 
     // MARK: - テイスティング Section

@@ -14,7 +14,8 @@ data class CoffeeRecord(
     // --- コーヒー属性（旧 CoffeeItem から昇格）---
     val name: String,                     // コーヒー名（必須）
     val brewMethod: BrewMethod,
-    val origin: String?,                  // 産地（国 / エリア）
+    val origin: String?,                  // 産地（国名）。ドロップダウン選択（CoffeeOriginCatalog）。「ブレンド」/「その他で入力した国名」も可。null = 未選択。2026-07-22 に自由入力 → 国ドロップダウン化
+    val region: String?,                  // エリア / 農園（任意自由入力。例「イルガチェフェ」「ウエウエテナンゴ」）。origin から分離（2026-07-22 追加）。表示専用で分析には使わない
     val variety: String?,                 // 品種
     val processing: ProcessingMethod?,    // 精製方法
     val roastLevel: RoastLevel?,          // 焙煎度

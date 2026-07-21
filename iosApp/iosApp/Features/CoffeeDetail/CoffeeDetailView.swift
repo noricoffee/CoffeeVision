@@ -186,7 +186,7 @@ struct CoffeeDetailView: View {
                     Text(localizedBrewMethod(coffee.brewMethod))
                 }
 
-                if let origin = coffee.origin, !origin.isEmpty {
+                if let origin = coffee.originDisplayText {
                     LabeledContent(String(localized: "産地")) {
                         Text(origin)
                     }

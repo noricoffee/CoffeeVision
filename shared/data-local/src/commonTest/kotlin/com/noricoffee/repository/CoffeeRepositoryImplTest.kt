@@ -307,6 +307,7 @@ class CoffeeRepositoryImplTest {
             name = "ケニア",
             brewMethod = BrewMethod.HandDrip,
             origin = "ケニア",
+            region = null,
             variety = "SL28",
             processing = ProcessingMethod.Washed,
             roastLevel = RoastLevel.Medium,

@@ -81,6 +81,7 @@ class ObserveVisitedCafesUseCaseTest {
         name = "Test Coffee $id",
         brewMethod = BrewMethod.HandDrip,
         origin = null,
+        region = null,
         variety = null,
         processing = null,
         roastLevel = null,

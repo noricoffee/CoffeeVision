@@ -2,6 +2,7 @@ package com.noricoffee.domain
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertTrue
 
 /**
  * [OriginNormalizer] のユニットテスト。
@@ -78,5 +79,34 @@ class OriginNormalizerTest {
     fun moka_isAmbiguousAndNotInDictionary() {
         // 「モカ」はイエメン / エチオピアいずれの通称にもなり得る多義語のため辞書に含めない
         assertEquals("モカ", OriginNormalizer.normalize("モカ"))
+    }
+
+    // --- CoffeeOriginCatalog との整合（2026-07-22） ---
+
+    @Test
+    fun catalogCountries_areFixedPointsOfNormalize() {
+        // カタログ各国は normalize の固定点であること（正規化しても自分自身に戻る）
+        CoffeeOriginCatalog.countries.forEach { country ->
+            assertEquals(country, OriginNormalizer.normalize(country), "$country が固定点ではない")
+        }
+    }
+
+    @Test
+    fun synonymValues_areAllContainedInCatalog() {
+        // シノニム辞書の正規形（RHS）は全て CoffeeOriginCatalog.countries に含まれる
+        val synonymValues = setOf(
+            "エチオピア", "ケニア", "コロンビア", "パナマ", "グアテマラ", "コスタリカ", "エルサルバドル",
+            "ホンジュラス", "ブラジル", "ペルー", "ボリビア", "ルワンダ", "ブルンジ", "タンザニア", "イエメン",
+            "インドネシア", "インド", "中国", "ジャマイカ", "ハワイ", "パプアニューギニア",
+            "ウガンダ", "コンゴ民主共和国", "マラウイ", "ザンビア", "カメルーン", "コートジボワール",
+            "ニカラグア", "メキシコ", "エクアドル", "ベネズエラ", "ドミニカ共和国", "ハイチ", "キューバ",
+            "プエルトリコ", "ベトナム", "東ティモール", "タイ", "フィリピン", "ラオス", "ミャンマー", "台湾", "ネパール",
+        )
+        synonymValues.forEach { value ->
+            assertTrue(
+                CoffeeOriginCatalog.countries.contains(value),
+                "$value が CoffeeOriginCatalog.countries に含まれない",
+            )
+        }
     }
 }

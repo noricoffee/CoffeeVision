@@ -59,6 +59,7 @@ class CoffeeRecordMigration5Test {
             name = "raw",
             brew_method = "HandDrip",
             origin = null,
+            region = null,
             variety = null,
             processing = null,
             roast_level = null,
@@ -91,6 +92,7 @@ class CoffeeRecordMigration5Test {
             name = "raw-rated",
             brew_method = "HandDrip",
             origin = null,
+            region = null,
             variety = null,
             processing = null,
             roast_level = null,
@@ -119,11 +121,14 @@ class CoffeeRecordMigration5Test {
             sort_order = 0,
         )
 
-        // migration 5 を適用（rating nullable 化 + テーブル再作成）。
+        // migration 5（rating nullable 化 + テーブル再作成）+ migration 6（region 列追加）を適用する。
         // SQLDelight の Schema.version は「.sqm ファイル数 + 1」（baseline=1、migration N.sqm は
-        // version N→N+1 の遷移）。5.sqm だけを走らせるには oldVersion=5 → newVersion=6 を指定する
+        // version N→N+1 の遷移）。5.sqm だけを走らせるなら oldVersion=5 → newVersion=6 で足りるが、
+        // 生成される `coffeeRecordQueries` は常に**現行 head スキーマ**（region 列を含む）基準のため、
+        // 6.sqm まで通して region 列を復元しないと直後の型付き selectById が列不足で失敗する。
+        // よって newVersion は現行 head バージョン（7）まで進める
         // （migrateInternal の各ブロックは `oldVersion <= N && newVersion > N` で判定するため）。
-        AppDatabase.Schema.migrate(driver, 5L, 6L)
+        AppDatabase.Schema.migrate(driver, 5L, 7L)
 
         val zeroRow = db.coffeeRecordQueries.selectById("r-zero").executeAsOne()
         assertNull(zeroRow.rating, "旧 sentinel rating=0.0 は migration 5 で NULL に変換されるべき")
@@ -146,7 +151,13 @@ class CoffeeRecordMigration5Test {
 
     /**
      * migration 4 適用後（= migration 5 適用前）の `coffee_record` / `photo` テーブルを
-     * 生 DDL で構築する。`coffee_record.rating` が `NOT NULL` である点が現行 `.sq` との唯一の差分。
+     * 生 DDL で構築する。`coffee_record.rating` が `NOT NULL` である点が現行 `.sq` との差分。
+     *
+     * 本来 `region` 列は migration 6（v6 以降）で追加されるため v4 時点には存在しないが、
+     * 生成される `coffeeRecordQueries`（型付き API）は常に現行 head スキーマ基準の SQL を発行するため、
+     * ここでの型付き `upsert` 呼び出しを成立させる目的で `region TEXT` を含めている
+     * （migration 5 のテーブル再作成は明示的な列挙 SELECT のため、この余剰列は 5.sqm 実行時に
+     * 一旦失われ、直後に 6.sqm の `ALTER TABLE ADD COLUMN region` で作り直される。値は常に null のため実害なし）。
      */
     private fun createV4Schema() {
         driver.execute(
@@ -169,6 +180,7 @@ class CoffeeRecordMigration5Test {
                 name TEXT NOT NULL,
                 brew_method TEXT NOT NULL,
                 origin TEXT,
+                region TEXT,
                 variety TEXT,
                 processing TEXT,
                 roast_level TEXT,

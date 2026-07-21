@@ -116,6 +116,7 @@ class CoffeeEditorViewModelTest {
         name = "エチオピア ハンドドリップ",
         brewMethod = BrewMethod.HandDrip,
         origin = "Ethiopia",
+        region = null,
         variety = variety,
         processing = processing,
         roastLevel = roastLevel,

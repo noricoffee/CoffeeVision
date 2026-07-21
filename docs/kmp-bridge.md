@@ -450,6 +450,19 @@ let records = state.records
 
 `Map<String, Cafe>` も同様に `NSDictionary` → `[String: Cafe]` のキャストが必要になることがあります。
 
+### 定数カタログの共有（`CoffeeOriginCatalog`）
+
+産地の国ドロップダウン（[`data-model.md`](./data-model.md) §1.3a）は、選択肢の**単一の真実点を `shared/domain` に置き**、iOS ピッカーが SKIE 経由で読む。Kotlin の `object` + `val countries: List<String>` + `const val` はそのまま Swift から参照できる。
+
+```swift
+// SKIE あり: object は共有インスタンス、List<String> は [String] として現れる
+let countries = CoffeeOriginCatalog.shared.countries        // [String]
+let blend = CoffeeOriginCatalog.shared.BLEND                // "ブレンド"
+let other = CoffeeOriginCatalog.shared.OTHER               // "その他"
+```
+
+iOS 側でリストを二重管理しないこと（正規化 `OriginNormalizer` とのカバレッジ整合は KMP のテストで担保する）。
+
 ---
 
 ## Identifiable 化

@@ -17,7 +17,8 @@ CREATE TABLE coffee_record (
     -- コーヒー属性
     name TEXT NOT NULL,
     brew_method TEXT NOT NULL,             -- enum 文字列
-    origin TEXT,
+    origin TEXT,                           -- 国名（CoffeeOriginCatalog 選択値 / 「ブレンド」/ legacy 自由文字列）
+    region TEXT,                           -- エリア / 農園（自由入力。migration 6.sqm で ALTER TABLE ADD COLUMN。2026-07-22 追加）
     variety TEXT,
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
@@ -53,11 +54,11 @@ INSERT OR REPLACE INTO coffee_record (
     cafe_latitude, cafe_longitude, cafe_photo_references,
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
-    name, brew_method, origin, variety, processing, roast_level, cup, brew_recipe,
+    name, brew_method, origin, region, variety, processing, roast_level, cup, brew_recipe,
     sweetness, body, acidity, flavor, aftertaste,
     tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;

@@ -84,6 +84,7 @@ class ObserveTasteMatchedCafesUseCaseTest {
         name = coffeeName,
         brewMethod = brewMethod,
         origin = origin,
+        region = null,
         variety = null,
         processing = processing,
         roastLevel = roastLevel,

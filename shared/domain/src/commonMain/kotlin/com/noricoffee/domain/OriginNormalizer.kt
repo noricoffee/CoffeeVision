@@ -26,7 +26,7 @@ object OriginNormalizer {
     }
 
     private val SYNONYMS: Map<String, String> = mapOf(
-        // --- 英語国名 → 日本語産地（20 ヶ国） ---
+        // --- 英語国名 → 日本語産地（CoffeeOriginCatalog の全 43 か国をカバー） ---
         "ethiopia" to "エチオピア",
         "kenya" to "ケニア",
         "colombia" to "コロンビア",
@@ -51,6 +51,33 @@ object OriginNormalizer {
         "hawaii" to "ハワイ",
         "papua new guinea" to "パプアニューギニア",
         "png" to "パプアニューギニア",
+        "uganda" to "ウガンダ",
+        "dr congo" to "コンゴ民主共和国",
+        "drc" to "コンゴ民主共和国",
+        "congo" to "コンゴ民主共和国",
+        "malawi" to "マラウイ",
+        "zambia" to "ザンビア",
+        "cameroon" to "カメルーン",
+        "ivory coast" to "コートジボワール",
+        "cote d'ivoire" to "コートジボワール",
+        "nicaragua" to "ニカラグア",
+        "mexico" to "メキシコ",
+        "ecuador" to "エクアドル",
+        "venezuela" to "ベネズエラ",
+        "dominican republic" to "ドミニカ共和国",
+        "haiti" to "ハイチ",
+        "cuba" to "キューバ",
+        "puerto rico" to "プエルトリコ",
+        "vietnam" to "ベトナム",
+        "east timor" to "東ティモール",
+        "timor-leste" to "東ティモール",
+        "thailand" to "タイ",
+        "philippines" to "フィリピン",
+        "laos" to "ラオス",
+        "myanmar" to "ミャンマー",
+        "burma" to "ミャンマー",
+        "taiwan" to "台湾",
+        "nepal" to "ネパール",
 
         // --- サブ地域・通称（カタカナ + 英語綴り） ---
         "イルガチェフェ" to "エチオピア",

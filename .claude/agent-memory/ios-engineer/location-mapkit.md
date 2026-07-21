@@ -26,6 +26,10 @@ metadata:
 
 `MapTabView` の Apple 周辺ピン用ズームゲート（`applePoiZoomGateRadiusMeters` = 3000m、`scheduleAppleNearbyFetch` 内で `center.radiusMeters` と比較）は fetch 実行可否のガードだが、別ピン種（curated、fetch 不要でメモリ上の一覧をそのまま出す）の表示可否にも**同じ static let しきい値**を流用できる。fetch を伴わないピン種は `.onMapCameraChange` の副作用ではなく、表示用の filter 関数（`displayedXxx(bridge)`）内で `appState.mapSearchCenter?.radiusMeters` を直接参照してガードすればよい（新規 `@State` 追加不要）。`appState.mapSearchCenter` は `.onMapCameraChange(frequency: .onEnd)` でのみ更新されるため、初回カメラ確定前は `nil` — この間は該当ピンを非表示にする（Apple 周辺ピンの初期挙動と揃う）。
 
+## `UserAnnotation()` で標準ブルードットを出すときは `LocationManager.authorizationStatus` でゲートする（2026-07-21、マップ現在地表示追加で確認）
+
+`Map(position:) { ... }` コンテンツ内に `UserAnnotation()`（iOS 17+、`import MapKit` のみで使え `CoreLocation` 直参照不要）を `if locationManager.authorizationStatus == .authorizedWhenInUse || ... == .authorizedAlways` で囲むだけで動く。既存の現在地 FAB（recenter 用）とは完全に独立で、`LocationManager`（ワンショット取得）側の変更は不要 — `UserAnnotation()` は MapKit が内部で位置更新を自前管理する。ズームゲート等の既存ロジックとも無関係なので、`Map` コンテンツの一番手前（既存ピンの前）に足すだけで副作用が出ない。
+
 ## `MKError` の Swift ブリッジは struct（NSError bridge）で、静的メンバは `MKError.Code` を返す（2026-07-18、スロットリング耐性対応で確認）
 
 `MKTypes.h` の `MKErrorCode`（`NS_ENUM` + apinotes の `NSErrorDomain: MKErrorDomain` 注釈）は Swift 側で `MKError`（struct, `Error` 準拠, NSError ブリッジ）としてインポートされる。**`MKError.loadingThrottled` は `MKError` ではなく `MKError.Code` を返す**ため、`catch` 節で特定エラーを判別するときは `if let mkError = error as? MKError, mkError == .loadingThrottled` ではコンパイルエラーになる（"produces result of type 'MKError.Code', but context expects 'MKError'"）。正しくは `mkError.code == .loadingThrottled`（`.code` プロパティ経由で `Code` 同士を比較）。この `.h` ヘッダに `MKError` という型は存在せず（`MKErrorCode`/`MKErrorDomain` のみ）、Swift 側の型形状は apinotes のブリッジ規則からの類推が必要 — 実際にコンパイルしてエラーメッセージで裏取りするのが確実（`.swiftinterface` にも `MKError` の記載はない。Swift の自動 NSError ブリッジ規則で生成される暗黙の型のため）。

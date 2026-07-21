@@ -525,6 +525,15 @@ struct MapTabView: View {
     private func mapContent(bridge: MapViewModelBridge) -> some View {
         ZStack(alignment: .top) {
             Map(position: $cameraPosition) {
+                // ユーザー自身の現在地（標準ブルードット + ヘディング）。
+                // 位置情報許可が ON（when-in-use / always）のときのみ表示する。
+                // `.denied` / `.restricted` / `.notDetermined` では表示せず、既存の
+                // 「許可なし時は訪問済みカフェの bounding box にカメラ」挙動と矛盾させない。
+                if locationManager.authorizationStatus == .authorizedWhenInUse
+                    || locationManager.authorizationStatus == .authorizedAlways {
+                    UserAnnotation()
+                }
+
                 // 周辺カフェ（Apple 検索由来 / 低強調）ピン。既存ピン（訪問済み / 保存済み / 検索結果 /
                 // おすすめ（curated））と座標近接（約 40m 以内）のものは重複排除済み
                 // （displayedAppleNearbyCafes）。最初に描画して他ピンの背面に回す。

@@ -1046,3 +1046,13 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **横断点検で拾った回帰**: `AnalysisViewModel.FavoriteSignals.hasAnySignal()`（分析空状態の readiness 判定）が `bestProcessing` を見落とすと「精製のみ信号あり」の場合に「データ不足」表示のまま固まる。kmp-engineer が grep 点検で発見・修正（他の `best*` 列挙箇所に見落としなしを確認）。
 - **iOS 側の bridge 注意点**: SKIE はデフォルト引数を Swift に出さないため、`FavoriteSignals` に `bestProcessing` を足すと Swift の init が必須引数化し既存の構築 2 箇所がコンパイルエラーになる（`AnalysisView` プレビュー + `PreviewSamples`）。SKIE 生成 enum に `.processing` が乗るため網羅 switch（`preferenceMatchAxisLabel` / `axisIcon`）も追随必須。精製方法はアプリ内で enum 名を素表示（ローカライズ辞書は分析カードのみ）で、マップ理由表示は既存の焙煎度と同じ扱い。軸アイコンは `leaf.fill`。
 - **残課題（別タスク）**: `CoffeeStats.byProcessing`（精製方法別集計）は既存だが分析タブに棒グラフ表示がない（ios-engineer の申し送り）。要件で求められれば別 dispatch。
+
+### 2026-07-21: マップタブに現在地ブルードット表示を追加（`UserAnnotation`）
+
+- 領域: iOS
+- 関連: `MapTabView.swift`（`mapContent`）、Info.plist `NSLocationWhenInUseUsageDescription`、`docs/app-store-metadata.md`（プライバシー申告・審査ノート）
+
+マップタブで位置情報許可 ON のとき、ユーザー自身の現在地を標準ブルードット（ヘディング付き）で表示するようにした。`Map { }` コンテンツ先頭に `UserAnnotation()` を追加し、`locationManager.authorizationStatus` が `.authorizedWhenInUse` / `.authorizedAlways` のときのみ描画する条件でゲートする。
+
+- **既存の現在地 FAB とは独立**: FAB（`currentLocationFAB` / `recenterToCurrentLocation`）は「現在地へセンタリング + ズームリセット」の役割で、`LocationManager` のワンショット取得を使う。ブルードットは MapKit が内部で位置を自前管理するため、周辺カフェ検索（`setupLocation` のワンショット）への副作用はない。`MapUserLocationButton` への置き換えはしていない。
+- **権限文言の追随**: ブルードットは地図表示中は継続表示のため、旧文言「検索時のみ / 一時的に使用」は実態と食い違う（挙動は依然 when-in-use / フォアグラウンドのみ、バックグラウンド常時取得はしない）。Info.plist の usage description を「近くのカフェの検索と、地図上での現在地表示のために現在地を使用します。」に、app-store-metadata の申告・審査ノートを「カフェ検索と地図上の現在地表示に使用 / バックグラウンド常時取得はしない」に更新した（ユーザー確定）。

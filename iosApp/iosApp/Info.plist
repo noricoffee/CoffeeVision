@@ -17,7 +17,7 @@
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
 	<key>NSLocationWhenInUseUsageDescription</key>
-	<string>近くのカフェを検索するために、現在地を一時的に使用します。</string>
+	<string>近くのカフェの検索と、地図上での現在地表示のために現在地を使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>カフェで撮った写真を訪問記録に添えるため、写真ライブラリへのアクセスを使用します</string>
 	<key>NSUserTrackingUsageDescription</key>

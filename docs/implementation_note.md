@@ -470,11 +470,13 @@ LT テーマ「数値⇄言葉の双方向変換」の逆方向（自由文 → 
 
 `tastingMin` / `tastingMax` のいずれかが指定されている場合、`tasting == null`（未記録）のレコードは除外する（`rating=0.0` を評価範囲から除外するのと同じ「未記録を誤ヒットさせない」思想）。各軸は独立評価（全 5 軸がそれぞれ範囲内であること）。13-A-3 で iOS が `TastePreference` → filter 変換時に `axis ± margin(=2)` の範囲を渡す。
 
-### 2026-06-30: MapViewModel テイストプロファイルフィルタの設計（Phase 13-C）
+### 2026-06-30: MapViewModel テイストプロファイルフィルタの設計（Phase 13-C）〜 2026-07-21 撤去
 
 - 領域: KMP / アーキテクチャ
 
-`tasteMatchedPlaceIds` は `selectedTags`（ピン絞り込み）とは**独立の別軸**として管理（iOS 側で非マッチピンの半透明化に使うため）。両フィルタの AND 要件が出たら再検討。`latestAllRecords` キャッシュ + 即時 `applyTasteFilter()` はタグフィルタと同じパターン。`combine` の変換式は `Pair<Triple, List>` 返し（複雑化したら data class 化を検討）。
+**2026-07-21 撤去済み**: マップの「好みで絞り込む」チップ（`TasteMapFilterSheet` / `MapViewModel.onTasteProfileChanged` / `tasteMatchedPlaceIds` / `activeTastingMin`・`activeTastingMax` / `applyTasteFilter` / `latestAllRecords`）は「訪問済みの中を味覚スコアでさらに絞り込むだけで用途が薄い」とのユーザー判断で機能ごと削除。「好み一致」自動推薦（`recommendedCafes` / `ObserveTasteMatchedCafesUseCase`）と「テイストで探す」検索バー ✨（`TasteSearchSheet`）は別機能として存続。以下は撤去前の設計メモ（履歴）。
+
+`tasteMatchedPlaceIds` は `selectedTags`（ピン絞り込み）とは**独立の別軸**として管理していた（iOS 側で非マッチピンの半透明化に使用）。`latestAllRecords` キャッシュ + 即時 `applyTasteFilter()` はタグフィルタと同じパターン。`combine` の変換式は `Pair<Triple, List>` 返し（撤去時に素の `Triple` へ単純化）。
 
 ### 2026-06-30: Phase 12-B — Form 内サジェスト UI は VStack 展開（ZStack 非採用）
 
@@ -670,7 +672,7 @@ CLAUDE.md が 240 行と公式推奨（200 行以下）を超過し、docs 二�
 - **保存済み「強調」を MapViewModel UIState に置かなかった判断**: チップタップ時のピン強調はドメインロジックゼロの純プレゼンテーション状態（必要な placeId 集合は `savedCafes` として既に UIState にある）ため、iOS ローカル `@State savedEmphasisActive` で管理。`showVisited`（UIState）との非対称は「訪問済み = 表示 ON/OFF のドメイン設定、保存済み強調 = 一時的な演出」という意味の違い。保存済みピン自体は常時表示に変更（旧 `showSavedCafes` トグル廃止）
 - **CafeDetailViewModel の Places Details リフレッシュは init 1 回のみ**: 発火条件 `initialCafe == null || initialCafe.googleRating == null`（DB スナップショット由来のみ。検索 / POI 由来では API を叩かない = コスト抑制）。取得失敗時はサイレントフォールバックし、当該画面のライフサイクル中は再試行しない（スナップショット表示のまま）。`latestDetails ?: 最新記録 cafe ?: initialCafe` の優先マージで records 再 emit による巻き戻りを防止（テストで固定済み）
 - **`MapViewModel.onCafeSaveToggled` の保存判定は `savedCafes` リストから毎回導出**: cafe-detail 側 `onSaveToggled` が `UIState.isSaved` を使うのと非対称だが、MapViewModel は特定カフェの単一 `isSaved` 状態を持たないため
-- **`TasteMapFilterSheet` / `TasteSearchSheet` / sparkles 系の accentColor は pink 化対象外**: 「好みで絞り込む」（フィルタ操作 UI）と「好み一致」（推薦結果のセマンティクス）を別概念と整理。pink は推薦結果（recommendedCafePin・凡例・RecommendationMatchSheet の軸アイコン）のみ
+- **`TasteSearchSheet` / sparkles 系の accentColor は pink 化対象外**: 「テイストで探す」（フィルタ / 検索操作 UI）と「好み一致」（推薦結果のセマンティクス）を別概念と整理。pink は推薦結果（recommendedCafePin・凡例・RecommendationMatchSheet の軸アイコン）のみ（注: ここで併記していた `TasteMapFilterSheet`「好みで絞り込む」は 2026-07-21 撤去済み）
 - **TagChip の count バッジ配色**: 選択時 = 白背景 + accentColor 文字、非選択時 = accentColor 背景 + 白文字（旧右上ボタンの indigo バッジ意匠を選択状態で反転させる形。仕様未記載のため実装判断）
 - **後続候補**: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きのまま孤立（visitedCafePin の brown→accentColor 化に未追随。SavedCafeListSheet.swift:78）。次にこのファイルを触るとき accentColor へ揃える
 

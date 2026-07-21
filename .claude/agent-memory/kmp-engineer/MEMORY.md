@@ -21,3 +21,4 @@
 - [Repository 1 段構成（グローバル read-only）の追加手順](repository_1stage_global_readonly_addition.md) — BeanProfile 型（SQLDelight なし・one-shot get + メモリキャッシュ）の新規 Repository（例: CuratedCafe）を足すときのファイル一覧。`.h`（Obj-C ヘッダ）での Swift API 裏取り方法
 - [FavoriteSignals 対称軸追加チェックリスト](favoritesignals_symmetric_axis_addition.md) — bestRoastLevel 等と同型の新カテゴリ軸（例 bestProcessing）追加で触る4レイヤー。AnalysisViewModel の `hasAnySignal()` 見落とし注意
 - [DummyCoffeeData 人格再設計の統計設計](dummydata_persona_redesign.md) — 単一人格中心データにするときの z ゲート通過設計手順 + printline 実測検算のやり方 + commonTest の kotlinx.datetime 継承の実際
+- [VM 機能まるごと削除チェックリスト](vm_feature_removal_checklist.md) — combine 駆動 VM から派生フィルタ機能を消すときの 7 箇所チェック + iOS 依存 grep + sandbox link 失敗の許容範囲

@@ -62,6 +62,10 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 - KMP 側にトグル用の `UIState` フィールド/アクションが無い表示切替（例: フィルタチップの ON/OFF）は Swift 側 `@State` だけで完結させてよい（`MapTabView` の `showSavedCafes` 例）。ただし「複数種のピンの優先順位で 1 本だけ表示」のような**データの整合性に関わる dedup ロジック**は表示トグルの状態に関係なく常時適用する（トグルは見た目の間引きだけ、競合解決はトグル非依存）。
 - 「BeanProfileRepository と同型」と親から指定された新規 Repository（`CuratedCafeRepository` 等、read-only + one-shot get + メモリキャッシュ）は、Obj-C ヘッダで裏取りしても実際に `getAllWithCompletionHandler:` → Swift 名 `getAll(completionHandler:)` で完全一致した（フェーズ 19、2026-07-17）。`BeanProfileRepositoryIosImpl.swift` をそのままコピーして型名を差し替えるだけで実装できる、信頼度の高いテンプレート。
 
+## KMP 側で機能ごと `UIState` フィールド/メソッドを削除したときの iOS 追随は grep 4 点セットで漏れなく洗い出せる（2026-07-21、テイストフィルタ削除で確認）
+
+`grep -rn "<削除対象の識別子>" iosApp/` を「削除された KMP プロパティ名」「削除された KMP メソッド名」「その機能専用の Swift View ファイル名」「その機能専用の `@State` 変数名」の 4 系統で回すと、Bridge のプロパティ宣言 / `apply(_:)` 内代入 / アクションメソッド / View 側の `@State` / `.sheet` / チップ UI / 派生ロジック（今回は pinOpacity の三項式に混ざっていた）まで一通り拾える。**派生ロジックへの混入**（他機能の減光条件と 1 つの三項演算子に同居していた）が見落としやすいので、対象識別子そのものだけでなく「その値を使っている条件式・三項演算子」まで目視で追うこと。File System Synchronized Group（Xcode 16+）採用プロジェクトでは専用 View ファイルの削除に `project.pbxproj` 編集は不要（`grep` で該当ファイル名がヒットしなければ確認不要、`rm` だけで完結）。
+
 ## `Cafe`（8 フィールド + デフォルト値付き 6 フィールド）は Swift 側で 14 引数の designated initializer 1 本しかない（2026-07-17、CuratedCafe → 最小 Cafe 構築で確認）
 
 Kotlin `data class Cafe(placeId, name, address, latitude, longitude, photoReferences, websiteUrl, mapsUrl, openNow = null, weekdayDescriptions = emptyList(), phoneNumber = null, priceLevel = null, googleRating = null, userRatingCount = null)` は、末尾 6 フィールドが Kotlin 側でデフォルト値を持っていても **SKIE は defaultArgumentInterop 非対応（既存ルール参照）のため 8 引数の短縮 init は生成されない**。`Cafe(placeId:...:mapsUrl:)` のような呼び出しはビルドエラーになる。他のドメインモデル（`CuratedCafe` 等）から最小限のフィールドだけで `Cafe` を組み立てたい場合は、`openNow: nil, weekdayDescriptions: [], phoneNumber: nil, priceLevel: nil, googleRating: nil, userRatingCount: nil` を明示的にすべて渡す（`grep -n "instancetype)initWithPlaceId" SharedLogic.h` で該当クラスの init が 1 本だけか確認してから使う。似た名前の `CafeExportDto` は別クラスで 8 引数版しか持たないため取り違えに注意）。

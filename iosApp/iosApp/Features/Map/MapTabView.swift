@@ -236,9 +236,6 @@ struct MapTabView: View {
     /// POI ルックアップ結果などのプログラマティック push 用 NavigationPath。
     @State private var navigationPath = NavigationPath()
 
-    /// テイストフィルタシートの表示状態。
-    @State private var isPresentingTasteFilter = false
-
     /// テイスト検索シートの表示状態。
     @State private var isPresentingTasteSearch = false
 
@@ -345,9 +342,6 @@ struct MapTabView: View {
                 if let bridge = appState.mapBridge {
                     mapContent(bridge: bridge)
                         .toolbar(.hidden, for: .navigationBar)
-                        .sheet(isPresented: $isPresentingTasteFilter) {
-                            TasteMapFilterSheet(bridge: bridge)
-                        }
                         .sheet(isPresented: $isPresentingSavedCafesSheet) {
                             SavedCafeListSheet(
                                 savedCafes: bridge.savedCafes,
@@ -547,7 +541,7 @@ struct MapTabView: View {
                             appleNearbyCafePin(cafe: cafe)
                         }
                         .buttonStyle(.plain)
-                        .opacity(appleNearbyPinOpacity(bridge))
+                        .opacity(appleNearbyPinOpacity())
                     }
                 }
 
@@ -566,17 +560,11 @@ struct MapTabView: View {
                                     longitude: lng
                                 )
                             ) {
-                                let isTasteActive = !bridge.tasteMatchedPlaceIds.isEmpty
-                                let isTasteMatch = bridge.tasteMatchedPlaceIds.contains(
-                                    visitedCafe.cafe.placeId
-                                )
                                 // 「好み一致」/「保存済み」チップ強調中は対象以外を一律減光する
-                                // （テイストフィルタの減光より優先。両強調は排他のため同時 true にはならない）。
+                                // （両強調は排他のため同時 true にはならない）。
                                 let pinOpacity: Double = recommendedEmphasisActive
                                     ? (isRecommended ? 1.0 : 0.4)
-                                    : (savedEmphasisActive
-                                        ? 0.4
-                                        : (isTasteActive && !isTasteMatch ? 0.25 : 1.0))
+                                    : (savedEmphasisActive ? 0.4 : 1.0)
 
                                 Group {
                                     if isRecommended,
@@ -1301,20 +1289,6 @@ struct MapTabView: View {
                     }
                 }
 
-                // Foundation Models 利用可能なとき「好みで絞り込む」チップを表示
-                if TastePreferenceExtractor.makeIfAvailable() != nil {
-                    let isTasteFilterActive = bridge.activeTastingMin != nil
-                    TagChip(
-                        label: isTasteFilterActive
-                            ? String(localized: "好み絞り込み中")
-                            : String(localized: "好みで絞り込む"),
-                        systemImage: "sparkles",
-                        isOn: isTasteFilterActive
-                    ) {
-                        isPresentingTasteFilter = true
-                    }
-                }
-
                 // タグフィルタチップ（availableTags が空でないとき）
                 if !bridge.availableTags.isEmpty {
                     Divider()
@@ -1655,11 +1629,9 @@ struct MapTabView: View {
 
     /// Apple 検索由来ピンの不透明度。
     ///
-    /// 既存 4 種より明確に低強調な意匠に加え、「保存済み」/「好み一致」チップ強調中は 0.4、
-    /// テイストフィルタ有効時（Apple 由来は常に非マッチ扱い）は 0.25 まで減光する。
-    private func appleNearbyPinOpacity(_ bridge: MapViewModelBridge) -> Double {
+    /// 既存 4 種より明確に低強調な意匠に加え、「保存済み」/「好み一致」チップ強調中は 0.4 まで減光する。
+    private func appleNearbyPinOpacity() -> Double {
         if savedEmphasisActive || recommendedEmphasisActive { return 0.4 }
-        if !bridge.tasteMatchedPlaceIds.isEmpty { return 0.25 }
         return 1.0
     }
 

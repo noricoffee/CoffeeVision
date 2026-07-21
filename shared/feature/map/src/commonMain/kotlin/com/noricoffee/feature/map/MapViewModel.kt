@@ -1,9 +1,7 @@
 package com.noricoffee.feature.map
 
 import com.noricoffee.domain.Cafe
-import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
-import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.CafeRecommendationProvider
 import com.noricoffee.domain.model.CuratedCafe
 import com.noricoffee.domain.model.RecommendedCafe
@@ -105,19 +103,6 @@ class MapViewModel(
         val selectedTags: Set<String> = emptySet(),
         val availableTags: List<String> = emptyList(),
         /**
-         * テイストプロファイルフィルタが active なときのマッチカフェ placeId 集合。
-         * 空 = フィルタ未設定または非マッチ。[onTasteProfileChanged] で更新する。
-         */
-        val tasteMatchedPlaceIds: Set<String> = emptySet(),
-        /**
-         * アクティブなテイストフィルタの下限スコア。null = 下限なし。バッジ表示用。
-         */
-        val activeTastingMin: TastingScores? = null,
-        /**
-         * アクティブなテイストフィルタの上限スコア。null = 上限なし。
-         */
-        val activeTastingMax: TastingScores? = null,
-        /**
          * 「行きたい店」一覧（savedAt 降順、フェーズ 15-A）。マップの 4 種目ピン / 一覧シート用。
          * [com.noricoffee.repository.SavedCafeRepository.observeAll] を購読して常時最新化する。
          */
@@ -167,11 +152,10 @@ class MapViewModel(
     private var poiLookupJob: Job? = null
 
     // visitedCafes/coffeeRecords の最新値をキャッシュする。
-    // タグ選択・テイストフィルタが変化した際に collect を待たずに即時フィルタを再適用するために保持する。
+    // タグ選択が変化した際に collect を待たずに即時フィルタを再適用するために保持する。
     private var latestVisitedCafes: List<VisitedCafe> = emptyList()
     private var latestCafeTagsMap: Map<String, Set<String>> = emptyMap()
     private var latestAvailableTags: List<String> = emptyList()
-    private var latestAllRecords: List<CoffeeRecord> = emptyList()
 
     init {
         // visitedCafes と全コーヒー記録を combine して、タグフィルタ済みカフェと
@@ -195,14 +179,12 @@ class MapViewModel(
                     .distinct()
                     .sorted()
 
-                Triple(visitedCafes, cafeTagsMap, availableTags) to allRecords
-            }.collect { (triple, allRecords) ->
-                latestVisitedCafes = triple.first
-                latestCafeTagsMap = triple.second
-                latestAvailableTags = triple.third
-                latestAllRecords = allRecords
+                Triple(visitedCafes, cafeTagsMap, availableTags)
+            }.collect { (visitedCafes, cafeTagsMap, availableTags) ->
+                latestVisitedCafes = visitedCafes
+                latestCafeTagsMap = cafeTagsMap
+                latestAvailableTags = availableTags
                 applyTagFilter()
-                applyTasteFilter()
             }
         }
 
@@ -276,49 +258,6 @@ class MapViewModel(
     }
 
     /**
-     * 現在のキャッシュデータと [UIState.activeTastingMin] / [UIState.activeTastingMax] を使って
-     * テイストプロファイルフィルタを適用し、[UIState.tasteMatchedPlaceIds] を更新する。
-     *
-     * - [coffeeRepository] の新データ到着時（[combine] の collect）
-     * - [onTasteProfileChanged] でフィルタ条件が変化した時
-     * の両方で呼ばれる。
-     *
-     * フィルタが未設定（min / max 共に null）のときは [UIState.tasteMatchedPlaceIds] を空にする。
-     * `record.cafe` が null（セルフ抽出）または `record.tasting` が null の記録は除外する。
-     */
-    private fun applyTasteFilter() {
-        val tastingMin = _state.value.activeTastingMin
-        val tastingMax = _state.value.activeTastingMax
-        val placeIds = if (tastingMin == null && tastingMax == null) {
-            emptySet()
-        } else {
-            latestAllRecords
-                .filter { record ->
-                    val tasting = record.tasting ?: return@filter false
-                    record.cafe ?: return@filter false
-                    tastingMin?.let { min ->
-                        if (tasting.sweetness < min.sweetness) return@filter false
-                        if (tasting.body < min.body) return@filter false
-                        if (tasting.acidity < min.acidity) return@filter false
-                        if (tasting.flavor < min.flavor) return@filter false
-                        if (tasting.aftertaste < min.aftertaste) return@filter false
-                    }
-                    tastingMax?.let { max ->
-                        if (tasting.sweetness > max.sweetness) return@filter false
-                        if (tasting.body > max.body) return@filter false
-                        if (tasting.acidity > max.acidity) return@filter false
-                        if (tasting.flavor > max.flavor) return@filter false
-                        if (tasting.aftertaste > max.aftertaste) return@filter false
-                    }
-                    true
-                }
-                .mapNotNull { it.cafe?.placeId }
-                .toSet()
-        }
-        _state.update { it.copy(tasteMatchedPlaceIds = placeIds) }
-    }
-
-    /**
      * タグフィルタを on/off する。
      *
      * [tag] が現在の [UIState.selectedTags] に含まれている場合は除外し、含まれていない場合は追加する。
@@ -341,21 +280,6 @@ class MapViewModel(
     fun onTagFilterCleared() {
         _state.update { it.copy(selectedTags = emptySet()) }
         applyTagFilter()
-    }
-
-    /**
-     * 「今飲みたい味」テイストプロファイルフィルタを更新する。
-     *
-     * 両方 null を渡すとフィルタを解除する（[UIState.tasteMatchedPlaceIds] が空になる）。
-     * フィルタが設定されると [latestAllRecords] のうち tasting が範囲内の記録が紐付く
-     * カフェの placeId 集合を算出し、[UIState.tasteMatchedPlaceIds] を即時更新する。
-     *
-     * @param tastingMin テイスティングスコア下限。null = 下限なし
-     * @param tastingMax テイスティングスコア上限。null = 上限なし
-     */
-    fun onTasteProfileChanged(tastingMin: TastingScores?, tastingMax: TastingScores?) {
-        _state.update { it.copy(activeTastingMin = tastingMin, activeTastingMax = tastingMax) }
-        applyTasteFilter()
     }
 
     /**

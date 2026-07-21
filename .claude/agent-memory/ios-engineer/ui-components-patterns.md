@@ -42,12 +42,15 @@ metadata:
 - View 側は `@Environment(\.dismiss)` + `.onChange(of: viewModel.isDeleted) { _, v in if v { dismiss() } }` で一覧へ pop。`content` の `@ViewBuilder` 分岐は **`isDeleted` を最優先で判定**し `ProgressView()` を返す（dismiss アニメーションが効くまでの一瞬に「見つかりません」の `ContentUnavailableView` がちらつくのを防ぐ）。
 - リスト側の長押し `.contextMenu` からの削除確認は `confirmationDialog(_:isPresented:titleVisibility:presenting:actions:message:)`（`presenting:` 付きオーバーロード）を使うと、`@State private var deletionTarget: CoffeeRecord?` を `Binding(get: { != nil }, set: { if !$0 { nil にする } })` で `isPresented` に渡しつつ、`actions`/`message` クロージャに non-optional な対象データを渡せる。スワイプ削除（確認なし）とは別導線として共存させる。
 
-## 自前の下部ドラッグシート（2 detent）は `Button` + `DragGesture` を必ず `.simultaneousGesture` で組む（2026-07-22、マップ検索結果シートで確認）
+## 自前の下部ドラッグシート（2 detent）: ハンドル行は `Button` にせず `onTapGesture` + `.gesture(DragGesture(coordinateSpace: .global))` で組む（2026-07-22 発振バグ修正で確認。旧記述を置き換え）
 
-- native `.sheet` を避けて `.overlay(alignment: .bottom)` の自前 View で peek/expanded 2 detent を実装するとき、ドラッグハンドル行を「タップでも detent 切替できる」`Button` にした上でリサイズ用 `DragGesture` を付けたい場合、**`.gesture(DragGesture())` は Button 自身のタップ認識より優先されタップが効かなくなる**。`.simultaneousGesture(DragGesture())` にするとタップとドラッグの両方が独立して機能する（タップは移動量ゼロなので `DragGesture` の既定 `minimumDistance`（10pt）を満たさず干渉しない）。
-- ドラッグの追従は `@State dragTranslation`（`onChanged` で更新）+ 現在 detent の基準高さから引いた値を `min/max` でクランプする計算プロパティにするのが素直。スナップ判定は `onEnded` の `predictedEndTranslation`（速度込みの慣性込み終端）を使い、`(peekHeight + expandedHeight) / 2` の中点との比較で detent を決める。
+- native `.sheet` を避けて `.overlay(alignment: .bottom)` の自前 View で peek/expanded 2 detent を実装するとき、ドラッグハンドル行を `Button` + `.simultaneousGesture(DragGesture())` にすると、**ドラッグ中に高さがブレる（自己発振する）**。原因: `DragGesture()` は既定で `.local` 座標系で、ハンドル行はドラッグ対象の高さ（`.frame(height: currentHeight)`）に連動してシート全体（＝ハンドル行自身）が画面上で上下に動く。`.local` の `translation` は「動く View 自身」を基準に測るため、指の画面上の位置が同じでもフレームごとに読み値がズレて `height = base - translation` が発散する。
+- **修正パターン**: ①ハンドル行は `Button` をやめてプレーンな View + `.contentShape(Rectangle())` + `.onTapGesture { toggle }` + `.accessibilityAddTraits(.isButton)` + `.accessibilityAction { toggle }`（VoiceOver ダブルタップ用）にする。② リサイズ用ドラッグは `.gesture(DragGesture(minimumDistance: 8, coordinateSpace: .global))` にする（`.global` は画面固定座標なので View 自身の移動に影響されない）。`minimumDistance` を置くことでタップ（移動量ゼロ）と `onTapGesture` が競合しない。
+- `onChanged` で `@State dragTranslation` を更新する際、範囲外（peek 未満 / expanded 超過）に伸びる分もそのまま代入すると、height 側の `min/max` クランプに隠れて translation だけ過剰蓄積し、指を戻すときにデッドゾーン（一定量戻すまで反応しない）が出る。**`onChanged` の時点で translation 自体を `[base - expandedHeight, base - peekHeight]` にクランプ**しておく（`docs/kmp-bridge.md` 対象外の純 SwiftUI 論点）。
+- スナップ判定は `onEnded` の `predictedEndTranslation`（速度込みの慣性込み終端）を使い、`(peekHeight + expandedHeight) / 2` の中点との比較で detent を決める。
 - expanded detent の高さ（画面高の N%）は `GeometryReader` を対象 View の `.background(...)` として重ね、`onAppear` + `.onChange(of: proxy.size)` で `@State CGSize` に写し取ってから通常の計算プロパティで使う（GeometryReader の `body` 内で直接 `@State` を書き換えると "modifying state during view update" になるため避ける。`.onChange` 経由なら安全）。
 - ドラッグ操作はリスト本体の `ScrollView` には付けない（ハンドル行だけに限定）。シート全体に付けると一覧のスクロールジェスチャーと競合する。
+- 汎用教訓: **自身の `.frame(height:)`/位置が drag の入力そのものにフィードバックする（View が動く）ケースでは `DragGesture` を `.global` にする**。逆に `.offset()` で見た目だけ動かし `onEnded` の最終値しか使わない用途（例: `ErrorToast` のスワイプ消去）は `.local`（既定）のままで問題ない（`onChanged` で連続的に自己の位置を書き換えないため発振しない）。
 
 ## `ShareLink` で「生成 → 共有」の 2 フェーズ導線を作るときは enum 状態（idle/exporting/ready(URL)）で Section 内容を丸ごと差し替える（2026-07-07、設定画面データエクスポートで確認）
 

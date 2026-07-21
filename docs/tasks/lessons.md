@@ -714,3 +714,12 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 「fold 下でも実行されてほしい」副作用（広告の先読み、事前計測、必ず 1 回走らせたい初期化）を遅延コンテナの子に `.task`/`.onAppear` で載せない。**遅延スクロールで初めて可視になる位置**に置く前提の副作用（画像のオンデマンドロード等）だけを子に載せる。両者を取り違えると「ビルドは通るが出ない / 走らない」になる
 - **発生源**: マップ検索結果の下部シート化（2026-07-22、commit dd83f7f）で回帰、同日 ios-engineer が先読みパターンで修正。関連: 「UIKit SDK ビューはサイズ明示」（2026-07-15、同じ広告面の別バグ）
 - **横展開点検（2026-07-22）**: `grep -rn "LazyVStack\|LazyHStack\|LazyVGrid\|LazyHGrid" iosApp/iosApp --include="*.swift"` で全遅延コンテナを列挙し、各コンテナの子に「fold 下でも発火が必要な自己トリガー副作用」が載っていないか点検。`InlineBannerAdView`（広告の先読み必須）の使用は 2 面のみ（`CafeDetailView`＝List 直下で先読み済み・`MapTabView`＝今回修正）で両方対処済み。`PlacePhotoThumbnail`（`.task` で写真ロード）は遅延コンテナ内に多数あるが、**スクロール到達時のオンデマンドロードが意図した正しい挙動**（先読み不要）のため対象外。他に fold 下発火を要する自己トリガーは見当たらず、**該当なし（対処 2 面 + 対象外 1 種を確認）**
+
+### SwiftUI: 自身の `.frame`/位置がドラッグ結果で動く View に `DragGesture` を付けるときは `coordinateSpace: .global` にする（`.local` だと自己発振する）
+
+- **症状**: 自作の下部ドラッグシートで、ハンドルを掴んで上下にリサイズすると高さがブレる・カクつく・指に素直に追従しない（発振）
+- **原因の構造**: ハンドル行はシート上端（`.frame(height: currentHeight)`）に乗っており、ドラッグで高さが変わると**ハンドル行自身の画面 Y 位置も動く**。`DragGesture()` の既定 `.local` 座標系の `translation` は「ジェスチャー元 View のローカル座標」で測るため、View が自分のドラッグ結果で動くと、指の画面上位置が同じでもフレーム毎に読み値がズレる。`height = base - translation` がその読み値を再び高さに反映するのでフィードバックループになり発振する。**「入力（translation）が出力（View の位置）に依存し、出力が入力に戻る」構成が地雷**
+- **修正パターン**: `DragGesture(minimumDistance: 8, coordinateSpace: .global)` にする。`.global` は画面固定座標なので View 自身の移動に影響されず translation が安定する。あわせて (1) 範囲外ドラッグで translation が過剰蓄積しデッドゾーン化するのを防ぐため `translation` を有効域 `[base - maxHeight, base - minHeight]` にクランプ、(2) タップ toggle と競合する `Button + .simultaneousGesture` はやめ、プレーン View + `.onTapGesture` + `.gesture(DragGesture)`（`minimumDistance` でタップ/ドラッグ分離）+ `.accessibilityAction` に分離する
+- **教訓**: ドラッグで自分の位置・サイズが変わる UI（ボトムシート、リサイズ可能パネル、追従ハンドル）の `DragGesture` は**必ず `.global`（または固定 `.named` 空間）**。`.local` は「ドラッグしても自身が動かない」要素（swipe-to-dismiss で `onEnded` の符号だけ見る等）に限る
+- **発生源**: マップ検索結果の下部ドラッグシート（2026-07-22、commit 7ecd966 で導入・同日修正）。関連: 同シートの広告先読み lesson（同日）
+- **横展開点検（2026-07-22）**: `grep -rn "DragGesture(" iosApp/iosApp --include="*.swift"` → `MapTabView.swift`（今回修正・`.global`）と `ErrorToast.swift`（`onEnded` の `translation` 符号のみ参照する swipe-to-dismiss。ドラッグ中に自身が動かず `onChanged` で自己位置を書き換えないため発振の前提が無く**非該当**）の 2 箇所のみ。他に自作ドラッグリサイズ/追従実装なし。**該当なし（要修正は 1 箇所で対処済み）**

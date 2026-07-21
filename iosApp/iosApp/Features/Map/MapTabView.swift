@@ -909,40 +909,59 @@ struct MapTabView: View {
 
     /// 結果シートのドラッグハンドル行。
     ///
-    /// - タップで peek ⇄ expanded をトグルする（ドラッグ操作が難しい VoiceOver 利用者向けの代替導線）
+    /// - タップで peek ⇄ expanded をトグルする（ドラッグ操作が難しい VoiceOver 利用者向けの代替導線。
+    ///   VoiceOver 有効時はダブルタップと `.accessibilityAction` の双方から toggle できる）
     /// - ドラッグは本行にのみ付け、下部 `ScrollView` の縦スクロールと競合させない
+    /// - `Button` にはしない: タップ判定用の `.simultaneousGesture(DragGesture())` と実ドラッグが
+    ///   競合しやすく、また `.local` 座標系のドラッグは本行自身がリサイズで上下に動くため高さが
+    ///   自己発振する原因になっていた（2026-07-22 修正）。`onTapGesture` + `.gesture(DragGesture)`
+    ///   （`minimumDistance` でタップ/ドラッグを分離）+ `.global` 座標系に置き換える。
     private func searchSheetHandleBar(resultCount: Int) -> some View {
-        Button {
+        VStack(spacing: 6) {
+            Capsule()
+                .fill(Color.secondary)
+                .frame(width: 36, height: 5)
+            HStack {
+                Text(String(localized: "\(resultCount)件"))
+                    .font(.subheadline.weight(.semibold))
+                    .foregroundStyle(.secondary)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+        }
+        .padding(.top, 8)
+        .padding(.bottom, 8)
+        .frame(maxWidth: .infinity, minHeight: 44)
+        .contentShape(Rectangle())
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(String(localized: "検索結果 \(resultCount)件"))
+        .accessibilityHint(String(localized: "タップして一覧の表示サイズを切り替えます"))
+        .accessibilityAddTraits(.isButton)
+        .accessibilityAction {
             withAnimation(.snappy) {
                 searchSheetDetent = searchSheetDetent == .expanded ? .peek : .expanded
             }
-        } label: {
-            VStack(spacing: 6) {
-                Capsule()
-                    .fill(Color.secondary)
-                    .frame(width: 36, height: 5)
-                HStack {
-                    Text(String(localized: "\(resultCount)件"))
-                        .font(.subheadline.weight(.semibold))
-                        .foregroundStyle(.secondary)
-                    Spacer()
-                }
-                .padding(.horizontal, 16)
-            }
-            .padding(.top, 8)
-            .padding(.bottom, 8)
-            .frame(maxWidth: .infinity, minHeight: 44)
-            .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel(String(localized: "検索結果 \(resultCount)件"))
-        .accessibilityHint(String(localized: "タップして一覧の表示サイズを切り替えます"))
-        // `.simultaneousGesture` を使う: 通常の `.gesture` は Button 自身のタップ認識より優先され、
-        // タップが効かなくなる（ドラッグと同時に「タップで拡大/縮小」も成立させる必要があるため）。
-        .simultaneousGesture(
-            DragGesture()
+        .onTapGesture {
+            withAnimation(.snappy) {
+                searchSheetDetent = searchSheetDetent == .expanded ? .peek : .expanded
+            }
+        }
+        .gesture(
+            // `.global`: 本行は `.frame(height: searchSheetCurrentHeight)` を持つシート上端に乗っており、
+            // 高さが変わるたびに本行自身の Y 位置も動く。`.local`（デフォルト）の translation は
+            // 「動く View 自身」を基準に測るため、指の画面上の位置が同じでもフレームごとに読み値が
+            // ズレて `height = base - translation` が自己発振してしまう。`.global` は画面固定座標
+            // なので View の移動に影響されず、発振しない。
+            DragGesture(minimumDistance: 8, coordinateSpace: .global)
                 .onChanged { value in
-                    searchSheetDragTranslation = value.translation.height
+                    // 範囲外へのドラッグで translation が無限に蓄積すると、指を戻す際に
+                    // 「height 側のクランプに隠れて反応しない」デッドゾーンが生じる。
+                    // height = base - translation を [peek, expanded] に収める translation の
+                    // 範囲へあらかじめクランプしておく。
+                    let minTranslation = searchSheetBaseHeight - searchSheetExpandedHeight
+                    let maxTranslation = searchSheetBaseHeight - Self.searchSheetPeekHeight
+                    searchSheetDragTranslation = min(max(value.translation.height, minTranslation), maxTranslation)
                 }
                 .onEnded { value in
                     let predictedHeight = searchSheetBaseHeight - value.predictedEndTranslation.height

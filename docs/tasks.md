@@ -398,7 +398,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須 / ユーザー作業。アプリ内リンクの placeholder 差し替えも同時に。12-A から移管（2026-07-09） |
+| [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須。**本文起草済み（`docs/legal/privacy-policy.html` / `support.html`、2026-07-21）** — 実装事実（app-store §6）ベースで収集データ / 第三者 / 権利 / オンデバイス AI / 広告 IDFA を網羅。**残（ユーザー作業）**: `[開発者名]` / `[サポートメールアドレス]` / `[〜 URL]` プレースホルダ差し替え → 静的ホスティング公開 → URL 化 → アプリ内リンク差し替え。9-6 協調フィルタ（未実装）は実装着手時に追記 |
 | [x] | **F-1**: `PrivacyInfo.xcprivacy` のアプリ全体 Required Reason API 網羅監査（File Timestamp / System Boot Time / Disk Space 等）。フェーズ 18 では UserDefaults（`CA92.1`）+ テレメトリ集計データ種別のみ宣言済み | 2026-07-12 完了。Swift 側 = UserDefaults のみ（宣言済み）。**`SharedLogic`（K/N ランタイム）が stat 系 6 シンボルをリンク**（`nm -u` 実測）→ FileTimestamp **C617.1** を追加宣言。Boot Time / Disk Space / Keyboard 該当なし、Firebase は SDK 同梱マニフェストで自己申告済み。`plutil -lint` OK。判断は implementation_note 2026-07-12 |
 | [x] | 逆変換 PoC 導線（分析タブ最下部の `TastePreferenceConversionView` への NavLink）を本番に含めるか判断する（含める / 設定の開発者向けへ移動 / 削除） | 2026-07-12 ユーザー決定: **本番に含める**。FM 非対応端末では `makeIfAvailable()` ガードで導線非表示をコード確認済み（`AnalysisView.swift`）→ 追加実装なし。判断は implementation_note 2026-07-12 |
 

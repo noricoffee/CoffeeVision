@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>プライバシーポリシー — CoffeeVision</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1c1c1e; --muted: #6b6b70;
+    --accent: #7a4a2b; --border: #e5e5ea; --card: #f7f7f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e; --fg: #f2f2f7; --muted: #9a9aa0;
+      --accent: #c8956a; --border: #38383a; --card: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.8; font-size: 16px;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 1.75rem; margin: 0 0 0.25em; }
+  h2 { font-size: 1.25rem; margin: 2em 0 0.5em; padding-top: 0.5em; border-top: 1px solid var(--border); }
+  h3 { font-size: 1.05rem; margin: 1.5em 0 0.3em; }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2em; }
+  a { color: var(--accent); }
+  ul { padding-left: 1.4em; }
+  li { margin: 0.35em 0; }
+  table { width: 100%; border-collapse: collapse; margin: 1em 0; font-size: 0.95rem; display: block; overflow-x: auto; }
+  th, td { border: 1px solid var(--border); padding: 8px 10px; text-align: left; vertical-align: top; }
+  th { background: var(--card); }
+  .note { background: var(--card); border-left: 3px solid var(--accent); padding: 12px 16px; margin: 1.5em 0; border-radius: 4px; }
+  .placeholder { color: var(--accent); font-weight: 600; }
+  footer { color: var(--muted); font-size: 0.85rem; margin-top: 3em; border-top: 1px solid var(--border); padding-top: 1em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>プライバシーポリシー</h1>
+  <p class="meta">CoffeeVision（以下「本アプリ」）<br>制定日: 2026年7月21日 / 最終更新日: 2026年7月21日</p>
+
+  <p><span class="placeholder">[開発者名]</span>（以下「当方」）は、本アプリにおけるユーザーの個人情報および利用データの取り扱いについて、以下のとおりプライバシーポリシー（以下「本ポリシー」）を定めます。</p>
+
+  <h2>1. 収集する情報と利用目的</h2>
+  <p>本アプリは、機能の提供に必要な範囲で以下の情報を取り扱います。</p>
+  <table>
+    <thead>
+      <tr><th>情報</th><th>取得</th><th>利用目的</th><th>備考</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>位置情報（おおよそ / 正確）</td>
+        <td>アプリ利用中のみ</td>
+        <td>周辺カフェの検索、地図上での現在地表示</td>
+        <td>アプリ使用中（when-in-use）のみ取得し、バックグラウンドでの常時取得は行いません。座標はカフェ検索のため Google Places API に送信されます。</td>
+      </tr>
+      <tr>
+        <td>写真</td>
+        <td>ユーザーが添付したとき</td>
+        <td>コーヒー記録への添付・表示</td>
+        <td><strong>端末内にのみ保存</strong>し、外部サーバーへは送信しません。</td>
+      </tr>
+      <tr>
+        <td>コーヒー記録（評価 / テイスティング / メモ / タグ / カフェ情報）</td>
+        <td>ユーザーが作成したとき</td>
+        <td>クラウド同期・バックアップ、（同意時のみ）サービス改善のための分析</td>
+        <td>Firebase Firestore に保存し、匿名のユーザー ID に紐付きます。分析への利用は、初回オンボーディングまたは設定画面の同意（既定は無効）に同意した場合のみ行います。</td>
+      </tr>
+      <tr>
+        <td>匿名ユーザー ID</td>
+        <td>自動</td>
+        <td>データ同期のためのアカウント識別</td>
+        <td>Firebase 匿名認証により発行される識別子です。</td>
+      </tr>
+      <tr>
+        <td>メールアドレス</td>
+        <td>任意（Apple でサインインした場合のみ）</td>
+        <td>アカウントの引き継ぎ・アップグレード</td>
+        <td>「Apple でサインイン」でアカウントを連携した場合に Firebase Authentication が保持します。Apple の「メールを非公開」を選択できます。</td>
+      </tr>
+      <tr>
+        <td>診断情報（クラッシュ / パフォーマンス）</td>
+        <td>常時</td>
+        <td>アプリの安定性・技術的品質の改善</td>
+        <td>Firebase Crashlytics / Performance。広告用識別子（IDFA）は使用しません。</td>
+      </tr>
+      <tr>
+        <td>使用状況データ（画面遷移等）</td>
+        <td>同意時のみ</td>
+        <td>サービス改善のための分析</td>
+        <td>Firebase Analytics。上記のデータ利用同意が有効な場合のみ収集し、IDFA・クロスアプリ追跡は行いません。</td>
+      </tr>
+      <tr>
+        <td>広告識別子（IDFA）・広告データ</td>
+        <td>トラッキング許諾時のみ</td>
+        <td>広告の配信・measurement</td>
+        <td>Google AdMob による広告を表示します。App Tracking Transparency で許諾した場合のみパーソナライズ広告に IDFA を利用し、許諾しない場合は非パーソナライズ広告（IDFA 不使用）を配信します。</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. 第三者サービス</h2>
+  <p>本アプリは以下の第三者サービスを利用し、上表の目的の範囲でデータを送信します。各社のプライバシーポリシーが適用されます。</p>
+  <ul>
+    <li><strong>Google</strong>（Firebase Authentication / Firestore / Crashlytics / Performance / Analytics、Google Places API、Google AdMob）</li>
+    <li><strong>Apple</strong>（「Apple でサインイン」を利用した場合の認証）</li>
+  </ul>
+  <p>本アプリの分析タブの AI 機能（傾向の要約・対話・好みの分析）は、Apple のオンデバイス処理（Foundation Models）で動作し、<strong>記録データを外部サーバーへ送信しません</strong>。</p>
+
+  <h2>3. データの保存場所と保持期間</h2>
+  <ul>
+    <li>コーヒー記録等のデータは Firebase（Google）のサーバー（アジア地域）に保存されます。</li>
+    <li>データはアカウントが存続する限り保持され、アカウント削除により削除されます（下記 4 参照）。</li>
+    <li>写真は端末内にのみ保存され、アプリの削除または個別削除により消去されます。</li>
+  </ul>
+
+  <h2>4. ユーザーの権利と選択</h2>
+  <ul>
+    <li><strong>アカウントの削除</strong>: 設定画面からアカウントを削除できます。削除時にはクラウド上の記録データも削除されます。「Apple でサインイン」連携アカウントの削除時には、Apple 連携トークンの失効（revoke）を行います。</li>
+    <li><strong>データのエクスポート</strong>: 記録データを JSON 形式で書き出せます。</li>
+    <li><strong>分析への同意の撤回</strong>: 設定画面のデータ利用同意トグルをいつでも変更できます。無効にすると使用状況データの収集は停止します。</li>
+    <li><strong>広告トラッキングの選択</strong>: iOS の「設定 &gt; プライバシーとセキュリティ &gt; トラッキング」および初回の許諾ダイアログで選択・変更できます。</li>
+  </ul>
+
+  <h2>5. 子どものプライバシー</h2>
+  <p>本アプリは 13 歳未満の子どもを主たる対象としておらず、13 歳未満の子どもから意図的に個人情報を収集することはありません。</p>
+  <div class="note">※ App Store の年齢レーティング設定と整合させてください。対象年齢の方針が異なる場合はこの記述を調整してください。</div>
+
+  <h2>6. 準拠法・配信地域</h2>
+  <p>本アプリは日本国内での配信を対象とし、本ポリシーは日本法に準拠します。</p>
+
+  <h2>7. 本ポリシーの改定</h2>
+  <p>当方は、必要に応じて本ポリシーを改定することがあります。重要な変更を行う場合は、本アプリまたは本ページ上で告知します。</p>
+
+  <h2>8. お問い合わせ</h2>
+  <p>本ポリシーおよび個人情報の取り扱いに関するお問い合わせは、以下までご連絡ください。</p>
+  <p>開発者: <span class="placeholder">[開発者名]</span><br>
+     連絡先: <span class="placeholder">[サポートメールアドレス]</span></p>
+
+  <footer>
+    CoffeeVision — 訪れたカフェでのコーヒー体験を記録・振り返るアプリ<br>
+    &copy; 2026 <span class="placeholder">[開発者名]</span>
+  </footer>
+</main>
+</body>
+</html>

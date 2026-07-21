@@ -47,7 +47,7 @@
 |------|------|------|
 | [x] | kmp-engineer: `ensureCafeKeyword` の補完語を「 カフェ」→「 コーヒー」に置換 + KDoc 追随 + `PlacesClientImplSearchTextKeywordTest` の期待値更新 + テスト実行 | 2026-07-21 完了。includedType=cafe / CAFE_KEYWORDS / locationBias 経路は不変 |
 | [x] | 親: テスト再検証（`iosSimulatorArm64Test` override 無し green）+ implementation_note 記録 | 2026-07-21 完了 |
-| [ ] | ユーザー: シミュレータで味覚語検索の目視（「フルーティー」等でデザート店が減る / 地名のみ検索は従来どおり） + commit 可否判断 | ビルド成功 ≠ 確認完了 |
+| [x] | ユーザー: シミュレータで味覚語検索の目視（「フルーティー」等でデザート店が減る / 地名のみ検索は従来どおり） + commit 可否判断 | 2026-07-21 ユーザー確認 OK（味覚語でデザート店減 / 地名のみ従来どおり） |
 
 #### 広告導入: AdMob ネイティブ広告（2026-07-14 起票）
 
@@ -135,7 +135,7 @@
 | [x] | ios-engineer: `roastLevelSection` を全 8 段階・焙煎順横棒 + 浅→深ランプ化 | 2026-07-13 完了。`byRoastLevel` 空ならセクション非表示は従来どおり |
 | [x] | ios-engineer: `TastingRadarChart.swift` 新規 + `tastingAveragesSection` 置き換え | 2026-07-13 完了。ドメイン非依存の `RadarChartAxis` 設計 |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-13 完了。Gradle タスク実行 + BUILD SUCCEEDED を親再検証 |
-| [ ] | ユーザー: シミュレータで表示確認（焙煎順 + ランプ / レーダー描画 / ダークモード / VoiceOver） | ビルド成功 ≠ 修正完了 |
+| [x] | ユーザー: シミュレータで表示確認（焙煎順 + ランプ / レーダー描画 / ダークモード / VoiceOver） | 2026-07-21 ユーザー確認 OK（焙煎順+ブラウンランプ / レーダー 5 軸描画 / ダーク / VoiceOver） |
 
 #### カフェ詳細 Places 写真の段階読み込み（2026-07-13 起票）
 
@@ -145,7 +145,7 @@
 |------|------|------|
 | [x] | `CafePhotoHeader` を段階読み込み化（初期 3 / +3 ずつ / 上限 10）→ ios-engineer | 2026-07-13 実装完了・override なしビルド成功。自分の記録写真は対象外（従来どおり全件表示） |
 | [x] | paid-services.md の Photo Media 行を追随更新（親） | 2026-07-13 完了 |
-| [ ] | ユーザー: シミュレータ / 実機で表示確認 | ビルド成功 ≠ 修正完了 |
+| [x] | ユーザー: シミュレータ / 実機で表示確認 | 2026-07-21 ユーザー確認 OK（初期 3 枚 / さらに表示で +3・上限 10） |
 
 #### 周辺カフェピンのノイズ除去（名前フィルタ + ネガティブキャッシュ、2026-07-13 起票）
 
@@ -157,7 +157,7 @@
 | [x] | 親: `:shared:feature:map:iosSimulatorArm64Test` 再検証 | 2026-07-13 全緑 |
 | [x] | ios-engineer: Bridge 追随 + 名前フィルタ + `ApplePoiNegativeCache`（UserDefaults / 30m+名前一致 / 上限 300 FIFO / TTL なし）+ MapTabView 配線 | 2026-07-13 完了。除外キーワード 16 語は `MapTabView.excludedApplePoiNameKeywords` に一元化 |
 | [x] | 親: 統合検証（verify-kmp-ios）+ implementation_note 記録 + commit | 2026-07-13 完了。①testAndroidHostTest / iosSimulatorArm64Test 全緑 ②XCFramework 成功 ③xcodebuild override 無しで BUILD SUCCEEDED |
-| [ ] | ユーザー: シミュレータ / 実機確認（キーワード POI 非表示 / 該当なしタップ → ピン消滅・再パンでも非表示 / 通信エラーではピンが消えない） | ビルド成功 ≠ 修正完了 |
+| [x] | ユーザー: シミュレータ / 実機確認（キーワード POI 非表示 / 該当なしタップ → ピン消滅・再パンでも非表示 / 通信エラーではピンが消えない） | 2026-07-21 ユーザー確認 OK（キーワード POI 非表示 / 該当なし→消滅・再パンで非表示 / 通信エラーで保持） |
 
 #### 名前フィルタの Remote Config 外部注入（2026-07-13 起票）
 

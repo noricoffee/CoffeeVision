@@ -213,10 +213,15 @@ private struct ApplePoiCafe: Identifiable {
 ///
 /// - MapKit の `Map` に訪問済みカフェ（アクセントカラー）と周辺カフェ（gray）の Annotation を表示する
 /// - 上部の Google Maps スタイル検索バーからカフェ名検索を行い、結果ピンをマップに表示する
-/// - 検索欄フォーカス中 or 結果表示中は「検索モード」（`isSearchMode`）となり、フィルタチップ行を隠して
-///   検索結果ドロップダウンを表示する（重なり防止）。「このエリアを検索」ボタンは検索モード中に
-///   地図をパン / ズームした場合のみ結果ドロップダウンの上に出現する（ブラウズモードでは出さない）
-/// - 検索結果タップで下部カードを表示し、「詳細を見る」で `CafeDetailView` へ push する
+/// - 検索欄フォーカス中 or 結果表示中は「検索モード」（`isSearchMode`）となり、フィルタチップ行を隠す。
+///   検索結果一覧は下部の自前ドラッグシート `searchResultsBottomSheet`（マップ主体 + 下部一覧、
+///   2026-07-22 刷新）で提示し、マップは常時パン / ズーム可能なまま結果と併存する。
+///   「このエリアを検索」ボタンは検索モード中に地図をパン / ズームした場合のみ結果シートの上に
+///   出現する（ブラウズモードでは出さない）
+/// - テキスト検索完了時は全結果ピンの bounding box にカメラを自動フィットする（「このエリアを検索」は
+///   結果が構造的に画面内のため対象外）
+/// - 検索結果（行 or ピン）タップで下部カードを表示し（結果シートとは排他）、選択中のピンは
+///   scale 1.3 + 影で強調する。「詳細を見る」で `CafeDetailView` へ push する
 /// - フィルタトグルで各種ピンの表示 / 非表示を切り替える（ブラウズモード時のみ表示）
 /// - カスタムピンタップで `CafeDetailView` へ push する（`NavigationLink(value:)` 経由）
 /// - 周辺カフェ（Apple 検索由来・低強調ピン）は `MKLocalPointsOfInterestRequest` で表示範囲内を
@@ -284,6 +289,32 @@ struct MapTabView: View {
     /// 検索結果から選択されたカフェ（下部カード表示用）。nil = カード非表示。
     @State private var selectedSearchCafe: Cafe? = nil
 
+    /// 選択中の検索結果ピンの placeId（マップ上でのハイライト表示用）。nil = ハイライトなし。
+    @State private var highlightedSearchPlaceId: String? = nil
+
+    // MARK: - 検索結果 下部ドラッグシート関連 State（2026-07-22 マップ検索結果刷新）
+
+    /// 下部ドラッグシートの 2 detent。
+    private enum SearchSheetDetent {
+        case peek
+        case expanded
+    }
+
+    /// 現在の detent（peek / expanded）。
+    @State private var searchSheetDetent: SearchSheetDetent = .peek
+
+    /// ドラッグ中の追従用オフセット（`translation.height`。下方向ドラッグで正）。
+    @State private var searchSheetDragTranslation: CGFloat = 0
+
+    /// `mapContent` の ZStack 全体のサイズ（expanded detent の高さ算出に使う）。
+    @State private var mapContainerSize: CGSize = .zero
+
+    /// peek detent の固定高さ。
+    private static let searchSheetPeekHeight: CGFloat = 180
+
+    /// expanded detent の高さ比率（`mapContainerSize.height` に対して）。
+    private static let searchSheetExpandedFraction: CGFloat = 0.6
+
     // MARK: - 「このエリアを検索」関連 State
 
     /// 最後にエリア検索（またはカメラ初期化）した際のマップ中心。
@@ -332,6 +363,35 @@ struct MapTabView: View {
     /// 検索モード中でも `showAreaSearchButton`（地図パン検知）が true のときだけ表示する。
     private var isSearchMode: Bool {
         isSearchFieldFocused || showingSearchResults
+    }
+
+    // MARK: - 検索結果 下部ドラッグシート サイジング
+
+    /// expanded detent の高さ（`mapContainerSize` 確定前は peek と同値にフォールバック）。
+    private var searchSheetExpandedHeight: CGFloat {
+        max(Self.searchSheetPeekHeight, mapContainerSize.height * Self.searchSheetExpandedFraction)
+    }
+
+    /// 現在の detent に対応する基準高さ（ドラッグ追従前の値）。
+    private var searchSheetBaseHeight: CGFloat {
+        searchSheetDetent == .expanded ? searchSheetExpandedHeight : Self.searchSheetPeekHeight
+    }
+
+    /// ドラッグ追従を反映した実際の表示高さ（peek〜expanded にクランプ）。
+    private var searchSheetCurrentHeight: CGFloat {
+        let target = searchSheetBaseHeight - searchSheetDragTranslation
+        return min(max(target, Self.searchSheetPeekHeight), searchSheetExpandedHeight)
+    }
+
+    /// 結果シートの表示条件: 検索モード中・カフェ未選択・（ローディング中 or 結果あり）。
+    private var isShowingSearchResultsSheet: Bool {
+        guard isSearchMode, selectedSearchCafe == nil, let sb = searchBridge else { return false }
+        return sb.isLoading || !sb.results.isEmpty
+    }
+
+    /// 現在地 FAB が結果シートと重ならないよう追加する下端パディング。
+    private var searchSheetFABBottomInset: CGFloat {
+        isShowingSearchResultsSheet ? searchSheetCurrentHeight : 0
     }
 
     // MARK: - Body
@@ -403,7 +463,7 @@ struct MapTabView: View {
                         .overlay(alignment: .bottomTrailing) {
                             currentLocationFAB
                                 .padding(.trailing, 16)
-                                .padding(.bottom, 16)
+                                .padding(.bottom, 16 + searchSheetFABBottomInset)
                         }
                         .errorToast(message: activeToast(bridge: bridge)?.message) {
                             activeToast(bridge: bridge)?.dismiss()
@@ -732,8 +792,8 @@ struct MapTabView: View {
             // 上部コントロール（検索バー行 + モードに応じた下段コンテンツ）
             //
             // ブラウズモード: フィルタチップ行のみ（「このエリアを検索」ボタンは出さない）
-            // 検索モード:（パンで出現した場合）「このエリアを検索」ボタン + 検索結果ドロップダウン
-            // 同一 VStack 内に流し込むことで、ドロップダウンとボタンの重なりを構造的に防ぐ。
+            // 検索モード:（パンで出現した場合）「このエリアを検索」ボタンのみ（結果一覧は下部
+            // ドラッグシート `searchResultsBottomSheet` へ移設。2026-07-22 マップ検索結果刷新）
             VStack(spacing: 8) {
                 searchBarView
                 if isSearchMode {
@@ -745,7 +805,6 @@ struct MapTabView: View {
                         }
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
-                    searchResultsSection
                 } else {
                     filterChipRow(bridge: bridge)
                 }
@@ -761,71 +820,151 @@ struct MapTabView: View {
                 }
             }
         }
+        .background(
+            GeometryReader { proxy in
+                Color.clear
+                    .onAppear { mapContainerSize = proxy.size }
+                    .onChange(of: proxy.size) { _, newSize in mapContainerSize = newSize }
+            }
+        )
+        .overlay(alignment: .bottom) {
+            searchResultsBottomSheet
+        }
     }
 
-    /// 検索モード中に `searchBarView` の直下へ表示する結果ドロップダウン。
+    // MARK: - 検索結果 下部ドラッグシート（2026-07-22 マップ検索結果刷新）
+
+    /// マップ主体 + 下部ドラッグシートで検索結果一覧を提示する（Apple/Google マップ風）。
     ///
-    /// ローディング中はスピナー、結果があればリストを表示する。0 件かつ非ローディングのときは
-    /// 何も表示しない（結果を待つ間の空白を許容し、余計なプレースホルダは出さない）。
+    /// - native `.sheet` は使わない（検索モード中は ✨ `TasteSearchSheet` が併存し得るため、
+    ///   同一 View に 2 枚目の `.sheet` を出すと競合する。詳細は ui-ux-guidelines.md）
+    /// - 表示条件は `isShowingSearchResultsSheet`（検索モード中・カフェ未選択・ローディング中 or 結果あり）
+    /// - 2 detent（peek / expanded）を `DragGesture` + スナップで実装。ドラッグはハンドル行のみに
+    ///   付け、リスト本体の `ScrollView` とジェスチャーが競合しないようにする
     @ViewBuilder
-    private var searchResultsSection: some View {
-        if let sb = searchBridge {
-            if sb.isLoading {
-                ProgressView()
-                    .frame(maxWidth: .infinity)
-                    .padding()
-                    .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
-            } else if !sb.results.isEmpty {
+    private var searchResultsBottomSheet: some View {
+        if let sb = searchBridge, isShowingSearchResultsSheet {
+            VStack(spacing: 0) {
+                searchSheetHandleBar(resultCount: sb.results.count)
+
+                Divider()
+
                 ScrollView {
                     LazyVStack(spacing: 0) {
-                        ForEach(Array(sb.results.enumerated()), id: \.element.placeId) { index, cafe in
-                            Button {
-                                selectSearchResult(cafe)
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Image(systemName: "mappin.circle.fill")
-                                        .font(.title2)
-                                        .foregroundStyle(.blue)
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(cafe.name)
-                                            .font(.subheadline.weight(.medium))
-                                            .foregroundStyle(.primary)
-                                            .multilineTextAlignment(.leading)
-                                        if let address = cafe.address {
-                                            Text(address)
-                                                .font(.caption)
-                                                .foregroundStyle(.secondary)
-                                                .lineLimit(1)
-                                                .multilineTextAlignment(.leading)
-                                        }
+                        if sb.isLoading {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                            .padding(.vertical, 24)
+                        } else {
+                            ForEach(Array(sb.results.enumerated()), id: \.element.placeId) { index, cafe in
+                                searchResultRow(cafe: cafe, isLast: cafe.placeId == sb.results.last?.placeId)
+                                // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
+                                // 到達しないため非表示。requirements.md §11-2）。
+                                if index == 2 {
+                                    InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 8)
+                                    if cafe.placeId != sb.results.last?.placeId {
+                                        Divider().padding(.leading, 52)
                                     }
-                                    Spacer()
-                                }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 12)
-                                .frame(maxWidth: .infinity)
-                                .contentShape(Rectangle())
-                            }
-                            .buttonStyle(.plain)
-                            if cafe.placeId != sb.results.last?.placeId {
-                                Divider().padding(.leading, 52)
-                            }
-                            // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
-                            // 到達しないため非表示。requirements.md §11-2）。
-                            if index == 2 {
-                                InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                if cafe.placeId != sb.results.last?.placeId {
-                                    Divider().padding(.leading, 52)
                                 }
                             }
                         }
                     }
                 }
-                .frame(maxHeight: 300)
-                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
             }
+            .frame(height: searchSheetCurrentHeight)
+            .frame(maxWidth: .infinity)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
+        }
+    }
+
+    /// 結果シートのドラッグハンドル行。
+    ///
+    /// - タップで peek ⇄ expanded をトグルする（ドラッグ操作が難しい VoiceOver 利用者向けの代替導線）
+    /// - ドラッグは本行にのみ付け、下部 `ScrollView` の縦スクロールと競合させない
+    private func searchSheetHandleBar(resultCount: Int) -> some View {
+        Button {
+            withAnimation(.snappy) {
+                searchSheetDetent = searchSheetDetent == .expanded ? .peek : .expanded
+            }
+        } label: {
+            VStack(spacing: 6) {
+                Capsule()
+                    .fill(Color.secondary)
+                    .frame(width: 36, height: 5)
+                HStack {
+                    Text(String(localized: "\(resultCount)件"))
+                        .font(.subheadline.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                }
+                .padding(.horizontal, 16)
+            }
+            .padding(.top, 8)
+            .padding(.bottom, 8)
+            .frame(maxWidth: .infinity, minHeight: 44)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(String(localized: "検索結果 \(resultCount)件"))
+        .accessibilityHint(String(localized: "タップして一覧の表示サイズを切り替えます"))
+        // `.simultaneousGesture` を使う: 通常の `.gesture` は Button 自身のタップ認識より優先され、
+        // タップが効かなくなる（ドラッグと同時に「タップで拡大/縮小」も成立させる必要があるため）。
+        .simultaneousGesture(
+            DragGesture()
+                .onChanged { value in
+                    searchSheetDragTranslation = value.translation.height
+                }
+                .onEnded { value in
+                    let predictedHeight = searchSheetBaseHeight - value.predictedEndTranslation.height
+                    let midpoint = (Self.searchSheetPeekHeight + searchSheetExpandedHeight) / 2
+                    withAnimation(.snappy) {
+                        searchSheetDetent = predictedHeight > midpoint ? .expanded : .peek
+                        searchSheetDragTranslation = 0
+                    }
+                }
+        )
+    }
+
+    /// 結果シート内の 1 行（カフェ名 + 住所）。タップで `selectSearchResult` を呼ぶ。
+    @ViewBuilder
+    private func searchResultRow(cafe: Cafe, isLast: Bool) -> some View {
+        Button {
+            selectSearchResult(cafe)
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: "mappin.circle.fill")
+                    .font(.title2)
+                    .foregroundStyle(.blue)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(cafe.name)
+                        .font(.subheadline.weight(.medium))
+                        .foregroundStyle(.primary)
+                        .multilineTextAlignment(.leading)
+                    if let address = cafe.address {
+                        Text(address)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                            .multilineTextAlignment(.leading)
+                    }
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        if !isLast {
+            Divider().padding(.leading, 52)
         }
     }
 
@@ -946,6 +1085,8 @@ struct MapTabView: View {
     /// テキスト検索・「このエリアを検索」の両方の完了を検知し、成功時は結果を全件ピンとして
     /// `mapBridge` に反映する。「このエリアを検索」由来の完了時はさらにアンカーを更新して
     /// ボタンを隠し、0 件だった場合は軽量な案内メッセージを出す。
+    /// テキスト検索由来の完了時は、結果が画面外に落ちないよう全結果ピンへカメラを自動フィットする
+    /// （「このエリアを検索」は表示範囲内検索で結果が構造的に画面内のため対象外。2026-07-22）。
     private func handleSearchCompletion(sb: CafeSearchViewModelBridge, mapBridge: MapViewModelBridge) {
         let wasAreaSearch = isAreaSearchInFlight
         isAreaSearchInFlight = false
@@ -964,6 +1105,54 @@ struct MapTabView: View {
             if sb.results.isEmpty {
                 areaSearchEmptyMessage = String(localized: "このエリアにカフェが見つかりませんでした")
             }
+        } else {
+            fitCameraToSearchResults(sb.results)
+        }
+    }
+
+    /// テキスト検索完了時、全結果ピンの bounding box に収まるようカメラをフィットする。
+    ///
+    /// 結果 1 件のときは `selectSearchResult` と同じ 800m ズームにフォールバックする。
+    /// 座標が取れない結果のみの場合は何もしない（現在のカメラ位置を維持）。
+    private func fitCameraToSearchResults(_ results: [Cafe]) {
+        let coordinates: [CLLocationCoordinate2D] = results.compactMap { cafe in
+            guard let lat = cafe.latitude?.doubleValue, let lng = cafe.longitude?.doubleValue else {
+                return nil
+            }
+            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
+        }
+        guard !coordinates.isEmpty else { return }
+
+        if coordinates.count == 1 {
+            withAnimation {
+                cameraPosition = .region(
+                    MKCoordinateRegion(
+                        center: coordinates[0],
+                        latitudinalMeters: 800,
+                        longitudinalMeters: 800
+                    )
+                )
+            }
+            return
+        }
+
+        let lats = coordinates.map { $0.latitude }
+        let lngs = coordinates.map { $0.longitude }
+        let minLat = lats.min()!
+        let maxLat = lats.max()!
+        let minLng = lngs.min()!
+        let maxLng = lngs.max()!
+        let center = CLLocationCoordinate2D(
+            latitude: (minLat + maxLat) / 2,
+            longitude: (minLng + maxLng) / 2
+        )
+        // 1.3 倍（片側 15% 相当）は setInitialCameraFromVisitedCafes と同じ padding 係数。
+        let span = MKCoordinateSpan(
+            latitudeDelta: max((maxLat - minLat) * 1.3, 0.01),
+            longitudeDelta: max((maxLng - minLng) * 1.3, 0.01)
+        )
+        withAnimation {
+            cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
         }
     }
 
@@ -993,18 +1182,20 @@ struct MapTabView: View {
     /// 検索選択状態をクリアし、マップオーバーレイもリセットする。フォーカスも解除しブラウズモードへ戻す。
     private func clearSearchSelection() {
         selectedSearchCafe = nil
+        highlightedSearchPlaceId = nil
         showingSearchResults = false
         isSearchFieldFocused = false
         appState.mapBridge?.onSearchResultsCleared()
     }
 
-    /// 検索結果（ドロップダウンまたはピン）からカフェを選択する。
+    /// 検索結果（一覧行またはピン）からカフェを選択する。
     ///
     /// ピン集合（全検索結果）はそのまま維持し、下部カードの表示とマップ中心移動のみ行う
     /// （ピン集合と選択状態の関心を分離するため、ここでは `onSearchResultsUpdated` を呼ばない）。
-    /// ドロップダウンを閉じ、フォーカスも解除してブラウズモードへ戻す。
+    /// 結果一覧シートを退避し（`showingSearchResults = false`）、選択ピンをハイライトする。
     private func selectSearchResult(_ cafe: Cafe) {
         selectedSearchCafe = cafe
+        highlightedSearchPlaceId = cafe.placeId
         showingSearchResults = false
         isSearchFieldFocused = false
         guard let lat = cafe.latitude?.doubleValue,
@@ -1049,8 +1240,14 @@ struct MapTabView: View {
                 }
                 Spacer(minLength: 0)
                 Button {
-                    // ピン集合（全検索結果）は維持し、カードの選択のみ解除する
+                    // ピン集合（全検索結果）は維持し、カードの選択のみ解除する。
+                    // 検索結果からの選択時は結果一覧の下部ドラッグシートへ戻す
+                    // （「一覧に戻る」導線。2026-07-22 マップ検索結果刷新）。
                     selectedSearchCafe = nil
+                    highlightedSearchPlaceId = nil
+                    if searchBridge != nil {
+                        showingSearchResults = true
+                    }
                 } label: {
                     Image(systemName: "xmark.circle.fill")
                         .font(.title2)
@@ -1066,6 +1263,7 @@ struct MapTabView: View {
                     )
                     // ピン集合（全検索結果）は維持し、カードの選択のみ解除する
                     selectedSearchCafe = nil
+                    highlightedSearchPlaceId = nil
                 } label: {
                     Text(String(localized: "詳細を見る"))
                         .frame(maxWidth: .infinity)
@@ -1369,17 +1567,31 @@ struct MapTabView: View {
     }
 
     /// 検索結果オーバーレイピン（青 / `mappin.and.ellipse`）。
+    ///
+    /// 選択中（`highlightedSearchPlaceId` と一致）は scale 1.3 + 影を強調する
+    /// （色は既存の `Color.blue` を維持。2026-07-22 マップ検索結果刷新）。
     private func searchResultPin(cafe: Cafe) -> some View {
-        ZStack {
+        let isHighlighted = cafe.placeId == highlightedSearchPlaceId
+        return ZStack {
             Circle()
                 .fill(Color.blue)
                 .frame(width: 32, height: 32)
-                .shadow(color: Color.blue.opacity(0.4), radius: 4, x: 0, y: 2)
+                .shadow(
+                    color: Color.blue.opacity(isHighlighted ? 0.6 : 0.4),
+                    radius: isHighlighted ? 6 : 4,
+                    x: 0,
+                    y: 2
+                )
             Image(systemName: "mappin.and.ellipse")
                 .font(.caption2)
                 .foregroundStyle(.white)
         }
-        .accessibilityLabel(String(localized: "\(cafe.name) 検索結果"))
+        .scaleEffect(isHighlighted ? 1.3 : 1.0)
+        .accessibilityLabel(
+            isHighlighted
+                ? String(localized: "\(cafe.name) 検索結果、選択中")
+                : String(localized: "\(cafe.name) 検索結果")
+        )
     }
 
     /// 保存済み（行きたい）店ピン（indigo + bookmark。フェーズ 15-A）。

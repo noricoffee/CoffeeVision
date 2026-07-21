@@ -42,6 +42,13 @@ metadata:
 - View 側は `@Environment(\.dismiss)` + `.onChange(of: viewModel.isDeleted) { _, v in if v { dismiss() } }` で一覧へ pop。`content` の `@ViewBuilder` 分岐は **`isDeleted` を最優先で判定**し `ProgressView()` を返す（dismiss アニメーションが効くまでの一瞬に「見つかりません」の `ContentUnavailableView` がちらつくのを防ぐ）。
 - リスト側の長押し `.contextMenu` からの削除確認は `confirmationDialog(_:isPresented:titleVisibility:presenting:actions:message:)`（`presenting:` 付きオーバーロード）を使うと、`@State private var deletionTarget: CoffeeRecord?` を `Binding(get: { != nil }, set: { if !$0 { nil にする } })` で `isPresented` に渡しつつ、`actions`/`message` クロージャに non-optional な対象データを渡せる。スワイプ削除（確認なし）とは別導線として共存させる。
 
+## 自前の下部ドラッグシート（2 detent）は `Button` + `DragGesture` を必ず `.simultaneousGesture` で組む（2026-07-22、マップ検索結果シートで確認）
+
+- native `.sheet` を避けて `.overlay(alignment: .bottom)` の自前 View で peek/expanded 2 detent を実装するとき、ドラッグハンドル行を「タップでも detent 切替できる」`Button` にした上でリサイズ用 `DragGesture` を付けたい場合、**`.gesture(DragGesture())` は Button 自身のタップ認識より優先されタップが効かなくなる**。`.simultaneousGesture(DragGesture())` にするとタップとドラッグの両方が独立して機能する（タップは移動量ゼロなので `DragGesture` の既定 `minimumDistance`（10pt）を満たさず干渉しない）。
+- ドラッグの追従は `@State dragTranslation`（`onChanged` で更新）+ 現在 detent の基準高さから引いた値を `min/max` でクランプする計算プロパティにするのが素直。スナップ判定は `onEnded` の `predictedEndTranslation`（速度込みの慣性込み終端）を使い、`(peekHeight + expandedHeight) / 2` の中点との比較で detent を決める。
+- expanded detent の高さ（画面高の N%）は `GeometryReader` を対象 View の `.background(...)` として重ね、`onAppear` + `.onChange(of: proxy.size)` で `@State CGSize` に写し取ってから通常の計算プロパティで使う（GeometryReader の `body` 内で直接 `@State` を書き換えると "modifying state during view update" になるため避ける。`.onChange` 経由なら安全）。
+- ドラッグ操作はリスト本体の `ScrollView` には付けない（ハンドル行だけに限定）。シート全体に付けると一覧のスクロールジェスチャーと競合する。
+
 ## `ShareLink` で「生成 → 共有」の 2 フェーズ導線を作るときは enum 状態（idle/exporting/ready(URL)）で Section 内容を丸ごと差し替える（2026-07-07、設定画面データエクスポートで確認）
 
 - `ShareLink` はボタン自体をタップした瞬間にしか share sheet を出せない（値を先に非同期生成してから自動でシートを開く API はない）。「タップでエクスポート実行 → 完了したら共有」の要件は、`Button`（idle）→ `ProgressView`（exporting）→ `ShareLink(item:)`（ready）と同じ `Section` 内で `switch` して差し替える 2 段階 UI にするのが素直（`SettingsView.exportSection` 参照）。エラーは別途 `@State private var exportError: String?` + `.alert` で拾う。

@@ -26,6 +26,17 @@
 
 ### 未完・バックログ
 
+#### マップ検索結果を「マップ主体 + 下部ドラッグシート」に刷新（2026-07-22 起票）
+
+> 検索結果の位置がマップで見えづらい問題を解消。上部ドロップダウンを廃し、結果一覧を下部の自前ドラッグシート（2 detent）へ移設。テキスト検索完了時のみ全結果ピンにカメラ自動フィット。行/ピンタップは既存 `cafeSelectionCard` と排他表示（未選択=シート/選択=カード）。選択ピンを scale 1.3 で強調。iosApp `MapTabView.swift` 完結（KMP 変更なし）。native `.sheet` は ✨ `TasteSearchSheet` と競合するため不採用。仕様は ui-ux-guidelines「マップ検索結果の提示」・requirements §11-2/§5・プラン `.claude/plans/shiny-brewing-dongarra.md`。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: docs 確定更新（ui-ux-guidelines / requirements §11-2・§5 / implementation_note / app-store-metadata の「ドロップダウン」表記追随） | 2026-07-22 完了 |
+| [x] | ios-engineer: `MapTabView.swift` 実装（上部ドロップダウン撤去 / 自前下部ドラッグシート / カメラ自動フィット（テキスト検索のみ）/ 選択ピン強調 / 広告は結果シート内 3 件目後） | 2026-07-22 完了。peek 180pt / expanded = container 高さ 60%。ハンドル行に `.simultaneousGesture`（Button タップ + ドラッグ両立）、タップで detent トグル（VoiceOver 代替）。FAB は `searchSheetFABBottomInset` でシート高に追従 |
+| [x] | 親: レポート評価 + ビルド検証（override 無し再検証）+ 回帰確認 | 2026-07-22 完了。親が override 無し `xcodebuild ... BUILD SUCCEEDED` を独立再確認。差分レビュー: 排他条件（sheet=未選択/card=選択）・`showingSearchResults` 転用・カメラフィット span×1.3 いずれも整合。SourceKit の `No such module 'SharedLogic'` は xcframework 未インデックスの IDE 偽陽性 |
+| [ ] | ユーザー: シミュレータ/実機で目視（自動フィット / シートドラッグ / 行⇄ピン⇄カード / ✨ 競合なし / 広告 / ダーク・VoiceOver） | UI 挙動バグはビルド成功≠完了 |
+
 #### 好み一致の作り込み: 精製方法軸の追加 + ダミー人格再設計（2026-07-20 起票）
 
 > 「好み一致」（`ObserveTasteMatchedCafesUseCase` → `RecommendedCafe`）のマッチ軸を **3 軸（産地/焙煎/抽出）→ 4 軸（+ 精製方法）** に拡張。ダミーデータが全 enum 分散設計のため 2σ z ゲートに届かず焙煎度 Light しか信号化しない問題を、**人格中心の再設計**で解消（人格 = 産地ブラジル勝ち・焙煎 City・抽出 NelDrip・精製 Natural / ケニアは二番手）。`bestProcessing` はマップの好み一致と分析タブ「好みの傾向」カードの両方に出す。仕様は data-model.md §1.6/§1.7・requirements 9-5、プランは `.claude/plans/inherited-coalescing-eich.md`。テイスティング軸の一致は per-record 変換が非自明のため今回対象外（別途）。

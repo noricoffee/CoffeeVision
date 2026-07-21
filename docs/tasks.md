@@ -167,7 +167,7 @@
 |------|------|------|
 | [x] | ios-engineer: SPM に FirebaseRemoteConfig 追加 + キーワードプロバイダ実装 + `MapTabView` 参照差し替え + 起動時 fetchAndActivate | 2026-07-13 完了。`ApplePoiFilterConfig`。空配列は成功扱い（フィルタ一時無効化に使える） |
 | [x] | 親: 検証（xcodebuild override 無し）+ docs 更新（implementation_note / paid-services 棚卸し行）+ commit | 2026-07-13 完了。PrivacyInfo は SDK 同梱マニフェスト確認でアプリ側変更不要、app-store-metadata 6.3 に SDK 行追加 |
-| [ ] | ユーザー: Firebase コンソールで `map_poi_excluded_name_keywords` パラメータ作成 → コンソール変更が次回起動で反映されることを実機確認 | パラメータ未作成でも bundled デフォルトで動作する |
+| [x] | ユーザー: Firebase コンソールで `map_poi_excluded_name_keywords` パラメータ作成 → コンソール変更が次回起動で反映されることを実機確認 | 2026-07-21 ユーザー確認 OK（パラメータ作成 → 反映確認）。注: `minimumFetchInterval` は 12h 既定のため、即時反映は再インストール起動での fetch 強制が確実 |
 
 #### 周辺カフェピンのスロットリング耐性（2026-07-18 起票）
 
@@ -418,7 +418,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | ユーザー: 実機/シミュレータで実挙動確認（Crashlytics テストクラッシュ送出 / Analytics DebugView で consent トグル ON→OFF / Performance トレース / `screen_view` 発火）+ 親が commit | ビルド成功 ≠ 動作確認完了 |
+| [x] | ユーザー: 実機/シミュレータで実挙動確認（Crashlytics テストクラッシュ送出 / Analytics DebugView で consent トグル ON→OFF / Performance トレース / `screen_view` 発火）+ 親が commit | 2026-07-21 ユーザー確認 OK。Analytics DebugView で consent ON→OFF gating + `screen_view` 発火を確認。Crashlytics テストクラッシュはアプリ内導線なし・Performance は反映遅延のため即時確認は対象外（後日コンソール観察） |
 
 ### 完了
 

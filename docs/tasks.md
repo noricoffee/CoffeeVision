@@ -39,6 +39,16 @@
 | [x] | 親: 統合検証（verify-kmp-ios、xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-20 完了。親が override 無し BUILD SUCCEEDED を再確認 |
 | [ ] | ユーザー: Dummy Data Scheme で目視（マップに複数の好み一致ピン + 4 軸理由表示 / 分析カードに精製行 / ダーク・VoiceOver） | ビルド成功 ≠ 確認完了 |
 
+#### カフェ検索の補完語を「カフェ」→「コーヒー」に変更（2026-07-21 起票）
+
+> カフェ検索タブ（位置バイアスなし `searchText(query)`）で「フルーティー」等の味覚語を入れるとパフェ等のデザート店がヒットする。原因は `ensureCafeKeyword` の補完語「 カフェ」が業態フィルタを満たすだけでコーヒー方向へ寄せないこと。補完語を **「 コーヒー」に置換**して地名のみ問題を維持しつつコーヒー方向へバイアスする（ユーザー確定 2026-07-21）。`shared/data-places` 完結。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `ensureCafeKeyword` の補完語を「 カフェ」→「 コーヒー」に置換 + KDoc 追随 + `PlacesClientImplSearchTextKeywordTest` の期待値更新 + テスト実行 | 2026-07-21 完了。includedType=cafe / CAFE_KEYWORDS / locationBias 経路は不変 |
+| [x] | 親: テスト再検証（`iosSimulatorArm64Test` override 無し green）+ implementation_note 記録 | 2026-07-21 完了 |
+| [ ] | ユーザー: シミュレータで味覚語検索の目視（「フルーティー」等でデザート店が減る / 地名のみ検索は従来どおり） + commit 可否判断 | ビルド成功 ≠ 確認完了 |
+
 #### 広告導入: AdMob ネイティブ広告（2026-07-14 起票）
 
 > 収益化のため AdMob ネイティブ広告を 4 面（カフェ詳細 / マップ検索ドロップダウン / コーヒー記録タブ下部固定 / 分析タブ下部固定）+ ATT フロー（既存同意オンボーディング直後・拒否時 NPA）で導入する。**仕様の正は requirements.md §11**（2026-07-14 grilling で確定）。iosApp View 層完結・KMP 変更なし。本番ユニット発行前は Google 提供のテスト用ユニット ID で実装・検証を進められる。

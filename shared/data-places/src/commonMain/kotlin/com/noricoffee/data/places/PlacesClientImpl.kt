@@ -75,7 +75,9 @@ class PlacesClientImpl(
      *
      * 地名のみのクエリ（例: "渋谷"）を入力すると、Places API が locality 型の場所（渋谷区など）に
      * 一致させ、`includedType=cafe` フィルタで 0 件になる。
-     * そのため、カフェ語を含まないクエリには末尾に " カフェ" を補完してから API に送る。
+     * そのため、カフェ語を含まないクエリには末尾に " コーヒー" を補完してから API に送る。
+     * "カフェ" ではなく "コーヒー" を補完するのは、テキストのランキングをコーヒー方向へ寄せ、
+     * パフェ等のデザート店が味覚語（例: "フルーティー"）でヒットするのを避けるため。
      *
      * カフェ語を既に含む場合（例: "コーヒー", "渋谷 カフェ"）は補完しない（二重付与・既存挙動を維持）。
      * `searchText(query, locationBias)` はカフェ検索タブの位置バイアス付き検索専用のため補完対象外。
@@ -182,11 +184,13 @@ class PlacesClientImpl(
     }
 
     /**
-     * クエリにカフェ語が含まれていなければ末尾に " カフェ" を補完して返す。
+     * クエリにカフェ語が含まれていなければ末尾に " コーヒー" を補完して返す。
      *
      * Places API (New) の `searchText` は `includedType=cafe` を指定しているが、
      * 地名のみのクエリ（例: "渋谷"）は locality 型の場所に一致してしまい、
      * cafe フィルタで 0 件になる。そのためカフェ語を補完し、cafe 型の候補を引き出す。
+     * 補完語に "カフェ" ではなく "コーヒー" を選ぶのは、テキストのランキングをコーヒー方向へ
+     * 寄せるため（"カフェ" は業態フィルタを満たすだけでパフェ等のデザート店も拾ってしまう）。
      *
      * カフェ語判定（大文字小文字無視）: カフェ / cafe / café / コーヒー / 珈琲 / coffee
      * - query が blank の場合は no-op（空検索は UI 側で抑止しているが安全側の処理）
@@ -196,7 +200,7 @@ class PlacesClientImpl(
         if (query.isBlank()) return query
         val lower = query.lowercase()
         val hasCafeKeyword = CAFE_KEYWORDS.any { lower.contains(it) }
-        return if (hasCafeKeyword) query else "$query カフェ"
+        return if (hasCafeKeyword) query else "$query コーヒー"
     }
 
     private fun PlaceDto.toPlaceSummary(): PlaceSummary = PlaceSummary(
@@ -219,7 +223,7 @@ class PlacesClientImpl(
     private companion object {
         /**
          * カフェ語の一覧（小文字で比較する）。
-         * いずれかを含む query には " カフェ" を補完しない。
+         * いずれかを含む query には " コーヒー" を補完しない。
          */
         val CAFE_KEYWORDS = listOf("カフェ", "cafe", "café", "コーヒー", "珈琲", "coffee")
 

@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
  * リクエストボディの `textQuery` を直接 assert することで挙動を検証する。
  *
  * ## 検証ケース
- * 1. 地名のみ（"渋谷"）→ `"渋谷 カフェ"` に補完されて送信される
+ * 1. 地名のみ（"渋谷"）→ `"渋谷 コーヒー"` に補完されて送信される
  * 2. カタカナ「コーヒー」含む → 補完されない（"コーヒー" のまま）
  * 3. 「渋谷 カフェ」含む → 補完されない（二重付与なし）
  * 4. 英語「Coffee」含む → 大文字小文字無視で補完されない
@@ -61,7 +61,7 @@ class PlacesClientImplSearchTextKeywordTest {
     // -----------------------------------------------------------------------
 
     @Test
-    fun searchText_withPlaceName_appendsCafeKeyword() = runTest {
+    fun searchText_withPlaceName_appendsCoffeeKeyword() = runTest {
         val bodies = mutableListOf<String>()
         val client = buildClient(bodies)
 
@@ -69,8 +69,8 @@ class PlacesClientImplSearchTextKeywordTest {
 
         assertEquals(1, bodies.size)
         assertTrue(
-            bodies[0].contains("\"textQuery\":\"渋谷 カフェ\""),
-            "Expected textQuery to be '渋谷 カフェ' but body was: ${bodies[0]}",
+            bodies[0].contains("\"textQuery\":\"渋谷 コーヒー\""),
+            "Expected textQuery to be '渋谷 コーヒー' but body was: ${bodies[0]}",
         )
     }
 
@@ -91,7 +91,7 @@ class PlacesClientImplSearchTextKeywordTest {
             "Expected textQuery to be 'コーヒー' but body was: ${bodies[0]}",
         )
         assertFalse(
-            bodies[0].contains("コーヒー カフェ"),
+            bodies[0].contains("コーヒー コーヒー"),
             "textQuery should not be appended when cafe keyword already present",
         )
     }
@@ -112,9 +112,9 @@ class PlacesClientImplSearchTextKeywordTest {
             bodies[0].contains("\"textQuery\":\"渋谷 カフェ\""),
             "Expected textQuery to be '渋谷 カフェ' but body was: ${bodies[0]}",
         )
-        // "渋谷 カフェ カフェ" になっていないこと
+        // "渋谷 カフェ コーヒー" になっていないこと
         assertFalse(
-            bodies[0].contains("渋谷 カフェ カフェ"),
+            bodies[0].contains("渋谷 カフェ コーヒー"),
             "textQuery should not be double-appended",
         )
     }
@@ -136,7 +136,7 @@ class PlacesClientImplSearchTextKeywordTest {
             "Expected textQuery to be 'Coffee' but body was: ${bodies[0]}",
         )
         assertFalse(
-            bodies[0].contains("Coffee カフェ"),
+            bodies[0].contains("Coffee コーヒー"),
             "textQuery should not be appended when 'Coffee' (case-insensitive) is present",
         )
     }
@@ -158,7 +158,7 @@ class PlacesClientImplSearchTextKeywordTest {
             "Expected textQuery to be 'Cafe Paulista' but body was: ${bodies[0]}",
         )
         assertFalse(
-            bodies[0].contains("Cafe Paulista カフェ"),
+            bodies[0].contains("Cafe Paulista コーヒー"),
             "textQuery should not be appended when 'cafe' (case-insensitive) is present",
         )
     }
@@ -182,7 +182,7 @@ class PlacesClientImplSearchTextKeywordTest {
             "Expected textQuery to be '渋谷' (no append) but body was: ${bodies[0]}",
         )
         assertFalse(
-            bodies[0].contains("渋谷 カフェ"),
+            bodies[0].contains("渋谷 コーヒー"),
             "searchText(query, locationBias) should NOT append cafe keyword",
         )
     }

@@ -1056,3 +1056,15 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 - **既存の現在地 FAB とは独立**: FAB（`currentLocationFAB` / `recenterToCurrentLocation`）は「現在地へセンタリング + ズームリセット」の役割で、`LocationManager` のワンショット取得を使う。ブルードットは MapKit が内部で位置を自前管理するため、周辺カフェ検索（`setupLocation` のワンショット）への副作用はない。`MapUserLocationButton` への置き換えはしていない。
 - **権限文言の追随**: ブルードットは地図表示中は継続表示のため、旧文言「検索時のみ / 一時的に使用」は実態と食い違う（挙動は依然 when-in-use / フォアグラウンドのみ、バックグラウンド常時取得はしない）。Info.plist の usage description を「近くのカフェの検索と、地図上での現在地表示のために現在地を使用します。」に、app-store-metadata の申告・審査ノートを「カフェ検索と地図上の現在地表示に使用 / バックグラウンド常時取得はしない」に更新した（ユーザー確定）。
+
+### 2026-07-21: カフェ検索の補完語を「カフェ」→「コーヒー」に変更
+
+- 領域: KMP（`shared/data-places`）
+- 関連: `PlacesClientImpl.ensureCafeKeyword` / `PlacesClientImplSearchTextKeywordTest`、tasks.md「カフェ検索の補完語を…（2026-07-21 起票）」
+
+カフェ検索タブ（位置バイアスなし `searchText(query)`）で味覚語「フルーティー」を入れるとパフェ等のデザート店がヒットする問題に対し、`ensureCafeKeyword` がカフェ語を含まないクエリへ補完する語を「 カフェ」→「 コーヒー」に置換した。
+
+- **なぜ語の追加ではなく置換か**: 「カフェ」は `includedType=cafe` の業態を満たすだけでテキストのランキングをコーヒー方向へ寄せない。Google Places の searchText は全語を加味してランクするため、「フルーティー コーヒー」はコーヒーがフルーティーな店へ寄り、デザート専門店を弱められる。「フルーティー コーヒー カフェ」と 2 語足すよりノイズが少なく、地名のみ問題（例:「渋谷」→ locality 型で 0 件）も「渋谷 コーヒー」で同様に解決する（ユーザー確定）。
+- **据え置いたもの**: `includedType=cafe`(業態フィルタ)、`CAFE_KEYWORDS`(補完スキップ判定語。「カフェ」も残し、既に「渋谷 カフェ」等と入れたクエリには補完しない既存挙動を維持)、`searchText(query, locationBias)`(POI タップ経路。補完なし)、`searchByNameNear`。
+- **トレードオフ**: コーヒーアプリの前提で全キーワード検索がコーヒー方向へ寄るため、紅茶主体のカフェはわずかに出にくくなる（許容）。`includedType=cafe` は維持のため、cafe 型でない純喫茶チェーン等は依然フィルタされ得る（今回スコープ外）。
+- 検証: `:shared:data-places:testAndroidHostTest` + `iosSimulatorArm64Test`（親が override 無しで実行）ともに green。

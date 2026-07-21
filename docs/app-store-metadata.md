@@ -142,6 +142,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | メールアドレス | する（任意。Apple でサインイン時のみ） | アプリ機能（アカウントのアップグレード / 引き継ぎ） | 紐付ける | しない | Sign in with Apple での匿名アカウントアップグレード時に Firebase Auth が保持。ユーザーは Apple の「メールを非公開」を選択可。**申告要否はリリース前に再確認** |
 | 診断情報（クラッシュ / パフォーマンス） | する（**常時**） | アプリ機能（安定性・技術品質の改善） | 紐付ける（匿名 uid / Firebase Installation ID） | しない | Firebase Crashlytics + Performance。同意不要（安定性・技術品質の正当利益）。クラッシュスタック・非致命的エラー・起動/描画/ネットワークの遅延など。広告なし・IDFA なし |
 | 使用状況データ（製品インタラクション: `screen_view` / 自動収集イベント） | する（**同意時のみ**） | サービス改善のための分析 | 紐付ける（匿名 uid） | しない | Firebase Analytics（素の `FirebaseAnalytics` プロダクト。現行 SDK は既定で IDFA 非依存）。`analyticsConsent = true` の場合のみ収集を有効化。既定（未同意）は収集停止。カスタムイベントは未導入（自動収集 + `screen_view` のみ） |
+| ユーザーコンテンツ（味覚プロファイル: テイスティング平均 5 軸 / カテゴリ好み / 高評価カフェの placeId・座標） | する（**同意時のみ**・9-6 設計確定/未実装） | アプリ機能（好みが近いユーザー間のカフェ推薦） | 紐付ける（匿名 uid） | しない | `recommendationConsent = true` のときだけ `sharedTasteProfiles` に匿名 uid 紐付けで保存。生メモ・タグ・カフェ名は含めない。`analyticsConsent` とは別の独立同意（既定 false）。横断参照は Cloud Function 特権に閉じ、他ユーザーへ生データを開示しない。**実装着手前に申告を最終化** |
 | 識別子（広告 ID / IDFA）・広告データ | する（**ATT 許諾時のみ**） | 第三者広告（デベロッパーの広告 / マーケティング） | 紐付ける | **する**（許諾時のみ） | Google Mobile Ads SDK（AdMob）。ATT 許諾時はパーソナライズ広告に IDFA を利用、拒否時は非パーソナライズ（NPA）配信で IDFA 不使用。広告インタラクションデータは AdMob が収集（requirements.md §11） |
 
 > 分析タブの AI 機能（傾向要約・Q&A・好み検索）は Apple の Foundation Models による**オンデバイス処理**で、記録データを外部サーバに送信しない（App Privacy の申告対象にならない）。
@@ -156,7 +157,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | SDK | 提供元 | 用途 | 送信データ |
 |-----|--------|------|-----------|
 | Firebase Auth | Google | 匿名認証 + Sign in with Apple 連携 | 匿名 uid（Apple サインイン時は Apple ID 連携情報・メールアドレス） |
-| Firebase Firestore | Google | 記録の同期 / バックアップ | コーヒー記録（評価 / テイスティング / メモ / タグ / カフェ情報スナップショット / 写真メタデータ）+ データ利用同意フラグ |
+| Firebase Firestore | Google | 記録の同期 / バックアップ | コーヒー記録（評価 / テイスティング / メモ / タグ / カフェ情報スナップショット / 写真メタデータ）+ データ利用同意フラグ（+ 同意時の味覚プロファイル共有 = 9-6 設計確定/未実装） |
 | Google Places API | Google | カフェ検索・エリア検索・詳細・写真取得 | 検索クエリ / 現在地・マップ中心座標 |
 | Firebase Crashlytics | Google | クラッシュ / 非致命的エラー診断（**常時**） | クラッシュスタック・デバイス/OS・Firebase Installation ID・（同意時のみ）Analytics breadcrumb |
 | Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
@@ -269,3 +270,4 @@ CoffeeVision を初めてリリースしました。
 | 2026-07-12 | コピーを「過去から未来までのコーヒー体験」軸に刷新（ユーザー確定）: サブタイトル「コーヒー記録・分析・行きたい店」/ プロモテキスト（107 字）/ 説明文リード・締めを差し替え。あわせてフェーズ 15〜17 機能を原稿に追随: 説明文に「行きたいお店を保存する」ブロック + 抽出レシピ・複製・現在地サジェスト・周辺ピン・未経験豆提案・一覧検索/月別・JSON エクスポートの各行（計 1014 字）、キーワード 5 語追加（計 79 字）、スクショ #7（行きたいピン + 保存リスト）追加 |
 | 2026-07-13 | Firebase Remote Config 導入（マップ POI 除外キーワードの配信）に伴い 6.3 SDK 一覧に行を追加。ユーザーデータの送信はなく ASC 申告のデータ種別に変更なし（SDK 同梱マニフェストが Other Diagnostic Data / 非トラッキングを自己申告、アプリ側 `PrivacyInfo.xcprivacy` 変更不要を確認済み） |
 | 2026-07-14 | **AdMob 広告導入決定（requirements.md §11）に伴う更新**: 6.1 に「識別子（広告 ID / IDFA）・広告データ」行（ATT 許諾時のみトラッキング「する」）、6.2 の ATT を不要 → **必要**（プレプロンプト + 拒否時 NPA、`NSUserTrackingUsageDescription` 要）、6.3 に Google Mobile Ads SDK / UMP SDK を追加。配信地域を日本のみで確定（チェックリスト反映）。実装完了時に `PrivacyInfo.xcprivacy` の追随を要確認 |
+| 2026-07-21 | **9-6 協調フィルタ（設計確定・未実装）に伴い 6.1 に「味覚プロファイル共有」行を追加**: `recommendationConsent = true` の同意時のみ `sharedTasteProfiles` に匿名 uid 紐付けで保存（テイスティング平均 5 軸 / カテゴリ好み / 高評価カフェの placeId・座標）。生メモ・タグ・カフェ名は非共有、横断参照は Cloud Function 特権に閉じる。`analyticsConsent` とは別の独立同意。6.3 Firestore 送信データにも追記。**実装着手前に申告を最終化 + プライバシーポリシー（未作成・リリース前必須）に協調フィルタのデータ利用を記載** |

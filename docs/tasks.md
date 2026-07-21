@@ -199,7 +199,15 @@
 
 ##### 12-D: 協調フィルタリング（B-4 将来版 / 9-6）
 
-> **保留（2026-07-12 縮約）**: サーバーサイド基盤（インフラ選定・コスト見積もり）が前提で未着手。設計方針の正は requirements.md 9-6（✕ 将来）/ implementation_note 2026-06-22 Future Direction。`CafeRecommendationProvider` をリモート実装で差し替え可能な設計は B-4 で済み。フェーズ 8 の将来 9-6 行は本セクションへ統合済み（2026-07-09）。当時のタスク分解は git 履歴参照 — 優先度が上がったらインフラ選定から仕切り直す。
+> **設計確定・段階タスク化（2026-07-21 grilling）**: 6 意思決定を確定（同意分離 / Cloud Function 特権 read / 5 軸 cosine + カテゴリ補助 / 未訪問+地理制約 / `RecommendationReason.SimilarUsers` 同型・視覚区別 / 今回は設計固定まで）。確定仕様の正は requirements 9-6 / data-model §1.7・§3.2・§3.3 / implementation_note 2026-07-21。`CafeRecommendationProvider` をリモート実装で差し替え可能な設計は B-4 で済み。実装は未着手で、以下 3 段に分解して段階 dispatch する（前段が後段の前提）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | ①同意 + 共有プロファイル書き込み基盤（`recommendationConsent` トグル + `sharedTasteProfiles/{uid}` upsert/削除 + Security Rules）。**サーバー不要・クライアント完結**で先行可 | 最初の一歩 |
+| [ ] | ②Cloud Function 計算基盤（インフラ選定 → callable 実装 → 近傍 cosine + 未訪問/地理フィルタ）。**インフラ選定が 12-D 再開の起点** | 未決: 総当たり vs Firestore ネイティブ KNN |
+| [ ] | ③`CafeRecommendationProvider` リモート実装 + `RecommendationReason.SimilarUsers` UI（マップ視覚区別・理由文） | ②の後 |
+
+> 未決: 閾値定数（近傍 K / 自己記録 N / 半径 R）は実装時 sweep。FM 言語化を v1 に含めるかは実装フェーズ判断。プライバシーポリシー更新（協調フィルタのデータ利用記載）はカテゴリ 4「リリース前バックログ」。
 
 ### 完了（フェーズ番号 → 日付順）
 

@@ -1068,3 +1068,19 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **据え置いたもの**: `includedType=cafe`(業態フィルタ)、`CAFE_KEYWORDS`(補完スキップ判定語。「カフェ」も残し、既に「渋谷 カフェ」等と入れたクエリには補完しない既存挙動を維持)、`searchText(query, locationBias)`(POI タップ経路。補完なし)、`searchByNameNear`。
 - **トレードオフ**: コーヒーアプリの前提で全キーワード検索がコーヒー方向へ寄るため、紅茶主体のカフェはわずかに出にくくなる（許容）。`includedType=cafe` は維持のため、cafe 型でない純喫茶チェーン等は依然フィルタされ得る（今回スコープ外）。
 - 検証: `:shared:data-places:testAndroidHostTest` + `iosSimulatorArm64Test`（親が override 無しで実行）ともに green。
+
+### 2026-07-21: 9-6 協調フィルタリング推薦の設計確定（grilling で 6 意思決定）
+
+- 領域: アーキテクチャ方針（設計確定・実装未着手）
+- 関連: requirements 9-6（✕→△）・data-model §1.7 / §3.2 / §3.3・tasks 12-D・2026-06-22 Future Direction エントリの具体化
+
+ユーザー要望「9-6 を進める」に対し、リリース前・ユーザーベース皆無（コールドスタート直撃）を踏まえ**今回は設計を docs に固定するところまで**とし、grilling で 6 つの意思決定を確定した。実装コードは書いていない。
+
+- **①同意はフラグを分離（新規 `recommendationConsent`）**: 既存 `analyticsConsent` は「Firebase Analytics 集計」に紐づく App Privacy 申告。協調フィルタは「味覚プロファイルを他ユーザーへの推薦材料として共有」で**目的が異なる** → 目的別同意が原則（申告が濁らない）。既定 false・オプトイン。
+- **②計算は Cloud Function 特権 read に閉じる**: 横断参照をクライアントに晒すと他人のプロファイルが見える。Function が Admin 特権で全 `sharedTasteProfiles` を read し、呼び出しユーザーへ「推薦カフェ + 似ているユーザー数」だけ返す。Firestore ネイティブ KNN をクライアント直クエリする案は近傍ドキュメントがクライアントに返るためプライバシー後退で不採用。
+- **③特徴ベクトルは 5 軸 cosine + カテゴリ 4 軸補助**: docs 既定「`tastingAverages` 5 軸が基盤」を主軸にしつつ、tasting は任意入力で未入力ユーザーが 5 軸 null になり母集団が痩せるため、カテゴリ好み 4 軸を fallback + 精度シグナルに加味。
+- **④推薦対象は未訪問 + 地理制約**: 9-5（既訪問の再訪・ローカル）と役割分担。callable に中心座標+半径を渡し、地球の裏側の無意味推薦を防ぐ。地理制約のため共有プロファイルの `highRatedCafes` に座標を持たせる。
+- **⑤マップは型拡張で同型・視覚区別**: data-model §1.7 予告どおり `RecommendationReason.SimilarUsers(count)` を追加（UI/VM は加算的）。ただし 9-6 は未訪問なので 9-5 のハートピン（訪問済み）と視覚区別する。
+- **⑥共有プロファイル `sharedTasteProfiles/{uid}`**: 特徴ベクトルのみ（生メモ・タグ・カフェ名は含めない）。本人のみ read/write、横断 read は Function 特権（Security Rules に追加）。
+
+未決（docs に明記）: 閾値定数（K/N/半径）は実装時 sweep / Function 内の類似計算（総当たり cosine vs Firestore ネイティブベクトル KNN。初期は総当たりで十分の想定）/ サーバーインフラ選定（Cloud Functions ランタイム・デプロイ・CI = 12-D 再開の起点）/ FM 言語化を v1 に含めるか。最初の実装可能な一歩は①同意 + 共有プロファイル書き込み基盤（サーバー不要・クライアント完結）。

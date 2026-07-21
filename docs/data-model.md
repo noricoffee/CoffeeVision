@@ -407,7 +407,10 @@ sealed interface RecommendationReason {
         val exampleRecordName: String,    // 代表記録のコーヒー名
         val exampleRating: Double,        // その記録の評価
     ) : RecommendationReason
-    // 将来（9-6 協調フィルタ）: SimilarUsers(count, ...) 等をここに追加（UI/VM/FM は不変のまま種類追加）
+    // 9-6（協調フィルタ / リモート・設計確定 2026-07-21・未実装）: 味覚が近いユーザーが高評価した未訪問店
+    data class SimilarUsers(
+        val similarUserCount: Int,        // 似ているユーザー数（最小 K 未満は推薦を出さない = 個人特定回避）
+    ) : RecommendationReason
 }
 
 enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
@@ -447,6 +450,22 @@ interface CafeRecommendationProvider {
 - `MapViewModel` は `CafeRecommendationProvider.observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。公開 API 追加は加算的。
 - iOS `MapTabView`: 一致カフェを**区別ピン**（アクセント色＋ハート/星）で強調し、タップで理由（`matches`）を表示。理由文言（「好みのエチオピアを高評価で記録（〇〇 ★4.5）」）は iOS でローカライズ生成。
 - **Foundation Models 連携は将来 9-6 で「推薦理由の自然言語化」一点に限定**（v1 は構造化 reason を iOS が定型文で表示。LLM は使わない）。
+
+### 9-6 協調フィルタリング（リモート実装 / 設計確定 2026-07-21・未実装）
+
+9-5（ローカル・既訪問の再訪）に**追加**で載る新規開拓推薦。`CafeRecommendationProvider` のリモート実装として差し替える（`MapViewModel` / iOS UI / 理由表示層は不変）。**実装はインフラ選定から段階着手**（tasks 12-D）。
+
+- **同意**: 新規 `recommendationConsent`（§3.2 `users/{uid}`。`analyticsConsent` とは目的別・オプトイン・既定 false）。ON かつ記録変更時に自プロファイルを再計算し `sharedTasteProfiles/{uid}` へ upsert、OFF で削除（共有撤回）。
+- **共有プロファイル `sharedTasteProfiles/{uid}`**（`beanProfiles` / `curatedCafes` と同型のグローバルコレクション。§3.2 / §3.3 参照）: 特徴ベクトルのみを持ち、生メモ・タグ・記録本文・カフェ名は含めない（プライバシー最小化）。
+  - `tastingVector`: `tastingAverages` 5 軸（`Double?`。null 軸は cosine で欠損扱い）
+  - `categoryPrefs`: `bestOrigin` / `bestRoastLevel` / `bestBrewMethod` / `bestProcessing` のラベル（null 可）
+  - `highRatedCafes`: 高評価（rating ≥ 4.0）カフェの `[{placeId, lat, lng, rating}]`（地理制約に座標が要るため座標を持つ。店名は placeId から詳細解決）
+  - `updatedAt`
+- **類似度**: `tastingVector` 5 軸 cosine を主軸に、`categoryPrefs` 4 軸の一致をスコア加味（tasting 未入力ユーザーはカテゴリで fallback して母集団が痩せない）。
+- **計算（Cloud Function / callable）**: クライアントが `{center, radiusMeters}` で呼ぶ → Function が Admin 特権で自プロファイル + 全 `sharedTasteProfiles` を read → 近傍上位 K 人選定 → K 人の `highRatedCafes` のうち「呼び出しユーザー未訪問」かつ「半径内」を placeId で集約（複数人が高評価した placeId ほど上位 = 票数）→ `[{placeId, lat, lng, similarUserCount}]` を返す（他人の uid・生データは返さない）。**横断 read はサーバ特権に閉じ、クライアントは他人のプロファイルを一切見ない**。
+- **コールドスタート**: 近傍 K・自己記録 N 未満は推薦 0（空 = ピンが出ないだけ・専用空状態 UI なし）。最小 K で「N 人が高評価」表示の個人特定を回避。閾値は定数化し実装時 sweep（9-5 の `FavoriteSignals` 定数運用に倣う）。
+- **理由表示**: `RecommendationReason.SimilarUsers(count)`。9-5（既訪問・ハートピン）と視覚区別。文言「あなたと味覚が近い人のおすすめ」は KMP でテンプレ生成（両 OS）。Foundation Models 言語化は iOS の任意上乗せ（必須でない）。
+- **未決**: 閾値定数（近傍 K / 自己記録 N / 半径 R）/ Function 内の類似計算（総当たり cosine vs Firestore ネイティブベクトル KNN。初期は総当たりで十分の想定）/ サーバーインフラ選定（Cloud Functions ランタイム・デプロイ・CI）/ FM 言語化を v1 に含めるか。
 
 ---
 
@@ -793,12 +812,14 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 ```json
 {
-  "analyticsConsent": false
+  "analyticsConsent": false,
+  "recommendationConsent": false
 }
 ```
 
 - **analyticsConsent**: ユーザーが記録データをサービス改善目的での集計に同意したか否か。初回起動オンボーディングで取得。後から設定画面のトグルで変更可能。ドキュメント自体が存在しない場合（未オンボーディングユーザー）は `false` として扱う。
-- フィールドは今後増える可能性がある（例: フェーズ 12-D の協調フィルタリング opt-in 等）。
+- **recommendationConsent**（フェーズ 12-D / 9-6・設計確定 2026-07-21・未実装）: 味覚プロファイルを協調フィルタ推薦の材料として共有することへの同意。`analyticsConsent`（Firebase Analytics 集計）とは**目的が別**の独立フラグ。オプトイン・既定 false（未設定は false 扱い）。ON のとき自プロファイルを `sharedTasteProfiles/{uid}` へ upsert、OFF で削除。
+- フィールドは今後増える可能性がある。
 
 ### `beanProfiles/{beanId}`（豆ナレッジ）
 
@@ -963,11 +984,17 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if false;
     }
+
+    match /sharedTasteProfiles/{uid} {
+      // 協調フィルタ用の共有味覚プロファイル（9-6・設計確定 2026-07-21・未実装）。
+      // 本人のみ read/write。他ユーザー横断 read は Cloud Function（Admin SDK）が Rules バイパスで行う。
+      allow read, write: if request.auth != null && request.auth.uid == uid;
+    }
   }
 }
 ```
 
-> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。**フェーズ 19 更新**: `curatedCafes` グローバルコレクションを追加（同型）。`firebase deploy --only firestore:rules` はユーザー作業。
+> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。**フェーズ 19 更新**: `curatedCafes` グローバルコレクションを追加（同型）。**9-6 設計確定（2026-07-21・未実装）**: `sharedTasteProfiles/{uid}` を追加（本人のみ read/write、横断 read は Cloud Function 特権のみ）。`firebase deploy --only firestore:rules` はユーザー作業。
 
 ---
 

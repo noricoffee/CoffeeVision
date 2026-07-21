@@ -34,8 +34,9 @@
 |------|------|------|
 | [x] | 親: docs 確定更新（ui-ux-guidelines / requirements §11-2・§5 / implementation_note / app-store-metadata の「ドロップダウン」表記追随） | 2026-07-22 完了 |
 | [x] | ios-engineer: `MapTabView.swift` 実装（上部ドロップダウン撤去 / 自前下部ドラッグシート / カメラ自動フィット（テキスト検索のみ）/ 選択ピン強調 / 広告は結果シート内 3 件目後） | 2026-07-22 完了。peek 180pt / expanded = container 高さ 60%。ハンドル行に `.simultaneousGesture`（Button タップ + ドラッグ両立）、タップで detent トグル（VoiceOver 代替）。FAB は `searchSheetFABBottomInset` でシート高に追従 |
-| [x] | 親: レポート評価 + ビルド検証（override 無し再検証）+ 回帰確認 | 2026-07-22 完了。親が override 無し `xcodebuild ... BUILD SUCCEEDED` を独立再確認。差分レビュー: 排他条件（sheet=未選択/card=選択）・`showingSearchResults` 転用・カメラフィット span×1.3 いずれも整合。SourceKit の `No such module 'SharedLogic'` は xcframework 未インデックスの IDE 偽陽性 |
-| [ ] | ユーザー: シミュレータ/実機で目視（自動フィット / シートドラッグ / 行⇄ピン⇄カード / ✨ 競合なし / 広告 / ダーク・VoiceOver） | UI 挙動バグはビルド成功≠完了 |
+| [x] | 親: レポート評価 + ビルド検証（override 無し再検証）+ 回帰確認 | 2026-07-22 完了。親が override 無し `xcodebuild ... BUILD SUCCEEDED` を独立再確認。差分レビュー: 排他条件（sheet=未選択/card=選択）・`showingSearchResults` 転用・カメラフィット span×1.3 いずれも整合。SourceKit の `No such module` 系は xcframework 未インデックスの IDE 偽陽性 |
+| [x] | ios-engineer: 広告非表示の回帰修正（ユーザー報告）| 2026-07-22 完了。原因: `InlineBannerAdView` の自己 `.task` が `LazyVStack` の fold 下（peek 180pt）で発火せず未ロード。修正: CafeDetail と同型でシートのルート VStack `.background(GeometryReader).task` から先読みロード。lessons 2026-07-22 記録 + sweep 済み |
+| [ ] | ユーザー: シミュレータ/実機で目視（自動フィット / シートドラッグ / 行⇄ピン⇄カード / ✨ 競合なし / **広告（3 件以上でスクロール到達時に表示）** / ダーク・VoiceOver） | UI 挙動バグはビルド成功≠完了 |
 
 #### 好み一致の作り込み: 精製方法軸の追加 + ダミー人格再設計（2026-07-20 起票）
 

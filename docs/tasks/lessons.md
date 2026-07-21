@@ -692,3 +692,25 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: エラーメッセージが変わった＝前進、とは限らない。同じ仮説（「archive を Distribution で署名させたい」）のまま対処の**経路だけ**を変える（command-line → pbxproj）のは「同じ系統のアプローチ」の繰り返しであり、CLAUDE.md の「2 回失敗したら根本原因を再調査する」規約が指す典型例。署名エラーは Web 検索や公式ドキュメントで「Automatic signing の archive フェーズは常に Development」という一次情報にあたってから対処すべきで、エラーメッセージの字面（「Release だから Distribution」という思い込み）だけで即席の設定変更を重ねない
 - **発生源**: `release-testflight.yml` archive 失敗の修正（2026-07-18〜20、親が直接対応）。コミット: c473cf7（誤り: command-line 上書き）→ 7695687（誤り: pbxproj Release のみ上書き）→ d635a94（訂正: 元の Apple Development に戻す）
 - **横展開点検（2026-07-20）**: ① `grep -rn "CODE_SIGN_IDENTITY\|CODE_SIGN_STYLE\|PROVISIONING_PROFILE" .github/workflows/` → 上書きの残存なし。② `grep -n "CODE_SIGN_IDENTITY\|name = Debug\|name = Release" iosApp/iosApp.xcodeproj/project.pbxproj` → Debug/Release とも `"Apple Development"` で一致、Distribution の残存なし。③ `find . -name "*.xcodeproj"` → プロジェクトは `iosApp.xcodeproj` の 1 つのみ（他ターゲット・extension 無し）。**該当なし**
+
+## 2026-07-22
+
+### 遅延コンテナ（`LazyVStack` / `List` 等）の N 番目に埋め込んだ「自己 `.task` でロードする」コンポーネントは、初回表示時に fold 下だと `.task` が一度も発火しない
+
+- **症状**: マップ検索結果を下部ドラッグシート化（既定 peek 180pt）した後、結果一覧内 3 件目の後のインラインバナー広告（§11-2）が表示されなくなった。ビルドは成功、コード上は旧ドロップダウンと同じ `if index == 2 { InlineBannerAdView(...) }`
+- **原因の構造**: `InlineBannerAdView` はロードを**自身の** `.background(GeometryReader).task(id: width)` でトリガーする。それが `LazyVStack` の 4 番目（3 行目の後）にあり、シートが既定 peek（180pt）で開くと広告スロットは fold 下 → `LazyVStack` が subview を実体化しない → `.task` が発火せず**一度もロードされない**。旧ドロップダウン（最大 300pt）では 3 行 ≈ 192pt が枠内に入り実体化されていたため出ていた＝コンテナ高を縮めたことによる回帰。**遅延コンテナは可視範囲外の子を作らないので、子自身に付けたライフサイクルトリガー（`.task`/`.onAppear`）は「画面に入るまで」発火しない**
+- **修正パターン**: ロードのトリガーを、**常に実体化される親コンテナ**の `.background(GeometryReader).task(id:)` に移す（`CafeDetailView.cafeDetailList` が List 自身の background から先読みする既存の正パターンに揃える）。子コンポーネント側の `.task` はフォールバックとして残し、`isLoaded` 済みなら実体化された瞬間に即描画させる。id は幅＋出現条件（例 `"\(Int(width))-\(results.count >= 3)"`）の合成にして条件成立時に再発火させる
+  ```swift
+  // シートのルート VStack（常に実体化される）に付ける
+  .background(GeometryReader { proxy in
+      Color.clear.task(id: "\(Int(proxy.size.width))-\(sb.results.count >= 3)") {
+          guard sb.results.count >= 3 else { return }
+          let width = proxy.size.width - 32
+          guard width >= BannerAdLoader.minimumRequestableWidth else { return }
+          searchAdLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: 100))
+      }
+  })
+  ```
+- **教訓**: 「fold 下でも実行されてほしい」副作用（広告の先読み、事前計測、必ず 1 回走らせたい初期化）を遅延コンテナの子に `.task`/`.onAppear` で載せない。**遅延スクロールで初めて可視になる位置**に置く前提の副作用（画像のオンデマンドロード等）だけを子に載せる。両者を取り違えると「ビルドは通るが出ない / 走らない」になる
+- **発生源**: マップ検索結果の下部シート化（2026-07-22、commit dd83f7f）で回帰、同日 ios-engineer が先読みパターンで修正。関連: 「UIKit SDK ビューはサイズ明示」（2026-07-15、同じ広告面の別バグ）
+- **横展開点検（2026-07-22）**: `grep -rn "LazyVStack\|LazyHStack\|LazyVGrid\|LazyHGrid" iosApp/iosApp --include="*.swift"` で全遅延コンテナを列挙し、各コンテナの子に「fold 下でも発火が必要な自己トリガー副作用」が載っていないか点検。`InlineBannerAdView`（広告の先読み必須）の使用は 2 面のみ（`CafeDetailView`＝List 直下で先読み済み・`MapTabView`＝今回修正）で両方対処済み。`PlacePhotoThumbnail`（`.task` で写真ロード）は遅延コンテナ内に多数あるが、**スクロール到達時のオンデマンドロードが意図した正しい挙動**（先読み不要）のため対象外。他に fold 下発火を要する自己トリガーは見当たらず、**該当なし（対処 2 面 + 対象外 1 種を確認）**

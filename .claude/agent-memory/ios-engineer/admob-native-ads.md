@@ -136,6 +136,25 @@ UIKit レンダリング知見（`NativeAdView` の headlineView 等）は不要
 - `AdUnitIDs.swift` の定数削除と `Info.plist` の対応キー削除、`Base.xcconfig` のフォールバック
   宣言削除はセットで行う（3 箇所は必ず揃える。1 つでも残すとダングリング参照になる）。
 
+## `LazyVStack` の N 番目要素に埋め込んだ `InlineBannerAdView` は、シートが既定 detent（peek/fold）で開くと初回ロードされない（2026-07-22、マップ検索結果下部シート回帰で確認）
+
+- `InlineBannerAdView` 自身の `.task` トリガーは「常に実体化されるビュー」に付ける設計だが、それは
+  **自分自身が実体化されて初めて発火する**。`LazyVStack` の N 番目行として埋め込むと、fold 下
+  （スクロール到達前）では行自体が生成されず `.task` が一度も走らない。`CafeDetailView` の広告面は
+  `List`（`.insetGrouped`）の Section 内だが、**List 自身に別途 `.background(GeometryReader).task`
+  を付けて先読みロードしている**ため気づきにくい落とし穴になっていた。
+- 修正パターン: 広告行を囲む**常に実体化されるコンテナ**（シートのルート `VStack` 等）の
+  `.background(GeometryReader { proxy in Color.clear.task(id: ...) { loader.load(...) } })` から
+  先読みロードをトリガーし、`LazyVStack` 内の `InlineBannerAdView` 自体はそのまま残す
+  （`BannerAdLoader` が `isLoaded` 済みなら行が実体化された瞬間に即描画される。二重 `load()` は
+  `pendingAdSize` 機構が吸収するので無害）。`.task(id:)` の合成キーは「幅（Int 丸め）+ 表示条件
+  （例: 結果件数 >= 3）」の文字列結合にすると、条件が false→true に変わったときや幅変化時に
+  再発火する。
+- **`.background(GeometryReader{...})` 経由で `inlineAdaptiveBanner` / `BannerAdLoader` を直接
+  呼ぶファイルには `import GoogleMobileAds` が必要**（`InlineBannerAdView.swift` 側で完結していた
+  ときは不要だったが、呼び出し元の View ファイルに処理を持ち上げると新規 import 漏れでビルドエラー
+  `cannot find 'inlineAdaptiveBanner' in scope` になる）。
+
 ## xcodebuild 検証中に DerivedData の `rm -rf` を中断すると SPM checkout が壊れる
 
 - `rm -rf DerivedData/iosApp-*` の途中で `Directory not empty` エラーが出て中断されると、

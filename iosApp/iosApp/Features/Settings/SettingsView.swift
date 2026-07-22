@@ -1,4 +1,7 @@
 import SwiftUI
+#if DEBUG
+import GoogleMobileAds
+#endif
 
 /// アプリ設定画面。TabBar の「設定」タブとして常設表示する。
 ///
@@ -52,6 +55,9 @@ struct SettingsView: View {
                 themeSection
                 appInfoSection
                 licensesSection
+                #if DEBUG
+                debugSection
+                #endif
             }
             .navigationTitle(String(localized: "設定"))
             .navigationBarTitleDisplayMode(.inline)
@@ -191,6 +197,42 @@ struct SettingsView: View {
             .accessibilityLabel(String(localized: "ライセンス一覧を開く"))
         }
     }
+
+    #if DEBUG
+    /// デバッグビルド限定の診断ツールセクション。
+    ///
+    /// AdMob no-fill（`Error Code=1 "No ad to show."`）の原因（Google 側の抑制か実装側の退行か）を
+    /// 実機上で切り分けるための Ad Inspector 起動導線。`#if DEBUG` の外に出してはいけない。
+    private var debugSection: some View {
+        Section {
+            Button {
+                presentAdInspector()
+            } label: {
+                Label("Ad Inspector を開く", systemImage: "ladybug")
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel("Ad Inspector を開く")
+            .accessibilityHint("AdMob の広告配信診断ツールを表示します")
+        } header: {
+            Text("デバッグ")
+        } footer: {
+            Text("広告が表示されない原因を AdMob 側で確認するための開発者向けツールです。")
+                .font(.caption)
+        }
+    }
+
+    /// `MobileAds.shared.presentAdInspector(from:completionHandler:)` を呼び出す。
+    ///
+    /// 起動元 View Controller は `RootViewControllerProvider.current`（`AdConsentCoordinator.swift`）を
+    /// 再利用する。エラーはコンソールログにのみ出す（診断ツールのため UI アラートは不要）。
+    private func presentAdInspector() {
+        MobileAds.shared.presentAdInspector(from: RootViewControllerProvider.current) { error in
+            if let error {
+                print("[CoffeeVision] Ad Inspector: \(error.localizedDescription)")
+            }
+        }
+    }
+    #endif
 
     // MARK: - データエクスポート
 

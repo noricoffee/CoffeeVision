@@ -1118,3 +1118,21 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **BeanProfile 産地サジェストは撤去**: 国がピッカーで制約されサジェスト不要に。品種サジェストは今回スコープ外（据え置き）。
 
 **影響範囲**: domain（`CoffeeRecord.region` / `CoffeeOriginCatalog` / `OriginNormalizer` 拡張）/ data-local（migration 6 で `region` 列 + upsert + Mapper）/ data-firebase（Firestore `region` キー、null 省略）/ feature-coffee-editor（`CoffeeDraft.region` / `onRegionChanged` / build/toDraft/toDuplicate）/ `DummyCoffeeData`（混在産地を国 + エリアに分割）/ iOS（エディタ UI = 国 Menu + エリア TextField、詳細 / シェアカードの産地表示に region 連結）。未リリースのためクリーンブレイク（ユーザーデータ移行なし）。
+
+### 2026-07-22: 広告 no-fill 診断 — デモユニットの "No fill" は Google 側抑制（コード無問題）
+
+- 領域: iOS / 診断
+- 関連: `iosApp/iosApp/Features/Settings/SettingsView.swift`（DEBUG 限定 Ad Inspector 導線を追加。commit 514acaf）/ `iosApp/iosApp/Ads/*`
+
+**背景**: ユーザー報告「カフェ詳細・マップ検索の 2 面で 3 日ほど前から広告が出ない（`Error Domain=com.google.admob Code=1 "No ad to show."`）」。冒頭に出る `49 required SKAdNetwork identifier(s) missing` は無関係の警告。
+
+**切り分けの結論（コード・設定に問題なし）**:
+- `Code=1` は AdMob の no-fill（サーバー応答）。設定エラー(Code=0)/ネットワーク(Code=2)ではない。
+- 使用 ID は全て Google 公式 iOS **デモ** ID（App ID `...~1458002511` / バナー `.../2435281174` = iOS のインライン/アンカー両アダプティブ用の正しいテスト ID）。`Secrets.xcconfig` でも**本番未上書き**（ユーザー確認）＝**アカウント非依存**。
+- 広告リクエスト経路（`BannerAdLoader` / `iOSApp.swift` の `MobileAds.shared.start()` / `Base.xcconfig` の ID / SDK v13.6.0）は直近1週間**無変更**（git log で確認）。
+- 症状は**シミュレータ・実機の両方**で**3日間継続**。→ 短時間レート制限では説明が弱い。
+- **Ad Inspector（本コミットで DEBUG 導線を追加）で対象ユニットが `No fill` と確定**。
+
+**判断**: 開発中の過剰トラフィックによる **Google 側のデモ広告抑制**が原因。端末/IP 単位で数日〜2週間ほど続き自然回復する既知挙動。**コード修正は不要**。本番は実 App ID + 実広告ユニット（`Secrets.xcconfig`、リリース前にユーザーが発行）で配信するため影響しない。
+
+**再発時の初動**: 設定 → デバッグ → 「Ad Inspector を開く」（シミュレータは自動テストデバイス登録）で `No fill` を確認できればコード側は無罪。実機で開くにはコンソールの `testDeviceIdentifiers` 登録が別途必要。

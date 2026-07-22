@@ -97,9 +97,9 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | ios-engineer: `#if DEBUG` 限定で `MobileAds.shared.presentAdInspector(from:)` を起動する導線を追加（設定画面のデバッグ行 等、リリースビルドに出さない）。ビルド検証まで | iosApp 完結・KMP 変更なし |
-| [ ] | 親: 検証（override 無し build）+ commit | |
-| [ ] | ユーザー: 実機/シミュレータで Ad Inspector を開き、対象ユニットの request log / no-fill 理由を確認 | ここで「Google 側抑制」か「リクエスト設定要因」かが確定する |
+| [x] | ios-engineer: `#if DEBUG` 限定で `MobileAds.shared.presentAdInspector(from:)` を起動する導線を追加（設定画面のデバッグ行 等、リリースビルドに出さない）。ビルド検証まで | 2026-07-22 完了。`SettingsView` に DEBUG 限定「デバッグ」セクション + 「Ad Inspector を開く」ボタン。`RootViewControllerProvider` 再利用 |
+| [x] | 親: 検証（override 無し build）+ commit | 2026-07-22 完了。フラグ無し `xcodebuild ... BUILD SUCCEEDED` を親が再確認（SettingsView の SourceKit 診断は macOS SDK インデックス誤りで実害なし）。commit 514acaf |
+| [x] | ユーザー: **シミュレータ**で Ad Inspector を開き（設定 → デバッグ → Ad Inspector を開く）、対象ユニットの request log / no-fill 理由を確認 | 2026-07-22 完了。**`No fill` 確定** → Google 側のデモ広告抑制（開発中の過剰トラフィック起因、自然回復見込み）。コード無問題。経緯は implementation_note 2026-07-22 |
 
 #### 記録・分析タブの広告撤去（2026-07-16 起票）
 

@@ -18,7 +18,7 @@ CoffeeVision の設計・仕様・運用ドキュメントの置き場。ここ�
 - **[tasks.md](./tasks.md)**（直下）— カテゴリ別タスク・進捗管理。実装 / 設計タスクの正。
 - **[tasks/lessons.md](./tasks/lessons.md)** — 再発させたくない落とし穴・お作法（自己改善ループ）。冒頭に**主題別インデックス**あり。追記手順は `record-lesson` skill。
 - **[tasks/verification-checklist.md](./tasks/verification-checklist.md)** — 実機 / シミュレータの**目視 QA 項目**（ビルド・自動テストは green 済みが前提。`tasks.md` から 2026-07-08 分離）。
-- **[tasks/pr-log.md](./tasks/pr-log.md)** — PR の記録ログ。
+- **[tasks/pr-log.md](./tasks/pr-log.md)** — Phase 1〜初期（〜2026-06-25）の PR 振り返りログ。**凍結済み**（以降は `tasks.md` 完了 / `implementation_note.md` / git log が正）。
 
 ## legal/ — 法務ページ原稿
 

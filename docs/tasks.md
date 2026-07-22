@@ -101,7 +101,14 @@
 | [x] | 親: 検証（override 無し build）+ commit | 2026-07-22 完了。フラグ無し `xcodebuild ... BUILD SUCCEEDED` を親が再確認（SettingsView の SourceKit 診断は macOS SDK インデックス誤りで実害なし）。commit 514acaf |
 | [x] | ユーザー: **シミュレータ**で Ad Inspector を開き（設定 → デバッグ → Ad Inspector を開く）、対象ユニットの request log / no-fill 理由を確認 | 2026-07-22 完了。**`No fill` 確定** → Google 側のデモ広告抑制（開発中の過剰トラフィック起因、自然回復見込み）。コード無問題。経緯は implementation_note 2026-07-22 |
 
-#### 記録・分析タブの広告撤去（2026-07-16 起票）
+#### SKAdNetwork 識別子の整備（広告収益最適化 / 2026-07-22 起票）
+
+> 起動ログの `49 required SKAdNetwork identifier(s) missing from Info.plist` 警告への対応。現状 `SKAdNetworkItems` は Google 自身の 1 件（`cstr6suwn9.skadnetwork`）のみ。SKAdNetwork は ATT 後のプライバシー保護型インストール計測基盤で、AdMob メディエーション各社の ID を列挙しておくと、ATT 拒否ユーザーの広告成果も計測でき fill 率・eCPM が上がる（機能面の不具合ではなく収益最適化）。Google 公式 Privacy strategies ページの全 50 件を反映する。no-fill（本ページ別項）とは無関係。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `Info.plist` の `SKAdNetworkItems` を Google 公式の全 50 件に差し替え（既存 `cstr6suwn9` 含む）。plist 妥当性検証 | 2026-07-22 完了。純粋追加（他キー無変更）。一覧は時々更新されるため、本番リリース前に再取得推奨。出典: developers.google.com/admob/ios/ios14 |
+| [x] | 親: 検証 + commit | 2026-07-22 完了。親が `plutil -lint`=OK / 識別子 50 件 / 重複なし / 196 insertions・0 deletions を再確認。commit で反映 |
 
 > ユーザビリティレビュー採用分。定着の核となる記録・振り返り 2 画面のバナーはリテンションを削る割に収益が小さいため**一度撤去**（再導入余地は残す — コンポーネントは git 履歴から復元可能）。広告はカフェ詳細 / マップ検索の 2 面に縮小。**仕様の正は requirements.md §11（11-3 = ✕ 撤去、2026-07-16 改訂済み）**。ATT フローは残存 2 面のため維持。プランは `.claude/plans/agile-knitting-fern.md`。
 

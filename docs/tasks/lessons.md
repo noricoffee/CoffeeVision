@@ -6,6 +6,24 @@
 
 ---
 
+## 主題別インデックス
+
+本文は日付順で並ぶため、テーマから引くための地図。各項目末尾の `(MM-DD)` は該当エントリが載る日付セクション（`## 2026-MM-DD` を Cmd+F でジャンプ）。**新規 lesson を追記したら、この索引にも 1 行足す**（`record-lesson` skill の手順に含める）。
+
+- **SKIE / KMP ブリッジ（Swift⇄Kotlin）**: SuspendInterop は呼び出し方向限定 (06-04) / デフォルト引数を引き出さない (06-04) / EnumInterop enum→@frozen・camelCase (06-09) / SKIE 型は `.swiftinterface` を見る (06-09) / `KotlinDouble?` を `String(format:)` 直渡しで 0.0 (06-21)
+- **Gradle / Convention Plugin / XCFramework / 署名**: Gradle タスク名 (06-02) / includeBuild + version catalog パス (06-08) / precompiled script plugin と `register` 併用不可 (06-08) / `jvmToolchain(N)` で JDK 依存 (06-08) / build-logic で type-safe accessor 不可 (06-08) / `export` は `api` と別に明示 (06-08) / `XCFramework(name)` = `baseName` を揃える・宣言なしでタスク無し (06-08) / Umbrella 移行は Run Script 1 行 (06-08) / SPM `upToNextMajor` で古いメジャー解決 (07-14) / archive は Development 署名固定・`CODE_SIGN_IDENTITY` 明示で失敗 (07-20)
+- **ビルド成功⇄実態の乖離（SourceKit / DerivedData / 偽成功）**: `No such module` が実ビルドと乖離 (06-08) / DerivedData 古い symlink (06-09) / `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` は偽の成功 (06-19) / 実機バイナリは `grep -a` で確認 (06-23) / JVM green・iOS だけコンパイル不能の 2 種 (07-07)
+- **SQLDelight / ローカル DB / migration**: 命名規則・テスト配置・`expect class` Beta 警告・トランザクションと Flow emit・`sqlite3_bind_blob` 未定義・モデルとマッパの責任分担 (06-02) / `schemaVersion` は `.sqm` ファイル名で決まる (06-10) / JdbcSqliteDriver は `PRAGMA foreign_keys=ON` (06-19) / 列追加は `Mapper.toRow` と `upsert` 両方 (07-07) / `Schema.migrate` の `oldVersion` の意味 (07-13)
+- **Firebase / Firestore / Auth**: nullable はキー省略 (06-04) / Firebase CLI 重複インストール・Storage は Blaze 必須・Security Rules はリポジトリ管理 (06-06) / Android `Task` を `suspendCancellableCoroutine` (06-10) / `SignInWithAppleButton` rawNonce 非公開 (06-17) / Firestore マッパー二重手書きの追随漏れ (07-08)
+- **xcconfig / Places / API キー / シリアライズ**: 既存 xcconfig の継承漏れ (06-10) / フォールバック宣言は `#include?` の前 (06-23) / REST DTO `emptyList` + `expectSuccess=false` で握り潰し・`encodeDefaults=false` で default フィールド脱落 (06-23)
+- **Coroutines / Flow / ViewModel scope / テスト**: test ヘルパは実装モジュール内で閉じる (06-08) / `androidMain` の `implementation` は推移しない・`callbackFlow` は ProducerScope を取り出す (06-10) / `runTest` 永続購読 Fake で `UncompletedCoroutinesError` (06-17) / `runCatching` はコルーチン内で使わない・所有 `viewModelScope` + `clear()` (06-24) / 所有 scope テストは `finally { clear() }` (06-25) / `combine` に `MutableStateFlow` で 60 秒タイムアウト (06-29) / `clear()` は iOS/Native で `advanceUntilIdle` drain 必須・interface メソッド追加で fake 追随漏れ (07-06)
+- **Kotlin/Native 言語仕様の罠**: KDoc 内 `/*` がネストコメント (06-08) / クロスモジュール nullable は smart cast 不可 (06-19) / `Map.mapNotNull` + `maxWith` が全 null・`maxWith(compareByDescending)` が逆 (06-22) / `enum.valueOf` は未知値で例外・`when(mode)` 早期 return で値を無言脱落・正規化辞書の contains 部分一致すれ違い (07-08)
+- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22)
+- **統計 / 分析 / Foundation Models**: FM tool calling は instructions の逃げ道で呼ばれない (06-21) / 好み判定は無相関ペルソナで偽陽性率を測る・winner's curse は n 連動閾値 (06-22)
+- **プロセス / 設計 / 診断の姿勢**: 横断 doc は構造的に陳腐化 (06-16) / テストダブルの接続を本番と乖離させない・dev シードが本番バグをマスク・KMP テスト実行の環境メモ (07-03) / 無音フォールバックは偽バグ報告になる (07-06) / 地図の「表示」と「解決」の集合ズレ (07-08) / 外部 SDK の required 判定はクライアントで制御不能 (07-14) / レイアウト実測の再入ガードが過渡値を破棄 (07-15)
+
+---
+
 ## 2026-06-02
 
 ### SQLDelight 2.x の命名規則

@@ -36,8 +36,9 @@
 | [x] | kmp-engineer: `CoffeeRecord.region` 追加 / `CoffeeOriginCatalog` 新設 / `OriginNormalizer` を ~43 か国へ拡張（英語綴りシノニム含む）+ カタログ ⊇ シノニム値のテスト / data-local（migration 6 で `region` 列 + `CoffeeRecord.sq` upsert + `Mapper`）/ data-firebase Mapper / feature-coffee-editor（`CoffeeDraft.region`/`onRegionChanged`/build/toDraft/toDuplicate）/ `DummyCoffeeData` の混在産地を国+エリアに分割 / commonTest 更新 | 2026-07-22 完了。DummyData は origin が全て単一英語国名で混在文字列なし → region は null 据え置き。migration5 テストは head スキーマ基準のため v4 DDL に region 追加 + migrate(5→7) 追随 |
 | [x] | 親: KMP 公開 API 差分確認 + `:shared:*` テスト override 無し再検証（`iosSimulatorArm64Test` 含む） | 2026-07-22 完了。親が override 無しで `verifySqlDelightMigration` + `OriginNormalizer` テスト + `:shared:domain`/`data-local`/`coffee-editor` の `iosSimulatorArm64Test` を独立に BUILD SUCCESSFUL 再確認 |
 | [x] | ios-engineer: `CoffeeEditorView` の産地 UI を国 Picker + エリア TextField に置換（BeanProfile 産地サジェスト撤去 / 「その他」で国名自由入力欄）/ カタログをブリッジ受領 / `CoffeeFirestoreMapper.swift` に region / 詳細・シェアカードの産地表示に region 連結 / ローカライズ | 2026-07-22 完了。legacy origin は Picker 選択肢に動的追加でフォールバック。「その他」選択時は onOriginChanged("") で一旦空に。`CoffeeRecordDisplay.swift`（`originDisplayText`）新設で連結表示を共通化 |
-| [ ] | 親: 2 レポート統合 + 統合検証（verify-kmp-ios / xcodebuild override 無し）+ commit | 検証済み。親が override 無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認。SourceKit の `No such module` は xcframework 未インデックスの IDE 偽陽性。commit のみ残 |
-| [ ] | ユーザー: シミュレータで目視（国ドロップダウン選択 / エリア入力 / 「その他」自由入力 / 「ブレンド」/ 詳細・シェアカード表示 / 分析の産地ランキング / ダーク・VoiceOver） | UI 挙動はビルド成功≠完了 |
+| [x] | 親: 2 レポート統合 + 統合検証（verify-kmp-ios / xcodebuild override 無し）+ commit | 2026-07-22 完了。親が override 無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認。SourceKit の `No such module` は xcframework 未インデックスの IDE 偽陽性。commit `d72f76f` |
+| [x] | 追加: 産地ドロップダウンを生産量ランキング順（ICO/FAO 概算）に並び替え（ブレンド → 生産量順 → その他、未選択は最上段維持）| 2026-07-22 完了。KMP = `countries` 並び替え / iOS = Picker で「ブレンド」を国リスト直前へ移動。data-model §1.3a 追随。commit `254a026` |
+| [x] | ユーザー: シミュレータで目視（国ドロップダウン選択 / エリア入力 / 「その他」自由入力 / 「ブレンド」/ 詳細・シェアカード表示 / 分析の産地ランキング / 生産量順の並び / ダーク・VoiceOver） | 2026-07-22 ユーザー判断で目視 OK（黙示確認込み）・完了扱い |
 
 #### マップ検索結果を「マップ主体 + 下部ドラッグシート」に刷新（2026-07-22 起票）
 

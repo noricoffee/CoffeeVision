@@ -110,6 +110,15 @@
 | [x] | ios-engineer: `Info.plist` の `SKAdNetworkItems` を Google 公式の全 50 件に差し替え（既存 `cstr6suwn9` 含む）。plist 妥当性検証 | 2026-07-22 完了。純粋追加（他キー無変更）。一覧は時々更新されるため、本番リリース前に再取得推奨。出典: developers.google.com/admob/ios/ios14 |
 | [x] | 親: 検証 + commit | 2026-07-22 完了。親が `plutil -lint`=OK / 識別子 50 件 / 重複なし / 196 insertions・0 deletions を再確認。commit で反映 |
 
+#### CI リリースへの本番 AdMob ID 注入（2026-07-22 起票）
+
+> `Secrets.xcconfig` は gitignore 済みで CI 追跡外。`release-testflight.yml` の「Restore secret files」は従来 `PLACES_API_KEY` しか書き出しておらず、**本番 AdMob ID を発行しても TestFlight ビルドは Base.xcconfig のデモ ID のまま出荷される**地雷があった（発見: 2026-07-22 のユーザー質問）。本番 ID 発行済みのため CI を先行配線する。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: `release-testflight.yml` の「Restore secret files」を拡張。`ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH` を env 追加し `Secrets.xcconfig` へ書き出し。**リリースは本番 ID 必須（未設定なら fail-fast）** + 非空担保後に書く（空文字で Base のデモ ID を上書きしてクラッシュ/403 になる罠を回避） | 2026-07-22 完了。YAML 妥当性（ruby）+ guard ロジック dry-run（未設定→fail / 全設定→4 行書き出し）を親が検証。commit で反映 |
+| [ ] | **ユーザー: GitHub リポジトリに Secrets 3 件を登録** — `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH`（本番 AdMob コンソールの値） | 未登録だとリリースワークフローが fail-fast で止まる（＝デモ ID 出荷を機械的に防止）。`gh secret set <NAME>` または GitHub Settings → Secrets and variables → Actions |
+
 > ユーザビリティレビュー採用分。定着の核となる記録・振り返り 2 画面のバナーはリテンションを削る割に収益が小さいため**一度撤去**（再導入余地は残す — コンポーネントは git 履歴から復元可能）。広告はカフェ詳細 / マップ検索の 2 面に縮小。**仕様の正は requirements.md §11（11-3 = ✕ 撤去、2026-07-16 改訂済み）**。ATT フローは残存 2 面のため維持。プランは `.claude/plans/agile-knitting-fern.md`。
 
 | 状態 | タスク | 備考 |

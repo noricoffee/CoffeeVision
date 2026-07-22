@@ -248,15 +248,15 @@ struct CoffeeEditorView: View {
 
             // 産地ドロップダウン（国選択。2026-07-22 自由入力 → ドロップダウン化）
             //
-            // Picker の選択肢は「未選択」+ CoffeeOriginCatalog.countries + 「ブレンド」+「その他」。
+            // Picker の選択肢は「未選択」+「ブレンド」+ CoffeeOriginCatalog.countries + 「その他」。
             // catalog に無い legacy 値（Edit モードの旧自由入力データ）は選択肢の末尾に動的追加し、
             // Menu の現在値表示が壊れないようにフォールバックする。
             Picker(String(localized: "産地（任意）"), selection: originSelection) {
                 Text(String(localized: "未選択")).tag("")
+                Text(CoffeeOriginCatalog.shared.BLEND).tag(CoffeeOriginCatalog.shared.BLEND)
                 ForEach(CoffeeOriginCatalog.shared.countries, id: \.self) { country in
                     Text(country).tag(country)
                 }
-                Text(CoffeeOriginCatalog.shared.BLEND).tag(CoffeeOriginCatalog.shared.BLEND)
                 if let legacyOrigin {
                     Text(legacyOrigin).tag(legacyOrigin)
                 }

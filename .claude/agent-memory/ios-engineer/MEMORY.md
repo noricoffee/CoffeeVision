@@ -13,3 +13,4 @@
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 
 - `iosApp` の `IPHONEOS_DEPLOYMENT_TARGET` は 26.0（`API_AVAILABLE(ios(26.0))` は可用性チェック不要）。詳細は [location-mapkit.md](location-mapkit.md) の `MKMapItem.location` 項目参照
+- `iosApp.xcodeproj` は `PBXFileSystemSynchronizedRootGroup` 採用済み。フォルダ配下に新規 `.swift` を作成するだけで自動的にターゲットに含まれる（pbxproj を手編集する必要なし）。大型ファイル分割リファクタ（MapTabView 等）で新ファイルを切り出すときもこれで足りる

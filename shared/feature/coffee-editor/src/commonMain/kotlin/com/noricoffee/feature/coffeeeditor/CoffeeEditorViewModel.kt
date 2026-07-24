@@ -75,7 +75,6 @@ import kotlinx.datetime.todayIn
  * @param cafeRepository 現在地カフェサジェスト（Nearby 検索）を担うリポジトリ
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
  */
-@OptIn(kotlin.uuid.ExperimentalUuidApi::class)
 class CoffeeEditorViewModel(
     private val coffeeRepository: CoffeeRepository,
     private val cafeRepository: CafeRepository,
@@ -624,7 +623,7 @@ class CoffeeEditorViewModel(
         saveJob?.cancel()
         saveJob = viewModelScope.launch {
             _state.update { it.copy(isSaving = true) }
-            val record = buildRecord(draft, userId)
+            val record = buildRecord(draft, userId, _state.value.mode, currentInitialRecord, selectedCafe)
             try {
                 coffeeRepository.save(record)
                 _state.update { it.copy(isSaving = false, savedCoffeeId = record.id, error = null) }
@@ -656,132 +655,6 @@ class CoffeeEditorViewModel(
         viewModelScope.cancel()
     }
 
-    // --- プライベートヘルパ ---
-
-    /**
-     * draft のバリデーション。エラーメッセージを返す。問題なければ null を返す。
-     *
-     * - name（コーヒー名）は必須・最大 200 文字
-     * - rating は null（未評価。未評価のまま保存可）または 0.5..5.0（0.5 刻み）。
-     *   非 null のときのみ範囲・刻みをバリデーションする（2026-07-12 B-4）
-     * - notes は最大 2000 文字
-     * - brewRecipe は最大 500 文字
-     * - cafe は任意（空の場合はセルフ抽出として保存）
-     */
-    private fun validate(draft: CoffeeDraft): String? {
-        val rating = draft.rating
-        return when {
-            draft.name.isBlank() -> "コーヒー名を入力してください"
-            draft.name.length > 200 -> "コーヒー名は 200 文字以内で入力してください"
-            rating != null && (rating < 0.5 || rating > 5.0 || (rating * 2) % 1.0 != 0.0) ->
-                "評価を 0.5〜5.0 で入力してください"
-            draft.notes.length > 2000 -> "メモは 2000 文字以内で入力してください"
-            draft.brewRecipe.length > 500 -> "抽出レシピは 500 文字以内で入力してください"
-            else -> null
-        }
-    }
-
-    /**
-     * draft と [Mode] から保存用の [CoffeeRecord] を組み立てる。
-     *
-     * - cafe は [buildCafe] に委譲する（cafeName が空のとき null = セルフ抽出）
-     * - [Mode.Create] / [Mode.Duplicate]: id を新規 UUID で採番し、createdAt / updatedAt を now で設定する
-     * - [Mode.Edit]: [currentInitialRecord] から id / placeId / createdAt を引き継ぎ、updatedAt を now で更新する
-     */
-    private fun buildRecord(draft: CoffeeDraft, userId: String): CoffeeRecord {
-        val now = Clock.System.now()
-        val mode = _state.value.mode
-        val (id, createdAt) = when (mode) {
-            is Mode.Create, is Mode.Duplicate -> Pair(
-                kotlin.uuid.Uuid.random().toString(),
-                now,
-            )
-            is Mode.Edit -> {
-                val initial = currentInitialRecord
-                Pair(
-                    initial?.id ?: mode.coffeeId,
-                    initial?.createdAt ?: now,
-                )
-            }
-        }
-
-        val cafe = buildCafe(draft)
-
-        return CoffeeRecord(
-            id = id,
-            userId = userId,
-            cafe = cafe,
-            visitedOn = draft.visitedOn,
-            rating = draft.rating,
-            notes = draft.notes,
-            photos = draft.photos,
-            name = draft.name,
-            brewMethod = draft.brewMethod,
-            origin = draft.origin.takeIf { it.isNotBlank() },
-            region = draft.region.takeIf { it.isNotBlank() },
-            variety = draft.variety.takeIf { it.isNotBlank() },
-            processing = draft.processing,
-            roastLevel = draft.roastLevel,
-            cup = draft.cup.takeIf { it.isNotBlank() },
-            brewRecipe = draft.brewRecipe.takeIf { it.isNotBlank() },
-            tasting = draft.tasting?.clamped(),
-            tags = draft.tags,
-            createdAt = createdAt,
-            updatedAt = now,
-        )
-    }
-
-    /**
-     * draft から保存用の [Cafe]（任意）を組み立てる。
-     *
-     * 優先順位:
-     * 1. [draft].cafeName が空 → null（セルフ抽出）
-     * 2. このセッションで Places 選択があった（`selectedCafe` が非 null）→
-     *    `selectedCafe` の placeId / latitude / longitude / photoReferences を採用
-     * 3. 引き継ぎ元 cafe がある（[currentInitialRecord]`?.cafe` が非 null。[Mode.Edit] / [Mode.Duplicate] で
-     *    取得した元記録にカフェが紐づいていた場合）→ その placeId / 座標 / photoReferences を引き継ぐ
-     *    （[Mode.Duplicate] は複製元の cafe を同一カフェとして扱う）
-     * 4. 上記いずれでもない（[Mode.Create] の手入力カフェ、またはセルフ抽出記録
-     *    （元 cafe = null）の [Mode.Edit] / [Mode.Duplicate] で手動カフェ名を入力したケース）→
-     *    UUID を placeId として新規採番、座標は null / photoReferences は空
-     *
-     * cafe 採用の判定は mode ではなく「引き継ぎ元 cafe の有無」の一点に畳める（[Mode.Create] は
-     * [onAppear] で [currentInitialRecord] を null にするため、自然に 4 に落ちる）。
-     * いずれの場合も name / address / websiteUrl / mapsUrl は draft の編集値を採用する。
-     */
-    private fun buildCafe(draft: CoffeeDraft): Cafe? {
-        if (draft.cafeName.isBlank()) return null
-
-        val selected = selectedCafe
-        val initialCafe = currentInitialRecord?.cafe
-        val (placeId, latitude, longitude, photoReferences) = when {
-            selected != null ->
-                CafeSnapshot(selected.placeId, selected.latitude, selected.longitude, selected.photoReferences)
-            initialCafe != null ->
-                CafeSnapshot(initialCafe.placeId, initialCafe.latitude, initialCafe.longitude, initialCafe.photoReferences)
-            else -> CafeSnapshot(kotlin.uuid.Uuid.random().toString(), null, null, emptyList())
-        }
-
-        return Cafe(
-            placeId = placeId,
-            name = draft.cafeName,
-            address = draft.cafeAddress.takeIf { it.isNotBlank() },
-            latitude = latitude,
-            longitude = longitude,
-            photoReferences = photoReferences,
-            websiteUrl = draft.cafeWebsiteUrl.takeIf { it.isNotBlank() },
-            mapsUrl = draft.cafeMapsUrl.takeIf { it.isNotBlank() },
-        )
-    }
-
-    /** [buildCafe] の内部ヘルパ: 引き継ぎ元 cafe の非表示フィールド（placeId / 座標 / photoReferences）。 */
-    private data class CafeSnapshot(
-        val placeId: String,
-        val latitude: Double?,
-        val longitude: Double?,
-        val photoReferences: List<String>,
-    )
-
     companion object {
         /**
          * 新規作成モードにおけるコーヒー名の初期値（要件 2-9）。編集可能。
@@ -792,6 +665,10 @@ class CoffeeEditorViewModel(
         /**
          * [CoffeeDraft] の初期値を返す。
          * Create モードの初期 draft として、また onAppear 前のデフォルト値として使う。
+         *
+         * Swift 側は `CoffeeEditorViewModel.companion.defaultDraft()` として参照する
+         * （`iosApp/iosApp/Features/CoffeeEditor/CoffeeEditorViewModelBridge.swift`）ため、
+         * companion object の public メンバとして維持する（internal 化・移動は不可）。
          */
         fun defaultDraft(): CoffeeDraft = CoffeeDraft(
             cafeName = "",
@@ -816,81 +693,3 @@ class CoffeeEditorViewModel(
         )
     }
 }
-
-// --- プライベート拡張 ---
-
-/**
- * [CoffeeRecord] を [CoffeeEditorViewModel.CoffeeDraft] に変換する。
- * Edit モードで [CoffeeRepository.observeById] から取得した record を draft の初期値として使う。
- */
-private fun CoffeeRecord.toDraft(): CoffeeEditorViewModel.CoffeeDraft =
-    CoffeeEditorViewModel.CoffeeDraft(
-        cafeName = cafe?.name ?: "",
-        cafeAddress = cafe?.address ?: "",
-        cafeWebsiteUrl = cafe?.websiteUrl ?: "",
-        cafeMapsUrl = cafe?.mapsUrl ?: "",
-        visitedOn = visitedOn,
-        rating = rating,
-        notes = notes,
-        photos = photos,
-        name = name,
-        brewMethod = brewMethod,
-        origin = origin ?: "",
-        region = region ?: "",
-        variety = variety ?: "",
-        processing = processing,
-        roastLevel = roastLevel,
-        cup = cup ?: "",
-        brewRecipe = brewRecipe ?: "",
-        tasting = tasting,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット（edit モードで既存 tasting を反映）
-        tags = tags,
-    )
-
-/**
- * [CoffeeRecord] を複製（[CoffeeEditorViewModel.Mode.Duplicate]）の初期 draft に変換する。
- *
- * 引き継ぐ: cafe（表示用フィールドのみ。placeId / 座標 / photoReferences は `currentInitialRecord` 経由で
- * [CoffeeEditorViewModel.buildCafe] が引き継ぐ）/ name / brewMethod / origin / region / variety / processing /
- * roastLevel / cup / brewRecipe / tags。
- * 引き継がない: rating（null = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
- * `visitedOn` は今日にする（元記録の日付は使わない）。
- */
-private fun CoffeeRecord.toDuplicateDraft(): CoffeeEditorViewModel.CoffeeDraft =
-    CoffeeEditorViewModel.CoffeeDraft(
-        cafeName = cafe?.name ?: "",
-        cafeAddress = cafe?.address ?: "",
-        cafeWebsiteUrl = cafe?.websiteUrl ?: "",
-        cafeMapsUrl = cafe?.mapsUrl ?: "",
-        visitedOn = Clock.System.todayIn(TimeZone.currentSystemDefault()),
-        rating = null,
-        notes = "",
-        photos = emptyList(),
-        name = name,
-        brewMethod = brewMethod,
-        origin = origin ?: "",
-        region = region ?: "",
-        variety = variety ?: "",
-        processing = processing,
-        roastLevel = roastLevel,
-        cup = cup ?: "",
-        brewRecipe = brewRecipe ?: "",
-        tasting = null,  // all-or-nothing: 複製では引き継がない（要件 2-10）
-        tags = tags,
-    )
-
-/**
- * テイスティングスコアの各要素を `1..10` の範囲にクランプした新しいインスタンスを返す。
- *
- * 各フィールドは非 null（all-or-nothing）。入力範囲外（< 1 または > 10）の値はクランプする。
- * バリデーション規約: `data-model.md` §1.1a
- */
-private fun TastingScores.clamped(): TastingScores = TastingScores(
-    sweetness = sweetness.clampTasting(),
-    body = body.clampTasting(),
-    acidity = acidity.clampTasting(),
-    flavor = flavor.clampTasting(),
-    aftertaste = aftertaste.clampTasting(),
-)
-
-/** `1..10` の範囲にクランプする拡張関数。 */
-private fun Int.clampTasting(): Int = coerceIn(1, 10)

@@ -1217,3 +1217,22 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **トレードオフ**:
 - **20 件上限の取りこぼし**: Places 1 応答上限 20 件のうち範囲外分をクライアントで捨てるため、範囲内に候補が 20 件超ある密集エリアでは表示件数が減る。`locationBias` で近傍が上位に来るため実用上は小さいと判断。厳密対応が要れば shared に rectangle `locationRestriction` 付き `searchText` を足す（[[paid-services]] 課金は不変）。
 - 可視領域スナップは**検索実行時点**（完了時の最新 region ではない）。検索中にパンしても「押した瞬間の範囲」で絞る＝「このエリア」の意味に忠実。
+
+### 2026-07-25: KMP ViewModel の 800 行超分割は「top-level internal 関数抽出」方式
+
+- 領域: KMP `shared/feature/coffee-editor` のみ（`CoffeeEditorViewModel.kt` 896 行分割）。iOS 側追随なし（公開 API 無変更）
+- 関連: coding-conventions §3.4、Swift 側 View 分割 3 件（MapTabView / AnalysisView / CoffeeEditorView、2026-07-24）
+
+**背景**: 分割閾値 800 行を KMP 側で初めて超過。Swift 側の分割は `extension` でクラス本体を複数ファイルに割ったが、**Kotlin のクラス本体は複数ファイルに割れない**（`partial` 相当なし・nested 型も本体内固定）。この非対称性のため KMP では別方式が要る。
+
+**方式**: クラスに閉じている必要のない純粋ロジックを、同一パッケージの兄弟ファイルへ `internal` top-level 関数として抽出する。
+- `CoffeeRecordBuilder.kt`: `validate` / `buildRecord` / `buildCafe` / `CafeSnapshot`。旧実装が暗黙参照していた ViewModel 内部状態（`mode` / `currentInitialRecord` / `selectedCafe`）を**引数として明示注入**する形に変換（呼び出しは `onSaveTapped` 1 か所）。純粋関数化で単体テスト容易性も向上。
+- `CoffeeEditorMapping.kt`: `toDraft` / `toDuplicateDraft` / `clamped` / `clampTasting`（元々 class 外の `private` top-level 拡張 → `internal` 化のみ。Swift 露出は元から無いので影響なし）。
+- **nested 型（`Mode` / `CoffeeDraft` / `UIState`）はクラス本体に必ず残す**。top-level 化すると Swift 公開名（`CoffeeEditorViewModel.UIState` 等）が変わり iOS 追随が必要になるため。
+- **public const（`DEFAULT_COFFEE_NAME`）と `defaultDraft()` は companion に残置**。特に `defaultDraft()` は Swift Bridge が `CoffeeEditorViewModel.companion.defaultDraft()` として直接参照する **public な companion メンバ**であり、これを一度 top-level `internal` へ動かしたところ Swift 側が `has no member 'defaultDraft'` でコンパイル不能になった（下記 落とし穴）。companion の元位置へ戻して解消。
+
+**落とし穴（重要）**: 分割時の可視性判定を誤ると Swift Bridge を壊す。判定基準は「元が `public`（companion メンバ含む）だったか」。`private`/`internal` だったものは移動先で `internal` にしても Objective-C ヘッダに出ないため Swift 露出は不変だが、`public` だったものは**定義位置を動かさない**（companion メンバは companion に残す）。さらに **KMP モジュール単体の Kotlin テスト（`testAndroidHostTest` / `iosSimulatorArm64Test` / `compileTestKotlin*`）では iosApp の Swift コンパイルは検証されない** — `commonMain` の public API に触れる分割では、生成ヘッダ（`SharedLogic.h`）確認だけでなく **実際の Swift ビルド**まで親が検証すること。→ lessons 2026-07-25。
+
+**トレードオフ**: `validate` / `buildRecord` を domain UseCase へ昇格する案は見送り。いずれも feature 層の `CoffeeDraft`（20 フィールドの UI 編集 draft）に依存し、domain へ持ち上げると UI-draft で domain を汚すため、feature モジュール内の純粋関数に留めた。
+
+**検証**: `CoffeeEditorViewModelTest` 20 件を無改変で全緑（testAndroidHostTest / `iosSimulatorArm64Test`）+ 親のフラグ無し `assembleSharedLogicDebugXCFramework`（link まで成功）+ **iosApp スキームの実 Swift ビルド `xcodebuild build ... -scheme iosApp` が `BUILD SUCCEEDED`**（`CoffeeEditorViewModelBridge.swift` 含む）。最終 3 ファイル: `CoffeeEditorViewModel.kt` 695 / `CoffeeRecordBuilder.kt` 141 / `CoffeeEditorMapping.kt` 88 行（全 800 以下）。

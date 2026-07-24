@@ -14,6 +14,7 @@ paths:
 
 - 公式 [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html) に従う。ViewModel は `<機能名>ViewModel` と命名し、UI イベントは `on○○Tapped` 等のメソッドで受ける
 - **1 ファイル / 1 型が肥大化したら責務分割**（目安: **800 行超**で分割検討。PostToolUse フック `check-file-size.sh` が警告）。UseCase / Repository / `expect`-`actual` ラッパ等へ切り出す。詳細は [`coding-conventions.md`](../../docs/coding-conventions.md) §3.4
+  - 分割・リネームで **`public` メンバ（特に companion メンバ・nested 型）の定義位置や可視性を変えると Swift Bridge を壊す**（`companion.foo()` 参照が解決不能に / `internal` 化で ObjC ヘッダから消える）。元が `public` のシンボルは定義位置を保持する。KMP モジュールの Kotlin テストは Swift コンパイルを検証しないため、`commonMain` の public API に触れる分割は**親が実 Swift ビルドまで検証**する（lessons 2026-07-25）
 - `when` は全ケースを網羅する（`else` は極力使わない）
 - コルーチン内で `runCatching` を使わない。`try/catch` + `CancellationException` の先行 catch & 再スロー
 - 各 ViewModel は注入 scope から子スコープ（`SupervisorJob(parentJob)`）を所有し `clear()` で畳む

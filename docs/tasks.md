@@ -394,6 +394,14 @@
 
 > `AnalysisView.swift` 1929 行を責務別 7 ファイルへ分割。既に 18 サブビューへ分解済みだったため純粋移動 + `extension AnalysisView`（統計チャート系）抽出のみ（低リスク）。`AnalysisQaViews` / `AnalysisInsightViews` / `AnalysisSignalViews` / `AnalysisBeanViews` / `AnalysisView+Statistics` / `AnalysisView+Preview` に切り出し。別ファイル extension から参照する `private` メンバは internal 化。`AnalysisView.swift` 1929→266 行、全ファイル 800 以下。coding-conventions §3.4 分割規約の適用例（MapTabView 分割 M-0〜M-4 の続き）。親のフラグ無し再検証で `BUILD SUCCEEDED`。
 
+#### CoffeeEditorViewModel 分割（2026-07-25 起票）
+
+> `CoffeeEditorViewModel.kt` 896 行を 3 ファイルへ分割。KMP 側で初めて 800 行超が出たケース（Swift の View 分割 3 件に続く）。**Kotlin のクラス本体は分割不可**（`extension` で複数ファイルに割れる Swift と異なる）ため、クラスに閉じる必要のない純粋ロジックを top-level 関数として同一パッケージの兄弟ファイルへ抽出する方式。Swift Bridge / 公開 API 無変更・振る舞い不変。① `CoffeeEditorViewModel.kt`（クラス本体、~665 行）② `CoffeeRecordBuilder.kt`（`validate` / `buildRecord` / `buildCafe` / `CafeSnapshot` を純粋関数化、暗黙参照していた mode / initialRecord / selectedCafe を引数注入、~130 行）③ `CoffeeEditorMapping.kt`（`toDraft` / `toDuplicateDraft` / `clamped` / `clampTasting` + companion の `defaultDraft` を移動、~110 行）。nested 型（`Mode`/`UIState`）の top-level 化は Swift 公開名が変わるため不採用。domain UseCase 昇格は `CoffeeDraft`（feature 層 draft）依存のため見送り。coding-conventions §3.4 の KMP 版適用例。
+
+| 状態 | ID | 内容 | リスク |
+|------|----|------|--------|
+| [x] | CE-1 | kmp-engineer: `CoffeeEditorViewModel.kt` を 3 ファイルへ分割（純粋関数の top-level 抽出 + 引数注入）。2026-07-25 完了: `CoffeeEditorViewModel.kt` 896→695 行 / `CoffeeRecordBuilder.kt` 141 行（`validate`/`buildRecord`/`buildCafe`/`CafeSnapshot`、mode/initialRecord/selectedCafe を引数注入）/ `CoffeeEditorMapping.kt` 88 行（`toDraft`/`toDuplicateDraft`/`clamped`/`clampTasting`）。`DEFAULT_COFFEE_NAME` と `defaultDraft()`（Swift Bridge が `companion.defaultDraft()` で参照する public メンバ）は companion 残置。**初回に `defaultDraft` を top-level internal 化して Swift ビルドを壊し companion へ戻した**（→ lessons / implementation_note 2026-07-25）。`CoffeeEditorViewModelTest` 20/20 無改変 green + 親のフラグ無し XCFramework link + iosApp 実 Swift ビルド `BUILD SUCCEEDED`。全ファイル 800 以下 | 低 |
+
 #### フェーズ 2.5: モジュール分割 (1) — 基盤レイヤー
 
 > 完了（2026-06-08、PR1〜PR3）: `build-logic/convention`（`kmp.library` / `kmp.feature` / `android.library`）新設 → `shared/{core,domain,data-local,data-firebase}` 切り出し → `shared/framework` umbrella 化 + 旧 `sharedLogic` 完全削除 + CI コマンド差し替え。現行構成は `settings.gradle.kts` と `architecture.md` を真とする。

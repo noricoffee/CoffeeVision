@@ -752,3 +752,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: `locationBias` = ヒント / `locationRestriction` = 制限。「表示範囲で検索」系の UI で `locationBias` を使うなら、範囲制限はクライアント（表示矩形フィルタ）かサーバー（Text Search は rectangle restriction）で別途担保する。位置バイアス検索を新規追加するときは「これは範囲を絞るのか優先するだけか」を必ず区別する。
 - **発生源**: `MapSearchController`（2026-07-24 のエリア検索キーワード維持変更で顕在化）。設計判断は implementation_note 2026-07-24「エリア検索の表示範囲フィルタ」。
 - **横展開点検（sweep）**: `locationBias` / `LocationBias` / `searchText` / `searchByNameNear` の全消費点を grep 点検（`shared` / `iosApp`）。範囲内限定の一覧表示に `locationBias` を使う同型箇所は**該当なし** — 他はテキスト検索（`CafeSearchView` / 検索バー = 全国検索が意図で範囲外は正常）、`MapViewModel.searchByNameNear`（POI タップの placeId 単一解決用・200m・一覧表示しない）、CoffeeEditor 周辺候補（`searchNearby` = `locationRestriction` で元々範囲制限）のみ。
+
+## 2026-07-25
+
+### KMP のファイル分割で public companion メンバを top-level 化すると Swift Bridge を壊す（Kotlin テストでは検出不能）
+
+- **症状**: `CoffeeEditorViewModel.kt`（896 行）を分割リファクタ後、Xcode ビルドで `Value of type 'CoffeeEditorViewModel.Companion' has no member 'defaultDraft'`。KMP 側の `testAndroidHostTest` / `iosSimulatorArm64Test` / `compileTestKotlinIosSimulatorArm64` はすべて green だったのに Swift だけ落ちた。
+- **原因の構造**: `defaultDraft()` は **companion object の public 関数**で、Swift Bridge が `CoffeeEditorViewModel.companion.defaultDraft()` として直接参照していた（`CoffeeEditorViewModelBridge.swift:19`）。分割時にこれを別ファイルの **top-level `internal` 関数**へ移したため、(a) companion から消え Swift の名前解決が壊れ、(b) `internal` 化で Objective-C ヘッダに出なくなり二重に非公開化した。**KMP モジュール単体の Kotlin テストは iosApp の Swift コンパイルを一切検証しない**（別ターゲット）ため、公開 API を壊しても Kotlin 側は緑のまま = 検出漏れの構造。「公開 API 無変更」の自己申告が実際は不成立だった。
+- **修正パターン**: `defaultDraft()` を companion の**元の位置（public）へ戻す**。クラス内の呼び出し（`UIState` の default 引数・`onAppear`）は companion メンバとしてそのまま解決される。可視性判定の基準は「**元が `public`（companion メンバ含む）だったか**」— `public` だったシンボルは移動先を選ばず**定義位置を保持**する（companion メンバは companion に残す）。`private`/`internal` だったものは移動先で `internal` にしても ObjC ヘッダに出ないので Swift 露出は不変（`toDraft`/`buildRecord` 等は元 private のため top-level internal 化して無問題）。
+- **教訓**: `commonMain` の **public API（特に companion メンバ・nested 型）に触れる分割・リネームは、Kotlin テストの green を「Swift も無事」と読み替えない**。検証は (1) 生成ヘッダ `SharedLogic.h` に想定の Swift 名が出るか + (2) **実際の Swift ビルド**（親が `DEVELOPER_DIR=... xcodebuild build -scheme iosApp -destination 'generic/platform=iOS Simulator' CODE_SIGNING_ALLOWED=NO`）まで必ず親が実施する。サブエージェントは sandbox で Swift ビルド不可のため、この検証は親の専任。関連: implementation_note 2026-07-25「KMP ViewModel の 800 行超分割」。
+- **発生源**: `CoffeeEditorViewModel.kt` 分割（2026-07-25、tasks CE-1）。分割方式そのものは正しく、壊したのは可視性判定の一点。
+- **横展開点検（sweep）**: `grep -rn "\.companion\." iosApp/iosApp --include="*.swift"` で Swift が依存する **public companion メンバ**を全列挙 → アプリ全体で 2 件のみ: `AnalysisViewModel.companion.SUGGESTED_QUESTIONS`（`AnalysisViewModelBridge.swift:68`）と `CoffeeEditorViewModel.companion.defaultDraft()`（今回修正済み）。前者は無変更で健全。さらに **iosApp スキームのフルビルドが `BUILD SUCCEEDED`** = 今回の分割で他の public API（companion 以外含む）も一切壊していないことを全 Swift 参照で確認済み。**該当なし（要修正は defaultDraft 1 件で対処済み）**。

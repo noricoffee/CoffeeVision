@@ -43,6 +43,14 @@ metadata:
 - 対策: 削除前に、削除範囲内に列挙された移動対象**以外**の `// MARK:` / `private func` / `private var` 宣言がないか grep（`grep -n "MARK:\|private func\|private var" file.swift` を対象行範囲で確認）してから `del lines[a:b]` を実行する。移動対象を 1 つずつ「この関数は指示に列挙されているか」を機械的にチェックリスト照合するのが確実。
 - ビルドエラーの「cannot find X in scope」は速攻で気づけるため大事故にはならないが、型検査のカスケードで無関係な行に誤ったエラー（例: `Map(position:) { }` のトレーリングクロージャ型不一致）が出ることがあるので、実際の原因は "in scope" エラーの方を優先して読む。
 
+## 「複数の子ファイルから呼ばれる親のセクション関数 vs. 単一ファイル内でしか使わないヘルパー」を仕分けてから private を外す（2026-07-24、AnalysisView 分割で確認）
+
+- 巨大 View を「本体に残すグループ」と「extension 別ファイルへ出すグループ」に割るとき、後者の中でもさらに「本体（呼び出し元）から直接呼ばれる関数だけ」と「その extension ファイル内の他メンバからしか呼ばれないヘルパー」を区別する。**internal 化が必要なのは前者だけ**。後者はそのまま `private` を維持できる（同じ新ファイル内で完結するため）。
+- 具体例（`AnalysisView` の統計チャートセクション分割）: `statisticsScrollView`（本体に残る）が呼ぶ 8 個のセクション関数（`summarySection` / `ratingHistogramSection` / `tastingAveragesSection` / `originRankingSection` / `roastLevelSection` / `brewMethodSection` / `monthlyTrendSection` / `topCafesSection`）だけを `private` → internal に変更し、それらが内部で使う `summaryCard` / `sectionHeader` / `formattedRating` / `localizedRoastLevel` 等のヘルパーや `RoastLevelBarItem` / `roastLevelOrder` は、呼び出し元がすべて同じ新ファイル内に移動するため `private` のまま据え置いた。「一括で全部 internal にする」より安全（意図しない公開範囲拡大を避けられる）。
+- 判定手順: 分割前に `grep -n "<関数名>"` で全呼び出し箇所の行番号を洗い出し、呼び出し元が「移動先と同じファイルに収まるか」を機械的に確認してから access level を決める。
+- 複数ファイルから参照される View 構造体（`InsightLoadedCard` 等）も同様の基準: 本体の `insightCardSection` と Preview 専用ファイルの両方から呼ばれるものは internal 化必須。単一カードの内部だけで使うサブ View（`FavoriteSignalRow` 等）は private のまま。
+- 依存関係が複雑な関数（AI 系セクションを呼ぶ `statisticsScrollView` 自体）は「迷ったら依存が少ない側（呼び出し元が全部同じ場所に留まる側）に寄せて本体に残す」判断が安全（[`docs/coding-conventions.md` §3.4](../../../docs/coding-conventions.md) の分割指針どおり）。
+
 ## 参照: [ui-components-patterns.md](ui-components-patterns.md) の「排他的な複数種シート」パターンとは独立の論点
 
 上記は「1 つの View を複数の小さい View 構造体に割る」ときの状態設計の話で、`ui-components-patterns.md` の enum item シートパターン（表示状態の排他制御）とは別の関心事。

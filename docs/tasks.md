@@ -386,6 +386,10 @@
 
 ### 完了
 
+#### AnalysisView 分割（2026-07-24 完了）
+
+> `AnalysisView.swift` 1929 行を責務別 7 ファイルへ分割。既に 18 サブビューへ分解済みだったため純粋移動 + `extension AnalysisView`（統計チャート系）抽出のみ（低リスク）。`AnalysisQaViews` / `AnalysisInsightViews` / `AnalysisSignalViews` / `AnalysisBeanViews` / `AnalysisView+Statistics` / `AnalysisView+Preview` に切り出し。別ファイル extension から参照する `private` メンバは internal 化。`AnalysisView.swift` 1929→266 行、全ファイル 800 以下。coding-conventions §3.4 分割規約の適用例（MapTabView 分割 M-0〜M-4 の続き）。親のフラグ無し再検証で `BUILD SUCCEEDED`。
+
 #### フェーズ 2.5: モジュール分割 (1) — 基盤レイヤー
 
 > 完了（2026-06-08、PR1〜PR3）: `build-logic/convention`（`kmp.library` / `kmp.feature` / `android.library`）新設 → `shared/{core,domain,data-local,data-firebase}` 切り出し → `shared/framework` umbrella 化 + 旧 `sharedLogic` 完全削除 + CI コマンド差し替え。現行構成は `settings.gradle.kts` と `architecture.md` を真とする。

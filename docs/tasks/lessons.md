@@ -741,3 +741,14 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: ドラッグで自分の位置・サイズが変わる UI（ボトムシート、リサイズ可能パネル、追従ハンドル）の `DragGesture` は**必ず `.global`（または固定 `.named` 空間）**。`.local` は「ドラッグしても自身が動かない」要素（swipe-to-dismiss で `onEnded` の符号だけ見る等）に限る
 - **発生源**: マップ検索結果の下部ドラッグシート（2026-07-22、commit 7ecd966 で導入・同日修正）。関連: 同シートの広告先読み lesson（同日）
 - **横展開点検（2026-07-22）**: `grep -rn "DragGesture(" iosApp/iosApp --include="*.swift"` → `MapTabView.swift`（今回修正・`.global`）と `ErrorToast.swift`（`onEnded` の `translation` 符号のみ参照する swipe-to-dismiss。ドラッグ中に自身が動かず `onChanged` で自己位置を書き換えないため発振の前提が無く**非該当**）の 2 箇所のみ。他に自作ドラッグリサイズ/追従実装なし。**該当なし（要修正は 1 箇所で対処済み）**
+
+## 2026-07-24
+
+### Places API の `locationBias` は範囲制限ではなく近傍ヒント — 範囲内限定 UI はクライアント側フィルタが要る
+
+- **症状**: マップ「このエリアを検索」でキーワードあり時、表示範囲外のカフェ（遠方の同名チェーン店など）が結果一覧・ピンに混入する、というユーザー報告。
+- **原因の構造**: `searchText(query, locationBias)` の `locationBias`（Places API New v1 の `locationBias.circle`）は「**近くを優先するヒント**」であって範囲を制限しない。範囲内に限定したい UI で `locationBias` を使うと範囲外が返る。Places の **Text Search の `locationRestriction` は rectangle のみ対応**（circle 不可）で、サーバー側で厳密に絞るには矩形の受け渡し＋ shared 改修が要る。構造的な API 仕様の誤解パターン（単発ミスではない）。対して Nearby Search（`searchNearby`）は `locationRestriction`（circle）で範囲制限される — この非対称が誤解の温床。
+- **修正パターン**: 範囲内限定の一覧/ピン表示は、クライアント側で**表示範囲矩形フィルタ**を掛ける。検索実行時点の `MKCoordinateRegion` をスナップ（`areaSearchRegion`）→ 完了時に `region.center ± span/2` の矩形内座標でフィルタ（座標欠損は除外）。フィルタ済み結果を `displayedResults` として**単一ソース化**し、一覧とピンの双方に同じ配列を流す（別々にフィルタするとズレる）。
+- **教訓**: `locationBias` = ヒント / `locationRestriction` = 制限。「表示範囲で検索」系の UI で `locationBias` を使うなら、範囲制限はクライアント（表示矩形フィルタ）かサーバー（Text Search は rectangle restriction）で別途担保する。位置バイアス検索を新規追加するときは「これは範囲を絞るのか優先するだけか」を必ず区別する。
+- **発生源**: `MapSearchController`（2026-07-24 のエリア検索キーワード維持変更で顕在化）。設計判断は implementation_note 2026-07-24「エリア検索の表示範囲フィルタ」。
+- **横展開点検（sweep）**: `locationBias` / `LocationBias` / `searchText` / `searchByNameNear` の全消費点を grep 点検（`shared` / `iosApp`）。範囲内限定の一覧表示に `locationBias` を使う同型箇所は**該当なし** — 他はテキスト検索（`CafeSearchView` / 検索バー = 全国検索が意図で範囲外は正常）、`MapViewModel.searchByNameNear`（POI タップの placeId 単一解決用・200m・一覧表示しない）、CoffeeEditor 周辺候補（`searchNearby` = `locationRestriction` で元々範囲制限）のみ。

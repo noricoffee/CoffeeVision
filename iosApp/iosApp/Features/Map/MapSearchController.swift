@@ -57,6 +57,17 @@ final class MapSearchController {
     /// エリア検索が 0 件だったときの軽量案内メッセージ。`errorToast` 経由で表示する。
     var areaSearchEmptyMessage: String?
 
+    /// 一覧・ピンの表示に使う結果（`sb.results` を表示用に加工したもの。単一ソース）。
+    ///
+    /// テキスト検索は `sb.results` をそのまま反映する。エリア検索は `areaSearchRegion`
+    /// （検索実行時にスナップした表示範囲矩形）で絞り込んだ結果を反映する
+    /// （Places の `locationBias` は範囲制限ではなく近傍ヒントに過ぎず、範囲外の同名店が
+    /// 混ざりうるため。2026-07-24 ユーザー報告対応）。
+    private(set) var displayedResults: [Cafe] = []
+
+    /// 直近のエリア検索実行時にスナップした表示範囲矩形（`displayedResults` の絞り込み基準）。
+    private var areaSearchRegion: MKCoordinateRegion?
+
     // MARK: - Init
 
     init(
@@ -156,18 +167,40 @@ final class MapSearchController {
         // ピン反映しない。失敗時はボタンを隠さず再試行できる状態のまま残す。
         guard sb.hasSearched, sb.error == nil else { return }
 
-        mapBridge.onSearchResultsUpdated(sb.results)
+        // エリア検索は表示範囲外の結果（Places の locationBias は範囲制限ではないため混入しうる）
+        // を除外する。テキスト検索は全件をそのまま反映する。
+        displayedResults = wasAreaSearch ? filterResultsWithinAreaSearchRegion(sb.results) : sb.results
+        mapBridge.onSearchResultsUpdated(displayedResults)
 
         if wasAreaSearch {
             if let currentCenter {
                 lastAreaSearchCenter = currentCenter
             }
             showAreaSearchButton = false
-            if sb.results.isEmpty {
+            if displayedResults.isEmpty {
                 areaSearchEmptyMessage = String(localized: "このエリアにカフェが見つかりませんでした")
             }
         } else {
             fitCameraToSearchResults(sb.results)
+        }
+    }
+
+    /// `areaSearchRegion`（エリア検索実行時にスナップした表示範囲矩形）で結果を絞り込む。
+    ///
+    /// 座標が取れない結果は範囲外扱いで除外する。矩形が未確定（想定外経路。ボタン表示前に
+    /// `onMapCameraChange` が一度も発火していない等）の場合は絞り込まず全件を返す
+    /// （誤って全件非表示になるより安全側に倒す）。
+    private func filterResultsWithinAreaSearchRegion(_ results: [Cafe]) -> [Cafe] {
+        guard let region = areaSearchRegion else { return results }
+        let latHalf = region.span.latitudeDelta / 2
+        let lngHalf = region.span.longitudeDelta / 2
+        let latRange = (region.center.latitude - latHalf)...(region.center.latitude + latHalf)
+        let lngRange = (region.center.longitude - lngHalf)...(region.center.longitude + lngHalf)
+        return results.filter { cafe in
+            guard let lat = cafe.latitude?.doubleValue, let lng = cafe.longitude?.doubleValue else {
+                return false
+            }
+            return latRange.contains(lat) && lngRange.contains(lng)
         }
     }
 
@@ -221,11 +254,16 @@ final class MapSearchController {
     /// `searchText` 相当（`performSearch` と同じ `onQueryChanged` → `onSearchTapped(center:)` の順序）を
     /// 実行する。キーワードが空（空白のみ含む）なら従来どおりキーワード非依存の周辺一括検索
     /// （`onNearbySearchRequested`）にフォールバックする。
-    func performAreaSearch(center: MapSearchCenter?) {
+    ///
+    /// - Parameter visibleRegion: 検索実行時点の地図可視領域（`MapTabView` の
+    ///   `.onMapCameraChange` で得た最新 region）。`handleCompletion` での結果フィルタ基準として
+    ///   スナップする（検索実行中にユーザーが地図を動かしても、押した瞬間の範囲を基準にする）。
+    func performAreaSearch(center: MapSearchCenter?, visibleRegion: MKCoordinateRegion?) {
         guard let sb = searchBridge,
               let center,
               !isAreaSearchInFlight else { return }
         isAreaSearchInFlight = true
+        areaSearchRegion = visibleRegion
         let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
         if !trimmedQuery.isEmpty {
             // performSearch と同じ順序: onSearchTapped(center:) は shared 側の直近 query を使うため、

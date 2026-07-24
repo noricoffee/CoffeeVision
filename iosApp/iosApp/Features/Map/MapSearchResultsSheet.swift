@@ -37,7 +37,11 @@ struct MapSearchResultsSheet: View {
     /// expanded detent の高さ比率（コンテナ高さに対して）。
     static let expandedFraction: CGFloat = 0.6
 
-    let sb: CafeSearchViewModelBridge
+    /// 一覧・ピンに反映する表示用の検索結果（`MapSearchController.displayedResults`。
+    /// エリア検索は表示範囲でフィルタ済み、テキスト検索は全件。2026-07-24）。
+    let results: [Cafe]
+    /// 検索実行中フラグ（`CafeSearchViewModelBridge.isLoading`）。
+    let isLoading: Bool
     let searchAdLoader: BannerAdLoader
 
     /// ドラッグ追従を反映した実際の表示高さ（呼び出し元が算出済み）。
@@ -54,13 +58,13 @@ struct MapSearchResultsSheet: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            handleBar(resultCount: sb.results.count)
+            handleBar(resultCount: results.count)
 
             Divider()
 
             ScrollView {
                 LazyVStack(spacing: 0) {
-                    if sb.isLoading {
+                    if isLoading {
                         HStack {
                             Spacer()
                             ProgressView()
@@ -68,15 +72,15 @@ struct MapSearchResultsSheet: View {
                         }
                         .padding(.vertical, 24)
                     } else {
-                        ForEach(Array(sb.results.enumerated()), id: \.element.placeId) { index, cafe in
-                            row(cafe: cafe, isLast: cafe.placeId == sb.results.last?.placeId)
+                        ForEach(Array(results.enumerated()), id: \.element.placeId) { index, cafe in
+                            row(cafe: cafe, isLast: cafe.placeId == results.last?.placeId)
                             // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
                             // 到達しないため非表示。requirements.md §11-2）。
                             if index == 2 {
                                 InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
                                     .padding(.horizontal, 16)
                                     .padding(.vertical, 8)
-                                if cafe.placeId != sb.results.last?.placeId {
+                                if cafe.placeId != results.last?.placeId {
                                     Divider().padding(.leading, 52)
                                 }
                             }
@@ -94,8 +98,8 @@ struct MapSearchResultsSheet: View {
             // peek detent では発火しない。ルート VStack は常に実体化されるため確実に発火する）。
             GeometryReader { proxy in
                 Color.clear
-                    .task(id: "\(Int(proxy.size.width))-\(sb.results.count >= 3)") {
-                        guard sb.results.count >= 3 else { return }
+                    .task(id: "\(Int(proxy.size.width))-\(results.count >= 3)") {
+                        guard results.count >= 3 else { return }
                         let width = proxy.size.width - 32
                         // レイアウト測定の過渡状態（ゴミ幅・負値）でリクエストしない
                         // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。

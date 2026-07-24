@@ -1201,3 +1201,19 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - 課金構造は不変（`searchText` も `searchNearby` も 1 リクエスト、手動ボタンで発火頻度は同じ）。→ [[paid-services]] 更新不要。
 - ボタン文言は「このエリアを検索」のまま（キーワード有無でのラベル出し分けは今回スコープ外）。
 - shared 変更なし（`onSearchTapped` の半径付きオーバーロードは既存）。
+
+### 2026-07-24: エリア検索の表示範囲フィルタ（クライアント側）
+
+- 領域: iOS のみ（`MapSearchController` / `MapSearchResultsSheet` / `MapTabView`。KMP / shared 変更なし）
+- 関連: 直前の「このエリアを検索でキーワード維持」変更（同日）、requirements 5-5
+
+**背景**: キーワード維持変更で「このエリアを検索」がキーワードあり時に `searchText(query, locationBias)` を呼ぶようになった結果、ユーザーから「範囲外のカフェも一覧に出る」報告。原因は **Places API の `locationBias` が範囲制限ではなく近傍ヒント**であること（遠方の同名店も返る）。Places の Text Search の `locationRestriction` は rectangle のみ対応でサーバー側厳密制限は shared 大改修になるため、**iOS クライアント側で表示範囲フィルタ**する方針を採用。
+
+**実装**:
+- `MapSearchController` に `displayedResults: [Cafe]`（一覧・ピンの単一ソース）と `areaSearchRegion: MKCoordinateRegion?`（エリア検索**実行時**にスナップした可視領域）を追加。`performAreaSearch(center:visibleRegion:)` で region を受け取りスナップ。
+- `handleCompletion`: エリア検索由来のみ `filterResultsWithinAreaSearchRegion`（`region.center ± span/2` の矩形内・座標欠損は除外）を通し、`mapBridge.onSearchResultsUpdated` と 0 件メッセージ判定もフィルタ後の `displayedResults` 基準に。テキスト検索は全件維持（`fitCameraToSearchResults` も従来どおり `sb.results`）。
+- `MapSearchResultsSheet` を `sb: CafeSearchViewModelBridge` 依存から `results: [Cafe]` + `isLoading: Bool` の受け取りに変更。呼び出し側が `displayedResults` を渡すことで、**ピンと一覧が別フィルタ結果を参照してズレる再発を構造的に防止**。
+
+**トレードオフ**:
+- **20 件上限の取りこぼし**: Places 1 応答上限 20 件のうち範囲外分をクライアントで捨てるため、範囲内に候補が 20 件超ある密集エリアでは表示件数が減る。`locationBias` で近傍が上位に来るため実用上は小さいと判断。厳密対応が要れば shared に rectangle `locationRestriction` 付き `searchText` を足す（[[paid-services]] 課金は不変）。
+- 可視領域スナップは**検索実行時点**（完了時の最新 region ではない）。検索中にパンしても「押した瞬間の範囲」で絞る＝「このエリア」の意味に忠実。

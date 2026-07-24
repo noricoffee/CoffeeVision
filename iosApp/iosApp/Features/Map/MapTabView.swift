@@ -108,6 +108,10 @@ struct MapTabView: View {
     /// `mapContent` の ZStack 全体のサイズ（expanded detent の高さ算出に使う）。
     @State private var mapContainerSize: CGSize = .zero
 
+    /// 直近の `.onMapCameraChange` で得た地図可視領域。「このエリアを検索」実行時の結果フィルタ
+    /// 基準として `MapSearchController.performAreaSearch(visibleRegion:)` に渡す（2026-07-24）。
+    @State private var latestVisibleRegion: MKCoordinateRegion?
+
     // MARK: - 周辺カフェ（Apple 検索由来）関連 State（フェーズ 17 / M-2 で `AppleNearbyCafeLoader` へ隔離）
 
     /// Apple 検索由来の周辺カフェ fetch（デバウンス・ネガティブキャッシュ・名前フィルタ・
@@ -155,7 +159,7 @@ struct MapTabView: View {
         guard isSearchMode, searchController.selectedCafe == nil, let sb = searchController.searchBridge else {
             return false
         }
-        return sb.isLoading || !sb.results.isEmpty
+        return sb.isLoading || !searchController.displayedResults.isEmpty
     }
 
     /// 現在地 FAB が結果シートと重ならないよう追加する下端パディング。
@@ -539,6 +543,7 @@ struct MapTabView: View {
             // frequency: .onEnd で頻繁な中間値更新を抑制する。
             .onMapCameraChange(frequency: .onEnd) { context in
                 let region = context.region
+                latestVisibleRegion = region
                 // 可視領域の半径相当をメートルで算出する。
                 // latitudinalMeters: 緯度 1 度 ≈ 111_000 m、span の半分が半径
                 // longitudinalMeters: 緯度に応じた経度 1 度あたりのメートル数で補正
@@ -662,7 +667,8 @@ struct MapTabView: View {
     private var searchResultsBottomSheet: some View {
         if let sb = searchController.searchBridge, isShowingSearchResultsSheet {
             MapSearchResultsSheet(
-                sb: sb,
+                results: searchController.displayedResults,
+                isLoading: sb.isLoading,
                 searchAdLoader: searchAdLoader,
                 currentHeight: searchSheetCurrentHeight,
                 baseHeight: searchSheetBaseHeight,
@@ -734,7 +740,7 @@ struct MapTabView: View {
     /// 検索中は `isAreaSearchInFlight` に応じてスピナーへ差し替え、タップを無効化する。
     private var areaSearchButton: some View {
         Button {
-            searchController.performAreaSearch(center: appState.mapSearchCenter)
+            searchController.performAreaSearch(center: appState.mapSearchCenter, visibleRegion: latestVisibleRegion)
         } label: {
             HStack(spacing: 6) {
                 if searchController.isAreaSearchInFlight {

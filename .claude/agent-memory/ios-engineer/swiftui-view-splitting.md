@@ -51,6 +51,12 @@ metadata:
 - 複数ファイルから参照される View 構造体（`InsightLoadedCard` 等）も同様の基準: 本体の `insightCardSection` と Preview 専用ファイルの両方から呼ばれるものは internal 化必須。単一カードの内部だけで使うサブ View（`FavoriteSignalRow` 等）は private のまま。
 - 依存関係が複雑な関数（AI 系セクションを呼ぶ `statisticsScrollView` 自体）は「迷ったら依存が少ない側（呼び出し元が全部同じ場所に留まる側）に寄せて本体に残す」判断が安全（[`docs/coding-conventions.md` §3.4](../../../docs/coding-conventions.md) の分割指針どおり）。
 
+## UI セクションと処理ロジックを「2 つの兄弟 extension ファイル」に分けるとき、相互参照はどちらも internal 化が要る（2026-07-24、CoffeeEditorView 分割で確認）
+
+- `CoffeeEditorView+Sections.swift`（フォーム UI）と `CoffeeEditorView+Photos.swift`（写真の非同期処理）のように**同じ型の extension を役割で 2 ファイルに分ける**場合、`photosSection`（Sections 側）が `handlePhotoDelete`（Photos 側）を呼ぶような**ファイルをまたぐ呼び出し**は、呼ばれる側関数を internal 化しないとコンパイルエラーになる（呼び出し元が「同じ新ファイル」に収まらない一例）。判定は「呼び出し元 1 箇所しかない」ではなく「呼び出し元がどのファイルにあるか」で見る。
+- 逆に本体（メインファイル）の `body`/`toolbarContent` から呼ばれる Photos 側の関数（`handlePickerSelection` は `.onChange` から、`saveWithPhotoFlush` は `toolbarContent` から）も同じ理由で internal 化必須。
+- `@State` プロパティも同様: 宣言はメインファイルに残し、Sections/Photos 両方の extension から読み書きするもの（`viewModel` / `pendingImageData` など）は、たとえ片方の extension からしか実際には呼ばれなくても、**宣言ファイルと参照ファイルが別なら internal 化が要る**（`private` はファイルスコープであり "呼び出し元の数" ではなく "宣言ファイルと参照ファイルが同じか" で判定する）。
+
 ## 参照: [ui-components-patterns.md](ui-components-patterns.md) の「排他的な複数種シート」パターンとは独立の論点
 
 上記は「1 つの View を複数の小さい View 構造体に割る」ときの状態設計の話で、`ui-components-patterns.md` の enum item シートパターン（表示状態の排他制御）とは別の関心事。

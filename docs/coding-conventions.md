@@ -443,7 +443,7 @@ Kotlin 側と同じ方針。**WHY** のみ書き、WHAT は書かない。
 
 - **1 ファイル / 1 型が肥大化したら責務ごとに分割する**。目安は **コードファイル（`.swift` / `.kt`）800 行超**で分割を検討する（PostToolUse フック [`.claude/hooks/check-file-size.sh`](../.claude/hooks/check-file-size.sh) が Write/Edit 時に警告を出す。閾値はスクリプト内 `THRESHOLD` で調整可）。
 - 行数は機械的な目安であり絶対条件ではない。本質は「複数の独立責務が 1 つの型に同居していないか」。1 ファイル = 1 公開型の原則（[§1.2](#12-ファイル構成) / [§2.2](#22-ファイル構成)）と併せて判断する。
-- 分割の型（iOS の例。実例は `MapTabView` 分割 M-0〜M-4 と `AnalysisView` 分割、lessons / implementation_note 2026-07-24）:
+- 分割の型（iOS の例。実例は `MapTabView` 分割 M-0〜M-4 / `AnalysisView` 分割 / `CoffeeEditorView` 分割、lessons / implementation_note 2026-07-24）。フォーム系 View は `extension` を UI セクション用と非同期処理用の 2 ファイルに分けられる（`CoffeeEditorView+Sections` / `CoffeeEditorView+Photos`）:
   - **サブ View の独立構造体化**: 巨大 SwiftUI View 内の `@ViewBuilder` メソッドを `struct XxxView: View` へ切り出し、状態は init 引数 / `@Binding` で渡す
   - **状態・サービスの `@Observable` 隔離**: 検索・データ取得など独立した状態機械を `@Observable final class` へ分離（SwiftUI 固有の `@FocusState` / `cameraPosition` はコールバックで分離）
   - **`extension` 分離**: 純粋関数的なヘルパー群を別ファイルの `extension` へ（別ファイルの extension からは `private` が見えない → 参照するメンバは internal 化）

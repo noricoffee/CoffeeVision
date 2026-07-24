@@ -386,6 +386,10 @@
 
 ### 完了
 
+#### CoffeeEditorView 分割（2026-07-24 完了）
+
+> `CoffeeEditorView.swift` 859 行を 4 ファイルへ分割。フォーム系 View のため `extension CoffeeEditorView` を UI セクション用（`+Sections`）と写真非同期処理用（`+Photos`）に分け、`PhotoThumbnailCell` は独立ファイルへ純粋移動。別ファイル extension から参照する `@State` / メンバは internal 化。`CoffeeEditorView.swift` 859→277 行、全ファイル 800 以下。coding-conventions §3.4 の適用例（3 例目）。親のフラグ無し再検証で `BUILD SUCCEEDED`。
+
 #### AnalysisView 分割（2026-07-24 完了）
 
 > `AnalysisView.swift` 1929 行を責務別 7 ファイルへ分割。既に 18 サブビューへ分解済みだったため純粋移動 + `extension AnalysisView`（統計チャート系）抽出のみ（低リスク）。`AnalysisQaViews` / `AnalysisInsightViews` / `AnalysisSignalViews` / `AnalysisBeanViews` / `AnalysisView+Statistics` / `AnalysisView+Preview` に切り出し。別ファイル extension から参照する `private` メンバは internal 化。`AnalysisView.swift` 1929→266 行、全ファイル 800 以下。coding-conventions §3.4 分割規約の適用例（MapTabView 分割 M-0〜M-4 の続き）。親のフラグ無し再検証で `BUILD SUCCEEDED`。

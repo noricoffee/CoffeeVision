@@ -9,6 +9,7 @@ paths:
 正本は [`docs/coding-conventions.md`](../../docs/coding-conventions.md) / [`docs/ui-ux-guidelines.md`](../../docs/ui-ux-guidelines.md) / [`docs/kmp-bridge.md`](../../docs/kmp-bridge.md)。ここは常時確認する要点のみ。
 
 - [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/) に従う。SwiftUI View は `<機能名>View` と命名する
+- **1 ファイル / 1 型が肥大化したら責務分割**（目安: **800 行超**で分割検討。PostToolUse フック `check-file-size.sh` が警告）。SwiftUI View はサブ View の独立構造体化・状態/サービスの `@Observable` 隔離・`extension` 分離で切り出す（`MapTabView` 分割が実例。lessons / implementation_note 2026-07-24）
 - `switch` は全ケースを網羅する（`default` は極力使わない）
 - 観測タスクの破棄はブリッジの `deinit` 起点（`kotlin.clear()`）。タブ常駐 View では `.onDisappear` で observation を cancel しない
 

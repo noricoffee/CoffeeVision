@@ -1169,3 +1169,18 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **Phase 3 での扱い**: 検索系 State を `@Observable MapSearchController` へ隔離する際、この detent/高さ状態も controller へ移すか親に残すかを再判断する。FAB インセットとの二重消費が残るため、controller が高さを公開 → 親が FAB インセットに使う形なら移譲可能。M-1 時点では過剰設計を避け親残置とした（Simplicity First）。
 
 **その他**: 別ファイルの `extension MapTabView`（`MapTabView+PinResolution`）へ移した競合解決メソッドと `applePoiZoomGateRadiusMeters` は、`private`（Swift ではファイルスコープ）だとアクセス不能になるため internal 化。モジュール外へは出ず公開 API 化のリスクなし。
+
+### 2026-07-24: MapTabView 分割リファクタ Phase 3（M-3）— `@State` 保持クラスのコールバック事後配線
+
+- 領域: iOS のみ（KMP 変更なし）
+- 関連: `MapTabView` 分割リファクタ（tasks.md M-3）。検索 + エリア検索を `@MainActor @Observable final class MapSearchController` へ隔離。MapTabView.swift 1132→968 行
+
+**論点**: `MapSearchController` は検索/エリア検索の data state とビジネスロジックを持つが、SwiftUI 固有の 2 要素は View に残し、コールバックで分離した:
+- camera 移動（`fitCameraToSearchResults` / `selectResult` 内）→ `onRequestCamera: (MKCoordinateRegion) -> Void`。`withAnimation { cameraPosition = .region(region) }` は **View 側クロージャで実行**し、controller は `onRequestCamera(region)` を呼ぶだけ。
+- キーボード解除（`clearSelection` / `selectResult` 内の `isSearchFieldFocused = false`）→ `onDismissKeyboard: () -> Void`。`@FocusState` は View 固有で controller に移せないため。
+
+**配線タイミングの制約（Swift 言語仕様）**: `MapTabView` の `@State private var searchController` の**初期値式からは `self`（＝兄弟の `cameraPosition`/`isSearchFieldFocused`）を参照できない**（格納プロパティ初期化式は他プロパティに触れない）。そのため controller はプロパティ宣言時に **no-op クロージャで仮初期化**し、既存の `.task`（`searchBridge` を初回のみ生成する慣習）内で `configureCallbacks(onRequestCamera:onDismissKeyboard:)` を呼んで本物のクロージャへ差し替える。`.task` は初回マウント時 1 度だけ実行され、その時点で `self` は永続ストレージに結び付いているため安全（カスタム `init` で `_cameraPosition.projectedValue` を使う案は `@State` 確立タイミングの裏取りが困難でリスク大と判断し不採用）。
+
+**appState 非依存**: `performSearch(center:)` / `performAreaSearch(center:)` / `handleCompletion(mapBridge:currentCenter:)` / `clearSelection(mapBridge:)` は `appState`/`mapSearchCenter` を引数で受け、controller を `appState` 非依存に保つ。`TextField` 双方向バインドは `searchBarView` 内の `@Bindable var searchController = searchController` ローカル宣言で対応（他箇所は読み書きのみで `@Bindable` 不要）。
+
+**detent 残置**: 検索シート detent 状態・高さ計算は M-1 の申し送り（FAB インセットとの二重消費）を踏襲し View 残置。controller へは移さなかった。

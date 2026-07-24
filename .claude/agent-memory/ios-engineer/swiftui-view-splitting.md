@@ -26,6 +26,17 @@ metadata:
 - **複数箇所（別ファイルの extension を含む）が参照する `static let` しきい値**をサービスクラスへ集約するときは、参照元のシンボルを `Self.xxx` → `NewClass.xxx` に張り替えるだけで済む（アクセスレベルは `static let`（デフォルト internal）のままでよく、`private static let` にする必要はない — モジュール内 extension から見えれば足りる）。「なぜこのクラスに定義したか」（例: 2 種のピンが同じズームゲートを共用する設計意図）をコメントで明記しておくと、後から見て発見しにくくならない。
 - dedup（既存座標との近接除外）のような「他の状態（bridge 由来の座標一覧）に依存する算出」は、サービスクラスのメソッドに **算出済みの引数（`[CLLocationCoordinate2D]`）として渡す**設計にすると、サービスクラスが View 側の bridge 型に依存せずに済む（`swiftui-view-splitting.md` の「down-flow」原則をサービスクラス分離にも適用できる）。
 
+## `@State` で保持する `@Observable` クラスがコールバックで兄弟 `@State`/`@FocusState` を必要とするとき、初期値式に `self` は使えない（2026-07-24、MapTabView M-3 分割で確認）
+
+- `MapSearchController(onRequestCamera: (MKCoordinateRegion) -> Void, onDismissKeyboard: () -> Void)` のように、コントローラのコールバックが View 側の `cameraPosition`（`@State`）や `isSearchFieldFocused`（`@FocusState`）を必要とする設計にすると、`@State private var searchController = MapSearchController(onRequestCamera: { region in cameraPosition = ... }, ...)` という**プロパティ宣言の初期値式は書けない**（Swift は「他の格納プロパティの初期値式」から `self` を参照させない。カスタム `init` で `_cameraPosition.projectedValue` を使う手もあるが、@State の永続ストレージがビューの初回マウントで初めて確立される仕様と絡み合い、挙動の裏取りが困難でリスクが高い）。
+- **採用したパターン**: プロパティ宣言では no-op クロージャで仮初期化し（`{ _ in }` / `{}`）、既存の「`.task` で 1 度だけ本生成する」慣習（`searchBridge` 等）に相乗りして、同じ `.task` 内で `searchController.configureCallbacks(onRequestCamera:onDismissKeyboard:)` を呼び本物のクロージャ（`self.cameraPosition` / `self.isSearchFieldFocused` を捕捉）に差し替える。`.task` はそのビュー識度の初回マウント時にのみ実行され、その時点の `self` は正しく永続ストレージへ結び付いた `Binding` 相当の参照を持つため安全（同一ファイル内の「初回のみ」ガード = `searchController.searchBridge == nil` を流用）。
+- コントローラ側のクロージャ格納プロパティは `let` ではなく `private var` にし、`init` と `configureCallbacks` の 2 箇所から代入できるようにする。
+
+## `TextField` 等の双方向バインドで `@State` 内の `@Observable` クラスのメンバーへ `$` バインドしたいとき
+
+- `@State private var controller = SomeObservableClass()` を保持する View で、子孫の値（`controller.query` 等）に `TextField(text:)` の `Binding<String>` を渡したい場合、`$controller` は「クラス全体への `Binding<SomeObservableClass>`」にしかならず、`$controller.query` のようなメンバー単位の `Binding` は得られない。**その computed property / 関数のスコープ内で `@Bindable var controller = controller` をローカル宣言**すると、以降の `$controller.query` がメンバー単位の `Binding<String>` として機能する（SwiftUI + Observation の標準パターン）。単純な読み取り・代入（`controller.query = ""` 等）や `.onChange(of: controller.query)` には `@Bindable` は不要（`Binding` を作るときだけ必要）。
+- 素の `var searchBarView: some View { ... }`（`@ViewBuilder` 明示なし）の中に `@Bindable var x = ...` というローカル宣言文を足すと、実装が「単一式の暗黙 return」から複数文になるため `return` を明示する必要がある（`@ViewBuilder private func mapContent(...)` のように既に `@ViewBuilder` 付きの関数ならこの制約はない）。
+
 ## 参照: [ui-components-patterns.md](ui-components-patterns.md) の「排他的な複数種シート」パターンとは独立の論点
 
 上記は「1 つの View を複数の小さい View 構造体に割る」ときの状態設計の話で、`ui-components-patterns.md` の enum item シートパターン（表示状態の排他制御）とは別の関心事。

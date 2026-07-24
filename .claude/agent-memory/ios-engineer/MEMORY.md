@@ -9,9 +9,10 @@
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意
 - [AdMob アダプティブバナー実装パターン](admob-native-ads.md) — ネイティブ→バナー再編の経緯、SPM モジュール名の罠、BannerView/AdSize API、UMP をコードから呼ばない理由、`.task` 発火の罠と GeometryReader 幅計測
 - [ImageRenderer 共有カード画像生成パターン](image-renderer-share-card.md) — 固定フレーム+clipped、scaleEffect+frame での固定高さコンポーネント圧縮、可変レイアウトの高さ配分計算、PreviewSamples 4 種の使い回し
-- [SwiftUI View 分割の落とし穴](swiftui-view-splitting.md) — 別ファイル extension への private 移動でアクセス不能になる問題、複数消費者が要る算出値は親に残し子へ down-flow で渡す設計判断、fetch ロジックを `@Observable` サービスへ隔離（クラス全体 `@MainActor`・共有 static しきい値・dedup は引数渡し）
+- [SwiftUI View 分割の落とし穴](swiftui-view-splitting.md) — 別ファイル extension への private 移動でアクセス不能になる問題、複数消費者が要る算出値は親に残し子へ down-flow で渡す設計判断、fetch ロジックを `@Observable` サービスへ隔離（クラス全体 `@MainActor`・共有 static しきい値・dedup は引数渡し）、`@State` 保持クラスのコールバックが兄弟 `@State`/`@FocusState` を要る場合は `.task` で事後配線、`@Bindable` ローカル宣言でメンバー単位 Binding
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 
 - `iosApp` の `IPHONEOS_DEPLOYMENT_TARGET` は 26.0（`API_AVAILABLE(ios(26.0))` は可用性チェック不要）。詳細は [location-mapkit.md](location-mapkit.md) の `MKMapItem.location` 項目参照
 - `iosApp.xcodeproj` は `PBXFileSystemSynchronizedRootGroup` 採用済み。フォルダ配下に新規 `.swift` を作成するだけで自動的にターゲットに含まれる（pbxproj を手編集する必要なし）。大型ファイル分割リファクタ（MapTabView 等）で新ファイルを切り出すときもこれで足りる
+- Edit ツールで全角括弧（（）等）を含む複数行ブロックを `old_string` に含めると、一見同じ文字に見えても "String to replace not found" で失敗することがある（2026-07-24 確認、原因未特定）。同じテキストでも全角括弧を含まない周辺行だけを対象にした小さい `old_string` に分割するか、`python3` で `open(path, encoding='utf-8')` して行番号ベースの `del lines[a:b]` / 置換を行うと確実（本タスクの MapTabView State 削除で多用）

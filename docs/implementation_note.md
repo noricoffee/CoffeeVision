@@ -1136,3 +1136,23 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **判断**: 開発中の過剰トラフィックによる **Google 側のデモ広告抑制**が原因。端末/IP 単位で数日〜2週間ほど続き自然回復する既知挙動。**コード修正は不要**。本番は実 App ID + 実広告ユニット（`Secrets.xcconfig`、リリース前にユーザーが発行）で配信するため影響しない。
 
 **再発時の初動**: 設定 → デバッグ → 「Ad Inspector を開く」（シミュレータは自動テストデバイス登録）で `No fill` を確認できればコード側は無罪。実機で開くにはコンソールの `testDeviceIdentifiers` 登録が別途必要。
+
+### 2026-07-24: マップ「好み一致」/「保存済み」チップを一覧パネルに一本化（操作モデル改修）
+
+- 領域: iOS のみ（KMP 変更なし）
+- 関連: `iosApp/iosApp/Features/Map/MapTabView.swift`。2026-07-16「好み一致チップのタップ対応」/ フェーズ 15-A・16「保存済み強調」の操作モデルを差し替え
+
+**背景**: ユーザー報告「好み一致タグはタップで一覧が出てマップ強調されるが、再度リストを出すには一度 OFF にしてから再タップが必要で直感的でない」。旧実装はチップが「強調（他ピン減光）」と「一覧ハーフシート」を兼務し、内部で 2 状態（`*EmphasisActive` + `isPresenting*Sheet`）を持っていた。ON 中の再タップは強調 OFF のみで一覧を再表示せず、一覧を下スワイプで閉じた後（強調は ON のまま残存）に一覧へ戻るのに 2 タップ要していた。
+
+**確定した設計（AskUserQuestion で 2 点確定）— 好み一致・保存済み両方に適用**:
+- **チップ = 一覧パネルを開くアクションに一本化**。タップは常に一覧シートを開く（既に開いていれば no-op、トグル OFF はしない）。1 タップで必ず一覧が再表示される。
+- **マップ強調はシート表示中だけ ON に連動**。シートを下スワイプで閉じる＝強調も自動 OFF。「地図全体を強調したまま眺める（シートなし）」状態は廃止（好み一致ピンは元々ピンク♥で判別可能なため、強調はシート ↔ マップの相関用途に限定してよいと判断）。
+- チップの `isOn`（ハイライト）＝該当シート表示中。好み一致 / 保存済みは排他。
+
+**実装判断 / トレードオフ**:
+- **強調 State を独立に持たず、単一 item state に集約**。`recommendedEmphasisActive` / `savedEmphasisActive` / `isPresenting*Sheet` の 4 `@State` を廃し、`@State activeCafeListSheet: CafeListSheetKind?`（`.recommended` / `.saved`）1 本へ。強調は `activeCafeListSheet == .recommended/.saved` の **computed property** として同名で残し、多数の opacity / size 計算箇所を無改修に保った（Minimal Impact）。
+- **2 本の `.sheet(isPresented:)` を 1 本の `.sheet(item:)` に統合**したのが肝。(1) 排他性が構造的に保証され、medium detent でチップが見える状態からの相互切り替えでも二重表示バグが起きない。(2) スワイプ dismiss 時に item が自動で nil に戻る＝「シートを閉じる＝強調 OFF」を SwiftUI 標準機能でそのまま実現（追加ガード不要）。(3) 同一 item の再代入は再アニメーションなし＝「既に開いていれば no-op」も標準挙動で満たす。
+- 好み一致ピンタップの推薦理由シート（`selectedRecommendedCafe` / `RecommendationMatchSheet`）は対象外・無変更（別系統の独立 `.sheet`）。
+- **状態を KMP UIState に置かない方針は不変**（[implementation_note 2026-07-16 / フェーズ 15-A 参照]）。強調はドメインロジックゼロの純プレゼンテーションで、必要な placeId 集合は `recommendedCafes` / `savedCafes`（UIState）に既にある。旧 `@State savedEmphasisActive` の記述は本改修で computed property 化（Swift ローカルである点は不変）。
+
+**影響範囲**: `MapTabView.swift` のみ。ビルド成功確認済み（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 不使用）。UI 挙動（1 タップ再表示 / 下スワイプで強調 OFF / 両チップ排他 / medium detent 併存 / 選択 push 時のクローズ）はシミュレータ実地確認が必要。

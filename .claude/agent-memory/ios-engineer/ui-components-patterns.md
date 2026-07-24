@@ -57,3 +57,9 @@ metadata:
 - `ShareLink` はボタン自体をタップした瞬間にしか share sheet を出せない（値を先に非同期生成してから自動でシートを開く API はない）。「タップでエクスポート実行 → 完了したら共有」の要件は、`Button`（idle）→ `ProgressView`（exporting）→ `ShareLink(item:)`（ready）と同じ `Section` 内で `switch` して差し替える 2 段階 UI にするのが素直（`SettingsView.exportSection` 参照）。エラーは別途 `@State private var exportError: String?` + `.alert` で拾う。
 - 一時ファイル書き出しは `FileManager.default.temporaryDirectory.appendingPathComponent(name)` + `String.write(to:atomically:encoding:)` で十分（専用ストア不要）。
 - suspend な UseCase 呼び出しを View 直下の `Task` から呼ぶ既存パターンは `Task { @MainActor in ... }` で統一されている（`AccountView` 参照）。
+
+## 排他的な複数種シート + 「表示中だけ連動する強調状態」は `enum: Identifiable` の単一 `@State item` + `.sheet(item:)` に一本化する（2026-07-24、MapTabView 好み一致/保存済みチップ操作モデル改修で確認）
+
+- 「チップ A/B どちらか一方だけ開ける一覧シート」+「シート表示中だけマップ側の強調（他ピン減光）を ON にする」要件は、`isPresentingA`/`isPresentingB`/`emphasisA`/`emphasisB` の 4 `@State` bool で個別管理すると、閉じ忘れ（下スワイプ dismiss 時に強調 bool だけ残る）や排他性の手動維持（相手を false にし忘れる）が起きやすい。`enum Kind: Identifiable { case a, case b; var id: Self { self } }` + `@State var activeSheet: Kind?` + `.sheet(item: $activeSheet) { kind in switch kind { ... } }` に一本化すると、①排他性（同時に 2 種は開けない）と②下スワイプ dismiss 時の自動リセット（`activeSheet` が自動的に `nil` に戻る）の両方が構造的に保証される。
+- 強調状態を参照する既存の opacity / size 計算箇所（`recommendedEmphasisActive` 等）を大量に触りたくない場合は、削除した `@State var xEmphasisActive: Bool` と**同名の computed property**（`activeSheet == .x`）を追加すれば、呼び出し側は無改修で済む。
+- チップのタップアクションは「常にそのシートを開く」（`activeSheet = .x`、既に開いていれば SwiftUI 側が no-op）に一本化でき、旧来の「ON→タップで強調解除のみ・一覧は再表示されない」トグル分岐（if/else）が丸ごと不要になる。

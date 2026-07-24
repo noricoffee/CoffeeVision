@@ -252,23 +252,28 @@ struct MapTabView: View {
     /// 好み一致ピンタップ時に推薦理由シートで表示する対象。nil = シート非表示。
     @State private var selectedRecommendedCafe: RecommendedCafe? = nil
 
-    // MARK: - 「保存済み」関連 State（フェーズ 15-A / 16）
+    // MARK: - 「好み一致」/「保存済み」一覧シート State（2026-07-24、操作モデル改修）
 
-    /// 「保存済み」チップの強調状態。KMP に対応する状態を持たない純プレゼンテーション状態のため
-    /// View 側 `@State` のみで管理する（保存済みピン自体は常時表示。強調中は他ピンを減光する）。
-    @State private var savedEmphasisActive: Bool = false
+    /// マップ上に開いているカフェ一覧シートの種別。nil = どちらも非表示。
+    /// 好み一致 / 保存済みは排他（同時には開かない）。シートの表示＝該当チップの強調 ON に連動する。
+    private enum CafeListSheetKind: Identifiable {
+        case recommended
+        case saved
+        var id: Self { self }
+    }
 
-    /// 「行きたい店」一覧ハーフシートの表示状態。
-    @State private var isPresentingSavedCafesSheet = false
+    /// チップは「一覧シートを開くアクション」に一本化されており、マップ強調（他ピン減光）は
+    /// シート表示中かどうかに連動する。`.sheet(item:)` を使うことで、下スワイプで閉じたときに
+    /// 自動的に nil に戻り強調も解除される（排他性・強調解除ともに構造的に保証される）。
+    @State private var activeCafeListSheet: CafeListSheetKind? = nil
 
-    // MARK: - 「好み一致」関連 State（2026-07-16、チップのタップ対応）
+    /// 「好み一致」強調中か（= 好み一致シート表示中）。既存の opacity / size 計算箇所からの
+    /// 参照名を変えないため、computed property として残す。
+    private var recommendedEmphasisActive: Bool { activeCafeListSheet == .recommended }
 
-    /// 「好み一致」チップの強調状態。「保存済み」と同じ操作体系（タップで強調 + 一覧シート、
-    /// 再タップで強調解除のみ）。「保存済み」強調とは排他（両方同時に ON にはしない）。
-    @State private var recommendedEmphasisActive: Bool = false
-
-    /// 「好み一致」一覧ハーフシートの表示状態。
-    @State private var isPresentingRecommendedCafesSheet = false
+    /// 「保存済み」強調中か（= 保存済みシート表示中）。既存の opacity / size 計算箇所からの
+    /// 参照名を変えないため、computed property として残す。
+    private var savedEmphasisActive: Bool { activeCafeListSheet == .saved }
 
     // MARK: - 検索関連 State
 
@@ -403,37 +408,42 @@ struct MapTabView: View {
                 if let bridge = appState.mapBridge {
                     mapContent(bridge: bridge)
                         .toolbar(.hidden, for: .navigationBar)
-                        .sheet(isPresented: $isPresentingSavedCafesSheet) {
-                            SavedCafeListSheet(
-                                savedCafes: bridge.savedCafes,
-                                recordedPlaceIds: bridge.recordedPlaceIds,
-                                onSelect: { savedCafe in
-                                    isPresentingSavedCafesSheet = false
-                                    navigationPath.append(
-                                        CafeDetailRoute(
-                                            placeId: savedCafe.cafe.placeId,
-                                            initialCafe: savedCafe.cafe
+                        // 「好み一致」/「保存済み」一覧シート。1 本の `.sheet(item:)` に統合することで
+                        // 排他性を構造的に保証し、下スワイプで閉じたときに `activeCafeListSheet` が
+                        // 自動的に nil へ戻る（→ 強調も自動 OFF になる。2026-07-24 操作モデル改修）。
+                        .sheet(item: $activeCafeListSheet) { kind in
+                            switch kind {
+                            case .recommended:
+                                RecommendedCafeListSheet(
+                                    recommendedCafes: bridge.recommendedCafes,
+                                    onSelect: { recommended in
+                                        activeCafeListSheet = nil
+                                        navigationPath.append(
+                                            CafeDetailRoute(
+                                                placeId: recommended.cafe.placeId,
+                                                initialCafe: recommended.cafe
+                                            )
                                         )
-                                    )
-                                },
-                                onRemove: { placeId in
-                                    bridge.onSavedCafeRemoved(placeId: placeId)
-                                }
-                            )
-                        }
-                        .sheet(isPresented: $isPresentingRecommendedCafesSheet) {
-                            RecommendedCafeListSheet(
-                                recommendedCafes: bridge.recommendedCafes,
-                                onSelect: { recommended in
-                                    isPresentingRecommendedCafesSheet = false
-                                    navigationPath.append(
-                                        CafeDetailRoute(
-                                            placeId: recommended.cafe.placeId,
-                                            initialCafe: recommended.cafe
+                                    }
+                                )
+                            case .saved:
+                                SavedCafeListSheet(
+                                    savedCafes: bridge.savedCafes,
+                                    recordedPlaceIds: bridge.recordedPlaceIds,
+                                    onSelect: { savedCafe in
+                                        activeCafeListSheet = nil
+                                        navigationPath.append(
+                                            CafeDetailRoute(
+                                                placeId: savedCafe.cafe.placeId,
+                                                initialCafe: savedCafe.cafe
+                                            )
                                         )
-                                    )
-                                }
-                            )
+                                    },
+                                    onRemove: { placeId in
+                                        bridge.onSavedCafeRemoved(placeId: placeId)
+                                    }
+                                )
+                            }
                         }
                         .sheet(isPresented: $isPresentingTasteSearch) {
                             TasteSearchSheet { keywords in
@@ -508,11 +518,11 @@ struct MapTabView: View {
                             appleNearbyCafes.removeAll { $0.id == tapped.id }
                             lastTappedApplePoi = nil
                         }
-                        // 好み一致カフェが 0 件になった（チップ消滅）ら強調 / シートをリセットする。
+                        // 好み一致カフェが 0 件になった（チップ消滅）ら開いている一覧シートを閉じる
+                        // （強調は `activeCafeListSheet` に連動して自動的に OFF になる）。
                         .onChange(of: bridge.recommendedCafes.count) { _, count in
-                            if count == 0 {
-                                recommendedEmphasisActive = false
-                                isPresentingRecommendedCafesSheet = false
+                            if count == 0, activeCafeListSheet == .recommended {
+                                activeCafeListSheet = nil
                             }
                         }
                         // 検索完了（テキスト検索 / エリア検索の両方）を検知して全件ピン反映する
@@ -1498,9 +1508,10 @@ struct MapTabView: View {
                     bridge.onShowVisitedToggled(!bridge.showVisited)
                 }
 
-                // 「好み一致」チップ（1 件以上あるときのみ表示。2026-07-16 タップ対応）
-                // 「保存済み」と同じ操作体系: タップで強調 ON + 一覧シート表示。強調中の再タップは強調解除のみ。
-                // 「保存済み」強調とは排他のため、ON にする際は必ず相手側を OFF にする。
+                // 「好み一致」チップ（1 件以上あるときのみ表示。2026-07-24 操作モデル改修）
+                // タップで常に一覧シートを開く（既に開いていれば no-op）。マップ強調はシート表示中
+                // だけ連動して ON になり、下スワイプで閉じると自動的に OFF になる。「保存済み」との
+                // 排他性は `activeCafeListSheet`（単一 item state）が構造的に保証する。
                 if !bridge.recommendedCafes.isEmpty {
                     TagChip(
                         label: String(localized: "好み一致"),
@@ -1509,18 +1520,13 @@ struct MapTabView: View {
                         count: bridge.recommendedCafes.count,
                         tint: .pink
                     ) {
-                        if recommendedEmphasisActive {
-                            recommendedEmphasisActive = false
-                        } else {
-                            recommendedEmphasisActive = true
-                            savedEmphasisActive = false
-                            isPresentingRecommendedCafesSheet = true
-                        }
+                        activeCafeListSheet = .recommended
                     }
                 }
 
-                // 「保存済み」チップ（1 件以上あるときのみ表示。フェーズ 15-A / 16）
-                // タップで強調 ON + 一覧シート表示。強調中の再タップは強調解除のみ。
+                // 「保存済み」チップ（1 件以上あるときのみ表示。2026-07-24 操作モデル改修）
+                // タップで常に一覧シートを開く（既に開いていれば no-op）。マップ強調はシート表示中
+                // だけ連動して ON になり、下スワイプで閉じると自動的に OFF になる。
                 if !bridge.savedCafes.isEmpty {
                     TagChip(
                         label: String(localized: "保存済み"),
@@ -1528,13 +1534,7 @@ struct MapTabView: View {
                         isOn: savedEmphasisActive,
                         count: bridge.savedCafes.count
                     ) {
-                        if savedEmphasisActive {
-                            savedEmphasisActive = false
-                        } else {
-                            savedEmphasisActive = true
-                            recommendedEmphasisActive = false
-                            isPresentingSavedCafesSheet = true
-                        }
+                        activeCafeListSheet = .saved
                     }
                 }
 

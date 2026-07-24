@@ -1,22 +1,11 @@
 import SwiftUI
 import MapKit
 import CoreLocation
-import GoogleMobileAds
 import SharedLogic
 
-// MARK: - ApplePoiCafe
-
-/// Apple 検索（`MKLocalPointsOfInterestRequest`）由来の周辺カフェ。
-///
-/// まだ記録も保存もしていない「周辺の店」を示す低強調ピンの表示専用モデル。
-/// Google `placeId` を持たないため座標文字列を `id` として使う（フェーズ 17）。
-private struct ApplePoiCafe: Identifiable {
-    let id: String
-    let name: String
-    let coordinate: CLLocationCoordinate2D
-}
-
 // MARK: - MapTabView
+
+// `ApplePoiCafe` はピン UI（`MapPins.swift`）と同居させるため同ファイルへ移動済み（M-1）。
 
 /// マップタブのルート画面。
 ///
@@ -108,11 +97,9 @@ struct MapTabView: View {
 
     // MARK: - 検索結果 下部ドラッグシート関連 State（2026-07-22 マップ検索結果刷新）
 
-    /// 下部ドラッグシートの 2 detent。
-    private enum SearchSheetDetent {
-        case peek
-        case expanded
-    }
+    /// `SearchSheetDetent` は `MapSearchResultsSheet.swift` に定義（M-1）。
+    /// detent 状態・サイズ計算は現在地 FAB のインセット計算（`searchSheetFABBottomInset`）でも
+    /// 参照するため、あえて `MapSearchResultsSheet` 側へ移さずここで保持する。
 
     /// 現在の detent（peek / expanded）。
     @State private var searchSheetDetent: SearchSheetDetent = .peek
@@ -122,12 +109,6 @@ struct MapTabView: View {
 
     /// `mapContent` の ZStack 全体のサイズ（expanded detent の高さ算出に使う）。
     @State private var mapContainerSize: CGSize = .zero
-
-    /// peek detent の固定高さ。
-    private static let searchSheetPeekHeight: CGFloat = 180
-
-    /// expanded detent の高さ比率（`mapContainerSize.height` に対して）。
-    private static let searchSheetExpandedFraction: CGFloat = 0.6
 
     // MARK: - 「このエリアを検索」関連 State
 
@@ -155,7 +136,10 @@ struct MapTabView: View {
     @State private var appleFetchTask: Task<Void, Never>? = nil
 
     /// ズームゲートしきい値（この可視半径[m]を超えたら fetch せず既存ピンをクリアする）。
-    private static let applePoiZoomGateRadiusMeters: Double = 3000
+    ///
+    /// `MapTabView+PinResolution.swift`（別ファイルの extension）からも参照するため internal
+    /// のまま維持する（M-1、`private` は同一ファイル内の extension にしか見えないため）。
+    static let applePoiZoomGateRadiusMeters: Double = 3000
 
     /// 直近でタップされた Apple 検索由来ピン。POI ルックアップが「該当なし」だった際に
     /// ネガティブキャッシュへ登録する対象を特定するために保持する（周辺カフェピンのノイズ除去、2026-07-13）。
@@ -183,18 +167,21 @@ struct MapTabView: View {
 
     /// expanded detent の高さ（`mapContainerSize` 確定前は peek と同値にフォールバック）。
     private var searchSheetExpandedHeight: CGFloat {
-        max(Self.searchSheetPeekHeight, mapContainerSize.height * Self.searchSheetExpandedFraction)
+        max(
+            MapSearchResultsSheet.peekHeight,
+            mapContainerSize.height * MapSearchResultsSheet.expandedFraction
+        )
     }
 
     /// 現在の detent に対応する基準高さ（ドラッグ追従前の値）。
     private var searchSheetBaseHeight: CGFloat {
-        searchSheetDetent == .expanded ? searchSheetExpandedHeight : Self.searchSheetPeekHeight
+        searchSheetDetent == .expanded ? searchSheetExpandedHeight : MapSearchResultsSheet.peekHeight
     }
 
     /// ドラッグ追従を反映した実際の表示高さ（peek〜expanded にクランプ）。
     private var searchSheetCurrentHeight: CGFloat {
         let target = searchSheetBaseHeight - searchSheetDragTranslation
-        return min(max(target, Self.searchSheetPeekHeight), searchSheetExpandedHeight)
+        return min(max(target, MapSearchResultsSheet.peekHeight), searchSheetExpandedHeight)
     }
 
     /// 結果シートの表示条件: 検索モード中・カフェ未選択・（ローディング中 or 結果あり）。
@@ -426,7 +413,7 @@ struct MapTabView: View {
                                 longitude: cafe.coordinate.longitude
                             )
                         } label: {
-                            appleNearbyCafePin(cafe: cafe)
+                            AppleNearbyCafePin(cafe: cafe)
                         }
                         .buttonStyle(.plain)
                         .opacity(appleNearbyPinOpacity())
@@ -463,7 +450,7 @@ struct MapTabView: View {
                                         Button {
                                             selectedRecommendedCafe = recommended
                                         } label: {
-                                            recommendedCafePin(visitedCafe: visitedCafe)
+                                            RecommendedCafePin(visitedCafe: visitedCafe)
                                         }
                                         .buttonStyle(.plain)
                                     } else {
@@ -474,7 +461,7 @@ struct MapTabView: View {
                                                 initialCafe: visitedCafe.cafe
                                             )
                                         ) {
-                                            visitedCafePin(visitedCafe: visitedCafe)
+                                            VisitedCafePin(visitedCafe: visitedCafe)
                                         }
                                         .buttonStyle(.plain)
                                     }
@@ -501,7 +488,7 @@ struct MapTabView: View {
                                     initialCafe: savedCafe.cafe
                                 )
                             ) {
-                                savedCafePin(savedCafe: savedCafe)
+                                SavedCafePin(savedCafe: savedCafe, emphasized: savedEmphasisActive)
                             }
                             .buttonStyle(.plain)
                             // 「好み一致」チップ強調中は保存済みピンも減光する（保存済みは推薦対象外のため）。
@@ -525,7 +512,7 @@ struct MapTabView: View {
                                 Button {
                                     selectSearchResult(cafe)
                                 } label: {
-                                    searchResultPin(cafe: cafe)
+                                    SearchResultPin(cafe: cafe, isHighlighted: cafe.placeId == highlightedSearchPlaceId)
                                 }
                                 .buttonStyle(.plain)
                                 .opacity((savedEmphasisActive || recommendedEmphasisActive) ? 0.4 : 1.0)
@@ -552,7 +539,7 @@ struct MapTabView: View {
                                 initialCafe: minimalCafe(from: curated)
                             )
                         ) {
-                            curatedCafePin(cafe: curated)
+                            CuratedCafePin(cafe: curated)
                         }
                         .buttonStyle(.plain)
                         // 「好み一致」/「保存済み」チップ強調中はおすすめピンも減光する
@@ -604,7 +591,32 @@ struct MapTabView: View {
             }
             .safeAreaInset(edge: .bottom) {
                 if let cafe = selectedSearchCafe {
-                    cafeSelectionCard(cafe, bridge: bridge)
+                    CafeSelectionCard(
+                        cafe: cafe,
+                        bridge: bridge,
+                        appState: appState,
+                        onClose: {
+                            // ピン集合（全検索結果）は維持し、カードの選択のみ解除する。
+                            // 検索結果からの選択時は結果一覧の下部ドラッグシートへ戻す
+                            // （「一覧に戻る」導線。2026-07-22 マップ検索結果刷新）。
+                            selectedSearchCafe = nil
+                            highlightedSearchPlaceId = nil
+                            if searchBridge != nil {
+                                showingSearchResults = true
+                            }
+                        },
+                        onOpenDetail: { cafe in
+                            navigationPath.append(
+                                CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
+                            )
+                            // ピン集合（全検索結果）は維持し、カードの選択のみ解除する
+                            selectedSearchCafe = nil
+                            highlightedSearchPlaceId = nil
+                        },
+                        onToggleSave: { cafe in
+                            bridge.onCafeSaveToggled(cafe: cafe)
+                        }
+                    )
                 }
             }
 
@@ -625,7 +637,13 @@ struct MapTabView: View {
                         .transition(.move(edge: .top).combined(with: .opacity))
                     }
                 } else {
-                    filterChipRow(bridge: bridge)
+                    MapFilterChipRow(
+                        bridge: bridge,
+                        recommendedEmphasisActive: recommendedEmphasisActive,
+                        savedEmphasisActive: savedEmphasisActive,
+                        onOpenRecommended: { activeCafeListSheet = .recommended },
+                        onOpenSaved: { activeCafeListSheet = .saved }
+                    )
                 }
             }
             .padding(.horizontal, 16)
@@ -651,180 +669,26 @@ struct MapTabView: View {
         }
     }
 
-    // MARK: - 検索結果 下部ドラッグシート（2026-07-22 マップ検索結果刷新）
+    // MARK: - 検索結果 下部ドラッグシート（2026-07-22 マップ検索結果刷新。実装は `MapSearchResultsSheet.swift`）
 
     /// マップ主体 + 下部ドラッグシートで検索結果一覧を提示する（Apple/Google マップ風）。
     ///
-    /// - native `.sheet` は使わない（検索モード中は ✨ `TasteSearchSheet` が併存し得るため、
-    ///   同一 View に 2 枚目の `.sheet` を出すと競合する。詳細は ui-ux-guidelines.md）
-    /// - 表示条件は `isShowingSearchResultsSheet`（検索モード中・カフェ未選択・ローディング中 or 結果あり）
-    /// - 2 detent（peek / expanded）を `DragGesture` + スナップで実装。ドラッグはハンドル行のみに
-    ///   付け、リスト本体の `ScrollView` とジェスチャーが競合しないようにする
-    /// - インラインアダプティブバナー（`InlineBannerAdView`、3 件目の後）は既定の peek detent では
-    ///   `LazyVStack` の fold 下に隠れて実体化されず、`.task` によるロードトリガーが発火しない
-    ///   （2026-07-22 回帰で確認）。そのため `CafeDetailView.cafeDetailList` と同じパターンで、
-    ///   常に実体化されるルート `VStack` 自身の `.background(GeometryReader)` から
-    ///   `searchAdLoader.load(...)` を先読みトリガーする（`InlineBannerAdView` 側の `.task` は
-    ///   そのまま残し、行が実体化された瞬間に `isLoaded` 済みなら即描画される）
+    /// detent 状態・サイズ計算（`searchSheetDetent` / `searchSheetDragTranslation` /
+    /// `searchSheetCurrentHeight` 等）は現在地 FAB のインセット計算（`searchSheetFABBottomInset`）
+    /// でも参照するため本 View 側に残し、`MapSearchResultsSheet` へは算出済みの値を渡す（M-1）。
     @ViewBuilder
     private var searchResultsBottomSheet: some View {
         if let sb = searchBridge, isShowingSearchResultsSheet {
-            VStack(spacing: 0) {
-                searchSheetHandleBar(resultCount: sb.results.count)
-
-                Divider()
-
-                ScrollView {
-                    LazyVStack(spacing: 0) {
-                        if sb.isLoading {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                Spacer()
-                            }
-                            .padding(.vertical, 24)
-                        } else {
-                            ForEach(Array(sb.results.enumerated()), id: \.element.placeId) { index, cafe in
-                                searchResultRow(cafe: cafe, isLast: cafe.placeId == sb.results.last?.placeId)
-                                // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
-                                // 到達しないため非表示。requirements.md §11-2）。
-                                if index == 2 {
-                                    InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 8)
-                                    if cafe.placeId != sb.results.last?.placeId {
-                                        Divider().padding(.leading, 52)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-            .frame(height: searchSheetCurrentHeight)
-            .frame(maxWidth: .infinity)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-            .background(
-                // 結果 3 件以上になった時点で、広告スロットが fold 下でも先読みロードする
-                // （`InlineBannerAdView` 自身の `.task` は `LazyVStack` の遅延実体化に依存するため、
-                // peek detent では発火しない。ルート VStack は常に実体化されるため確実に発火する）。
-                GeometryReader { proxy in
-                    Color.clear
-                        .task(id: "\(Int(proxy.size.width))-\(sb.results.count >= 3)") {
-                            guard sb.results.count >= 3 else { return }
-                            let width = proxy.size.width - 32
-                            // レイアウト測定の過渡状態（ゴミ幅・負値）でリクエストしない
-                            // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。
-                            guard width >= BannerAdLoader.minimumRequestableWidth else { return }
-                            searchAdLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: 100))
-                        }
-                }
+            MapSearchResultsSheet(
+                sb: sb,
+                searchAdLoader: searchAdLoader,
+                currentHeight: searchSheetCurrentHeight,
+                baseHeight: searchSheetBaseHeight,
+                expandedHeight: searchSheetExpandedHeight,
+                detent: $searchSheetDetent,
+                dragTranslation: $searchSheetDragTranslation,
+                onSelectCafe: { cafe in selectSearchResult(cafe) }
             )
-            .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
-            .transition(.move(edge: .bottom).combined(with: .opacity))
-        }
-    }
-
-    /// 結果シートのドラッグハンドル行。
-    ///
-    /// - タップで peek ⇄ expanded をトグルする（ドラッグ操作が難しい VoiceOver 利用者向けの代替導線。
-    ///   VoiceOver 有効時はダブルタップと `.accessibilityAction` の双方から toggle できる）
-    /// - ドラッグは本行にのみ付け、下部 `ScrollView` の縦スクロールと競合させない
-    /// - `Button` にはしない: タップ判定用の `.simultaneousGesture(DragGesture())` と実ドラッグが
-    ///   競合しやすく、また `.local` 座標系のドラッグは本行自身がリサイズで上下に動くため高さが
-    ///   自己発振する原因になっていた（2026-07-22 修正）。`onTapGesture` + `.gesture(DragGesture)`
-    ///   （`minimumDistance` でタップ/ドラッグを分離）+ `.global` 座標系に置き換える。
-    private func searchSheetHandleBar(resultCount: Int) -> some View {
-        VStack(spacing: 6) {
-            Capsule()
-                .fill(Color.secondary)
-                .frame(width: 36, height: 5)
-            HStack {
-                Text(String(localized: "\(resultCount)件"))
-                    .font(.subheadline.weight(.semibold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-        }
-        .padding(.top, 8)
-        .padding(.bottom, 8)
-        .frame(maxWidth: .infinity, minHeight: 44)
-        .contentShape(Rectangle())
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(String(localized: "検索結果 \(resultCount)件"))
-        .accessibilityHint(String(localized: "タップして一覧の表示サイズを切り替えます"))
-        .accessibilityAddTraits(.isButton)
-        .accessibilityAction {
-            withAnimation(.snappy) {
-                searchSheetDetent = searchSheetDetent == .expanded ? .peek : .expanded
-            }
-        }
-        .onTapGesture {
-            withAnimation(.snappy) {
-                searchSheetDetent = searchSheetDetent == .expanded ? .peek : .expanded
-            }
-        }
-        .gesture(
-            // `.global`: 本行は `.frame(height: searchSheetCurrentHeight)` を持つシート上端に乗っており、
-            // 高さが変わるたびに本行自身の Y 位置も動く。`.local`（デフォルト）の translation は
-            // 「動く View 自身」を基準に測るため、指の画面上の位置が同じでもフレームごとに読み値が
-            // ズレて `height = base - translation` が自己発振してしまう。`.global` は画面固定座標
-            // なので View の移動に影響されず、発振しない。
-            DragGesture(minimumDistance: 8, coordinateSpace: .global)
-                .onChanged { value in
-                    // 範囲外へのドラッグで translation が無限に蓄積すると、指を戻す際に
-                    // 「height 側のクランプに隠れて反応しない」デッドゾーンが生じる。
-                    // height = base - translation を [peek, expanded] に収める translation の
-                    // 範囲へあらかじめクランプしておく。
-                    let minTranslation = searchSheetBaseHeight - searchSheetExpandedHeight
-                    let maxTranslation = searchSheetBaseHeight - Self.searchSheetPeekHeight
-                    searchSheetDragTranslation = min(max(value.translation.height, minTranslation), maxTranslation)
-                }
-                .onEnded { value in
-                    let predictedHeight = searchSheetBaseHeight - value.predictedEndTranslation.height
-                    let midpoint = (Self.searchSheetPeekHeight + searchSheetExpandedHeight) / 2
-                    withAnimation(.snappy) {
-                        searchSheetDetent = predictedHeight > midpoint ? .expanded : .peek
-                        searchSheetDragTranslation = 0
-                    }
-                }
-        )
-    }
-
-    /// 結果シート内の 1 行（カフェ名 + 住所）。タップで `selectSearchResult` を呼ぶ。
-    @ViewBuilder
-    private func searchResultRow(cafe: Cafe, isLast: Bool) -> some View {
-        Button {
-            selectSearchResult(cafe)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: "mappin.circle.fill")
-                    .font(.title2)
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(cafe.name)
-                        .font(.subheadline.weight(.medium))
-                        .foregroundStyle(.primary)
-                        .multilineTextAlignment(.leading)
-                    if let address = cafe.address {
-                        Text(address)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .multilineTextAlignment(.leading)
-                    }
-                }
-                Spacer()
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
-            .frame(maxWidth: .infinity)
-            .contentShape(Rectangle())
-        }
-        .buttonStyle(.plain)
-        if !isLast {
-            Divider().padding(.leading, 52)
         }
     }
 
@@ -1069,463 +933,6 @@ struct MapTabView: View {
                 )
             )
         }
-    }
-
-    // MARK: - 選択カフェ 下部カード
-
-    private func cafeSelectionCard(_ cafe: Cafe, bridge: MapViewModelBridge) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .top, spacing: 12) {
-                if let photoName = cafe.photoReferences.first {
-                    PlacePhotoThumbnail(
-                        photoName: photoName,
-                        maxWidthPx: 150,
-                        loader: appState.placePhotoLoader
-                    )
-                    .frame(width: 72, height: 72)
-                    .clipShape(RoundedRectangle(cornerRadius: 12))
-                }
-
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(cafe.name)
-                        .font(.headline)
-                        .lineLimit(2)
-                    if let address = cafe.address {
-                        Text(address)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(2)
-                    }
-                    cafeCardInfoRow(cafe, bridge: bridge)
-                }
-                Spacer(minLength: 0)
-                Button {
-                    // ピン集合（全検索結果）は維持し、カードの選択のみ解除する。
-                    // 検索結果からの選択時は結果一覧の下部ドラッグシートへ戻す
-                    // （「一覧に戻る」導線。2026-07-22 マップ検索結果刷新）。
-                    selectedSearchCafe = nil
-                    highlightedSearchPlaceId = nil
-                    if searchBridge != nil {
-                        showingSearchResults = true
-                    }
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(.title2)
-                        .foregroundStyle(.secondary)
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel(String(localized: "閉じる"))
-            }
-            HStack(spacing: 12) {
-                Button {
-                    navigationPath.append(
-                        CafeDetailRoute(placeId: cafe.placeId, initialCafe: cafe)
-                    )
-                    // ピン集合（全検索結果）は維持し、カードの選択のみ解除する
-                    selectedSearchCafe = nil
-                    highlightedSearchPlaceId = nil
-                } label: {
-                    Text(String(localized: "詳細を見る"))
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-                .accessibilityLabel(String(localized: "\(cafe.name) の詳細を見る"))
-
-                Button {
-                    bridge.onCafeSaveToggled(cafe: cafe)
-                } label: {
-                    Image(systemName: isCafeSaved(cafe, bridge: bridge) ? "bookmark.fill" : "bookmark")
-                        .font(.body.weight(.medium))
-                        .frame(width: 44, height: 44)
-                }
-                .buttonStyle(.bordered)
-                .controlSize(.large)
-                .tint(.indigo)
-                .sensoryFeedback(.selection, trigger: isCafeSaved(cafe, bridge: bridge))
-                .accessibilityLabel(
-                    isCafeSaved(cafe, bridge: bridge)
-                        ? String(localized: "行きたい店から削除")
-                        : String(localized: "行きたい店に追加")
-                )
-            }
-        }
-        .padding(16)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))
-        .padding(.horizontal, 16)
-        .padding(.bottom, 8)
-        .shadow(color: .black.opacity(0.12), radius: 12, x: 0, y: -4)
-    }
-
-    private func cafeCardInfoRow(_ cafe: Cafe, bridge: MapViewModelBridge) -> some View {
-        HStack(spacing: 8) {
-            if let openNow = cafe.openNow?.boolValue {
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(openNow ? Color.green : Color.red)
-                        .frame(width: 6, height: 6)
-                    Text(openNow ? String(localized: "営業中") : String(localized: "終了"))
-                        .font(.caption)
-                        .foregroundStyle(openNow ? .green : .red)
-                }
-            }
-            if let rating = cafe.googleRating?.doubleValue {
-                HStack(spacing: 2) {
-                    Image(systemName: "star.fill")
-                        .font(.caption2)
-                        .foregroundStyle(.yellow)
-                    Text(ratingText(rating: rating, count: cafe.userRatingCount?.intValue))
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                }
-            }
-            if let level = cafe.priceLevel {
-                Text(mapPriceLevelText(level))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-            }
-            if let visits = visitCount(for: cafe, bridge: bridge) {
-                HStack(spacing: 2) {
-                    Image(systemName: "cup.and.saucer.fill")
-                        .font(.caption2)
-                    Text(String(localized: "\(visits)杯"))
-                        .font(.caption)
-                }
-                .foregroundStyle(Color.accentColor)
-            }
-        }
-    }
-
-    /// 「★4.5 (128件)」形式の評価テキスト。件数が nil または 0 のときは括弧を省略する。
-    private func ratingText(rating: Double, count: Int?) -> String {
-        let ratingStr = String(format: "%.1f", rating)
-        if let count, count > 0 {
-            return "\(ratingStr) (\(count)件)"
-        }
-        return ratingStr
-    }
-
-    /// カードの保存状態（`bridge.savedCafes` の placeId 一致で判定）。
-    private func isCafeSaved(_ cafe: Cafe, bridge: MapViewModelBridge) -> Bool {
-        bridge.savedCafes.contains { $0.cafe.placeId == cafe.placeId }
-    }
-
-    /// このカフェの記録杯数（`bridge.visitedCafes` の placeId 一致。0 件 or 未訪問なら nil）。
-    private func visitCount(for cafe: Cafe, bridge: MapViewModelBridge) -> Int? {
-        guard let visited = bridge.visitedCafes.first(where: { $0.cafe.placeId == cafe.placeId }) else {
-            return nil
-        }
-        let count = Int(visited.visitCount)
-        return count > 0 ? count : nil
-    }
-
-    private func mapPriceLevelText(_ level: String) -> String {
-        switch level {
-        case "PRICE_LEVEL_FREE": return String(localized: "無料")
-        case "PRICE_LEVEL_INEXPENSIVE": return "¥"
-        case "PRICE_LEVEL_MODERATE": return "¥¥"
-        case "PRICE_LEVEL_EXPENSIVE": return "¥¥¥"
-        case "PRICE_LEVEL_VERY_EXPENSIVE": return "¥¥¥¥"
-        default: return ""
-        }
-    }
-
-    // MARK: - 「保存済み」ピン競合解決（フェーズ 15-A）
-
-    /// 訪問済みカフェの placeId 集合（ピン競合解決の基準。優先度最上位）。
-    private func visitedPlaceIds(_ bridge: MapViewModelBridge) -> Set<String> {
-        Set(bridge.visitedCafes.map { $0.cafe.placeId })
-    }
-
-    /// 行きたい店の placeId 集合（検索結果ピンの競合解決に使う。表示トグルの状態に関わらず全件対象）。
-    private func savedPlaceIds(_ bridge: MapViewModelBridge) -> Set<String> {
-        Set(bridge.savedCafes.map { $0.cafe.placeId })
-    }
-
-    /// 表示対象の行きたい店（訪問済みと競合するものを除外。優先順位: 訪問済み > 行きたい）。
-    private func displayedSavedCafes(_ bridge: MapViewModelBridge) -> [SavedCafe] {
-        let visited = visitedPlaceIds(bridge)
-        return bridge.savedCafes.filter { !visited.contains($0.cafe.placeId) }
-    }
-
-    /// 表示対象の検索結果ピン（訪問済み / 行きたいと競合するものを除外。優先順位: 訪問済み > 行きたい > 検索結果）。
-    private func displayedSearchResultPlaces(_ bridge: MapViewModelBridge) -> [Cafe] {
-        let visited = visitedPlaceIds(bridge)
-        let saved = savedPlaceIds(bridge)
-        return bridge.searchResultPlaces.filter {
-            !visited.contains($0.placeId) && !saved.contains($0.placeId)
-        }
-    }
-
-    // MARK: - おすすめカフェ（curated）ピン競合解決（フェーズ 19）
-
-    /// 表示対象のおすすめカフェ（訪問済み / 行きたい / 検索結果と競合するものを除外。
-    /// 優先順位: 訪問済み > 行きたい > 検索結果 > おすすめ（curated）。表示切替チップの状態に関わらず適用する）。
-    ///
-    /// ズームゲート: Apple 周辺ピン（`scheduleAppleNearbyFetch`）と同じしきい値
-    /// `applePoiZoomGateRadiusMeters`（可視半径 3000m）を再利用し、`appState.mapSearchCenter` の
-    /// 直近確定値がしきい値を超える（ズームアウトしている）場合は空配列を返して非表示にする
-    /// （東京全域規模の引きの地図で常時表示になり煩雑という確認フィードバックへの対応）。
-    /// 独自のしきい値は新設しない。
-    private func displayedCuratedCafes(_ bridge: MapViewModelBridge) -> [CuratedCafe] {
-        guard let radiusMeters = appState.mapSearchCenter?.radiusMeters,
-              radiusMeters <= Self.applePoiZoomGateRadiusMeters else {
-            return []
-        }
-        let visited = visitedPlaceIds(bridge)
-        let saved = savedPlaceIds(bridge)
-        let searched = Set(bridge.searchResultPlaces.map { $0.placeId })
-        return bridge.curatedCafes.filter {
-            !visited.contains($0.placeId) && !saved.contains($0.placeId) && !searched.contains($0.placeId)
-        }
-    }
-
-    /// `CuratedCafe` から詳細画面遷移用の最小 `Cafe` を構築する。
-    ///
-    /// 揮発フィールド（評価 / 営業時間等）は保持していないため nil / 空のまま渡し、
-    /// 詳細画面の既存 getDetails リフレッシュ（`googleRating == null` 条件）に解決を委ねる。
-    private func minimalCafe(from curated: CuratedCafe) -> Cafe {
-        Cafe(
-            placeId: curated.placeId,
-            name: curated.name,
-            address: nil,
-            latitude: KotlinDouble(value: curated.latitude),
-            longitude: KotlinDouble(value: curated.longitude),
-            photoReferences: [],
-            websiteUrl: nil,
-            mapsUrl: nil,
-            openNow: nil,
-            weekdayDescriptions: [],
-            phoneNumber: nil,
-            priceLevel: nil,
-            googleRating: nil,
-            userRatingCount: nil
-        )
-    }
-
-    // MARK: - フィルタチップ行
-
-    private func filterChipRow(bridge: MapViewModelBridge) -> some View {
-        ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 8) {
-                TagChip(
-                    label: String(localized: "訪問済み"),
-                    systemImage: "cup.and.saucer.fill",
-                    isOn: bridge.showVisited
-                ) {
-                    bridge.onShowVisitedToggled(!bridge.showVisited)
-                }
-
-                // 「好み一致」チップ（1 件以上あるときのみ表示。2026-07-24 操作モデル改修）
-                // タップで常に一覧シートを開く（既に開いていれば no-op）。マップ強調はシート表示中
-                // だけ連動して ON になり、下スワイプで閉じると自動的に OFF になる。「保存済み」との
-                // 排他性は `activeCafeListSheet`（単一 item state）が構造的に保証する。
-                if !bridge.recommendedCafes.isEmpty {
-                    TagChip(
-                        label: String(localized: "好み一致"),
-                        systemImage: "heart.fill",
-                        isOn: recommendedEmphasisActive,
-                        count: bridge.recommendedCafes.count,
-                        tint: .pink
-                    ) {
-                        activeCafeListSheet = .recommended
-                    }
-                }
-
-                // 「保存済み」チップ（1 件以上あるときのみ表示。2026-07-24 操作モデル改修）
-                // タップで常に一覧シートを開く（既に開いていれば no-op）。マップ強調はシート表示中
-                // だけ連動して ON になり、下スワイプで閉じると自動的に OFF になる。
-                if !bridge.savedCafes.isEmpty {
-                    TagChip(
-                        label: String(localized: "保存済み"),
-                        systemImage: "bookmark.fill",
-                        isOn: savedEmphasisActive,
-                        count: bridge.savedCafes.count
-                    ) {
-                        activeCafeListSheet = .saved
-                    }
-                }
-
-                // タグフィルタチップ（availableTags が空でないとき）
-                if !bridge.availableTags.isEmpty {
-                    Divider()
-                        .frame(height: 24)
-
-                    ForEach(bridge.availableTags, id: \.self) { tag in
-                        TagChip(
-                            label: tag,
-                            systemImage: "tag",
-                            isOn: bridge.selectedTags.contains(tag)
-                        ) {
-                            bridge.onTagFilterToggled(tag)
-                        }
-                    }
-
-                    if !bridge.selectedTags.isEmpty {
-                        Button {
-                            bridge.onTagFilterCleared()
-                        } label: {
-                            Image(systemName: "xmark.circle")
-                                .font(.subheadline)
-                                .foregroundStyle(.secondary)
-                                .frame(minWidth: 44, minHeight: 44)
-                        }
-                        .buttonStyle(.plain)
-                        .accessibilityLabel(String(localized: "タグフィルターをクリア"))
-                    }
-                }
-            }
-            .padding(.horizontal, 2)
-        }
-    }
-
-    // MARK: - ピン UI
-
-    /// 訪問済みカフェピン（アクセントカラー / 訪問回数バッジ付き）。
-    ///
-    /// - 2 回以上訪問した場合は右上コーナーに訪問回数バッジを表示する
-    /// - 10 回以上は "9+" と表示して 1 桁に収める
-    private func visitedCafePin(visitedCafe: VisitedCafe) -> some View {
-        let count = Int(visitedCafe.visitCount)
-        let badgeText = count >= 10 ? "9+" : "\(count)"
-
-        return ZStack {
-            Circle()
-                .fill(Color.accentColor)
-                .frame(width: 36, height: 36)
-                .shadow(color: Color.accentColor.opacity(0.4), radius: 4, x: 0, y: 2)
-            Image(systemName: "cup.and.saucer.fill")
-                .font(.caption2)
-                .foregroundStyle(.white)
-        }
-        .overlay(alignment: .topTrailing) {
-            if count >= 2 {
-                ZStack {
-                    Circle()
-                        .fill(Color.white)
-                        .frame(width: 18, height: 18)
-                    Text(badgeText)
-                        .font(.caption2.bold())
-                        .foregroundStyle(Color.accentColor)
-                }
-                .offset(x: 4, y: -4)
-            }
-        }
-        .accessibilityLabel(
-            String(localized: "\(visitedCafe.cafe.name) 訪問済み \(visitedCafe.visitCount)回")
-        )
-    }
-
-    /// 検索結果オーバーレイピン（青 / `mappin.and.ellipse`）。
-    ///
-    /// 選択中（`highlightedSearchPlaceId` と一致）は scale 1.3 + 影を強調する
-    /// （色は既存の `Color.blue` を維持。2026-07-22 マップ検索結果刷新）。
-    private func searchResultPin(cafe: Cafe) -> some View {
-        let isHighlighted = cafe.placeId == highlightedSearchPlaceId
-        return ZStack {
-            Circle()
-                .fill(Color.blue)
-                .frame(width: 32, height: 32)
-                .shadow(
-                    color: Color.blue.opacity(isHighlighted ? 0.6 : 0.4),
-                    radius: isHighlighted ? 6 : 4,
-                    x: 0,
-                    y: 2
-                )
-            Image(systemName: "mappin.and.ellipse")
-                .font(.caption2)
-                .foregroundStyle(.white)
-        }
-        .scaleEffect(isHighlighted ? 1.3 : 1.0)
-        .accessibilityLabel(
-            isHighlighted
-                ? String(localized: "\(cafe.name) 検索結果、選択中")
-                : String(localized: "\(cafe.name) 検索結果")
-        )
-    }
-
-    /// 保存済み（行きたい）店ピン（indigo + bookmark。フェーズ 15-A）。
-    ///
-    /// 既存 3 種ピン（訪問済み=accentColor / 好み一致=pink / 検索結果=blue）と区別できる
-    /// 色（indigo）を採用し、`bookmark.fill` で「保存済み」を示す。
-    /// 「保存済み」チップ強調中はひとまわり大きく表示する（フェーズ 16）。
-    private func savedCafePin(savedCafe: SavedCafe) -> some View {
-        let size: CGFloat = savedEmphasisActive ? 38 : 34
-
-        return ZStack {
-            Circle()
-                .fill(Color.indigo)
-                .frame(width: size, height: size)
-                .shadow(color: Color.indigo.opacity(0.4), radius: 4, x: 0, y: 2)
-            Image(systemName: "bookmark.fill")
-                .font(.caption2)
-                .foregroundStyle(.white)
-        }
-        .accessibilityLabel(String(localized: "\(savedCafe.cafe.name) 保存済み"))
-    }
-
-    /// 好み一致カフェピン（pink + ハート）。
-    ///
-    /// 通常訪問済みピン（アクセントカラー）よりひとまわり大きく表示して視覚的に区別する。
-    private func recommendedCafePin(visitedCafe: VisitedCafe) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color.pink)
-                .frame(width: 38, height: 38)
-                .shadow(color: Color.pink.opacity(0.4), radius: 4, x: 0, y: 2)
-            Image(systemName: "heart.fill")
-                .font(.caption.weight(.bold))
-                .foregroundStyle(.white)
-        }
-        .accessibilityLabel(
-            String(
-                localized: "好み一致のカフェ、\(visitedCafe.cafe.name)。タップして理由を確認"
-            )
-        )
-    }
-
-    /// おすすめカフェ（curated）ピン（system orange + cup.and.saucer.fill。フェーズ 19 意匠変更）。
-    ///
-    /// Google Maps の「人気 POI 強調」表現に寄せ、Apple 周辺ピン（`appleNearbyCafePin`）と
-    /// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、サイズ（34pt。Apple 周辺ピンの
-    /// 28pt よりひとまわり大きい）と色の彩度だけで「同じカフェだが特に推されている」ことを
-    /// 表現する。色は既存 5 色（accentColor / pink / indigo / blue / secondaryLabel）と被らない
-    /// システムカラー `Color.orange` をそのまま使う（黒ミックスなし）。訪問済みピン（`accentColor`
-    /// = 茶 #8B5A2B）と一目で区別できるよう明るいオレンジを維持する判断（シミュレータ確認
-    /// フィードバックで黒ミックス濃色は茶に寄って見分けにくいと判定されたため）。
-    /// トグルなし。ズームゲート（`applePoiZoomGateRadiusMeters`）を Apple 周辺ピンと共用し、
-    /// 可視領域が一定以上広い（ズームアウトした）ときは非表示にする（`displayedCuratedCafes` 参照）。
-    private func curatedCafePin(cafe: CuratedCafe) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color.orange)
-                .frame(width: 34, height: 34)
-                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
-                .shadow(color: Color.orange.opacity(0.5), radius: 4, x: 0, y: 2)
-            Image(systemName: "cup.and.saucer.fill")
-                .font(.caption2)
-                .foregroundStyle(.white)
-        }
-        .accessibilityLabel(String(localized: "\(cafe.name)、おすすめのカフェ"))
-    }
-
-    /// 周辺カフェ（Apple 検索由来）ピン。まだ記録も保存もしていない店を示す低強調ピン。
-    ///
-    /// 既存 4 種ピン（訪問済み=accentColor / 保存済み=indigo / 検索結果=blue / 好み一致=pink）より
-    /// 明確に控えめな意匠（小径 24pt + ミュートしたセカンダリ配色）にする（フェーズ 17）。
-    private func appleNearbyCafePin(cafe: ApplePoiCafe) -> some View {
-        ZStack {
-            Circle()
-                .fill(Color(.secondaryLabel))
-                .frame(width: 28, height: 28)
-                // 白フチ + 影で地図の情報密度に負けず見つけやすくする（意味ピンより一段下の強調は維持）
-                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
-                .shadow(color: .black.opacity(0.25), radius: 3, x: 0, y: 1)
-            Image(systemName: "cup.and.saucer.fill")
-                .font(.caption2)
-                .foregroundStyle(Color(.systemBackground))
-        }
-        .accessibilityLabel(String(localized: "\(cafe.name)、周辺のカフェ"))
     }
 
     // MARK: - 現在地 FAB

@@ -1156,3 +1156,16 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **状態を KMP UIState に置かない方針は不変**（[implementation_note 2026-07-16 / フェーズ 15-A 参照]）。強調はドメインロジックゼロの純プレゼンテーションで、必要な placeId 集合は `recommendedCafes` / `savedCafes`（UIState）に既にある。旧 `@State savedEmphasisActive` の記述は本改修で computed property 化（Swift ローカルである点は不変）。
 
 **影響範囲**: `MapTabView.swift` のみ。ビルド成功確認済み（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 不使用）。UI 挙動（1 タップ再表示 / 下スワイプで強調 OFF / 両チップ排他 / medium detent 併存 / 選択 push 時のクローズ）はシミュレータ実地確認が必要。
+
+### 2026-07-24: MapTabView 分割リファクタ Phase 1（M-1）— 検索結果シートの高さ結合の扱い
+
+- 領域: iOS のみ（KMP 変更なし）
+- 関連: `MapTabView` 分割リファクタ（tasks.md M-0〜M-4）。M-1 でリーフ View 5 ファイルを抽出（`MapPins` / `CafeSelectionCard` / `MapFilterChipRow` / `MapSearchResultsSheet` / `MapTabView+PinResolution`）。MapTabView.swift 2008→1223 行
+
+**論点（Phase 3 への申し送り）**: 検索結果下部ドラッグシートを `MapSearchResultsSheet` へ切り出す際、detent 状態（`searchSheetDetent` / `searchSheetDragTranslation`）とサイズ計算（`searchSheetCurrentHeight` 等）を **`MapTabView` 側に残した**（シート View へ完全移譲しなかった）。
+
+**理由**: `searchSheetCurrentHeight` は現在地 FAB のボトムインセット（`searchSheetFABBottomInset`）でも参照される二重消費値。シート側へ状態を移すと親が現在高さを知れず、高さ変化を親へ逆流させるコールバックが要り複雑化する。SwiftUI の一方向データフローに沿い、**共通の親に状態を残し、子へは算出済み高さ（`let`）と `detent`/`dragTranslation` の `@Binding` を down-flow** で渡す構成にした。
+
+**Phase 3 での扱い**: 検索系 State を `@Observable MapSearchController` へ隔離する際、この detent/高さ状態も controller へ移すか親に残すかを再判断する。FAB インセットとの二重消費が残るため、controller が高さを公開 → 親が FAB インセットに使う形なら移譲可能。M-1 時点では過剰設計を避け親残置とした（Simplicity First）。
+
+**その他**: 別ファイルの `extension MapTabView`（`MapTabView+PinResolution`）へ移した競合解決メソッドと `applePoiZoomGateRadiusMeters` は、`private`（Swift ではファイルスコープ）だとアクセス不能になるため internal 化。モジュール外へは出ず公開 API 化のリスクなし。

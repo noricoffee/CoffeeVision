@@ -379,7 +379,7 @@
 | 状態 | ID | フェーズ | 内容 | リスク |
 |------|----|--------|------|--------|
 | [x] | M-0 | Phase 0 | 既に独立している `RecommendationMatchSheet` + `preferenceMatchAxisLabel` + `CafeDetailRoute` を別ファイルへ純粋移動（本体無変更）。2026-07-24 完了: `RecommendationMatchSheet.swift` / `MapNavigation.swift` 新設、192 行移動で 2008→1816 行。ビルド成功（フラグ無し） | 極小 |
-| [ ] | M-1 | Phase 1 | リーフ View 抽出: ピン 6 種 → `MapPins.swift`（+ `ApplePoiCafe`）/ 選択カード → `CafeSelectionCard` / チップ行 → `MapFilterChipRow` / 結果ボトムシート → `MapSearchResultsSheet` / 競合解決 → `MapTabView+PinResolution`。状態は init 引数で受け渡し | 低 |
+| [x] | M-1 | Phase 1 | リーフ View 抽出。2026-07-24 完了: `MapPins.swift`（ピン6種 + `ApplePoiCafe`）/ `CafeSelectionCard.swift` / `MapFilterChipRow.swift` / `MapSearchResultsSheet.swift` / `MapTabView+PinResolution.swift` の 5 ファイルへ抽出。状態は init 引数/Binding で受け渡し。MapTabView.swift 1816→1223 行。親のフラグ無しクリーンビルドで `BUILD SUCCEEDED` 再検証済み。シート detent 状態は親残置（→ implementation_note 2026-07-24、Phase 3 で再検討） | 低 |
 | [ ] | M-2 | Phase 2 | Apple POI fetch を `@Observable final class AppleNearbyCafeLoader` へ隔離（Task デバウンス/キャンセル・ネガティブキャッシュ内包、dedup は既存座標を引数で） | 中 |
 | [ ] | M-3 | Phase 3 | 検索 + エリア検索を `@Observable final class MapSearchController` へ。camera 変更は controller が目標 region を返し View 側で適用（コールバック分離） | 高 |
 | [ ] | M-4 | Phase 4 | 位置・カメラ（`setupLocation` / `locationStream` / `recenterToCurrentLocation` / 初期カメラ）を `MapTabView+Location.swift` へ機械的移動 | 低 |

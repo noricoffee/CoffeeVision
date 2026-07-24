@@ -9,6 +9,7 @@
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意
 - [AdMob アダプティブバナー実装パターン](admob-native-ads.md) — ネイティブ→バナー再編の経緯、SPM モジュール名の罠、BannerView/AdSize API、UMP をコードから呼ばない理由、`.task` 発火の罠と GeometryReader 幅計測
 - [ImageRenderer 共有カード画像生成パターン](image-renderer-share-card.md) — 固定フレーム+clipped、scaleEffect+frame での固定高さコンポーネント圧縮、可変レイアウトの高さ配分計算、PreviewSamples 4 種の使い回し
+- [SwiftUI View 分割の落とし穴](swiftui-view-splitting.md) — 別ファイル extension への private 移動でアクセス不能になる問題、複数消費者が要る算出値は親に残し子へ down-flow で渡す設計判断
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 

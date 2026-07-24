@@ -372,6 +372,18 @@
 | [x] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を解消し、`CoffeeRecord.rating` を **nullable 化する**（2026-07-12 ユーザー決定） | 2026-07-13 完了。あわせて未評価のまま保存可に変更（従来はエディタで評価必須 = requirements と矛盾していた）。migration 5（0.0→NULL、JVM / NativeSqliteDriver 両方でテスト実証）+ Firestore は読み側で legacy 0.0 正規化。requirements §未決事項も消し込み済み。判断は implementation_note 2026-07-12、SQLDelight migrate の off-by-one は lessons 2026-07-13。**シミュレータ目視（未評価保存 → 表示 → 分析除外 → 既存 DB の migration）はユーザー作業** |
 | [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
 
+#### MapTabView の分割リファクタ（God View 解体 / 2026-07-24 起票）
+
+> `iosApp/iosApp/Features/Map/MapTabView.swift` が 2008 行、うち `MapTabView` 1 struct が約 1770 行（`@State` 30 個 + メソッド約 50 個）に肥大化。複数の独立責務（検索 / Apple 周辺カフェ / ピン描画 / 位置・カメラ / 選択カード / フィルタ）が単一 View に同居し変更影響が読めない。**方式=独立 View 構造体（+ 一部 `@Observable` サービス / extension）、スコープ=Phase 0–4 全部**（2026-07-24 ユーザー決定）。各フェーズ独立でビルド＆シミュレータ確認＆コミット、実装は `ios-engineer` に 1 フェーズ = 1 dispatch。目標: `MapTabView.swift` ルートを ~500 行（State + body + mapContent の組み立てのみ）へ。挙動リグレッション（カメラ・検索シート detent・エリア検索ボタン出現条件）を招きやすいので `verify-kmp-ios` 必須。
+
+| 状態 | ID | フェーズ | 内容 | リスク |
+|------|----|--------|------|--------|
+| [ ] | M-0 | Phase 0 | 既に独立している `RecommendationMatchSheet` + `preferenceMatchAxisLabel` + `CafeDetailRoute` を別ファイルへ純粋移動（本体無変更、~180 行減） | 極小 |
+| [ ] | M-1 | Phase 1 | リーフ View 抽出: ピン 6 種 → `MapPins.swift`（+ `ApplePoiCafe`）/ 選択カード → `CafeSelectionCard` / チップ行 → `MapFilterChipRow` / 結果ボトムシート → `MapSearchResultsSheet` / 競合解決 → `MapTabView+PinResolution`。状態は init 引数で受け渡し | 低 |
+| [ ] | M-2 | Phase 2 | Apple POI fetch を `@Observable final class AppleNearbyCafeLoader` へ隔離（Task デバウンス/キャンセル・ネガティブキャッシュ内包、dedup は既存座標を引数で） | 中 |
+| [ ] | M-3 | Phase 3 | 検索 + エリア検索を `@Observable final class MapSearchController` へ。camera 変更は controller が目標 region を返し View 側で適用（コールバック分離） | 高 |
+| [ ] | M-4 | Phase 4 | 位置・カメラ（`setupLocation` / `locationStream` / `recenterToCurrentLocation` / 初期カメラ）を `MapTabView+Location.swift` へ機械的移動 | 低 |
+
 ### 完了
 
 #### フェーズ 2.5: モジュール分割 (1) — 基盤レイヤー

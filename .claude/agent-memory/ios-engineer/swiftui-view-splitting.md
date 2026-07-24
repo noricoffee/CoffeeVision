@@ -37,6 +37,12 @@ metadata:
 - `@State private var controller = SomeObservableClass()` を保持する View で、子孫の値（`controller.query` 等）に `TextField(text:)` の `Binding<String>` を渡したい場合、`$controller` は「クラス全体への `Binding<SomeObservableClass>`」にしかならず、`$controller.query` のようなメンバー単位の `Binding` は得られない。**その computed property / 関数のスコープ内で `@Bindable var controller = controller` をローカル宣言**すると、以降の `$controller.query` がメンバー単位の `Binding<String>` として機能する（SwiftUI + Observation の標準パターン）。単純な読み取り・代入（`controller.query = ""` 等）や `.onChange(of: controller.query)` には `@Bindable` は不要（`Binding` を作るときだけ必要）。
 - 素の `var searchBarView: some View { ... }`（`@ViewBuilder` 明示なし）の中に `@Bindable var x = ...` というローカル宣言文を足すと、実装が「単一式の暗黙 return」から複数文になるため `return` を明示する必要がある（`@ViewBuilder private func mapContent(...)` のように既に `@ViewBuilder` 付きの関数ならこの制約はない）。
 
+## 行番号ベースの一括削除（`del lines[a:b]`）で範囲を決めるとき、MARK セクション境界を目視だけで決め打ちしない（2026-07-24、MapTabView M-4 分割で確認）
+
+- 「メソッド A 〜 メソッド E を移動する」といった指示で、A の直前の MARK コメントから E の関数末尾までを丸ごと削除範囲にすると、**A〜E の間に無関係なヘルパー（移動対象外）が挟まっているケースを見落とす**。今回は「現在地 FAB」〜「初期カメラ」の間に「周辺カフェ Apple POI 関連ヘルパー」（`existingPinCoordinates` / `appleNearbyPinOpacity`）2 関数が挟まっており、削除範囲に巻き込んで消してしまった（ビルドで `cannot find 'existingPinCoordinates' in scope` 等として顕在化、無関係に見えるトレーリングクロージャ型エラーも巻き添えで出た）。
+- 対策: 削除前に、削除範囲内に列挙された移動対象**以外**の `// MARK:` / `private func` / `private var` 宣言がないか grep（`grep -n "MARK:\|private func\|private var" file.swift` を対象行範囲で確認）してから `del lines[a:b]` を実行する。移動対象を 1 つずつ「この関数は指示に列挙されているか」を機械的にチェックリスト照合するのが確実。
+- ビルドエラーの「cannot find X in scope」は速攻で気づけるため大事故にはならないが、型検査のカスケードで無関係な行に誤ったエラー（例: `Map(position:) { }` のトレーリングクロージャ型不一致）が出ることがあるので、実際の原因は "in scope" エラーの方を優先して読む。
+
 ## 参照: [ui-components-patterns.md](ui-components-patterns.md) の「排他的な複数種シート」パターンとは独立の論点
 
 上記は「1 つの View を複数の小さい View 構造体に割る」ときの状態設計の話で、`ui-components-patterns.md` の enum item シートパターン（表示状態の排他制御）とは別の関心事。

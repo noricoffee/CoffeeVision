@@ -1184,3 +1184,20 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **appState 非依存**: `performSearch(center:)` / `performAreaSearch(center:)` / `handleCompletion(mapBridge:currentCenter:)` / `clearSelection(mapBridge:)` は `appState`/`mapSearchCenter` を引数で受け、controller を `appState` 非依存に保つ。`TextField` 双方向バインドは `searchBarView` 内の `@Bindable var searchController = searchController` ローカル宣言で対応（他箇所は読み書きのみで `@Bindable` 不要）。
 
 **detent 残置**: 検索シート detent 状態・高さ計算は M-1 の申し送り（FAB インセットとの二重消費）を踏襲し View 残置。controller へは移さなかった。
+
+### 2026-07-24: 「このエリアを検索」がキーワードを維持して再検索するよう変更
+
+- 領域: iOS のみ（`MapSearchController.performAreaSearch`。KMP / shared 変更なし）
+- 関連: requirements 5-5、フェーズ 14（implementation_note 2026-07-01）、MapTabView 分割リファクタ M-3
+
+**背景**: 分割リファクタ M-0〜M-4 後の動作確認でユーザーが「検索ワード入力後、地図移動して『このエリアを検索』を押すとキーワードが入っていない」と報告。調査の結果、これは **M-3 リファクタで壊れたバグではなく元からの設計挙動**（`performAreaSearch` は M-3 前後で同一）。「このエリアを検索」はフェーズ 14 で `onNearbySearchRequested` → `searchNearby`（キーワード非依存の周辺一括表示）として実装されており、`CafeSearchViewModel` のコメントも「`UIState.query` とは独立」と明記していた。
+
+**判断（ユーザー決定）**: 検索バーにキーワードを入れた状態で地図を動かすと「このエリアを検索」が出る導線のため、ユーザー期待（そのキーワードで再検索）と食い違う。**キーワードがあればそれを維持して表示範囲を再検索、空なら従来どおり周辺一括**に変更（AskUserQuestion で確定）。
+
+**実装**: `performAreaSearch` で `query`（trim して空判定）が非空なら `onQueryChanged(query)` → `onSearchTapped(lat,lng,radius)`（= `searchText(query, bias)`）、空なら従来の `onNearbySearchRequested(lat,lng,radius)`。`isAreaSearchInFlight = true` は分岐前に立てるため、`handleCompletion` の `wasAreaSearch` 判定は両分岐とも true になり、完了時のアンカー更新・ボタン非表示・0件メッセージ・**カメラ自動フィット非対象**（表示範囲内検索で結果が構造的に画面内）の既存挙動がそのまま維持される。
+
+**トレードオフ / 補足**:
+- `onSearchTapped(lat,lng,radius)` は shared 側 `_state.value.query` を使うため、**未確定入力のまま地図移動されたケースに備え `onQueryChanged(query)` で先に最新化**する（`performSearch` と同じ順序）。これを省くと古い/空クエリで検索してしまう。
+- 課金構造は不変（`searchText` も `searchNearby` も 1 リクエスト、手動ボタンで発火頻度は同じ）。→ [[paid-services]] 更新不要。
+- ボタン文言は「このエリアを検索」のまま（キーワード有無でのラベル出し分けは今回スコープ外）。
+- shared 変更なし（`onSearchTapped` の半径付きオーバーロードは既存）。

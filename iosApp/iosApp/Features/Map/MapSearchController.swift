@@ -142,9 +142,11 @@ final class MapSearchController {
     ///
     /// テキスト検索・「このエリアを検索」の両方の完了を検知し、成功時は結果を全件ピンとして
     /// `mapBridge` に反映する。「このエリアを検索」由来の完了時はさらにアンカーを更新して
-    /// ボタンを隠し、0 件だった場合は軽量な案内メッセージを出す。
-    /// テキスト検索由来の完了時は、結果が画面外に落ちないよう全結果ピンへカメラを自動フィットする
-    /// （「このエリアを検索」は表示範囲内検索で結果が構造的に画面内のため対象外。2026-07-22）。
+    /// ボタンを隠し、0 件だった場合は軽量な案内メッセージを出す
+    /// （「このエリアを検索」はキーワードがあれば `searchText` 相当を実行するが、`isAreaSearchInFlight`
+    /// による `wasAreaSearch` 判定はキーワード有無に関わらず「エリア検索由来」として扱う。2026-07-24）。
+    /// テキスト検索（検索バー送信）由来の完了時は、結果が画面外に落ちないよう全結果ピンへカメラを
+    /// 自動フィットする（「このエリアを検索」は表示範囲内検索で結果が構造的に画面内のため対象外。2026-07-22）。
     func handleCompletion(mapBridge: MapViewModelBridge, currentCenter: MapSearchCenter?) {
         guard let sb = searchBridge else { return }
         let wasAreaSearch = isAreaSearchInFlight
@@ -214,16 +216,33 @@ final class MapSearchController {
     // MARK: - このエリアを検索
 
     /// 表示中のマップ範囲でカフェを検索する。「このエリアを検索」ボタンから呼ぶ。
+    ///
+    /// 検索バーにキーワードが入力されていれば、そのキーワード + 表示範囲の位置バイアスで
+    /// `searchText` 相当（`performSearch` と同じ `onQueryChanged` → `onSearchTapped(center:)` の順序）を
+    /// 実行する。キーワードが空（空白のみ含む）なら従来どおりキーワード非依存の周辺一括検索
+    /// （`onNearbySearchRequested`）にフォールバックする。
     func performAreaSearch(center: MapSearchCenter?) {
         guard let sb = searchBridge,
               let center,
               !isAreaSearchInFlight else { return }
         isAreaSearchInFlight = true
-        sb.onNearbySearchRequested(
-            latitude: center.latitude,
-            longitude: center.longitude,
-            radiusMeters: center.radiusMeters
-        )
+        let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
+        if !trimmedQuery.isEmpty {
+            // performSearch と同じ順序: onSearchTapped(center:) は shared 側の直近 query を使うため、
+            // 先に onQueryChanged で最新化してから呼ぶ（未確定入力のまま地図移動されたケースへの対応）。
+            sb.onQueryChanged(query)
+            sb.onSearchTapped(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                radiusMeters: center.radiusMeters
+            )
+        } else {
+            sb.onNearbySearchRequested(
+                latitude: center.latitude,
+                longitude: center.longitude,
+                radiusMeters: center.radiusMeters
+            )
+        }
     }
 
     /// 現在のマップ中心が前回エリア検索アンカーから閾値以上動いたかを判定する。

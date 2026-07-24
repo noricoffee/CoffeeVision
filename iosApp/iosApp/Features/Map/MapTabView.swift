@@ -127,30 +127,15 @@ struct MapTabView: View {
     /// エリア検索が 0 件だったときの軽量案内メッセージ。`errorToast` 経由で表示する。
     @State private var areaSearchEmptyMessage: String? = nil
 
-    // MARK: - 周辺カフェ（Apple 検索由来）関連 State（フェーズ 17）
+    // MARK: - 周辺カフェ（Apple 検索由来）関連 State（フェーズ 17 / M-2 で `AppleNearbyCafeLoader` へ隔離）
 
-    /// `MKLocalPointsOfInterestRequest` で取得した周辺カフェ（低強調ピン用）。
-    @State private var appleNearbyCafes: [ApplePoiCafe] = []
-
-    /// 直近の Apple 検索 fetch Task（デバウンス / キャンセル用）。
-    @State private var appleFetchTask: Task<Void, Never>? = nil
-
-    /// ズームゲートしきい値（この可視半径[m]を超えたら fetch せず既存ピンをクリアする）。
-    ///
-    /// `MapTabView+PinResolution.swift`（別ファイルの extension）からも参照するため internal
-    /// のまま維持する（M-1、`private` は同一ファイル内の extension にしか見えないため）。
-    static let applePoiZoomGateRadiusMeters: Double = 3000
+    /// Apple 検索由来の周辺カフェ fetch（デバウンス・ネガティブキャッシュ・名前フィルタ・
+    /// スロットリング耐性を内包）を担うサービス（`AppleNearbyCafeLoader.swift`、M-2）。
+    @State private var appleLoader = AppleNearbyCafeLoader()
 
     /// 直近でタップされた Apple 検索由来ピン。POI ルックアップが「該当なし」だった際に
     /// ネガティブキャッシュへ登録する対象を特定するために保持する（周辺カフェピンのノイズ除去、2026-07-13）。
     @State private var lastTappedApplePoi: ApplePoiCafe? = nil
-
-    /// 名前ヒューリスティックで除外すべき Apple POI かどうかを判定する。
-    ///
-    /// 除外キーワード一覧は `ApplePoiFilterConfig`（Firebase Remote Config 外部注入、2026-07-13）を参照する。
-    private func isExcludedByNameHeuristic(_ name: String) -> Bool {
-        ApplePoiFilterConfig.excludedNameKeywords.contains { name.contains($0) }
-    }
 
     // MARK: - 検索モード
 
@@ -310,7 +295,7 @@ struct MapTabView: View {
                         .onChange(of: bridge.poiLookupError) { _, error in
                             guard let error, error.isNotFound, let tapped = lastTappedApplePoi else { return }
                             ApplePoiNegativeCache.add(name: tapped.name, coordinate: tapped.coordinate)
-                            appleNearbyCafes.removeAll { $0.id == tapped.id }
+                            appleLoader.removeCafe(id: tapped.id)
                             lastTappedApplePoi = nil
                         }
                         // 好み一致カフェが 0 件になった（チップ消滅）ら開いている一覧シートを閉じる
@@ -402,8 +387,8 @@ struct MapTabView: View {
 
                 // 周辺カフェ（Apple 検索由来 / 低強調）ピン。既存ピン（訪問済み / 保存済み / 検索結果 /
                 // おすすめ（curated））と座標近接（約 40m 以内）のものは重複排除済み
-                // （displayedAppleNearbyCafes）。最初に描画して他ピンの背面に回す。
-                ForEach(displayedAppleNearbyCafes(bridge)) { cafe in
+                // （`appleLoader.displayed(excluding:)`）。最初に描画して他ピンの背面に回す。
+                ForEach(appleLoader.displayed(excluding: existingPinCoordinates(bridge))) { cafe in
                     Annotation(cafe.name, coordinate: cafe.coordinate) {
                         Button {
                             lastTappedApplePoi = cafe
@@ -587,7 +572,7 @@ struct MapTabView: View {
                 }
 
                 // 周辺カフェ（Apple 検索由来）ピンの再取得をスケジュールする。
-                scheduleAppleNearbyFetch(center: newCenter)
+                appleLoader.schedule(center: newCenter)
             }
             .safeAreaInset(edge: .bottom) {
                 if let cafe = selectedSearchCafe {
@@ -1000,67 +985,7 @@ struct MapTabView: View {
         }
     }
 
-    // MARK: - 周辺カフェ（Apple 検索由来）フェッチ（フェーズ 17）
-
-    /// カメラ移動確定ごとに Apple 検索由来の周辺カフェ fetch をスケジュールする。
-    ///
-    /// 直近の fetch Task をキャンセルしてから 300ms 待機し、連続パンを 1 回の検索へまとめる。
-    /// 可視半径がしきい値（`applePoiZoomGateRadiusMeters`）を超える場合は fetch せず既存ピンを
-    /// クリアする（都市スケールでの氾濫防止。しきい値以下では全ズーム域でピンが出る）。
-    private func scheduleAppleNearbyFetch(center: MapSearchCenter) {
-        appleFetchTask?.cancel()
-        guard center.radiusMeters <= Self.applePoiZoomGateRadiusMeters else {
-            appleNearbyCafes = []
-            return
-        }
-        appleFetchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
-            guard !Task.isCancelled else { return }
-            await fetchAppleNearbyCafes(center: center)
-        }
-    }
-
-    /// `MKLocalPointsOfInterestRequest`（`MKLocalSearch` 経由）で表示範囲内のカフェを
-    /// Apple 地図データから取得する。失敗時は低優先度の補助表示のため静かに処理するのみで、
-    /// トースト等のユーザー通知は出さない。長時間のパン・ズームで Apple 側にスロットリングされた
-    /// 場合（`MKError.loadingThrottled`）は一時的な失敗であり次の fetch で回復するため、
-    /// 空白より古いピンを残す方が自然と判断し `appleNearbyCafes` を保持する。それ以外のエラーは
-    /// 従来どおりクリアする（周辺カフェピンのスロットリング耐性、2026-07-18）。
-    /// ベーカリー（`.bakery`）は Google Places 側の解決（`onPoiTapped` → `searchNearby`、
-    /// `includedPrimaryTypes=[cafe, coffee_shop]`）に一致せずタップ解決できないため取得対象から
-    /// 除外している（「表示＝解決可能」を揃える。フェーズ 17-B）。
-    ///
-    /// 名前ヒューリスティック除外（法人本社等）とネガティブキャッシュ（過去に「該当なし」
-    /// だった POI）の両方でノイズを除去する（周辺カフェピンのノイズ除去、2026-07-13）。
-    private func fetchAppleNearbyCafes(center: MapSearchCenter) async {
-        let request = MKLocalPointsOfInterestRequest(
-            center: CLLocationCoordinate2D(latitude: center.latitude, longitude: center.longitude),
-            radius: center.radiusMeters
-        )
-        request.pointOfInterestFilter = MKPointOfInterestFilter(including: [.cafe])
-        do {
-            let response = try await MKLocalSearch(request: request).start()
-            guard !Task.isCancelled else { return }
-            appleNearbyCafes = response.mapItems.compactMap { item -> ApplePoiCafe? in
-                let coordinate = item.location.coordinate
-                let name = item.name ?? String(localized: "カフェ")
-                guard !isExcludedByNameHeuristic(name) else { return nil }
-                guard !ApplePoiNegativeCache.contains(name: name, coordinate: coordinate) else { return nil }
-                return ApplePoiCafe(
-                    id: "\(coordinate.latitude)_\(coordinate.longitude)",
-                    name: name,
-                    coordinate: coordinate
-                )
-            }
-        } catch {
-            guard !Task.isCancelled else { return }
-            if let mkError = error as? MKError, mkError.code == .loadingThrottled {
-                // 一時的なスロットリング: 次の fetch で回復するため既存ピンを保持する。
-                return
-            }
-            appleNearbyCafes = []
-        }
-    }
+    // MARK: - 周辺カフェ（Apple 検索由来）関連ヘルパ（フェーズ 17 / fetch 本体は M-2 で `AppleNearbyCafeLoader` へ移設）
 
     /// 既存ピンの座標一覧（訪問済み / 保存済み / 検索結果 / おすすめ（curated）。表示トグルの状態に
     /// 関わらず全件。Apple ピンの重複排除に使う。フェーズ 19 で curated を追加）。
@@ -1087,22 +1012,6 @@ struct MapTabView: View {
             CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
         }
         return visited + saved + searched + curated
-    }
-
-    /// 表示対象の Apple 検索由来カフェ。
-    ///
-    /// 既存ピン（訪問済み / 保存済み / 検索結果 / おすすめ（curated））のいずれかと座標近接
-    /// （約 40m 以内）のものを除外する（優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）
-    /// > Apple 検索由来。名前一致はローカライズで不安定なため使わない）。
-    private func displayedAppleNearbyCafes(_ bridge: MapViewModelBridge) -> [ApplePoiCafe] {
-        let proximityThresholdMeters: CLLocationDistance = 40
-        let existingLocations = existingPinCoordinates(bridge).map {
-            CLLocation(latitude: $0.latitude, longitude: $0.longitude)
-        }
-        return appleNearbyCafes.filter { cafe in
-            let location = CLLocation(latitude: cafe.coordinate.latitude, longitude: cafe.coordinate.longitude)
-            return !existingLocations.contains { $0.distance(from: location) <= proximityThresholdMeters }
-        }
     }
 
     /// Apple 検索由来ピンの不透明度。

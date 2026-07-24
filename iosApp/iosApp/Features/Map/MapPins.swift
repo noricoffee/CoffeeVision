@@ -145,7 +145,7 @@ struct RecommendedCafePin: View {
 /// システムカラー `Color.orange` をそのまま使う（黒ミックスなし）。訪問済みピン（`accentColor`
 /// = 茶 #8B5A2B）と一目で区別できるよう明るいオレンジを維持する判断（シミュレータ確認
 /// フィードバックで黒ミックス濃色は茶に寄って見分けにくいと判定されたため）。
-/// トグルなし。ズームゲート（`applePoiZoomGateRadiusMeters`）を Apple 周辺ピンと共用し、
+/// トグルなし。ズームゲート（`AppleNearbyCafeLoader.zoomGateRadiusMeters`）を Apple 周辺ピンと共用し、
 /// 可視領域が一定以上広い（ズームアウトした）ときは非表示にする（`displayedCuratedCafes` 参照）。
 struct CuratedCafePin: View {
     let cafe: CuratedCafe

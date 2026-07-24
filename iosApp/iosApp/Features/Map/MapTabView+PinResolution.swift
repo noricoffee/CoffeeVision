@@ -36,14 +36,15 @@ extension MapTabView {
     /// 表示対象のおすすめカフェ（訪問済み / 行きたい / 検索結果と競合するものを除外。
     /// 優先順位: 訪問済み > 行きたい > 検索結果 > おすすめ（curated）。表示切替チップの状態に関わらず適用する）。
     ///
-    /// ズームゲート: Apple 周辺ピン（`scheduleAppleNearbyFetch`）と同じしきい値
-    /// `applePoiZoomGateRadiusMeters`（可視半径 3000m）を再利用し、`appState.mapSearchCenter` の
-    /// 直近確定値がしきい値を超える（ズームアウトしている）場合は空配列を返して非表示にする
-    /// （東京全域規模の引きの地図で常時表示になり煩雑という確認フィードバックへの対応）。
-    /// 独自のしきい値は新設しない。
+    /// ズームゲート: Apple 周辺ピン（`AppleNearbyCafeLoader.schedule`）と同じしきい値
+    /// `AppleNearbyCafeLoader.zoomGateRadiusMeters`（可視半径 3000m）を再利用し、
+    /// `appState.mapSearchCenter` の直近確定値がしきい値を超える（ズームアウトしている）場合は
+    /// 空配列を返して非表示にする（東京全域規模の引きの地図で常時表示になり煩雑という確認
+    /// フィードバックへの対応）。独自のしきい値は新設しない（M-2 でしきい値の定義元を
+    /// `AppleNearbyCafeLoader` へ集約）。
     func displayedCuratedCafes(_ bridge: MapViewModelBridge) -> [CuratedCafe] {
         guard let radiusMeters = appState.mapSearchCenter?.radiusMeters,
-              radiusMeters <= Self.applePoiZoomGateRadiusMeters else {
+              radiusMeters <= AppleNearbyCafeLoader.zoomGateRadiusMeters else {
             return []
         }
         let visited = visitedPlaceIds(bridge)

@@ -19,7 +19,7 @@ import kotlinx.coroutines.flow.map
  * 一致する高評価記録（`rating >= RECOMMEND_MIN_RATING`）を持つカフェを
  * [RecommendedCafe] として返す。
  *
- * ## 一致ルール（data-model.md §1.7 準拠）
+ * ## 一致ルール（analysis-model.md §2 準拠）
  *
  * - カフェは `cafe != null` を `cafe.placeId` でグループ化（セルフ抽出は対象外）
  * - あるカフェに `rating >= RECOMMEND_MIN_RATING` かつ [FavoriteSignals] のカテゴリ好みの
@@ -43,7 +43,7 @@ import kotlinx.coroutines.flow.map
  * @param coffeeRepository [CoffeeRecord] の観測に使うリポジトリ
  * @param buildCoffeeStatsUseCase [FavoriteSignals] の算出に使う UseCase
  *
- * @see [data-model.md] §1.7
+ * @see [analysis-model.md] §2
  * @see [CafeRecommendationProvider]
  */
 class ObserveTasteMatchedCafesUseCase(
@@ -57,7 +57,7 @@ class ObserveTasteMatchedCafesUseCase(
          *
          * [BuildCoffeeStatsUseCase] の `HIGHLIGHTS_MIN_RATING`（= 4.0）と同値にする。
          * `HIGHLIGHTS_MIN_RATING` は private のため、本 UseCase の companion に定義する。
-         * data-model.md §1.7「HIGHLIGHTS_MIN_RATING と統一」意図。
+         * analysis-model.md §2 一致ルール: `HIGHLIGHTS_MIN_RATING`（private）と同値だが別定数として持つ意図。
          */
         const val RECOMMEND_MIN_RATING = 4.0
     }

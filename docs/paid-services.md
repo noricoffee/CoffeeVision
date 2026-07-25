@@ -45,7 +45,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 | Cloud Storage for Firebase | **現状課金なし** | **採用見送り済み**。SDK リンクと `storage.rules` は残っているが、写真は端末ローカル（Documents/photos/）保存のみで `Photo.remoteUrl` は常に null。将来復活用にフィールド・rules を残置（data-model.md §1.4） |
 | Crashlytics / Analytics / Performance | 無料 | クラッシュレポート・利用分析・パフォーマンス計測 |
 | Remote Config | 無料 | マップ POI 除外キーワードの配信（`map_poi_excluded_name_keywords`、`ApplePoiFilterConfig`）。起動時 fetch 1 回・最小フェッチ間隔は SDK 既定 12h（2026-07-13） |
-| Cloud Functions（**9-6 協調フィルタ / 設計確定・未実装**） | **従量課金**（呼び出し回数 / 実行時間 / アウトバウンド）— 未発生 | 味覚プロファイル横断の近傍計算 callable。Admin 特権で全 `sharedTasteProfiles` を read（**ユーザー数に線形**）→ 近傍 cosine → 推薦カフェを返す。マップの推薦要求時に呼ぶ（起動毎ではない）。将来は地理事前フィルタ / Firestore ネイティブ KNN で read を削減。**実装着手時にコスト再見積もり**（設計は requirements 9-6 / data-model §1.7） |
+| Cloud Functions（**9-6 協調フィルタ / 設計確定・未実装**） | **従量課金**（呼び出し回数 / 実行時間 / アウトバウンド）— 未発生 | 味覚プロファイル横断の近傍計算 callable。Admin 特権で全 `sharedTasteProfiles` を read（**ユーザー数に線形**）→ 近傍 cosine → 推薦カフェを返す。マップの推薦要求時に呼ぶ（起動毎ではない）。将来は地理事前フィルタ / Firestore ネイティブ KNN で read を削減。**実装着手時にコスト再見積もり**（設計は requirements 9-6 / analysis-model §2） |
 
 ---
 

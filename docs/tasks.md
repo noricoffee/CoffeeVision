@@ -253,7 +253,7 @@
 
 ##### 12-D: 協調フィルタリング（B-4 将来版 / 9-6）
 
-> **設計確定・段階タスク化（2026-07-21 grilling）**: 6 意思決定を確定（同意分離 / Cloud Function 特権 read / 5 軸 cosine + カテゴリ補助 / 未訪問+地理制約 / `RecommendationReason.SimilarUsers` 同型・視覚区別 / 今回は設計固定まで）。確定仕様の正は requirements 9-6 / data-model §1.7・§3.2・§3.3 / implementation_note 2026-07-21。`CafeRecommendationProvider` をリモート実装で差し替え可能な設計は B-4 で済み。実装は未着手で、以下 3 段に分解して段階 dispatch する（前段が後段の前提）。
+> **設計確定・段階タスク化（2026-07-21 grilling）**: 6 意思決定を確定（同意分離 / Cloud Function 特権 read / 5 軸 cosine + カテゴリ補助 / 未訪問+地理制約 / `RecommendationReason.SimilarUsers` 同型・視覚区別 / 今回は設計固定まで）。確定仕様の正は requirements 9-6 / analysis-model §2 / data-model §3.2・§3.3 / implementation_note 2026-07-21。`CafeRecommendationProvider` をリモート実装で差し替え可能な設計は B-4 で済み。実装は未着手で、以下 3 段に分解して段階 dispatch する（前段が後段の前提）。
 
 | 状態 | タスク | 備考 |
 |------|------|------|
@@ -321,7 +321,7 @@
 > - **15-B** 記録摩擦の低減: エディタの現在地カフェサジェスト（許可済みのみ one-shot）+ コーヒー名デフォルト値 + `Mode.Duplicate`（詳細画面「これをもとに記録」）
 > - **15-C** 一覧検索 + 月別グルーピング: UIState を `sections: List<MonthSection>` に置換（name / cafe.name / notes のメモリ内 filter + `.searchable`、表示文字列は iOS 生成）
 > - **15-D** 分析空状態プログレス: `AnalysisReadiness` 派生フィールド（閾値は既存定数参照・ハードコードなし）+ プログレスカード。`hasAnySignal` の単一ソース化まで完了（2026-07-09）
-> - **15-E-1** 抽出レシピ `brewRecipe: String?`（migration 4.sqm、data-model.md §1.1）/ **15-E-2** JSON エクスポート（`ExportCoffeeRecordsUseCase` + `ShareLink`。フェーズ 6 旧行を統合）/ **15-E-3** 未経験豆の探索提案（`SuggestUnexploredBeansUseCase`、data-model.md §1.7a）
+> - **15-E-1** 抽出レシピ `brewRecipe: String?`（migration 4.sqm、data-model.md §1.1）/ **15-E-2** JSON エクスポート（`ExportCoffeeRecordsUseCase` + `ShareLink`。フェーズ 6 旧行を統合）/ **15-E-3** 未経験豆の探索提案（`SuggestUnexploredBeansUseCase`、analysis-model.md §3）
 >
 > 判断は implementation_note 2026-07-06〜07-07 の 15-x 各エントリ、テスト教訓（Native cancel drain / UIState 破壊的変更の波及）は lessons 2026-07-06〜07-07。
 
@@ -354,7 +354,7 @@
 
 #### 産地シノニム正規化 OriginNormalizer（2026-07-08 着手）
 
-> 完了（2026-07-08）: 「Ethiopia」「イルガチェフェ」→「エチオピア」の名寄せを `object OriginNormalizer`（trim → lowercase → シノニム辞書完全一致、辞書外は素通し）で決定論のまま実現し、全 origin 正規化ポイント 5 箇所に適用（ベクトル検索は過剰と判断し見送り）。domain 170 件 green（iOS / Android）+ 統合ビルド成功。仕様反映は data-model.md §1.6〜§1.8、経緯は implementation_note 2026-07-08、複合語×辞書のすれ違いは lessons 2026-07-08。
+> 完了（2026-07-08）: 「Ethiopia」「イルガチェフェ」→「エチオピア」の名寄せを `object OriginNormalizer`（trim → lowercase → シノニム辞書完全一致、辞書外は素通し）で決定論のまま実現し、全 origin 正規化ポイント 5 箇所に適用（ベクトル検索は過剰と判断し見送り）。domain 170 件 green（iOS / Android）+ 統合ビルド成功。仕様反映は analysis-model.md §1 / data-model.md §1.8、経緯は implementation_note 2026-07-08、複合語×辞書のすれ違いは lessons 2026-07-08。
 
 ---
 
@@ -362,9 +362,10 @@
 
 ### 未完・バックログ
 
-#### data-model.md 棚卸しの是正（2026-07-25 起票）
+#### data-model.md 棚卸しの是正（2026-07-25 起票 / 完了）
 
-> `docs/data-model.md` をコードと突き合わせた陳腐化チェック（ストック型 doc は縮小でなく陳腐化チェックが棚卸しの中身）。doc 側の陳腐化 6 件・欠落 2 件は同日 doc に反映済み。ここに残すのは**コード側の是正**のみ。
+> `docs/data-model.md` をコードと突き合わせた棚卸し。**3 段**で実施し全て完了: ①陳腐化チェック（陳腐化 6 件是正 + 欠落 2 件補完。commit `4ae4885`）②縮約 1246 → 901 行（ソースの逐語コピーと経緯を排除。基準は doc 前文に明文化。commit `bc21dec`）③分析系 3 節を [`analysis-model.md`](./analysis-model.md) へ分離（data-model 901 → 708 行 + 新 doc 231 行。旧番号はリダイレクト表を残し、live pointer のみ張り替え = docs 24 + KDoc 19 箇所）。
+> 副産物のバグ（エクスポートが `region` を落とす）は commit `bbf51c6` で修正済み。判断の経緯は implementation_note 2026-07-25、教訓は lessons 2026-07-25。
 
 | 状態 | タスク | 備考 |
 |------|------|------|

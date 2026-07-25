@@ -12,7 +12,7 @@ import kotlinx.coroutines.flow.Flow
  * @property cafe placeId / 座標を持つカフェ情報（マップピン用）。最新記録時の Cafe スナップショット
  * @property matches 推薦理由の一覧（非空）。一致した軸ごとに 1 件ずつ格納される
  *
- * @see [data-model.md] §1.7
+ * @see [analysis-model.md] §2
  */
 data class RecommendedCafe(
     val cafe: Cafe,
@@ -26,7 +26,7 @@ data class RecommendedCafe(
  * 将来の協調フィルタリング（9-6）では `SimilarUsers(...)` 等をここに追加し、
  * UI / VM / Foundation Models 連携は不変のまま種類を拡張できる。
  *
- * @see [data-model.md] §1.7
+ * @see [analysis-model.md] §2
  */
 sealed interface RecommendationReason {
 
@@ -51,7 +51,7 @@ sealed interface RecommendationReason {
  *
  * v1 はカテゴリ好み 4 軸（産地 / 焙煎度 / 抽出方法 / 精製方法）に限定。
  * [FavoriteSignals.dominantTastingAxis]（相関軸）は per-record の categorical 一致に変換できないため
- * v1 の対象外とする（data-model.md §1.7 一致ルール参照）。
+ * v1 の対象外とする（analysis-model.md §2 一致ルール参照）。
  */
 enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
@@ -62,7 +62,7 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
  * 将来の 9-6（協調フィルタリング）ではサーバ側のリモート実装に差し替えるだけで、
  * [com.noricoffee.feature.map.MapViewModel] / iOS UI / Foundation Models 連携は不変のまま切り替えられる。
  *
- * @see [data-model.md] §1.7「推薦ソースの抽象化」
+ * @see [analysis-model.md] §2「推薦ソースの抽象化」
  */
 interface CafeRecommendationProvider {
     /**

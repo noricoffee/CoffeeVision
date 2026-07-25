@@ -12,7 +12,7 @@ import kotlinx.datetime.LocalDate
  * 1. 統計 UI の入力
  * 2. 階層3（Foundation Models）に渡す**唯一の入力**（生レコードは LLM に渡さない）
  *
- * @see [data-model.md] §1.6
+ * @see [analysis-model.md] §1
  */
 data class CoffeeStats(
     val totalCount: Int,                       // 全記録件数
@@ -107,7 +107,7 @@ data class RecordDigest(
  * Blue Bottle「Elements of Coffee Tasting」の 5 要素に対応する。
  *
  * @see [TastingAxisCorrelation]
- * @see [data-model.md] §1.6 集計ルール（dominantTastingAxis）
+ * @see [analysis-model.md] §1 集計ルール（dominantTastingAxis）
  */
 enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
 
@@ -141,7 +141,7 @@ data class TastingAxisCorrelation(
  * @see [BuildCoffeeStatsUseCase.SHRINKAGE_PRIOR_WEIGHT]
  * @see [BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE]
  * @see [BuildCoffeeStatsUseCase.CORRELATION_MIN_ABS]
- * @see [data-model.md] §1.6 集計ルール（favoriteSignals）
+ * @see [analysis-model.md] §1 集計ルール（favoriteSignals）
  */
 data class FavoriteSignals(
     val bestBrewMethod: CategoryStat? = null,
@@ -230,7 +230,7 @@ data class CoffeeInsight(
  * @property aftertaste 後味の平均
  * @property ratedCount tasting を持つ記録の件数（all-or-nothing なので 5 要素で共通）
  *
- * @see [data-model.md] §1.6 集計ルール
+ * @see [analysis-model.md] §1 集計ルール
  */
 data class TastingAverages(
     val sweetness: Double?,                    // 甘味の平均（tasting ありの記録のみ、無ければ null）

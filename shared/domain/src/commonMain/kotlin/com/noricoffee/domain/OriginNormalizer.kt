@@ -12,7 +12,7 @@ package com.noricoffee.domain
  * - 「モカ」はイエメン / エチオピアいずれの通称にもなり得る多義語のため辞書に含めない（誤名寄せ回避）
  * - 品種（variety）のシノニムは対象外
  *
- * @see [docs/data-model.md] §1.6 集計ルール
+ * @see [docs/analysis-model.md] §1 集計ルール
  */
 object OriginNormalizer {
 

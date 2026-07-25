@@ -33,7 +33,7 @@ import kotlin.math.sqrt
  * - **`favoriteSignals`**: 経験ベイズ収縮（[SHRINKAGE_PRIOR_WEIGHT]）でカテゴリ好みを選定し、
  *   ピアソン相関（[CORRELATION_MIN_SAMPLE] / [CORRELATION_MIN_ABS]）でテイスティング軸を選定する
  *
- * @see [data-model.md] §1.6
+ * @see [analysis-model.md] §1
  */
 class BuildCoffeeStatsUseCase {
 
@@ -336,7 +336,7 @@ class BuildCoffeeStatsUseCase {
      * tasting を持つ記録が 1 件も無い場合は各要素 null、ratedCount = 0。
      * 5 要素の母数は常に同じ（ratedCount は単一 Int）。
      *
-     * @see [data-model.md] §1.6 集計ルール（tastingAverages）
+     * @see [analysis-model.md] §1 集計ルール（tastingAverages）
      */
     private fun buildTastingAverages(records: List<CoffeeRecord>): TastingAverages {
         val tastingRecords = records.filter { it.tasting != null }

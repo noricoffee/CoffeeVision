@@ -13,7 +13,7 @@ import kotlinx.coroutines.flow.first
  * - SKIE により `searchRecords(filter:) async throws -> [CoffeeRecordSummary]` が Swift に見える。
  * - `userId` は実装（[CoffeeRecordQueryImpl]）が内部で解決するため、Swift は [CoffeeRecordFilter] だけ渡す。
  *
- * @see [docs/data-model.md] §1.6「対話 Q&A v2」
+ * @see [docs/analysis-model.md] §1「対話 Q&A v2」
  * @see [docs/kmp-bridge.md]「対話 Q&A v2（CoffeeRecordQuery.searchRecords）」
  */
 interface CoffeeRecordQuery {
@@ -128,7 +128,7 @@ data class CoffeeRecordSummary(
  * 個人アプリ規模（数十〜数百件）を想定した全件読み込み + インメモリフィルタ方式。
  * 件数が増えた場合は SQLDelight の WHERE 句での DB 側フィルタに移行する。
  *
- * @see [docs/data-model.md] §1.6「対話 Q&A v2」
+ * @see [docs/analysis-model.md] §1「対話 Q&A v2」
  */
 class CoffeeRecordQueryImpl(
     private val coffeeRepository: CoffeeRepository,

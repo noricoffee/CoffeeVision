@@ -124,7 +124,8 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 | コーディング規約 | Kotlin / Swift 双方の命名・実装ルール | [`docs/coding-conventions.md`](./docs/coding-conventions.md) |
 | UI/UX ガイドライン | SwiftUI（iOS）の HIG ベース UI 設計方針 | [`docs/ui-ux-guidelines.md`](./docs/ui-ux-guidelines.md) |
 | 要件定義 | 機能一覧・画面一覧・非機能要件 | [`docs/requirements.md`](./docs/requirements.md) |
-| データモデル | CoffeeRecord / Cafe / Photo / BeanProfile の Kotlin / SQLDelight / Firestore 表現 | [`docs/data-model.md`](./docs/data-model.md) |
+| データモデル | **永続エンティティ**（CoffeeRecord / Cafe / Photo / BeanProfile / SavedCafe / CuratedCafe / AuthAccount）の Kotlin / SQLDelight / Firestore / エクスポート JSON 表現 | [`docs/data-model.md`](./docs/data-model.md) |
+| 分析モデル | **永続化しない派生集計**（CoffeeStats / 階層3 インターフェース / RecommendedCafe / UnexploredBeanSuggestion）。2026-07-25 に data-model から分離 | [`docs/analysis-model.md`](./docs/analysis-model.md) |
 | KMP ブリッジ | Swift ⇄ Kotlin 相互運用ルール、`expect`/`actual`、Flow / suspend の扱い | [`docs/kmp-bridge.md`](./docs/kmp-bridge.md) |
 | 実装ノート | 要件未満の実装上の決定・影響・トレードオフ・経緯の時系列ログ（親のみ更新） | [`docs/implementation_note.md`](./docs/implementation_note.md) |
 | タスク一覧 | カテゴリ別タスク・進捗管理 | [`docs/tasks.md`](./docs/tasks.md) |

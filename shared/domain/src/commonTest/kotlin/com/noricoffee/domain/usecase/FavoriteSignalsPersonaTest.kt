@@ -1026,7 +1026,7 @@ class FavoriteSignalsPersonaTest {
         }
         println("  （★ = production 設定 δ=${productionDelta}, c=${productionC}）")
         println("")
-        println("  上記から最適候補を選び、親が data-model §1.6 の確定値を更新する。")
+        println("  上記から最適候補を選び、親が analysis-model §1 の確定値を更新する。")
         println("=================================================================")
 
         // production 設定（sweep 結果中の最近傍）での検出力アサート

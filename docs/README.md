@@ -9,7 +9,7 @@ CoffeeVision の設計・仕様・運用ドキュメントの置き場。ここ�
 ## 直下（設計・仕様の正本）
 
 コーディング時に従う正本。役割は CLAUDE.md「必読ドキュメント」表を参照：
-`architecture` / `coding-conventions` / `ui-ux-guidelines` / `requirements` / `data-model` / `kmp-bridge` / `implementation_note` / `tasks` / `app-store-metadata` / `paid-services`。
+`architecture` / `coding-conventions` / `ui-ux-guidelines` / `requirements` / `data-model` / `analysis-model` / `kmp-bridge` / `implementation_note` / `tasks` / `app-store-metadata` / `paid-services`。
 
 - **[admob-setup-todo.md](./admob-setup-todo.md)** — AdMob 本番ユニット発行のユーザー作業手順（**一時ファイル・git 非追跡**。完了後に削除）。実装側の切替手順の正本は `iosApp/Configuration/README.md`。
 

@@ -8,7 +8,7 @@ extension CoffeeRecord {
     /// （例:「エチオピア イルガチェフェ」）。`region` が空/nil なら `origin` のみ。
     /// 両方 nil/空なら nil（呼び出し側は非表示にする）。
     ///
-    /// `region` は分析非対象・表示専用（`docs/data-model.md` §1.3a / §1.6）。
+    /// `region` は分析非対象・表示専用（`docs/data-model.md` §1.3a / `docs/analysis-model.md` §1）。
     var originDisplayText: String? {
         let trimmedOrigin = origin?.trimmingCharacters(in: .whitespaces) ?? ""
         let trimmedRegion = region?.trimmingCharacters(in: .whitespaces) ?? ""

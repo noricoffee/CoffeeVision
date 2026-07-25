@@ -80,7 +80,7 @@
 - Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ
 - 分析は 3 階層分離: 階層1・2 は KMP で決定論（`CoffeeStats` / `FavoriteSignals`。収縮平均 + n 連動 z ゲート `CATEGORY_Z = 2.0` + 相関 floor で「弱い傾向」だけを信号化、断定しない）、階層3 は iOS Foundation Models（`CoffeeInsightProvider`。可否は注入時判定、null = 非対応端末で graceful degradation）。Q&A は v1 = `CoffeeStats` digest 注入（単発・ステートレス）/ v2 = `Tool` から `CoffeeRecordQuery.searchRecords`（計算は KMP・LLM は解釈と整形のみ）
 - `BeanProfile`（12-B）はサーバ管理 read-only の豆ナレッジ。`CoffeeRecord` と ID 紐付けせず origin / processings のファジーマッチ。取得は one-shot get + メモリキャッシュ。12-C で `FavoriteSignals` と突合した `preferredBeanTraits` を `CoffeeStats` に付加し、Foundation Models で言語化
-- 味覚一致カフェ推薦: **9-5（コンテンツベース v1）は実装完了・○ 確定**（2026-07-21。`ObserveTasteMatchedCafesUseCase` / `RecommendedCafe` / `CafeRecommendationProvider`、産地/焙煎/抽出/精製の 4 軸マッチ、マップの好み一致ピン + 理由表示 + 分析タブ連携。テイスティング 5 軸の一致はスコープ外）。**9-6（協調フィルタ / 他ユーザー横断 v2）は設計確定・△（未実装）**（`sharedTasteProfiles/{uid}` + Cloud Function 特権 read。閾値定数 / Function 内実装 / インフラ選定は未決。tasks 12-D で段階 dispatch）。詳細は data-model §1.7
+- 味覚一致カフェ推薦: **9-5（コンテンツベース v1）は実装完了・○ 確定**（2026-07-21。`ObserveTasteMatchedCafesUseCase` / `RecommendedCafe` / `CafeRecommendationProvider`、産地/焙煎/抽出/精製の 4 軸マッチ、マップの好み一致ピン + 理由表示 + 分析タブ連携。テイスティング 5 軸の一致はスコープ外）。**9-6（協調フィルタ / 他ユーザー横断 v2）は設計確定・△（未実装）**（`sharedTasteProfiles/{uid}` + Cloud Function 特権 read。閾値定数 / Function 内実装 / インフラ選定は未決。tasks 12-D で段階 dispatch）。詳細は analysis-model §2
 - データ利用同意（12-A）: `users/{uid}.analyticsConsent`。初回起動オンボーディングで取得し設定トグルで変更可。ドキュメント不在は false 扱い
 - Firebase テレメトリ（iOS のみ）: **Crashlytics + Performance = 常時収集**（同意不要）、**Analytics = `analyticsConsent` 同意時のみ**。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 では既定で IDFA 非依存 = 旧 `WithoutAdIdSupport` 相当。旧プロダクトは廃止。IDFA を使う場合のみ `FirebaseAnalyticsIdentitySupport` を追加する反転構成）。`Info.plist` の `FIREBASE_ANALYTICS_COLLECTION_ENABLED=NO` で Analytics 自動収集のみ起動時 OFF（Performance は常時 ON）→ `AppState.analyticsConsent` の `didSet` → `applyTelemetryConsent` が Analytics だけ有効化。イベントは自動収集 + `screen_view` のみ（カスタムイベント未導入）。詳細は 2026-07-08 エントリ
 
@@ -211,7 +211,7 @@ FAB タップで `pendingRecenter = true` → `requestLocation()` → `.onChange
 ### 2026-06-19: 分析機能の 3 階層分離と Foundation Models の使いどころ
 
 - 領域: Shared / KMP / iOS
-- 関連: `docs/requirements.md` §9, `docs/data-model.md` §1.6
+- 関連: `docs/requirements.md` §9, `docs/analysis-model.md` §1
 
 **核となる原則 — 集計は KMP、解釈は LLM**。階層1（記述統計）/ 階層2（傾向抽出）は KMP 共通層で決定論的に算出（`CoffeeStats` / `BuildCoffeeStatsUseCase`）、階層3（自然言語の要約・Q&A）だけ iOS Foundation Models で、**入力は集約済み `CoffeeStats` のみ**（生レコードは渡さない）。理由: ①正確性（平均を LLM に計算させない）②オンデバイス LLM のコンテキスト窓 ③再現性・テスト容易性 ④3 ロール体制に綺麗に割れる。
 
@@ -260,7 +260,7 @@ FAB タップで `pendingRecenter = true` → `requestLocation()` → `.onChange
 ### 2026-06-20: テイスティング 5 要素は all-or-nothing（`TastingScores?`）
 
 - 領域: 全レイヤー
-- 関連: `docs/data-model.md` §1.1a / §1.6
+- 関連: `docs/data-model.md` §1.1a / `docs/analysis-model.md` §1
 
 Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸味 / 風味 / 後味**を `CoffeeRecord.tasting` として追加。スケールは 1〜10 の**強度**（良し悪しではない。総合評価 `rating` とは別軸）。
 
@@ -290,7 +290,7 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 - **単一の柔軟な検索 tool** `CoffeeRecordQuery.searchRecords(filter)` 1 本。filter は全 String / Double / Int（enum なし）で、LLM 生成文字列を KMP 側で寛容マッチ。limit は不正値を clamp（既定 10 / 上限 100）
 - **userId は KMP 実装が内部解決**（Swift tool は意識しない）。ブリッジ方向は v1 と逆の Swift→Kotlin（SKIE が `async throws` を生成、witness 不要）
 - **遅延アタッチ**: provider は container より先に生成され container 引数になるため、`coffeeRecordQuery` は `attachRecordQuery(_:)` で構築後に後付け（依存サイクル解消。詳細は kmp-bridge.md）
-- **実機デバッグの結論**（試行錯誤は git 履歴参照）: ①モデルが digest を「全記録の網羅リスト」と誤認して tool を呼ばない → instructions を命令形にし「digest は非網羅の要約 / 記録の有無は tool 結果のみで判断」を明示 ②固有名詞のフィールド誤分類（カフェ名を `origin` に入れて 0 件）→ KMP 側で `origin` / `cafeName` を**フィールド横断 free-text term 化**（公開 API 不変で解決。data-model §1.6 反映済）
+- **実機デバッグの結論**（試行錯誤は git 履歴参照）: ①モデルが digest を「全記録の網羅リスト」と誤認して tool を呼ばない → instructions を命令形にし「digest は非網羅の要約 / 記録の有無は tool 結果のみで判断」を明示 ②固有名詞のフィールド誤分類（カフェ名を `origin` に入れて 0 件）→ KMP 側で `origin` / `cafeName` を**フィールド横断 free-text term 化**（公開 API 不変で解決。analysis-model §1 反映済）
 - Swift 側注意: Kotlin `Double?` は `KotlinDouble?`（ラップ必要）。`localizedBrewMethod` 等が 3 ファイルに重複（`CoffeeLocalizer` 共通化候補）
 
 ### 2026-06-21: CI Android ジョブでダミー google-services.json を生成
@@ -303,9 +303,9 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 ### 2026-06-22: 好み判定（FavoriteSignals）の統計設計 — 収縮平均 + n 連動ゲート
 
 - 領域: Shared / KMP
-- 関連: `shared/domain/.../usecase/BuildCoffeeStatsUseCase.kt`, `FavoriteSignalsPersonaTest.kt`, `docs/data-model.md` §1.6
+- 関連: `shared/domain/.../usecase/BuildCoffeeStatsUseCase.kt`, `FavoriteSignalsPersonaTest.kt`, `docs/analysis-model.md` §1
 
-（B-1 / B-1b / B-1c / B-1d の 5 エントリを統合。最終仕様は data-model §1.6 が正）
+（B-1 / B-1b / B-1c / B-1d の 5 エントリを統合。最終仕様は analysis-model §1 が正）
 
 **設計原則**: 生平均ランキングは n=1 の 5.0 が n=20 の 4.2 に勝つ罠があるため、①件数ガード ②経験ベイズ収縮 `shrunkMean = (n·mean + k·globalMean)/(n+k)`（k=5）で抑える。正方向のみ信号化。テイスティング軸はピアソン相関（符号付き。r<0 =「低いほど高評価」も返す）。**交絡は計算しない**（「産地が好き」か「その産地の店が好き」かは個人データでは分離不能。「言える範囲を計算で確定し、LLM はその範囲でしか言わない」= グラウンディングの土台）。
 
@@ -320,7 +320,7 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 ### 2026-06-22: 味覚一致カフェのマップ連携（B-4 v1・コンテンツベース推薦）
 
 - 領域: Shared → KMP → iOS
-- 関連: `docs/data-model.md` §1.7, `shared/domain/.../{RecommendedCafe.kt,ObserveTasteMatchedCafesUseCase.kt}`, `iosApp/.../Features/Map/`
+- 関連: `docs/analysis-model.md` §2, `shared/domain/.../{RecommendedCafe.kt,ObserveTasteMatchedCafesUseCase.kt}`, `iosApp/.../Features/Map/`
 
 （設計確定 + KMP 実装 + iOS 追随の 3 エントリを統合）
 
@@ -332,7 +332,7 @@ Blue Bottle「Elements of Coffee Tasting」由来の**甘味 / ボディ / 酸�
 ### 2026-06-22: Future Direction — 協調フィルタリング推薦（9-6）と FoundationModel の住み分け
 
 - 領域: アーキテクチャ方針（将来 / 未着手）
-- 関連: requirements 9-6・data-model §1.7 `CafeRecommendationProvider`
+- 関連: requirements 9-6・analysis-model §2 `CafeRecommendationProvider`
 
 将来像（ユーザー意向）: 複数ユーザーが好みを登録し、**好みが近い他ユーザーの高評価カフェを提案**する（協調フィルタリング）。「今は作らないが設計の北極星」として残す。
 
@@ -806,7 +806,7 @@ backlog B-4 の解消。`CoffeeRecord.rating: Double`（0.0 = 未評価 sentinel
 
 - **未評価保存の解禁（ユーザー決定）**: 従来エディタは rating 必須（0.5 未満はバリデーションエラー）で、requirements の「未評価は集計から除外」と矛盾していた（未評価記録はダミーデータ経由でしか作れなかった）。nullable 化にあわせ「null は OK / 非 null なら 0.5..5.0 かつ 0.5 刻み」に変更し、「まず記録、あとで評価」を可能にした（15-B の記録摩擦低減と整合）
 - **Firestore は「null = キー省略」**: 当初案は明示 null 書き込みだったが、既存規約（cafe / origin / tasting 等の nullable はキー省略）に合わせて省略方式へ変更。decode はキー欠如 / null / 0.0（legacy）をすべて null に正規化（リモート既存ドキュメントは migration せず読み側で吸収）。Android mapper の「rating 欠損で record 全体 drop」も撤廃
-- **Q&A ツール境界だけ 0.0 sentinel を意図的に残す**: `CoffeeRecordSummary.rating: Double`（`record.rating ?: 0.0`）。LLM ブリッジの primitive 主義（data-model §1.6）を優先し、iOS ツール系の `>= 0.5` 表示分岐も不変で済ませた
+- **Q&A ツール境界だけ 0.0 sentinel を意図的に残す**: `CoffeeRecordSummary.rating: Double`（`record.rating ?: 0.0`）。LLM ブリッジの primitive 主義（analysis-model §1）を優先し、iOS ツール系の `>= 0.5` 表示分岐も不変で済ませた
 - **migration 5 はテーブル再作成方式**: SQLite は NOT NULL 撤廃の ALTER 不可のため CREATE → `NULLIF(rating, 0.0)` で INSERT SELECT → DROP → RENAME → インデックス再作成。`PRAGMA foreign_keys` は SQLDelight グラマの制約で `0`/`1` リテラル表記。「SQLite はトランザクション内の `PRAGMA foreign_keys` を無視する」既知の罠があるため、JVM（JdbcSqliteDriver）に加えて NativeSqliteDriver（iOS 本番ドライバ、FK 有効の本番構成）でも migration テストを追加して実証（`CoffeeRecordMigration5IosTest`、0.0→NULL 変換 + photo FK 保持 + CASCADE 継続を確認。in-memory での検証のため実機ディスク DB はシミュレータ目視で補完）
 - **iOS の未評価 UI**: read-only は星 0 個でなく「未評価」テキスト（低評価との誤読回避）。解除は明示クリアボタン + VoiceOver の decrement 下限の 2 経路（再タップ解除は discoverability と VoiceOver 非対応で不採用）
 - 影響: `data-firebase` に初のテスト基盤新設（`commonTest` に kotlin-test 追加、plain JVM で Firestore `Timestamp` が動くことを確認）
@@ -1036,7 +1036,7 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 ### 2026-07-20: 好み一致に精製方法軸を追加（3→4 軸）+ ダミーデータ人格再設計
 
 - 領域: KMP + iOS
-- 関連: `FavoriteSignals` / `PreferenceMatchAxis` / `ObserveTasteMatchedCafesUseCase` / `BuildCoffeeStatsUseCase` / `DummyCoffeeData`、`AnalysisView.swift`（好みの傾向カード）、`MapTabView.swift`、data-model.md §1.6/§1.7、tasks.md「好み一致の作り込み（2026-07-20 起票）」
+- 関連: `FavoriteSignals` / `PreferenceMatchAxis` / `ObserveTasteMatchedCafesUseCase` / `BuildCoffeeStatsUseCase` / `DummyCoffeeData`、`AnalysisView.swift`（好みの傾向カード）、`MapTabView.swift`、analysis-model.md §1/§2、tasks.md「好み一致の作り込み（2026-07-20 起票）」
 
 「好み一致」（`RecommendedCafe`）のマッチ軸を **産地 / 焙煎度 / 抽出方法の 3 軸 → + 精製方法の 4 軸**に拡張。あわせて開発用ダミーデータを人格中心に再設計した。
 
@@ -1073,7 +1073,7 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 ### 2026-07-21: 9-6 協調フィルタリング推薦の設計確定（grilling で 6 意思決定）
 
 - 領域: アーキテクチャ方針（設計確定・実装未着手）
-- 関連: requirements 9-6（✕→△）・data-model §1.7 / §3.2 / §3.3・tasks 12-D・2026-06-22 Future Direction エントリの具体化
+- 関連: requirements 9-6（✕→△）・analysis-model §2・data-model §3.2 / §3.3・tasks 12-D・2026-06-22 Future Direction エントリの具体化
 
 ユーザー要望「9-6 を進める」に対し、リリース前・ユーザーベース皆無（コールドスタート直撃）を踏まえ**今回は設計を docs に固定するところまで**とし、grilling で 6 つの意思決定を確定した。実装コードは書いていない。
 
@@ -1081,7 +1081,7 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 - **②計算は Cloud Function 特権 read に閉じる**: 横断参照をクライアントに晒すと他人のプロファイルが見える。Function が Admin 特権で全 `sharedTasteProfiles` を read し、呼び出しユーザーへ「推薦カフェ + 似ているユーザー数」だけ返す。Firestore ネイティブ KNN をクライアント直クエリする案は近傍ドキュメントがクライアントに返るためプライバシー後退で不採用。
 - **③特徴ベクトルは 5 軸 cosine + カテゴリ 4 軸補助**: docs 既定「`tastingAverages` 5 軸が基盤」を主軸にしつつ、tasting は任意入力で未入力ユーザーが 5 軸 null になり母集団が痩せるため、カテゴリ好み 4 軸を fallback + 精度シグナルに加味。
 - **④推薦対象は未訪問 + 地理制約**: 9-5（既訪問の再訪・ローカル）と役割分担。callable に中心座標+半径を渡し、地球の裏側の無意味推薦を防ぐ。地理制約のため共有プロファイルの `highRatedCafes` に座標を持たせる。
-- **⑤マップは型拡張で同型・視覚区別**: data-model §1.7 予告どおり `RecommendationReason.SimilarUsers(count)` を追加（UI/VM は加算的）。ただし 9-6 は未訪問なので 9-5 のハートピン（訪問済み）と視覚区別する。
+- **⑤マップは型拡張で同型・視覚区別**: analysis-model §2 予告どおり `RecommendationReason.SimilarUsers(count)` を追加（UI/VM は加算的）。ただし 9-6 は未訪問なので 9-5 のハートピン（訪問済み）と視覚区別する。
 - **⑥共有プロファイル `sharedTasteProfiles/{uid}`**: 特徴ベクトルのみ（生メモ・タグ・カフェ名は含めない）。本人のみ read/write、横断 read は Function 特権（Security Rules に追加）。
 
 未決（docs に明記）: 閾値定数（K/N/半径）は実装時 sweep / Function 内の類似計算（総当たり cosine vs Firestore ネイティブベクトル KNN。初期は総当たりで十分の想定）/ サーバーインフラ選定（Cloud Functions ランタイム・デプロイ・CI = 12-D 再開の起点）/ FM 言語化を v1 に含めるか。最初の実装可能な一歩は①同意 + 共有プロファイル書き込み基盤（サーバー不要・クライアント完結）。
@@ -1265,4 +1265,9 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 **この判断を支持する実例**: 削除した 2 つのコードサンプルは、過去に**サンプル自体の追随漏れ**で修正タスクになっていた（tasks #6 = §4.2 の `runRemote` が `runCatching` を例示して自プロジェクトの禁止パターンに違反 / #7 = §2.1 の `upsert` に `brew_recipe` 列が無く実体と不一致）。**doc 内のコード複製は、それ自身が追随コストと陳腐化の発生源**という裏付けになった。
 
-**外部参照の生存検証**: 他 doc / コードコメントから名指しされている節番号 20 個（§1.1〜§8）すべてが縮約後も解決することを機械的に確認済み（節見出しは削除・改番していない）。§1.6 / §1.7 は分析系の派生モデルで今も 100 行超あり、さらに削るなら別 doc への分離が次の手段になるが、名指し参照の付け替えコストが大きいので今回は見送った。
+**外部参照の生存検証**: 他 doc / コードコメントから名指しされている節番号 20 個（§1.1〜§8）すべてが縮約後も解決することを機械的に確認済み（節見出しは削除・改番していない）。**追記（同日、ユーザー指示で分離を実施）**: 見送った「別 doc への分離」を実行し、§1.6 / §1.7 / §1.7a を [`analysis-model.md`](./analysis-model.md) §1 / §2 / §3 へ移した（data-model 901 → 708 行 + analysis-model 231 行）。分離軸は**永続するか否か**（analysis-model 側はすべて SQLDelight / Firestore 表現を持たない派生集計で、更新契機が永続エンティティと違う）。
+
+- **新 doc は独自採番**（§1〜§3）にした。移動先で `§1.6` から始まる採番を維持する案は参照の張り替えが不要になる利点があったが、新規読者に意味不明な番号が残るため却下
+- **`data-model.md` の §1.8 以降は改番しない**。§1 の採番に 1.6〜1.7a の欠番が空くが、他 doc / コードから名指しされている番号を動かす方がコストとリスクが高い（欠番は意図的であることを doc に明記）
+- **旧番号にはリダイレクト表を残した**（data-model.md §1.6〜1.7a）。これにより**完了済みタスク行・変更履歴行のような「史実としての参照」は書き換えずに済む**（当時 data-model に書いたという記録を改変しない）。書き換えたのは「現在の正本の場所を指す live pointer」だけ — docs 24 箇所 + KDoc 19 箇所（kmp-engineer 17 / ios-engineer 2 に dispatch）
+- 検証: 両 doc の実在節番号と全参照を機械照合し dangling ゼロを確認。`CoffeeRecordDisplay.swift` は §1.3a（data-model 残留）と §1.6（分離）の両方を参照していたため 2 doc を指す形に修正した

@@ -11,6 +11,8 @@ CoffeeVision のドメインモデルを **Kotlin（ドメイン）/ SQLDelight�
 - `Photo`（写真。`CoffeeRecord` の子）
 - `BeanProfile`（豆ナレッジ。Firestore グローバルコレクション / サービス管理データ）
 - `SavedCafe`（行きたい店。ウィッシュリスト / フェーズ 15-A）
+- `CuratedCafe`（都道府県別おすすめカフェ。Firestore グローバルコレクション / サービス管理データ / フェーズ 19）
+- `AuthAccount`（アカウント情報 + データ利用同意。`users/{uid}` ルートドキュメントと同期 / §1.11）
 
 ---
 
@@ -226,7 +228,7 @@ data class VisitedCafe(
 data class CoffeeStats(
     val totalCount: Int,                       // 全記録件数
     val ratedCount: Int,                       // rating != null の件数
-    val averageRating: Double?,                // 未評価(0.0)除外の平均。全未評価なら null
+    val averageRating: Double?,                // 未評価(rating == null)除外の平均。全未評価なら null
     val ratingHistogram: List<RatingBucket>,   // 0.5 刻みの度数（存在する刻みのみ、昇順）
     val byBrewMethod: List<CategoryStat>,      // 抽出方法別（label = enum.name）
     val byRoastLevel: List<CategoryStat>,      // 焙煎度別
@@ -327,7 +329,7 @@ data class PreferredBeanTraits(
 - **産地**: 分析が見るのは `origin`（国名）**のみ**。`region`（エリア / 農園）は表示専用で集計に使わない（2026-07-22 分離）。origin は国ドロップダウン（`CoffeeOriginCatalog` §1.3a）由来で概ね正規形に揃うが、`BeanProfile.origin` や legacy 自由文字列との名寄せのため引き続き `OriginNormalizer` を通す。グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`、2026-07-08 導入）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
-- **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion` に公開。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`。
+- **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion`。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`（**`HIGHLIGHTS_MIN_RATING` のみ `private`** = UseCase 内部専用。同じ 4.0 を使う §1.7 の推薦は別定数 `ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING` を持つ）。
 
 > Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は **Phase B-1（好み判定）で上記仕様により実体化**する（収縮平均＋相関軸。それ以前は全フィールド null の空 `FavoriteSignals`）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。`favoriteSignals` は階層3（要約・Q&A）の `buildPrompt` にも「弱い傾向＋件数の但し書き」として渡し、LLM は断定せず言語化する。
 
@@ -468,7 +470,7 @@ interface CafeRecommendationProvider {
 
 あるカフェ（`cafe.placeId` でグループ化、`cafe == null` のセルフ抽出は座標が無いため対象外）に、次を**両方**満たす `CoffeeRecord` が 1 件以上あれば `RecommendedCafe` として返す:
 
-1. `rating >= HIGHLIGHTS_MIN_RATING`（= 4.0。`recentHighlights` と統一）
+1. `rating >= ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING`（= 4.0。`recentHighlights` の `HIGHLIGHTS_MIN_RATING` と同値だが、あちらは `private` のため別定数として持つ）
 2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` / `bestProcessing` のうち **非 null のもの**）のいずれかに一致:
    - `origin`: `OriginNormalizer.normalize`（trim + lowercase + シノニム辞書）で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
    - `roastLevel`: enum 一致（`bestRoastLevel.label == record.roastLevel?.name`）
@@ -599,11 +601,12 @@ data class SavedCafe(
 
 - **キーは `cafe.placeId`（自然キー。UUID を持たない）**: 同じカフェを二重に「行きたい」登録する意味がないため、`(userId, placeId)` で一意とする。§5 の「ID は UUID v4」ルールの**意図的な例外**（保存/解除がトグルとして冪等になり、二重登録の防御ロジックが不要になる）。Places の place_id は英数字 + `-`/`_` で構成され `/` を含まないため、Firestore ドキュメント ID にそのまま使える
 - **記録作成時の自動解除はしない（データは独立）**: 記録保存フローに `SavedCafeRepository` への書き込みを結合させない（Simplicity First / ユーザーの意図しないデータ消失を避ける。「また行きたい」用途でリストに残す使い方も許容）。重複感は**表示側で解決**する:
-  - マップのピンは同一 placeId が競合したら **訪問済み（+ 好み一致）> 行きたい > 検索結果** の優先順位で 1 本だけ出す
+  - マップのピンは同一 placeId が競合したら **訪問済み（+ 好み一致）> 行きたい > 検索結果 > おすすめ（curated、§1.10）** の優先順位で 1 本だけ出す（フェーズ 19 で curated を末尾に追加。表示切替チップの状態に関わらず適用）
   - 行きたい一覧では、記録が既にある店に「記録あり」バッジを表示し、手動解除を促す
 - **一覧の導線はマップ画面内**: マップのツールバー（またはフィルタチップ列）のブックマークボタン → ハーフシートで `SavedCafe` 一覧（`savedAt` 降順、タップでカフェ詳細 push、スワイプで解除）。**新規 feature モジュールは作らない**（シートはマップ画面の一部。状態は `MapViewModel` に持たせ、1 画面 = 1 モジュール原則のカウント外とする）
 - **カフェ詳細のトグル状態**: `CafeDetailViewModel` が `observeByPlaceId` を購読して「行きたい」ボタンの ON/OFF を表示。保存時は表示中の `Cafe`（Places Details 取得済み）からスナップショットを作る
 - **スナップショットの鮮度**: 保存時点の 8 フィールドを固定保存。営業時間等の揮発情報はカフェ詳細画面が都度 Places Details を取得する既存挙動（§1.2）に委ねる
+- **`note` は v1 では常に空文字**: フィールド・永続化（SQLDelight / Firestore）だけ確保し、入力 UI は用意していない（保存は `CafeDetailViewModel.onSaveToggled` / `MapViewModel` から `note = ""` で行う）。メモ編集は将来の加算的追加
 
 ---
 
@@ -641,6 +644,28 @@ interface CuratedCafeRepository {
 `getAll()` はメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要 = BeanProfile と同じパターン）。全県分を flatten した 1 本のリストを返す。`MapViewModel` が init で一括ロードし、失敗時はサイレントに空のまま（おすすめは付加情報でありマップ本体を阻害しない）。
 
 > **将来課題**: 47 県フル展開時（約 1,400 件）は iOS 側 Annotation の可視領域フィルタ導入を検討する。
+
+---
+
+## 1.11 AuthAccount（アカウント情報 + データ利用同意）
+
+> Firebase Auth のアカウント状態と、`users/{uid}` ルートドキュメント（§3.2）の同意フラグを 1 つにまとめた読み取り専用モデル。**SQLDelight 表現は持たない**（端末に持つ意味がなく、Auth / Firestore が真）。
+
+**配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/AuthAccount.kt`
+
+```kotlin
+data class AuthAccount(
+    val uid: String,                          // Firebase Auth uid（匿名 / 実名ともに不変で一意）
+    val isAnonymous: Boolean,                 // 匿名アカウントか
+    val providerLabel: String?,               // サインインプロバイダ識別子（例: "apple.com"）。匿名は null
+    val email: String?,                       // プロバイダ提供のメール。Apple は非公開リレー含め null になりうる
+    val analyticsConsent: Boolean = false,    // §3.2 users/{uid}.analyticsConsent と同期。ドキュメント未作成は false
+)
+```
+
+- **匿名 → Apple アップグレードで `uid` は変わらない**: `isAnonymous` / `providerLabel` / `email` だけが変化する（記録の付け替えは発生しない）
+- **同意フラグの出入り口は `AuthRepository`**: `observeAccount(): Flow<AuthAccount?>` / `observeAnalyticsConsent(): Flow<Boolean>` / `updateAnalyticsConsent(consent)`。Firestore 書き込みはプラットフォーム別実装が担う（`RemoteCoffeeDataSource` と同じ非対称性の吸収）
+- **`recommendationConsent`（9-6）はまだ本モデルに無い**: §3.2 に定義済みだが未実装。実装時に本 data class へ加算的に追加する
 
 ---
 
@@ -828,6 +853,8 @@ users/{uid}                               # ユーザープロフィール（ana
 beanProfiles/{beanId}                     # 豆ナレッジベース（サービス管理 / 全認証ユーザーが read-only）
 curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ（サービス管理 / 全認証ユーザーが read-only。フェーズ 19）
 ```
+
+> **未実装のコレクション**: 9-6 協調フィルタの `sharedTasteProfiles/{uid}`（設計は §1.7「9-6 協調フィルタリング」/ Rules は §3.3 の注記）は**設計確定のみで未作成**。上の構造は現に存在するコレクションだけを列挙している。
 
 > **2026-06-19 改訂**: 旧 `visits` コレクション + サブコレクション（`coffeeItems` / `foodItems` / `photos`）を廃止。`coffees` コレクションの 1 ドキュメントに `cafe`（任意）と `photos`（埋め込み配列）を含める。子サブコレクションは持たない。
 
@@ -1022,17 +1049,15 @@ service cloud.firestore {
       allow read: if request.auth != null;
       allow write: if false;
     }
-
-    match /sharedTasteProfiles/{uid} {
-      // 協調フィルタ用の共有味覚プロファイル（9-6・設計確定 2026-07-21・未実装）。
-      // 本人のみ read/write。他ユーザー横断 read は Cloud Function（Admin SDK）が Rules バイパスで行う。
-      allow read, write: if request.auth != null && request.auth.uid == uid;
-    }
   }
 }
 ```
 
-> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。**フェーズ 19 更新**: `curatedCafes` グローバルコレクションを追加（同型）。**9-6 設計確定（2026-07-21・未実装）**: `sharedTasteProfiles/{uid}` を追加（本人のみ read/write、横断 read は Cloud Function 特権のみ）。`firebase deploy --only firestore:rules` はユーザー作業。
+> **上記は現行の `firestore.rules`（リポジトリルート）と一致した内容**。正本はファイル側で、この節はその写し。
+>
+> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。**フェーズ 19 更新**: `curatedCafes` グローバルコレクションを追加（同型）。`firebase deploy --only firestore:rules` はユーザー作業。
+>
+> **9-6 で追加予定（設計確定 2026-07-21・未実装 / `firestore.rules` には未投入）**: `sharedTasteProfiles/{uid}` を `allow read, write: if request.auth != null && request.auth.uid == uid;`（本人のみ read/write）で追加する。他ユーザー横断 read は Cloud Function（Admin SDK）が Rules バイパスで行うため、Rules 側に横断 read の穴は開けない。
 
 ---
 
@@ -1186,6 +1211,29 @@ interface RemoteSavedCafeDataSource {
 - `notes` は最大 2000 文字
 - `cafe` は任意（未選択でもセルフ抽出として保存可能）
 - バリデーションは **ViewModel 層で行う**（ドメインモデル自体は値を信用する）
+
+---
+
+# 8. エクスポート JSON（envelope v1）
+
+Kotlin / SQLDelight / Firestore に続く **第 4 の表現＝外部向けフォーマット**（[`requirements.md`](./requirements.md) §7-4）。ユーザーへのデータ持ち出し手段であり、開発用インポートスクリプトが読む**外部契約**でもあるため、正本をここに置く。
+
+- **生成**: `ExportCoffeeRecordsUseCase`（`shared/domain/.../usecase/`、`suspend operator fun invoke(userId): String`）。`observeAll(userId).first()` の全件を DTO 化して 1 本の JSON 文字列にする（ファイル書き出し・共有シートは iOS 側）
+- **DTO は export 専用**（`shared/domain/.../domain/export/`）: ドメインモデルに `@Serializable` を付けず `CoffeeRecordExportDto` / `CafeExportDto` / `PhotoExportDto` / `TastingScoresExportDto` に変換する（ドメイン層に kotlinx-serialization を持ち込まない）
+- **`Json` 設定は `prettyPrint = true` + `encodeDefaults = true`**: `version` や空 `tags` / `photos` がキーごと省略されるのを防ぐ。結果として **null フィールドもキーとして出力される**（Firestore 側の「null はキー省略」とはここだけ非対称）
+- **フィールド規則は Firestore（§3.2）を踏襲**: enum は `.name` 文字列 / `visitedOn` は `"YYYY-MM-DD"` / `createdAt` `updatedAt` は ISO-8601 文字列 / `cafe` は永続 8 フィールドのみ（§1.2 の揮発フィールドは含めない）/ `photos` はメタデータのみ（`localPath` は端末固有値のため除外、画像バイナリは対象外）
+
+```json
+{
+  "exportedAt": "<ISO-8601>",
+  "version": 1,
+  "records": [ /* CoffeeRecordExportDto */ ]
+}
+```
+
+- **`version` は互換性の契約**: 現在 1 固定。既存キーの意味変更・削除を伴う変更ではインクリメントし、下記の消費側も追随させる
+- **消費側**: `scripts/seed/seed-coffees.mjs`（開発用の Firestore 投入。envelope v1 をそのまま受け、null キー省略 / `Timestamp` 化 / `photos` 空化 / `userId` 付け替えの差分だけ吸収する）。**アプリ内のインポート機能は意図的に非対応**（復元は Firestore 同期 7-3 + iCloud Backup 7-2 が担う。経緯は [`implementation_note.md`](./implementation_note.md) 2026-07-13）
+- **`CoffeeRecord` にフィールドを追加したら DTO + Mapper も同時に更新する**（追随漏れは無言のデータ欠損になる）。2026-07-22 に追加した `region` が未追随で、現状のエクスポートは `region` を落とす（[`tasks.md`](./tasks.md) 参照）
 
 ---
 

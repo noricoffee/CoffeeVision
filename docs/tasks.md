@@ -362,6 +362,16 @@
 
 ### 未完・バックログ
 
+#### data-model.md 棚卸しの是正（2026-07-25 起票）
+
+> `docs/data-model.md` をコードと突き合わせた陳腐化チェック（ストック型 doc は縮小でなく陳腐化チェックが棚卸しの中身）。doc 側の陳腐化 6 件・欠落 2 件は同日 doc に反映済み。ここに残すのは**コード側の是正**のみ。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | kmp-engineer: エクスポート DTO の `region` 追随漏れ修正（`CoffeeRecordExportDto` + `CoffeeRecordExportMapper` に `region` 追加 + テスト） | **無言のデータ欠損**。2026-07-22 の `CoffeeRecord.region` 追加時に SQLDelight / Firestore（両 OS）は追随したが export だけ漏れた。仕様は data-model §8。あわせて lessons 記録（フィールド追加時に追随すべき全表現の点検）と `scripts/seed/seed-coffees.mjs` 側の受け入れ確認 |
+| [ ] | kmp-engineer: `CuratedCafe.kt` KDoc のピン記述を実装に合わせる（現 KDoc「amber + star、トグルなし常時表示」→ 実装は system orange + `cup.and.saucer.fill` + ズームゲート非表示あり） | data-model §1.10 は実装と一致済み。KDoc だけが旧仕様 |
+| [ ] | kmp-engineer: `BeanProfile.kt` KDoc の例示を日本語表記に（現「"Ethiopia"」「"Geisha"」「"Chocolate"」→ 2026-07-08 確定の日本語統一規約と不一致） | data-model §1.8 / §3.2 の表記規約が正。Firestore 実データも日本語 |
+
 #### docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない。必要になったフェーズで着手する（経緯は [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリ）。

@@ -50,8 +50,9 @@ case "$rel" in
     threshold=$FLOW_DOCS_THRESHOLD
     action="追記が止まった月をアーカイブへ切り出す時期です（curate-doc skill Phase 3 / 各 doc 前文の運用ルール）。"
     ;;
-  # ストック型 docs（仕様の正本）
-  docs/*.md|docs/*/*.md)
+  # ストック型 docs（仕様の正本）。root README.md も対象（リポジトリの玄関で、
+  # モジュール構成の記述が陳腐化しやすい。2026-07-25 に旧ドメイン名の残存を検出）
+  docs/*.md|docs/*/*.md|README.md)
     threshold=$DOCS_THRESHOLD
     action="棚卸しを検討してください（curate-doc skill: 陳腐化チェック → 縮約 → 分離）。"
     ;;

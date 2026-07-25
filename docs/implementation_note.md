@@ -838,3 +838,24 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 - 参照の生存: 他 doc / コードから名指しされている 2026-06 の日付参照 20 件すべてがアーカイブ側で解決することを機械確認。**参照は日付で引く運用なので参照側の書き換えは不要**（data-model 分離で使ったリダイレクトと同じ考え方）
 - 副産物: `curate-doc` skill の awk スニペットが、skill 起動時の引数展開で `$0` を潰される欠陥を発見（dogfooding で判明）。測定コマンドを skill 同梱スクリプトへ切り出して修正
+
+### 2026-07-25: architecture.md の棚卸し（589 → 438 行）+ README の旧ドメイン名を是正
+
+- 関連: `docs/architecture.md`、`README.md`、`.claude/hooks/check-file-size.sh`
+
+`curate-doc` skill の Phase 1 → 2。Phase 2 で 500 行を切ったため Phase 3（分離）は不要。
+
+**Phase 1（陳腐化チェック）で 3 件 + 欠落 2 件 + コード側 1 件**:
+
+- **Firebase 系 I/F が「4 つ」のまま**（3 箇所）→ `CuratedCafeRepository` を加えて 5 つに。`CuratedCafeRepositoryAndroidImpl` / `CuratedCafeFirestoreMapper` はフェーズ 19 で追加済みだった
+- **ViewModel の配置が `shared/feature/*/viewmodel/*ViewModel.kt`** → 実際は `viewmodel/` サブフォルダを作っていない（`.../feature/<name>/<Name>ViewModel.kt`）
+- **テスト方針の `FakeFirestore` が架空**。実在は手書き Fake 10 個（`FakeCoffeeRepository` 等）+ `TestSqlDriver`。モック生成ライブラリは使っていない
+- 欠落: **外部依存表に AdMob / Firebase Crashlytics・Analytics・Performance / Remote Config が無い**（実際に import されている 4 系統が未記載）。参考リンクに `analysis-model.md` も追加
+- コード側: `build-logic/.../kmp.feature.gradle.kts` の KDoc が「feature モジュールはまだ存在せず…`feature/visit-list` 等を作るときに使う想定」= Phase 2.5 当時のまま（feature は 8 個、`visit-*` はクリーンブレイクで全廃）→ kmp-engineer へ dispatch
+
+**Phase 2（縮約）**: コードブロックが 48%（283 行）で、その大半が**実ファイルや他 doc が正本のもの**だった。`framework/build.gradle.kts` 抜粋 / Convention Plugin 2 本 / `CoffeeListViewModel` 53 行（正本は coding-conventions §1.2 に同型スケルトンあり）/ iOS Bridge（正本は kmp-bridge）/ `AppContainer` スケッチ / テスト例を、**要点の箇条書き + 正本への参照**に置換。**構造を示す ASCII 図 5 つ（モジュールツリー / 依存方向 / レイヤー / データフロー 読み書き）は architecture が正本なので残した**（コードブロック比率 48% → 26%）。
+
+**副産物: root `README.md` が 1 か月半前の旧ドメイン名を掲げていた**。参照の生存検証（skill の締め #1）で `architecture.md#段階的移行ステップ` という**存在しない見出しへのアンカー**を検出し、README を読んだところ `visit-list` / `visit-detail` / `visit-editor`、`Visit / CoffeeItem / FoodItem`、「現在は Phase 1 の途中」「Storage（Android 実装）」が残存（2026-06-19 クリーンブレイクの消し込み漏れ）。6 箇所を是正した。
+
+- **フックの対象に root `README.md` を追加**。docs/ だけ見ていて玄関を見ていなかった。リポジトリの玄関はモジュール構成の記述が陳腐化しやすく、かつ最も人目に触れる
+- 教訓の一般形: **横断 doc の消し込み漏れは「参照先の見出しが消えている」形で表面化する**。節番号だけでなく**見出し名での参照も生存検証の対象**にする（lessons 2026-06-16「横断 doc は構造的に陳腐化」の実例が 1 件増えた）

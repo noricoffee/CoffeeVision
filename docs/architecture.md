@@ -2,6 +2,10 @@
 
 > 2026-06-19 に集約ルートを `Visit`（カフェ訪問）から `CoffeeRecord`（コーヒー 1 杯）へ再設計済み（クリーンブレイク。旧名との対応・経緯は git 履歴と `implementation_note.md` 2026-06-19 エントリ参照）。本ドキュメントの例文・スニペットは現行の `Coffee*` 系に更新済み。最新のデータ表現は [`data-model.md`](./data-model.md) を真とする。
 
+> **この doc に書くこと / 書かないこと**（2026-07-25 の棚卸しで確定。589 → 434 行に縮約した際の基準）
+> - **書く**: モジュールの責務と依存方向、レイヤーの役割、データフロー（読み書きの順序と Source of Truth）、配布戦略、方針レベルの決め事（なぜこの構成か）。**構造を示す ASCII 図はここが正本**
+> - **書かない**: ①**ビルドスクリプト・実装コードの逐語コピー**（`build.gradle.kts` / Convention Plugin / ViewModel / Bridge / `AppContainer` — 正本はファイル側。要点だけ箇条書きにする）②**コーディング規約の重複**（→ [`coding-conventions.md`](./coding-conventions.md)）③**Swift ⇄ Kotlin のブリッジ実装パターン**（→ [`kmp-bridge.md`](./kmp-bridge.md)）④**モジュールや feature の網羅列挙**（→ `settings.gradle.kts` が真）
+
 ## 概要
 
 CoffeeVision は **Kotlin Multiplatform（KMP）+ ネイティブ UI** 構成を採用しています。
@@ -45,8 +49,7 @@ coffeevision/
 │   ├── framework/                        # [com.noricoffee.framework] iOS 向け Umbrella。`SharedLogic.xcframework` を出力 + ViewModel ファクトリ
 │   └── feature/
 │       └── <feature-name>/               # [com.noricoffee.feature.<name>] 1 画面 = 1 モジュール（<Name>ViewModel + UIState）
-│                                         #   画面追加ごとに増える。正確な一覧は settings.gradle.kts を真とする
-│                                         #   現状: coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail / account / analysis
+│                                         #   画面追加ごとに増える。一覧は settings.gradle.kts を真とする
 │
 ├── sharedUI/                             # Compose Multiplatform（Android 検証用、feature/coffee-list を 1 画面表示）
 ├── iosApp/
@@ -63,7 +66,7 @@ coffeevision/
 ```
 
 - iOS 向けには `shared/framework` が **全 shared モジュール（基盤層 + 全 feature）** を `api` + `export(...)` で再公開し、`SharedLogic.framework`（XCFramework 名も `SharedLogic`）として配布。feature を追加したらこの export にも 1 行追加する
-- `shared/data-firebase` は `androidMain` に、domain の Firebase 系 I/F 4 つ（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository`）の Android 実装 + 各 Firestore Mapper を持つ（**実体一覧は `shared/data-firebase/src/androidMain` を真とする** — クラス名の列挙はしない）。iOS 実装は `iosApp` 側 Swift で同じ I/F に準拠
+- `shared/data-firebase` は `androidMain` に、domain の Firebase 系 I/F 5 つ（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository` / `CuratedCafeRepository`）の Android 実装 + 各 Firestore Mapper を持つ（**実体一覧は `shared/data-firebase/src/androidMain` を真とする** — クラス名の列挙はしない）。iOS 実装は `iosApp` 側 Swift で同じ I/F に準拠
 
 #### この分割の設計目的（KMP モジュール分割アーキテクチャの実証）
 
@@ -122,7 +125,7 @@ app (iosApp / androidApp)
 - **feature 同士は依存禁止**：画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
 - feature は `core` と `domain` の**両方に直接依存**する（`kmp.feature` Convention Plugin が自動配線。図は代表経路のみ）
 - **domain はインターフェースのみ**：`data-*` モジュールが実装し、`AppContainer` が注入する
-- **data-firebase の iOS 実装は `iosApp` 側 Swift**：domain の Firebase 系インターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository`）準拠の Swift クラスを書く（[`kmp-bridge.md`](./kmp-bridge.md) 参照）
+- **data-firebase の iOS 実装は `iosApp` 側 Swift**：domain の Firebase 系インターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository` / `CuratedCafeRepository`）準拠の Swift クラスを書く（[`kmp-bridge.md`](./kmp-bridge.md) 参照）
 
 ---
 
@@ -131,40 +134,13 @@ app (iosApp / androidApp)
 KMP は iOS 向けに **1 つの Framework として出力する** のが原則です（複数 framework 出力は `internal` 可視性が壊れ依存解決が破綻するため避ける）。
 このため `shared/framework` モジュールを **「全 shared モジュールを `api` 依存で再エクスポートするだけ」** の薄い層として用意します。
 
-```kotlin
-// shared/framework/build.gradle.kts（抜粋）
-import org.jetbrains.kotlin.gradle.plugin.mpp.apple.XCFramework
+設定の実体は `shared/framework/build.gradle.kts`（ここに複製しない）。要点は 4 つ:
 
-// 全 shared モジュール（基盤層 + 全 feature）を api + export で再公開する。
-// 下記は代表例。feature は画面追加ごとに増えるので、実体は settings.gradle.kts の全モジュールを列挙する。
-kotlin {
-    val xcf = XCFramework("SharedLogic")
-    listOf(iosArm64(), iosSimulatorArm64()).forEach { target ->
-        target.binaries.framework {
-            baseName = "SharedLogic"   // Swift 側 `import SharedLogic` を維持するため
-            isStatic = true
-            linkerOpts("-lsqlite3")    // sqliter が iOS システム SQLite に動的リンクするため
-            export(projects.shared.core)
-            export(projects.shared.domain)
-            export(projects.shared.dataLocal)
-            export(projects.shared.dataFirebase)
-            export(projects.shared.dataPlaces)
-            export(projects.shared.feature.coffeeList)
-            // 以下、全 feature モジュールを同様に export（一覧は settings.gradle.kts を真とする）
-            xcf.add(this)
-        }
-    }
-    sourceSets.commonMain.dependencies {
-        api(projects.shared.core)
-        api(projects.shared.domain)
-        api(projects.shared.dataLocal)
-        api(projects.shared.dataFirebase)
-        api(projects.shared.dataPlaces)
-        api(projects.shared.feature.coffeeList)
-        // 以下、全 feature モジュールを同様に api（export と両方必要。片方だけだと型が Swift に出ない）
-    }
-}
-```
+- `XCFramework("SharedLogic")` + `baseName = "SharedLogic"`（**両者を揃える**。揃えないと「Framework Renaming is not supported yet」warning）
+- `isStatic = true` / `linkerOpts("-lsqlite3")`（sqliter が iOS システム SQLite に動的リンクするため）
+- 全 shared モジュールを **`api(...)` と `framework { export(...) }` の両方**に書く
+- ターゲットは `iosArm64()` / `iosSimulatorArm64()`
+
 
 - 配布形態は **XCFramework**（`./gradlew :shared:framework:assembleSharedLogicXCFramework`）
 - `iosApp` は SPM 経由でも直接参照でも可。**`iosApp` から個別の shared モジュールを参照しない**（依存が複雑化するため）
@@ -178,35 +154,10 @@ kotlin {
 
 モジュールが 10 を超えると `build.gradle.kts` のコピペが破綻するため、`build-logic/convention/` に Gradle Convention Plugin を置き、KMP 共通設定を集約します。
 
-```kotlin
-// build-logic/convention/src/main/kotlin/kmp.library.gradle.kts（抜粋。実体を真とする）
-plugins {
-    id("org.jetbrains.kotlin.multiplatform")
-    id("com.android.kotlin.multiplatform.library")
-}
-kotlin {
-    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
-    iosArm64()
-    iosSimulatorArm64()
-    androidLibrary {
-        // namespace は各モジュールで個別設定。jvmTarget は 11
-        compilerOptions { jvmTarget = JvmTarget.JVM_11 }
-    }
-}
-// 注: `jvmToolchain(17)` は付けない（toolchain 強制は JDK ダウンロード要求で開発機運用と衝突）。
-// SKIE / SQLDelight など「特定モジュールだけ要るプラグイン」はここで適用しない。
-```
+実体は `build-logic/convention/src/main/kotlin/*.gradle.kts`（ここに複製しない）。要点:
 
-```kotlin
-// build-logic/convention/src/main/kotlin/kmp.feature.gradle.kts（抜粋）
-plugins {
-    id("kmp.library")
-}
-kotlin.sourceSets.getByName("commonMain").dependencies {
-    api(project(":shared:core"))
-    api(project(":shared:domain"))
-}
-```
+- **`kmp.library`**: `iosArm64()` / `iosSimulatorArm64()` / `androidLibrary`（jvmTarget = 11）+ `freeCompilerArgs += "-Xexpect-actual-classes"`。**`jvmToolchain(17)` は付けない**（toolchain 強制は JDK ダウンロード要求で開発機運用と衝突する）。SKIE / SQLDelight のような「特定モジュールだけ要るプラグイン」はここで適用しない
+- **`kmp.feature`**: `kmp.library` を継承し、`shared/core` と `shared/domain` を `api` で自動配線する
 
 各 feature の `build.gradle.kts` は `plugins { id("kmp.feature") }` を起点に、必要な依存だけを追加します。**自動配線されるのは `core` / `domain` のみ**で、`kotlinx-coroutines-core`（全 feature 必須）・`kotlinx-datetime`（`LocalDate` 等を直接参照する場合）・commonTest 依存は各 feature が手動追加する（commonTest を持つ feature が増えたら Plugin への組み込みを再検討）。
 
@@ -247,7 +198,7 @@ Android ターゲットを **「常にビルドが通り、共通 ViewModel を�
                ▼
 ┌──────────────────────────────────────────────────┐
 │                   ViewModel                      │
-│      shared/feature/*/viewmodel/*ViewModel.kt    │
+│   shared/feature/<name>/.../<Name>ViewModel.kt   │
 │  - UIState (data class) を StateFlow で公開      │
 │  - 副作用は suspend / Flow で受ける              │
 └──────────────┬───────────────────────────────────┘
@@ -295,86 +246,17 @@ Android ターゲットを **「常にビルドが通り、共通 ViewModel を�
 ViewModel は 1 つの `UIState`（`data class`）を `StateFlow` として公開します。
 複数の `StateFlow` を画面ごとに増やさず、**1 画面 = 1 UIState** を原則とします。
 
-```kotlin
-// shared/feature/coffee-list/.../CoffeeListViewModel.kt（実物の要約。構造規約は coding-conventions.md §1.2）
-package com.noricoffee.feature.coffeelist
+骨格（所有 `viewModelScope` / ネストした `UIState` / `on○○` ハンドラ / `clear()`）は [`coding-conventions.md`](./coding-conventions.md) §1.2「ViewModel ファイルの構造」が正本。アーキテクチャ上の決め事は次の 3 点:
 
-class CoffeeListViewModel(
-    private val coffeeRepository: CoffeeRepository,
-    scope: CoroutineScope,
-) {
-    // 注入 scope の Job を親にした所有スコープ。clear() で畳む（coding-conventions.md §1.2）
-    private val viewModelScope = CoroutineScope(
-        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
-    )
-
-    data class UIState(
-        val coffees: List<CoffeeRecord> = emptyList(),
-        val isLoading: Boolean = false,
-        val error: String? = null,
-    )
-
-    private val _state = MutableStateFlow(UIState())
-    val state: StateFlow<UIState> = _state.asStateFlow()
-
-    private var observeJob: Job? = null
-    private var currentUserId: String? = null
-
-    fun onAppear(userId: String) {
-        currentUserId = userId
-        observeJob?.cancel()   // 再表示時の二重購読防止
-        observeJob = viewModelScope.launch {
-            _state.update { it.copy(isLoading = true) }
-            coffeeRepository.observeAll(userId).collect { coffees ->
-                _state.update { it.copy(coffees = coffees, isLoading = false) }
-            }
-        }
-    }
-
-    fun onCoffeeDeleted(id: String) {
-        val userId = currentUserId ?: return   // onAppear 前の削除は uid 未確定として黙殺
-        viewModelScope.launch {
-            try {
-                coffeeRepository.delete(userId, id)
-            } catch (e: CancellationException) {
-                throw e   // 協調キャンセルを遮断しない（coding-conventions.md §1.7）
-            } catch (e: Exception) {
-                _state.update { it.copy(error = e.message ?: "delete failed") }
-            }
-        }
-    }
-
-    fun clear() {   // iOS Bridge の deinit から呼ぶ
-        viewModelScope.cancel()
-    }
-}
-```
+- **1 画面 = 1 `UIState`**。`StateFlow` を画面ごとに増やさない
+- **購読は張り替える**: 再表示時の二重購読を避けるため `observeJob?.cancel()` してから `launch` する
+- **失敗は `UIState.error` に載せて View へ渡す**（例外を Bridge まで投げない）。`CancellationException` は先行 catch で再スローする（同 §1.7）
 
 ### iOS（SwiftUI + @Observable）
 
 iOS では `@Observable` の薄い ViewModel ラッパが `shared/feature/*` の Kotlin ViewModel を内包し、`StateFlow` を Swift の `@Published` 相当の値へブリッジします。
 
-```swift
-import Observation
-import SharedLogic
-
-@MainActor
-@Observable
-final class CoffeeListViewModelBridge {
-    private let kotlin: CoffeeListViewModel
-    private(set) var coffees: [CoffeeRecord] = []
-    // StateFlow の購読（Task + for await）は kmp-bridge.md のパターンで実装する
-
-    init(kotlin: CoffeeListViewModel) {
-        self.kotlin = kotlin
-    }
-
-    deinit { kotlin.clear() }   // KMP 側 viewModelScope を畳む（coding-conventions.md §1.2）
-
-    func onAppear(userId: String) { kotlin.onAppear(userId: userId) }
-    func onCoffeeDeleted(id: String) { kotlin.onCoffeeDeleted(id: id) }
-}
-```
+実装パターン（`StateFlow` の購読 = `Task { for await ... }`、`deinit { kotlin.clear() }`）は [`kmp-bridge.md`](./kmp-bridge.md) が正本。
 
 Bridge の生存スコープは、タブ常駐画面 = `AppState` で 1 つ保持 / push・sheet 画面 = View 内 `@State` で遷移ごと生成、の 2 系統（**タブ常駐 View の `onDisappear` で observation を止めない**。詳細は `.claude/rules/swift-ios.md` と `tasks/lessons.md` 2026-06-25 エントリ）。
 
@@ -452,39 +334,16 @@ ViewModel が UIState を更新 → View が再描画
 - アプリ起動時に `AppContainer`（手書きの DI コンテナ）を 1 つ作り、各 ViewModel に必要な依存を渡す
 - iOS は `iOSApp` 起動時に `AppContainer` を生成し、SwiftUI の `Environment` 経由で各画面に供給する
 
-```kotlin
-// shared/core/commonMain（構造スケッチ。引数・公開プロパティの完全な一覧は AppContainer.kt を真とする）
-class AppContainer(
-    sqlDriver: SqlDriver,
-    // Firebase 実装はプラットフォーム別 SDK を使うため、外部から受け取る
-    private val remoteCoffeeDataSource: RemoteCoffeeDataSource,
-    val authRepository: AuthRepository,
-    val placesApiKey: String,      // Places API キー（Android=BuildConfig / iOS=Info.plist 経由で注入）
-    /* coffeeInsightProvider / beanProfileRepository 等 */
-    val scope: CoroutineScope,     // scope 引数ありのプライマリはテスト専用。通常は scope なしセカンダリ（iOS / Android の 2 系統）を使う
-) {
-    private val db = AppDatabase(sqlDriver)
+`AppContainer`（`shared/core`）の引数・公開プロパティの一覧は `AppContainer.kt` を真とする。構造上の決め事:
 
-    private val localCoffeeRepository = LocalCoffeeRepository(db)
-
-    // CoffeeRepositoryImpl が local + remote を合成して、UI には 1 本だけを見せる
-    val coffeeRepository: CoffeeRepository =
-        CoffeeRepositoryImpl(local = localCoffeeRepository, remote = remoteCoffeeDataSource)
-
-    // Places API（カフェ検索）リポジトリ
-    val cafeRepository: CafeRepository = createCafeRepository(placesApiKey)
-
-    // 起動時の匿名サインイン → uid 確定 → リモート → ローカル同期購読 を 1 メソッドで起こす
-    @Throws(Exception::class)
-    suspend fun startInitialSync(): String { /* ... */ }
-
-    // ViewModel ファクトリ（makeCoffeeListViewModel 等）は shared/framework の拡張関数として配置
-    //（core → feature の循環依存を避けるため。kmp-bridge.md / implementation_note.md 参照）
-}
-```
+- **プラットフォーム別 SDK が要る依存は外から受け取る**（`RemoteCoffeeDataSource` / `AuthRepository` / Places API キー等）。`AppContainer` 自身は `commonMain` で SDK に触らない
+- コンストラクタは 3 系統: **scope 引数ありのプライマリ = テスト専用** / scope なしセカンダリ 2 つ（iOS = `coffeeInsightProvider` 注入 / Android = 省略）。SKIE がデフォルト引数を Swift に出さないため
+- 合成は `AppContainer` の中で完結させ、**UI には合成後の 1 本だけ見せる**（`CoffeeRepositoryImpl(local, remote)` 等）
+- 起動シーケンス（匿名サインイン → uid 確定 → 同期購読）は `startInitialSync()` の 1 メソッドに閉じる
+- **ViewModel ファクトリは `shared/framework` の拡張関数**（`core → feature` の循環依存を避けるため）
 
 - `SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
-- Firebase を扱うインターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository`）は **`commonMain` で定義のみ**し、実装は以下のように分けます。
+- Firebase を扱うインターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository` / `CuratedCafeRepository`）は **`commonMain` で定義のみ**し、実装は以下のように分けます。
     - **Android**: `shared/data-firebase/androidMain` に Firebase Android SDK を使った実装を置き、`AppContainer` 生成時に Application から渡す
     - **iOS**: `iosApp` 側の Swift コードで `FirebaseFirestore`（SPM 配信）を使った実装クラスを書き、Kotlin のインターフェースに準拠させて `AppContainer` 構築時に渡す
 
@@ -536,25 +395,11 @@ class AppContainer(
 
 - 共通ロジックは **`commonTest` で `kotlin.test` を使ったユニットテスト** を書く
 - ViewModel テストは `runTest`（`kotlinx-coroutines-test`）で `StateFlow` の遷移を検証する
-- Repository テストは `FakeFirestore` / インメモリ SQLDelight ドライバを使う
+- Repository テストは **手書きの Fake**（`FakeCoffeeRepository` / `FakeRemoteCoffeeDataSource` / `FakeAuthRepository` 等。実体は各 `commonTest` を真とする）と**インメモリ SQLDelight ドライバ**（`TestSqlDriver`）を使う。モック生成ライブラリは導入しない
 - iOS / Android 固有実装のテストは各プラットフォームのテストソースセットで補完する
 
-```kotlin
-@Test
-fun coffee_list_loads_on_appear() = runTest {
-    val repo = FakeCoffeeRepository(initial = listOf(sampleRecord))
-    val vm = CoffeeListViewModel(repo, this)
-    try {
-        vm.onAppear(userId = "user-1")
-        runCurrent()
+- **所有 `viewModelScope` を持つ ViewModel のテストは `finally { vm.clear() }` で畳む**（畳まないと `UncompletedCoroutinesError`。lessons 2026-06-25 / iOS ターゲットでは `advanceUntilIdle` の drain も必要 = lessons 2026-07-06）
 
-        assertEquals(listOf(sampleRecord), vm.state.value.coffees)
-        assertFalse(vm.state.value.isLoading)
-    } finally {
-        vm.clear()   // 所有 viewModelScope を畳まないと UncompletedCoroutinesError（lessons 2026-06-25）
-    }
-}
-```
 
 ---
 
@@ -570,6 +415,9 @@ fun coffee_list_loads_on_appear() = runTest {
 | HTTP | Ktor Client（iOS = Darwin / Android = OkHttp エンジン） | `shared/data-places` |
 | Swift interop | SKIE（suspend / Flow / sealed の Swift 露出改善） | `shared/framework` |
 | オンデバイス LLM | Foundation Models（iOS 専用。分析タブの言語化のみ） | `iosApp` |
+| 広告 | Google Mobile Ads（AdMob。SPM。ネイティブ広告 + ATT） | `iosApp` |
+| テレメトリ | Firebase Crashlytics / Performance（常時）/ Analytics（同意時のみ） | `iosApp` |
+| リモート設定 | Firebase Remote Config（POI 除外キーワードの外部注入） | `iosApp` |
 | iOS UI | SwiftUI（標準） | `iosApp` |
 | Android UI | Compose Multiplatform（検証用 1 画面のみ） | `sharedUI` / `androidApp` |
 
@@ -585,5 +433,6 @@ fun coffee_list_loads_on_appear() = runTest {
 - [Firebase for Android（公式 / firebase-bom）](https://firebase.google.com/docs/android/setup)
 - [Google Places API](https://developers.google.com/maps/documentation/places/web-service)
 - [コーディング規約](./coding-conventions.md)
-- [データモデル](./data-model.md)
+- [データモデル（永続エンティティ）](./data-model.md)
+- [分析モデル（派生集計）](./analysis-model.md)
 - [KMP ブリッジ](./kmp-bridge.md)

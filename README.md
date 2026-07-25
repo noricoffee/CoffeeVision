@@ -8,7 +8,7 @@
 | プラットフォーム | 位置づけ | UI 実装 |
 |--------------|--------|--------|
 | **iOS** | リリース対象 | SwiftUI + `@Observable` ViewModel ラッパ |
-| **Android** | 共通レイヤーの検証ターゲット（リリース対象外） | Compose Multiplatform（Visit 一覧 1 画面のみ） |
+| **Android** | 共通レイヤーの検証ターゲット（リリース対象外） | Compose Multiplatform（コーヒー記録一覧 1 画面のみ） |
 
 Android ターゲットは、KMP の共通レイヤー（`feature` / `domain` / `data`）が両プラットフォームで成立することを実証するために維持しています。
 **CI で iOS / Android 両方のビルドを必須チェック**にしており、共通レイヤーの完全性を継続的に担保します。
@@ -77,18 +77,18 @@ coffeevision/
 │   ├── domain/                    # ドメインモデル + Repository インターフェース
 │   ├── data-local/                # SQLDelight
 │   ├── data-places/               # Google Places API クライアント（Ktor）
-│   ├── data-firebase/             # Firestore / Auth / Storage（Android 実装）
+│   ├── data-firebase/             # Firestore / Auth（Android 実装。Storage は採用見送り）
 │   └── feature/
-│       ├── visit-list/            # VisitListViewModel + UIState
-│       ├── visit-detail/
-│       ├── visit-editor/
-│       └── cafe-search/
+│       ├── coffee-list/           # CoffeeListViewModel + UIState
+│       ├── coffee-detail/
+│       ├── coffee-editor/
+│       └── ...                    # 1 画面 = 1 モジュール（一覧は settings.gradle.kts を真とする）
 ├── iosApp/                        # SwiftUI + Firebase Swift 実装
 └── androidApp/                    # Compose（検証用最小 UI）
 ```
 
-> 現在は Phase 1 の途中で、上記の分割は段階的に進行中です。
-> 現状の状態と移行計画は [`docs/architecture.md` §段階的移行ステップ](./docs/architecture.md#段階的移行ステップ) を参照してください。
+> モジュール分割は完了済み（上記は構造を示す代表例で、feature の網羅列挙はしない）。
+> 各モジュールの責務と依存方向ルールは [`docs/architecture.md`](./docs/architecture.md)「モジュール構成」を参照してください。
 
 ---
 
@@ -132,10 +132,11 @@ Xcode でターゲット `iosApp` を選択し、シミュレータまたは実�
 
 | ドキュメント | 内容 |
 |-------------|------|
-| [`docs/architecture.md`](./docs/architecture.md) | アーキテクチャ全体と段階的移行計画 |
+| [`docs/architecture.md`](./docs/architecture.md) | アーキテクチャ全体（モジュール構成・依存方向・状態管理） |
 | [`docs/coding-conventions.md`](./docs/coding-conventions.md) | Kotlin / Swift コーディング規約 |
 | [`docs/ui-ux-guidelines.md`](./docs/ui-ux-guidelines.md) | iOS UI/UX ガイドライン（HIG ベース） |
-| [`docs/data-model.md`](./docs/data-model.md) | Visit / CoffeeItem / FoodItem のドメインモデル |
+| [`docs/data-model.md`](./docs/data-model.md) | 永続エンティティ（CoffeeRecord / Cafe / Photo / BeanProfile / SavedCafe / CuratedCafe）のドメインモデル |
+| [`docs/analysis-model.md`](./docs/analysis-model.md) | 分析の派生集計モデル（CoffeeStats / RecommendedCafe） |
 | [`docs/kmp-bridge.md`](./docs/kmp-bridge.md) | Swift ⇄ Kotlin ブリッジ規約 |
 | [`docs/requirements.md`](./docs/requirements.md) | 機能要件・非機能要件 |
 | [`docs/tasks.md`](./docs/tasks.md) | フェーズ別タスク管理 |

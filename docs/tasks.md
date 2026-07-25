@@ -362,6 +362,19 @@
 
 ### 未完・バックログ
 
+#### docs 棚卸し（2026-07-25 / curate-doc skill 制定と初適用）
+
+> 500 行超で棚卸しするルールを制定（`curate-doc` skill + `check-file-size.sh`）し、3 doc に適用。
+> - **data-model.md** 1246 → 708 行（陳腐化 6 件是正 + 欠落 2 件補完 → 縮約 → 分析系 3 節を `analysis-model.md` へ分離）
+> - **implementation_note.md** 1273 → 840 行（`- 領域:` 廃止 + 系列統合 → 2026-06 の 36 件を `implementation-note-archive.md` へ凍結）。作業ログは行数閾値と相性が悪いため**フロー型は 1200 行 / 月次アーカイブ**運用に分離
+> - **architecture.md** 589 → 438 行（陳腐化 3 件 + 欠落 2 件 → ビルドスクリプト・実装コードの逐語コピーを要点へ置換）。副産物で root `README.md` の旧ドメイン名 6 箇所を是正 + フック対象に README を追加
+>
+> 経緯は implementation_note 2026-07-25（3 エントリ）、教訓は lessons 2026-07-25。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | kmp-engineer: `build-logic/.../kmp.feature.gradle.kts` の KDoc 陳腐化（「feature モジュールはまだ存在せず」「`feature/visit-list` を作るときに使う想定」）を是正 | architecture.md の陳腐化チェックで検出。feature は 8 個実在し `visit-*` は 2026-06-19 クリーンブレイクで全廃。`kmp.library` / `android.library` の KDoc も同時点検 |
+
 #### data-model.md 棚卸しの是正（2026-07-25 起票 / 完了）
 
 > `docs/data-model.md` をコードと突き合わせた棚卸し。**3 段**で実施し全て完了: ①陳腐化チェック（陳腐化 6 件是正 + 欠落 2 件補完。commit `4ae4885`）②縮約 1246 → 901 行（ソースの逐語コピーと経緯を排除。基準は doc 前文に明文化。commit `bc21dec`）③分析系 3 節を [`analysis-model.md`](./analysis-model.md) へ分離（data-model 901 → 708 行 + 新 doc 231 行。旧番号はリダイレクト表を残し、live pointer のみ張り替え = docs 24 + KDoc 19 箇所）。

@@ -367,6 +367,7 @@
 > 500 行超で棚卸しするルールを制定（`curate-doc` skill + `check-file-size.sh`）し、3 doc に適用。
 > - **data-model.md** 1246 → 708 行（陳腐化 6 件是正 + 欠落 2 件補完 → 縮約 → 分析系 3 節を `analysis-model.md` へ分離）
 > - **implementation_note.md** 1273 → 840 行（`- 領域:` 廃止 + 系列統合 → 2026-06 の 36 件を `implementation-note-archive.md` へ凍結）。作業ログは行数閾値と相性が悪いため**フロー型は 1200 行 / 月次アーカイブ**運用に分離
+> - **kmp-bridge.md** 573 → 455 行（陳腐化 6 件 → 縮約）。最大の検出は「SKIE を使わない場合」節 47 行が**実在しないコードの説明**だったこと（`FlowWrapper` / `Shared/Bridge` は 0 件）
 > - **architecture.md** 589 → 438 行（陳腐化 3 件 + 欠落 2 件 → ビルドスクリプト・実装コードの逐語コピーを要点へ置換）。副産物で root `README.md` の旧ドメイン名 6 箇所を是正 + フック対象に README を追加
 >
 > 経緯は implementation_note 2026-07-25（3 エントリ）、教訓は lessons 2026-07-25。

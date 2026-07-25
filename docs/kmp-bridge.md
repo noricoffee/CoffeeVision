@@ -1,5 +1,9 @@
 # KMP ブリッジガイド（Swift ⇄ Kotlin）
 
+> **この doc に書くこと / 書かないこと**（2026-07-25 の棚卸しで確定。573 → 455 行に縮約した際の基準）
+> - **書く**: Kotlin ⇄ Swift の**型の見え方**、SKIE の適用範囲と限界（特に**呼び出し方向**）、Swift 側で Kotlin interface を実装するときの生シグネチャ、ブリッジの実装パターンとその落とし穴
+> - **書かない**: ①**採用しなかった選択肢の実装手順**（SKIE 未採用時のヘルパ等 — 分岐が増えるだけで、必要になったら書き直す方が早い）②**配布戦略・Gradle 設定**（→ [`architecture.md`](./architecture.md)「iOS 配布戦略」）③**SwiftUI の一般的な書き方**（→ [`ui-ux-guidelines.md`](./ui-ux-guidelines.md) / `.claude/rules/swift-ios.md`）④**実ファイルが正本のシグネチャ列挙**（`AppContainer.kt` / `*.gradle.kts` / `expect`・`actual`）
+
 ## 概要
 
 CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
@@ -174,33 +178,10 @@ final class CoffeeListViewModelBridge {
 
 ### View 側の使い方
 
-```swift
-struct CoffeeListView: View {
-    @State var viewModel: CoffeeListViewModelBridge
+View は Bridge を `@State` で保持し、**`.task { viewModel.onAppear() }` で observation を起こす**。エラーは `viewModel.error != nil` を `isPresented` に束ねた `.alert` で出し、閉じるときに `onErrorDismissed()` を呼び返す（UIState 側の error をクリアする）。
 
-    var body: some View {
-        List(viewModel.records, id: \.id) { record in
-            CoffeeRecordRow(record: record)
-        }
-        .overlay {
-            if viewModel.isLoading { ProgressView() }
-        }
-        .alert("エラー", isPresented: .init(
-            get: { viewModel.error != nil },
-            set: { _ in viewModel.onErrorDismissed() }
-        )) {
-            Button("OK") {}
-        } message: {
-            Text(viewModel.error ?? "")
-        }
-        .task {
-            viewModel.onAppear()
-        }
-    }
-}
-```
-
----
+- **`.onAppear` ではなく `.task`** を使う（Bridge の `onAppear()` が Task を張るため、View のライフサイクルに合わせて自動キャンセルされる方が安全）
+- Bridge の生存スコープは 2 系統: **タブ常駐画面 = `AppState` で 1 つ保持** / **push・sheet 画面 = View 内 `@State` で遷移ごと生成**（`.claude/rules/swift-ios.md`）
 
 ## CoroutineScope の橋渡し
 
@@ -209,14 +190,16 @@ iOS では `MainScope()` を Kotlin 側で生成して渡すか、`AppContainer`
 
 ```kotlin
 // shared/framework/AppContainerViewModelFactory.kt（拡張関数。core → feature の循環依存回避）
-fun AppContainer.makeCoffeeListViewModel(userId: String) =
-    CoffeeListViewModel(coffeeRepository, userId, scope)
+fun AppContainer.makeCoffeeListViewModel(): CoffeeListViewModel =
+    CoffeeListViewModel(coffeeRepository, scope)
 ```
+
+`userId` はファクトリ引数ではなく `onAppear(userId:)` で渡す（サインイン完了のタイミングと画面生成を切り離すため）。
 
 Swift 側はこの `AppContainer` のファクトリ拡張関数を呼ぶだけで、`CoroutineScope` を意識しないで済みます（各 ViewModel は渡された scope を親に所有 `viewModelScope` を内部生成する）。
 
 ```swift
-let viewModel = appContainer.makeCoffeeListViewModel(userId: userId)
+let viewModel = appContainer.makeCoffeeListViewModel()
 let bridge = CoffeeListViewModelBridge(kotlin: viewModel)
 ```
 
@@ -242,67 +225,29 @@ let bridge = CoffeeListViewModelBridge(kotlin: viewModel)
 
 ```
 shared/data-local/src/
-├── commonMain/kotlin/com/noricoffee/data/local/
+├── commonMain/kotlin/com/noricoffee/platform/
 │   └── DatabaseDriverFactory.kt        # expect class DatabaseDriverFactory { fun create(): SqlDriver }
-├── iosMain/kotlin/com/noricoffee/data/local/
+├── iosMain/kotlin/com/noricoffee/platform/
 │   └── DatabaseDriverFactory.ios.kt    # actual
-└── androidMain/kotlin/com/noricoffee/data/local/
+└── androidMain/kotlin/com/noricoffee/platform/
     └── DatabaseDriverFactory.android.kt
 ```
 
 ### 例: SqlDriver
 
-```kotlin
-// commonMain
-expect class DatabaseDriverFactory {
-    fun create(): SqlDriver
-}
+`expect class DatabaseDriverFactory { fun create(): SqlDriver }` を `commonMain` に置き、iOS は `NativeSqliteDriver`、Android は `AndroidSqliteDriver` を返す（実体は `shared/data-local/src/*/kotlin/com/noricoffee/platform/` を真とする）。
 
-// iosMain
-actual class DatabaseDriverFactory {
-    actual fun create(): SqlDriver =
-        NativeSqliteDriver(AppDatabase.Schema, "coffeevision.db")
-}
-
-// androidMain
-actual class DatabaseDriverFactory(private val context: Context) {
-    actual fun create(): SqlDriver =
-        AndroidSqliteDriver(AppDatabase.Schema, context, "coffeevision.db")
-}
-```
-
-`actual` のシグネチャがプラットフォーム間で揃わない（Android はコンテキスト必須）場合は、各プラットフォームの App 初期化コードで対処します。
-
----
+- **`actual` のシグネチャは揃わなくてよい**: Android だけコンストラクタに `Context` が必要。**この非対称はアプリ初期化コード側で吸収する**（iOS は引数なし生成、Android は Application から Context を渡す）
+- FK 制約の有効化はドライバ生成時の設定（[`data-model.md`](./data-model.md) §2.2）。プラットフォームごとに書き方が違うので、両方に入れ忘れない
 
 ## Umbrella Framework + XCFramework（iOS 配布戦略）
 
-KMP は iOS 向けに **1 つの Framework として出力する** のが原則です（複数 framework 出力は `internal` 可視性が壊れ依存解決が破綻するため避ける）。
-このため `shared/framework` モジュールを **「全 shared モジュール（`feature/*` / `data-*` / `domain` / `core`）を `api` 依存で再エクスポートするだけ」** の薄い層として用意し、ここから XCFramework を生成します。
+**戦略と Gradle 設定の正本は [`architecture.md`](./architecture.md)「iOS 配布戦略：Umbrella Framework」**（KMP は 1 framework 出力が原則 / `api` と `export` の両方が必要 / `baseName` と XCFramework 名を揃える）。ブリッジを書く側が知っておくことだけ再掲する:
 
-### 配布形態
-
-- ローカル開発: `./gradlew :shared:framework:embedAndSignAppleFrameworkForXcode` を Xcode の Build Phase に組み込む
-- リリースビルド / CI: `./gradlew :shared:framework:assembleSharedLogicXCFramework` で XCFramework を生成
-
-### iosApp からの参照ルール
-
-`iosApp` は **`SharedLogic` という単一の Framework だけを参照** します（モジュール名は `shared/framework` だが、内部 framework 名・XCFramework 名・Swift `import` 名はすべて `SharedLogic`。詳細は `architecture.md` §iOS 配布戦略 / `tasks/lessons.md` の命名統一エントリ参照）。
-個別の shared モジュール（`shared/domain` / `shared/feature/visit-list` 等）を直接参照しないでください — 依存が複雑化し、Kotlin 側の `api` / `implementation` 制御が効かなくなります。
-
-```swift
-import SharedLogic
-
-let container = AppContainer(...)
-let bridge = CoffeeListViewModelBridge(kotlin: container.makeCoffeeListViewModel(userId: userId))
-```
-
-### 補足: `data-firebase` も `export` 対象に含める
-
-`data-firebase` は `androidMain` にのみ実装ソースを持ちます（iOS Firebase 実装は `iosApp` 側 Swift）が、`shared/framework` の `api` + `export` 対象には **他モジュールと同様に含めます**（`commonMain` の再公開のため。[`architecture.md`](./architecture.md) §iOS 配布戦略と同方針、実体は `shared/framework/build.gradle.kts` を真とする）。
-iOS が実装・利用する Repository インターフェース自体は `shared/domain` にあるため export の実利は薄いものの、「全 shared モジュールを一律 re-export する」規則を崩さない方を優先しています。
-
----
+- **`iosApp` は `SharedLogic` 単一 framework だけを参照する**。個別の shared モジュール（`shared/domain` / `shared/feature/coffee-list` 等）を直接参照しない（依存が複雑化し、Kotlin 側の `api` / `implementation` 制御が効かなくなる）
+- ローカル開発は `embedAndSignAppleFrameworkForXcode`（Xcode の Build Phase）、CI / リリースは `assembleSharedLogicXCFramework`
+- **SKIE は umbrella（`shared/framework`）に適用する**。個別モジュールに適用しても Swift 側には効かない
+- `data-firebase` は `androidMain` にしか実装がないが、「全 shared モジュールを一律 re-export する」規則を崩さないため `export` 対象に含める
 
 ## Firebase は公式プラットフォーム別 SDK を使う
 
@@ -367,29 +312,20 @@ iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kot
 `AppContainer` 構築時に、Swift 側で作った Repository 実装を Kotlin の `AppContainer` コンストラクタに渡します。
 
 ```swift
-// iosApp 起動時（AppState）。coffeeInsightProvider を注入するセカンダリコンストラクタ
+// iosApp 起動時（AppState）。Swift 実装を Kotlin の AppContainer に渡す
 let container = AppContainer(
     sqlDriver: DatabaseDriverFactory().create(),
-    remoteCoffeeDataSource: RemoteCoffeeDataSourceIosImpl(),   // Swift 実装
-    authRepository: AuthRepositoryIosImpl(),                   // Swift 実装
+    remoteCoffeeDataSource: RemoteCoffeeDataSourceIosImpl(),        // Swift 実装
+    remoteSavedCafeDataSource: RemoteSavedCafeDataSourceIosImpl(),  // Swift 実装
+    authRepository: AuthRepositoryIosImpl(),                        // Swift 実装
     placesApiKey: placesApiKey,
     coffeeInsightProvider: CoffeeInsightProviderIosImpl.makeIfAvailable(),  // 非対応端末は nil
-    beanProfileRepository: BeanProfileRepositoryIosImpl(),     // Swift 実装
-    curatedCafeRepository: CuratedCafeRepositoryIosImpl()      // Swift 実装（フェーズ 19）
+    beanProfileRepository: BeanProfileRepositoryIosImpl(),
+    curatedCafeRepository: CuratedCafeRepositoryIosImpl()
 )
 ```
 
-```kotlin
-// Android（Application#onCreate など）。coffeeInsightProvider なしのセカンダリコンストラクタ
-val container = AppContainer(
-    sqlDriver = DatabaseDriverFactory(this).create(),
-    remoteCoffeeDataSource = RemoteCoffeeDataSourceAndroidImpl(),
-    authRepository = AuthRepositoryAndroidImpl(),
-    placesApiKey = BuildConfig.PLACES_API_KEY,
-    beanProfileRepository = BeanProfileRepositoryAndroidImpl(),
-    curatedCafeRepository = CuratedCafeRepositoryAndroidImpl(FirebaseFirestore.getInstance()),
-)
-```
+Android も同じセカンダリコンストラクタを Kotlin 実装（`*AndroidImpl`）で埋めるだけ（`coffeeInsightProvider` のみ省略 = null）。
 
 > 引数の正確なシグネチャは `shared/core/.../AppContainer.kt` を真とする（scope 引数ありのプライマリはテスト専用）。
 
@@ -471,8 +407,8 @@ Kotlin の `data class` は `id` プロパティを持っていても、Swift �
 Swift 側の Extension で準拠させます。
 
 ```swift
-extension CoffeeRecord: Identifiable {}  // id プロパティが Hashable ならこれだけで OK
-extension Photo_: Identifiable {}        // SQLDelight 生成行型と同名衝突するため Swift 側では Photo_
+extension CoffeeRecord: @retroactive Identifiable {}  // 他モジュールの型への準拠は @retroactive が必要（Swift 6）
+extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型と同名衝突するため Swift 側では Photo_
 ```
 
 ---
@@ -491,58 +427,8 @@ extension Photo_: Identifiable {}        // SQLDelight 生成行型と同名衝�
 |------|------|
 | Swift 側で `SharedLogic` の型が見えない | Xcode で `Product > Clean Build Folder` → Gradle の `embedAndSignAppleFrameworkForXcode` を再実行 |
 | `suspend` 関数が見えない | `@Throws` を Kotlin 側に追加。SKIE 採用済みか確認 |
-| `Flow` が iterable でない | SKIE 採用済みか確認。未採用なら下記「SKIE を使わない場合」のヘルパを使う |
+| `Flow` が iterable でない | SKIE が umbrella（`shared/framework`）に適用されているか確認。`shared/*` 個別モジュールへの適用では効かない |
 | 起動時クラッシュ（`kotlin.IllegalStateException: Default value of CoroutineScope`） | `MainScope()` が iOS Main looper を取れていない。`Dispatchers.Main` の actual 実装を確認 |
-
----
-
-## SKIE を使わない場合
-
-SKIE を採用しない場合は、`Shared/Bridge/` に以下のヘルパを置きます。
-
-### Flow → AsyncStream
-
-```kotlin
-// shared/core/iosMain — Swift から呼ぶためのラッパ
-class FlowWrapper<T : Any>(private val flow: Flow<T>) {
-    fun watch(block: (T) -> Unit): Closeable {
-        val job = MainScope().launch {
-            flow.collect { block(it) }
-        }
-        return Closeable { job.cancel() }
-    }
-}
-```
-
-```swift
-// iosApp/Shared/Bridge/FlowWrapper+AsyncStream.swift
-extension FlowWrapper {
-    func stream() -> AsyncStream<T> {
-        AsyncStream { continuation in
-            let closeable = self.watch { value in
-                continuation.yield(value)
-            }
-            continuation.onTermination = { _ in closeable.close() }
-        }
-    }
-}
-```
-
-### suspend → async
-
-Kotlin/Native の生 SDK では `suspend` 関数は **completion handler** 形式で Swift に出ます。
-Swift 側で `withCheckedThrowingContinuation` を使ってラップします。
-
-```swift
-func save(_ record: CoffeeRecord) async throws {
-    try await withCheckedThrowingContinuation { cont in
-        viewModel.save(record: record) { error in
-            if let error { cont.resume(throwing: error) }
-            else { cont.resume() }
-        }
-    }
-}
-```
 
 ---
 

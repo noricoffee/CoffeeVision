@@ -859,3 +859,20 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 - **フックの対象に root `README.md` を追加**。docs/ だけ見ていて玄関を見ていなかった。リポジトリの玄関はモジュール構成の記述が陳腐化しやすく、かつ最も人目に触れる
 - 教訓の一般形: **横断 doc の消し込み漏れは「参照先の見出しが消えている」形で表面化する**。節番号だけでなく**見出し名での参照も生存検証の対象**にする（lessons 2026-06-16「横断 doc は構造的に陳腐化」の実例が 1 件増えた）
+
+### 2026-07-25: kmp-bridge.md の棚卸し（573 → 455 行）— 架空の 47 行を削除
+
+- 関連: `docs/kmp-bridge.md`
+
+`curate-doc` skill の Phase 1 → 2。Phase 2 で 500 行を切ったため分離は不要。**陳腐化 6 件、うち最大のものは「実在しないコードを 47 行にわたって説明していた節」**。
+
+- **「SKIE を使わない場合」節（47 行）が完全に架空**: `FlowWrapper` / `iosApp/Shared/Bridge/` を 0 件と実測（SKIE は 2026-06-04 から採用済みで、この分岐は一度も使われていない）。**採用しなかった選択肢の実装手順は書かない**（分岐が増えるだけで、必要になったら書き直す方が早い）を doc 前文の基準に追加して削除
+- **`shared/feature/visit-list`** = 2026-06-19 クリーンブレイク前の旧名（README と同じ消し込み漏れ。同型が 2 doc で出た）
+- **`DatabaseDriverFactory` のパスが `com/noricoffee/data/local/`** → 実際は `com/noricoffee/platform/`
+- **`makeCoffeeListViewModel(userId:)` のシグネチャが違う** → 実物は引数なしで、`userId` は `onAppear(userId:)` で渡す（サインイン完了と画面生成を切り離す設計）。Swift の呼び出し例 2 箇所も是正
+- **`AppContainer` の生成例に `remoteSavedCafeDataSource` が欠落**（7 → 8 引数。フェーズ 15-A の追随漏れ）。iOS / Android の 2 本並記を 1 本 + 差分 1 行に圧縮
+- **`extension CoffeeRecord: Identifiable {}`** → Swift 6 では他モジュールの型への準拠に `@retroactive` が必要で、実物は全 4 箇所が `@retroactive`
+
+**Phase 2（縮約）**: 「View 側の使い方」（SwiftUI の一般的な書き方 30 行）→ ブリッジ規約としての要点 2 つに / `expect`・`actual` の `SqlDriver` 実装例 → **要点は「`actual` のシグネチャは揃わなくてよい（Android だけ `Context` が要る）」**の 1 点なのでそこだけ残す / Umbrella Framework 節 → `architecture.md`「iOS 配布戦略」が正本なので、ブリッジを書く側が知るべき 4 点の再掲に圧縮（コードブロック 36% → 28%）。
+
+**この doc に固有の判断**: 型の見え方の表・SKIE の呼び出し方向の制約・Swift で Kotlin interface を実装するときの生シグネチャ表は**この doc が唯一の正本**なので、行数が嵩んでも残す。ブリッジは「知らないと詰まる」種類の知識で、他 doc に散らすと参照コストが跳ね上がる。

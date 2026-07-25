@@ -16,7 +16,7 @@ description: docs/**.md が 500 行を超えたときの棚卸し手順。陳腐
 | 型 | doc | 手順 |
 |---|---|---|
 | **ストック型の正本** | `data-model` / `analysis-model` / `requirements` / `architecture` / `coding-conventions` / `ui-ux-guidelines` / `kmp-bridge` / `app-store-metadata` / `paid-services` | Phase 1 → 2 →（まだ超えていれば）3 |
-| **フロー型** | `tasks.md` / `implementation_note.md` | Phase 2 のみ。**縮約規則は各 doc の前文が正本**（tasks: カテゴリ制 + 縮約 / note: 昇格パス）なのでまず前文を読む |
+| **フロー型** | `tasks.md` / `implementation_note.md` | Phase 2 →（作業ログは縮約が効かないので）**Phase 3 = 月次アーカイブへ凍結移送**。**規則は各 doc の前文が正本**（tasks: カテゴリ制 + 縮約 / note: 昇格パス + アーカイブ）なのでまず前文を読む |
 | **対象外** | `tasks/lessons.md` | 「昇格しても発生源として残す」設計。行数を理由に縮めない |
 
 **完了条件**: 型を特定し、フロー型なら該当 doc の前文を読み終えた。
@@ -43,12 +43,11 @@ doc を**全文**読み、doc が名指ししている実体（モデル / Repos
 - **残す = 仕様**: 列定義、公開 API の「形」、フィールドの型と null 許容、不変条件、表現間のマッピング規則、設計上の決め事
 - **移す = 経緯・実測値・不採用案** → `implementation_note.md`
 
-コードブロックの行数を測ると当たりが付く（data-model は 53% がコードブロックだった）:
+内訳を測ると当たりが付く（data-model は 53% がコードブロックだった）。同梱スクリプトで総行数・コードブロック比率・見出しごとの行数が出る:
 
-```bash
-awk '/^```/{f=!f; next} f{c++} END{print c}' <doc>
-awk '/^#{1,3} /{if(h){printf "%5d  %s\n", NR-s, h} h=$0; s=NR} END{printf "%5d  %s\n", NR-s, h}' <doc> | sort -rn | head -15
-```
+    .claude/skills/curate-doc/measure-doc.sh <doc>
+
+**コードブロック比率が低い doc（作業ログなど）に縮約は効かない。** その場合は Phase 3 へ回す。
 
 **移す前に受け皿の存在を grep で確認する。** 既に implementation_note にあるなら「移動」ではなく「doc 側を結論 + 参照に置換」。無いなら先に受け皿を書く。**確認せず消すのは削除**であって棚卸しではない。
 
@@ -58,7 +57,10 @@ doc 内のコード複製は、それ自身が追随コストの発生源。過�
 
 ## Phase 3 — 分離（Phase 2 後もまだ大きいとき）
 
-**分離軸は性質で切る**（章の順番や行数バランスで切らない）。data-model → analysis-model は「**永続するか否か**」で切った。永続しない派生集計は更新契機が違うので同じ doc に置く理由が無い。
+**分離軸は性質で切る**（章の順番や行数バランスで切らない）。実績のある 2 つの軸:
+
+- **永続するか否か** — data-model → analysis-model（永続しない派生集計は更新契機が違う）
+- **追記が止まったか否か** — implementation_note → implementation-note-archive（**完了して凍結した月**を切る。作業ログは append-only 気味に伸びるので、縮約で閾値に収めようとすると経緯そのものを削る = 歴史の破棄になる。前例: `tasks/pr-log.md`）
 
 参照の壊し方に 2 つの規律がある:
 

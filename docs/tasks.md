@@ -4,7 +4,7 @@
 完了したタスクは `[x]` でチェックし、完了日とコミット / PR を備考列に追記してください。
 
 > 細かい WIP メモは `docs/tasks/lessons.md`（自己改善ループ用）に書き出します。
-> **実機 / シミュレータの目視・手動検証（プロダクト QA）は [`docs/tasks/verification-checklist.md`](./tasks/verification-checklist.md) に分離**（2026-07-08）。tasks.md には実装・設計タスクのみを残す。
+> **実機 / シミュレータの目視・手動検証（プロダクト QA）は [`docs/tasks/verification-checklist.md`](./tasks/verification-checklist.md) に集約する**（2026-07-08 分離 / 2026-07-25 に完全移送）。**tasks.md に「ユーザー: シミュレータで目視」行を作らない** — 実装が終わって残るのが目視だけになったら、その時点で checklist へ 1 項目として移し、こちらはフェーズサマリで触れるだけにする。完了した目視行を `[x]` で残すのも禁止（確認済みの事実だけが溜まって読み飛ばす行が増える。記録が要る内容は implementation_note へ）。
 > **フェーズが完了したら、セクションの中身は「完了サマリ（数行）+ 未完行のみの表」に縮約する**（2026-07-04 運用開始。行単位の作業記録は git 履歴、設計判断は `implementation_note.md` が正）。セクション見出しは他 doc からの参照アンカーのため削除しない。完了時はサブ見出し（15-A / 17-D 等）も本文サマリへ畳み、サブ ID は本文中に残して grep 参照可能性を維持する（2026-07-09 全完了セクションへ適用済み）。
 > **2026-07-09 カテゴリ制へ再編**: 時系列の追記順をやめ、「①アプリ機能 / ②設計・アーキテクチャ・コード品質 / ③開発プロセス・ツーリング / ④リリース準備」の 4 カテゴリに整理。各カテゴリ内は未完・バックログを先頭、完了フェーズは番号順（番号なしセクションは日付順）に置く。既存セクションの見出しテキストは他 doc からの名指し参照のため変更していない。新規セクションは該当カテゴリへ追加する。
 > **フェーズ番号の採番は終了**（2026-07-09、フェーズ 18 が最後）: 新規セクションは番号を振らず「テーマ名（起票日）」とする。既存のフェーズ番号・サブ ID（15-A / 17-D / B-4 等）は docs・コードコメント・commit メッセージから 270 箇所以上参照されている**不変の参照 ID** として維持する（並び順の意味はもう持たない）。
@@ -38,7 +38,6 @@
 | [x] | ios-engineer: `CoffeeEditorView` の産地 UI を国 Picker + エリア TextField に置換（BeanProfile 産地サジェスト撤去 / 「その他」で国名自由入力欄）/ カタログをブリッジ受領 / `CoffeeFirestoreMapper.swift` に region / 詳細・シェアカードの産地表示に region 連結 / ローカライズ | 2026-07-22 完了。legacy origin は Picker 選択肢に動的追加でフォールバック。「その他」選択時は onOriginChanged("") で一旦空に。`CoffeeRecordDisplay.swift`（`originDisplayText`）新設で連結表示を共通化 |
 | [x] | 親: 2 レポート統合 + 統合検証（verify-kmp-ios / xcodebuild override 無し）+ commit | 2026-07-22 完了。親が override 無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認。SourceKit の `No such module` は xcframework 未インデックスの IDE 偽陽性。commit `d72f76f` |
 | [x] | 追加: 産地ドロップダウンを生産量ランキング順（ICO/FAO 概算）に並び替え（ブレンド → 生産量順 → その他、未選択は最上段維持）| 2026-07-22 完了。KMP = `countries` 並び替え / iOS = Picker で「ブレンド」を国リスト直前へ移動。data-model §1.3a 追随。commit `254a026` |
-| [x] | ユーザー: シミュレータで目視（国ドロップダウン選択 / エリア入力 / 「その他」自由入力 / 「ブレンド」/ 詳細・シェアカード表示 / 分析の産地ランキング / 生産量順の並び / ダーク・VoiceOver） | 2026-07-22 ユーザー判断で目視 OK（黙示確認込み）・完了扱い |
 
 #### マップ検索結果を「マップ主体 + 下部ドラッグシート」に刷新（2026-07-22 起票）
 
@@ -50,7 +49,6 @@
 | [x] | ios-engineer: `MapTabView.swift` 実装（上部ドロップダウン撤去 / 自前下部ドラッグシート / カメラ自動フィット（テキスト検索のみ）/ 選択ピン強調 / 広告は結果シート内 3 件目後） | 2026-07-22 完了。peek 180pt / expanded = container 高さ 60%。ハンドル行に `.simultaneousGesture`（Button タップ + ドラッグ両立）、タップで detent トグル（VoiceOver 代替）。FAB は `searchSheetFABBottomInset` でシート高に追従 |
 | [x] | 親: レポート評価 + ビルド検証（override 無し再検証）+ 回帰確認 | 2026-07-22 完了。親が override 無し `xcodebuild ... BUILD SUCCEEDED` を独立再確認。差分レビュー: 排他条件（sheet=未選択/card=選択）・`showingSearchResults` 転用・カメラフィット span×1.3 いずれも整合。SourceKit の `No such module` 系は xcframework 未インデックスの IDE 偽陽性 |
 | [x] | ios-engineer: 広告非表示の回帰修正（ユーザー報告）| 2026-07-22 完了。原因: `InlineBannerAdView` の自己 `.task` が `LazyVStack` の fold 下（peek 180pt）で発火せず未ロード。修正: CafeDetail と同型でシートのルート VStack `.background(GeometryReader).task` から先読みロード。lessons 2026-07-22 記録 + sweep 済み |
-| [ ] | ユーザー: シミュレータ/実機で目視（自動フィット / シートドラッグ / 行⇄ピン⇄カード / ✨ 競合なし / **広告（3 件以上でスクロール到達時に表示）** / ダーク・VoiceOver） | UI 挙動バグはビルド成功≠完了 |
 
 #### 好み一致の作り込み: 精製方法軸の追加 + ダミー人格再設計（2026-07-20 起票）
 
@@ -63,7 +61,6 @@
 | [x] | 親: KMP 公開 API 差分確認 + `:shared:domain`/`:shared:core` の 2 ターゲットテスト再検証 | 2026-07-20 完了。Android host + iosSimulatorArm64Test 全 green + XCFramework link 完走 + SKIE enum に `.processing` 生成確認 |
 | [x] | ios-engineer: 網羅 switch 追随（`preferenceMatchAxisLabel`/`axisIcon`）+ 分析カードに精製行 + `localizedProcessingStatic` + `FavoriteSignals` 構築 2 箇所修正 | 2026-07-20 完了。axisIcon = `leaf.fill`。`RecommendedCafeListSheet` は自動追随（無改修） |
 | [x] | 親: 統合検証（verify-kmp-ios、xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-20 完了。親が override 無し BUILD SUCCEEDED を再確認 |
-| [x] | ユーザー: Dummy Data Scheme で目視（マップに複数の好み一致ピン + 4 軸理由表示 / 分析カードに精製行 / ダーク・VoiceOver） | 2026-07-21 ユーザー判断で目視スキップ・完了扱い。requirements 9-5 △→○ 昇格。9-5 のコア実装はこれで完了（テイスティング 5 軸一致は将来拡張・別要件） |
 
 #### カフェ検索の補完語を「カフェ」→「コーヒー」に変更（2026-07-21 起票）
 
@@ -73,7 +70,6 @@
 |------|------|------|
 | [x] | kmp-engineer: `ensureCafeKeyword` の補完語を「 カフェ」→「 コーヒー」に置換 + KDoc 追随 + `PlacesClientImplSearchTextKeywordTest` の期待値更新 + テスト実行 | 2026-07-21 完了。includedType=cafe / CAFE_KEYWORDS / locationBias 経路は不変 |
 | [x] | 親: テスト再検証（`iosSimulatorArm64Test` override 無し green）+ implementation_note 記録 | 2026-07-21 完了 |
-| [x] | ユーザー: シミュレータで味覚語検索の目視（「フルーティー」等でデザート店が減る / 地名のみ検索は従来どおり） + commit 可否判断 | 2026-07-21 ユーザー確認 OK（味覚語でデザート店減 / 地名のみ従来どおり） |
 
 #### 広告導入: AdMob ネイティブ広告（2026-07-14 起票）
 
@@ -89,7 +85,6 @@
 | [x] | ios-engineer: **全面バナー化への再実装**（MediaView 必須判明による再編、requirements §11 改訂済み）— NativeAd 系 4 ファイル撤去、下部固定 2 面 = アンカーアダプティブバナー / インライン 2 面 = インラインアダプティブバナー（maxHeight 制限）、テスト用ユニット ID をバナー用に差し替え | 2026-07-14 完了。親再検証済み（build + Places 混入なし）。設計判断は implementation_note 2026-07-14 バナー再実装エントリ |
 | [x] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット **2 つ**発行（カフェ詳細 / マップ検索）→ `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備。2026-07-16 の 11-3 撤去で 4 → 2 ユニットに縮小。**発行済み**（App ID + ユニット 2 件、値は `docs/admob-setup-todo.md` = git 非追跡）。`Secrets.xcconfig` には 3 行を**コメントアウトで記載**し、日常の開発・検証はデモ ID にフォールバックさせる運用（本番 ID の自己タップによる無効トラフィック回避）。リリースビルドへの供給は CI 経由（下記「CI リリースへの本番 AdMob ID 注入」） |
 | [x] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要。リンク済み |
-| [x] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | 2026-07-15 完了。位置調整（記録タブ = リスト先頭インライン / 分析タブ = 高さ 90pt 上限）まで確認済み |
 
 #### 広告 no-fill 診断: Ad Inspector 導入（2026-07-22 起票）
 
@@ -99,7 +94,6 @@
 |------|------|------|
 | [x] | ios-engineer: `#if DEBUG` 限定で `MobileAds.shared.presentAdInspector(from:)` を起動する導線を追加（設定画面のデバッグ行 等、リリースビルドに出さない）。ビルド検証まで | 2026-07-22 完了。`SettingsView` に DEBUG 限定「デバッグ」セクション + 「Ad Inspector を開く」ボタン。`RootViewControllerProvider` 再利用 |
 | [x] | 親: 検証（override 無し build）+ commit | 2026-07-22 完了。フラグ無し `xcodebuild ... BUILD SUCCEEDED` を親が再確認（SettingsView の SourceKit 診断は macOS SDK インデックス誤りで実害なし）。commit 514acaf |
-| [x] | ユーザー: **シミュレータ**で Ad Inspector を開き（設定 → デバッグ → Ad Inspector を開く）、対象ユニットの request log / no-fill 理由を確認 | 2026-07-22 完了。**`No fill` 確定** → Google 側のデモ広告抑制（開発中の過剰トラフィック起因、自然回復見込み）。コード無問題。経緯は implementation_note 2026-07-22 |
 
 #### SKAdNetwork 識別子の整備（広告収益最適化 / 2026-07-22 起票）
 
@@ -127,7 +121,6 @@
 |------|------|------|
 | [x] | ios-engineer: 記録タブ（`CoffeeListView`）/ 分析タブ（`AnalysisView`）の広告配線削除 + `AnchoredBannerAdView.swift` 削除（分析タブ専用）+ ユニット ID 2 面分の定義削除（`AdUnitIDs.swift` / `Base.xcconfig` / `Info.plist`） | 2026-07-16 完了。撤去 5 識別子の grep 横断点検で残存なし。Configuration/README も 2 面に追随 |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。paid-services.md の面数記述も追随。`Secrets.xcconfig` のみ親から読み取り不可（本番ユニット未発行のため該当キー無しの見込み、ユーザー確認推奨） |
-| [x] | ユーザー: シミュレータで確認（記録・分析タブに広告なし / カフェ詳細・マップ検索は従来どおり / ATT プレプロンプト維持） | 2026-07-16 ユーザー確認完了 |
 
 #### 共有カード画像生成（2026-07-16 起票）
 
@@ -137,7 +130,6 @@
 |------|------|------|
 | [x] | ios-engineer: `ShareCard/` 新設（`CoffeeShareCardView` = 360×450pt 可変レイアウト / `ShareCardRenderer` = ImageRenderer scale 3 + ライト固定 + 一時 PNG / `ShareCardSheet` = プレビュー + ShareLink）+ `CoffeeDetailView` ツールバーに独立共有アイコン | 2026-07-16 完了。`TastingRadarChart` / `StarRatingView` / `PhotoFileStore` は無改変で再利用。カードの roastLevel はローカライズ表示（本体 Form と非対称 — implementation_note 2026-07-16） |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-16 完了。親が override 無し BUILD SUCCEEDED を再確認。設計判断 2 エントリを implementation_note に記録 |
-| [x] | ユーザー: シミュレータで確認（写真あり / なし・テイスティングあり / なし・未評価・セルフ抽出の各記録で崩れない / ダーク端末でもカードはライト配色 / share sheet から画像が渡る） | 2026-07-16 ユーザー確認完了（レーダー縮小時の可読性含め OK） |
 
 #### 分析タブ「抽出方法の内訳」の横棒化（2026-07-16 起票）
 
@@ -147,7 +139,6 @@
 |------|------|------|
 | [x] | ios-engineer: `AnalysisView.brewMethodSection` を横棒 BarMark 化（焙煎度セクションの軸構成を踏襲） | 2026-07-16 完了。データ順は `byBrewMethod`（件数降順）のまま = 最多の方法が最上段 |
 | [x] | 親: 検証（xcodebuild override 無し）+ commit | 2026-07-16 完了。ios-engineer が override 無し xcodebuild BUILD SUCCEEDED（error 0 件）を確認済み |
-| [x] | ユーザー: シミュレータで表示確認（ラベル被りなし / 件数軸グリッド） | 2026-07-16 ユーザー確認完了 |
 
 #### 分析タブ「あなたの傾向」の再生成抑止（2026-07-16 起票）
 
@@ -157,7 +148,6 @@
 |------|------|------|
 | [x] | kmp-engineer: `AnalysisViewModel.onAppear()` の購読中ガード + 同値 stats での insight 再生成スキップ + commonTest 追加 | 2026-07-16 完了。`AnalysisViewModelInsightRegenerationTest` 3 件新規（計 22 件 green）。公開 API 変更なし・iOS Bridge 追随不要 |
 | [x] | 親: verify-kmp-ios 再検証 + commit | 2026-07-16 完了。testAndroidHostTest + iosSimulatorArm64Test（analysis 実行確認）+ assembleSharedLogicXCFramework すべて BUILD SUCCESSFUL。判断は implementation_note 2026-07-16 |
-| [x] | ユーザー: シミュレータで確認（タブ往復で「傾向を分析中…」が再表示されない / 記録追加後は再生成される） | 2026-07-16 ユーザー確認完了 |
 
 #### コーヒー記録の削除動線 3 種（2026-07-16 起票）
 
@@ -168,7 +158,6 @@
 | [x] | kmp-engineer: `CoffeeDetailViewModel` に `onAppear(coffeeId, userId)` / `onDeleteTapped()` / `UIState.isDeleted` 追加 + commonTest 新設 | 2026-07-16 完了。commonTest 5 件 green（Android host + iosSimulatorArm64 は親実行） |
 | [x] | ios-engineer: 詳細 Bridge / View（削除 Menu + confirmationDialog + dismiss + 写真物理削除）、リスト contextMenu（編集 sheet + 削除 dialog） | 2026-07-16 完了。swipeActions 無変更 |
 | [x] | 親: verify-kmp-ios 再検証 + implementation_note 記録 + commit | 2026-07-16 検証完了。全モジュール 2 ターゲットテスト green + XCFramework link + override 無し xcodebuild BUILD SUCCEEDED を親確認。implementation_note 2026-07-16 記録済み |
-| [x] | ユーザー: シミュレータで 3 動線 + スワイプ退行なし確認 | 2026-07-16 ユーザー確認完了 |
 
 #### マップ「好み一致」チップのタップ対応（2026-07-16 起票）
 
@@ -178,7 +167,6 @@
 |------|------|------|
 | [x] | ios-engineer: 「好み一致」チップを `TagLegendChip` → `TagChip` 化（強調トグル + 一覧シート、保存済みパターン踏襲）+ `RecommendedCafeListSheet` 新設 + 強調中の他ピン減光 | 2026-07-16 完了。`TagChip` に `tint` パラメータ追加（好み一致のみ `.pink`）。保存済み強調と排他 |
 | [x] | 親: verify-kmp-ios で再検証 + implementation_note 記録 + commit | 2026-07-16 完了。override 無し xcodebuild BUILD SUCCEEDED を親確認。implementation_note 2026-07-16 + lessons 2026-07-16（型チェッカ誤誘導）記録済み |
-| [x] | ユーザー: シミュレータで挙動確認（タップ → シート / 再タップ → 解除 / 行タップ → 詳細 / 減光） | 2026-07-16 ユーザー確認完了 |
 
 #### 分析タブ可視化改善: 焙煎度チャート + テイスティングレーダー（2026-07-13 起票）
 
@@ -189,7 +177,6 @@
 | [x] | ios-engineer: `roastLevelSection` を全 8 段階・焙煎順横棒 + 浅→深ランプ化 | 2026-07-13 完了。`byRoastLevel` 空ならセクション非表示は従来どおり |
 | [x] | ios-engineer: `TastingRadarChart.swift` 新規 + `tastingAveragesSection` 置き換え | 2026-07-13 完了。ドメイン非依存の `RadarChartAxis` 設計 |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-13 完了。Gradle タスク実行 + BUILD SUCCEEDED を親再検証 |
-| [x] | ユーザー: シミュレータで表示確認（焙煎順 + ランプ / レーダー描画 / ダークモード / VoiceOver） | 2026-07-21 ユーザー確認 OK（焙煎順+ブラウンランプ / レーダー 5 軸描画 / ダーク / VoiceOver） |
 
 #### カフェ詳細 Places 写真の段階読み込み（2026-07-13 起票）
 
@@ -199,7 +186,6 @@
 |------|------|------|
 | [x] | `CafePhotoHeader` を段階読み込み化（初期 3 / +3 ずつ / 上限 10）→ ios-engineer | 2026-07-13 実装完了・override なしビルド成功。自分の記録写真は対象外（従来どおり全件表示） |
 | [x] | paid-services.md の Photo Media 行を追随更新（親） | 2026-07-13 完了 |
-| [x] | ユーザー: シミュレータ / 実機で表示確認 | 2026-07-21 ユーザー確認 OK（初期 3 枚 / さらに表示で +3・上限 10） |
 
 #### 周辺カフェピンのノイズ除去（名前フィルタ + ネガティブキャッシュ、2026-07-13 起票）
 
@@ -211,7 +197,6 @@
 | [x] | 親: `:shared:feature:map:iosSimulatorArm64Test` 再検証 | 2026-07-13 全緑 |
 | [x] | ios-engineer: Bridge 追随 + 名前フィルタ + `ApplePoiNegativeCache`（UserDefaults / 30m+名前一致 / 上限 300 FIFO / TTL なし）+ MapTabView 配線 | 2026-07-13 完了。除外キーワード 16 語は `MapTabView.excludedApplePoiNameKeywords` に一元化 |
 | [x] | 親: 統合検証（verify-kmp-ios）+ implementation_note 記録 + commit | 2026-07-13 完了。①testAndroidHostTest / iosSimulatorArm64Test 全緑 ②XCFramework 成功 ③xcodebuild override 無しで BUILD SUCCEEDED |
-| [x] | ユーザー: シミュレータ / 実機確認（キーワード POI 非表示 / 該当なしタップ → ピン消滅・再パンでも非表示 / 通信エラーではピンが消えない） | 2026-07-21 ユーザー確認 OK（キーワード POI 非表示 / 該当なし→消滅・再パンで非表示 / 通信エラーで保持） |
 
 #### 名前フィルタの Remote Config 外部注入（2026-07-13 起票）
 
@@ -221,7 +206,6 @@
 |------|------|------|
 | [x] | ios-engineer: SPM に FirebaseRemoteConfig 追加 + キーワードプロバイダ実装 + `MapTabView` 参照差し替え + 起動時 fetchAndActivate | 2026-07-13 完了。`ApplePoiFilterConfig`。空配列は成功扱い（フィルタ一時無効化に使える） |
 | [x] | 親: 検証（xcodebuild override 無し）+ docs 更新（implementation_note / paid-services 棚卸し行）+ commit | 2026-07-13 完了。PrivacyInfo は SDK 同梱マニフェスト確認でアプリ側変更不要、app-store-metadata 6.3 に SDK 行追加 |
-| [x] | ユーザー: Firebase コンソールで `map_poi_excluded_name_keywords` パラメータ作成 → コンソール変更が次回起動で反映されることを実機確認 | 2026-07-21 ユーザー確認 OK（パラメータ作成 → 反映確認）。注: `minimumFetchInterval` は 12h 既定のため、即時反映は再インストール起動での fetch 強制が確実 |
 
 #### 周辺カフェピンのスロットリング耐性（2026-07-18 起票）
 
@@ -231,7 +215,6 @@
 |------|------|------|
 | [x] | ios-engineer: `MapTabView.fetchAppleNearbyCafes` の catch で `MKError.loadingThrottled` を判別し、その場合は `appleNearbyCafes` を保持（クリアしない） | 2026-07-18 完了。`mkError.code == .loadingThrottled` で判別（`MKError.Code` の落とし穴は ios-engineer メモリに記録済み） |
 | [x] | 親: 検証（xcodebuild override 無し）+ implementation_note 記録 + commit | 2026-07-18 完了。親が override 無し BUILD SUCCEEDED + Gradle `:shared:framework:` タスク実行を確認 |
-| [ ] | ユーザー: 実機で長時間パン・ズーム時にピンが消えないことを確認（スロットリングは意図的再現が困難なため通常利用の中で観察） | |
 
 #### フェーズ 6（任意 / 後続）
 
@@ -497,7 +480,8 @@
 | [x] | #6 | `data-model.md` §4.2 の `runRemote` サンプルを `runCatching` → `try/catch` + `CancellationException` 再スローへ | 実コードは元から正しい。docs だけが自プロジェクトの禁止パターン（coding-conventions §1.7）を例示していた |
 | [x] | #7 | `data-model.md` §2.1 の `upsert` に `brew_recipe` 列を追加（実体 `CoffeeRecord.sq` と一致） | 列 30・プレースホルダ 30 に是正。lessons 07-07「列追加は Mapper と upsert 両方」の再発防止 |
 
-> 未対応で残した指摘（重要度中）: 2026-07-24 の機能変更 3 件が tasks.md 未起票 / `verification-checklist.md` が 2026-07-08 以降未更新 / `admob-setup-todo.md` の除外が `.git/info/exclude`（ローカル限定）/ coding-conventions §1.4 とデフォルト引数の SKIE 制約の衝突 / app-store-metadata §7「共有機能なし」と 2-12 共有カードの不整合。着手時は本セクションを起点にする。
+> 未対応で残した指摘（重要度中）: 2026-07-24 の機能変更 3 件が tasks.md 未起票 / `admob-setup-todo.md` の除外が `.git/info/exclude`（ローカル限定）/ coding-conventions §1.4 とデフォルト引数の SKIE 制約の衝突 / app-store-metadata §7「共有機能なし」と 2-12 共有カードの不整合。着手時は本セクションを起点にする。
+> **解消（2026-07-25）**: 「`verification-checklist.md` が 2026-07-08 以降未更新」→ 目視 QA を checklist に完全集約し（tasks.md の目視行 19 本を移送・削除）、陳腐化 2 件（行番号参照 / マップ検索の旧 UI 記述）も是正した。
 
 #### 開発支援: ダミーデータ Scheme
 
@@ -531,17 +515,10 @@
 
 > 完了分（2026-07-08）: seed データ `scripts/seed/bean-profiles.json`（主要産地 38 件・日本語表記統一・flavorNotes 統一語彙 42 語 = data-model.md §3.2）+ 冪等 upsert スクリプト `seed-bean-profiles.mjs` + README。`--dry-run` バリデーション全通過。確定仕様（grilling で親確定）と経緯は implementation_note 2026-07-08 エントリ。
 
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [ ] | ユーザー: サービスアカウント鍵取得 → `node seed-bean-profiles.mjs` で本番投入（`coffeevision-a54aa`）→ 実機確認（分析タブ「好みの豆の傾向」/「試してみては」/ エディタ産地サジェスト。verification-checklist 15-E-3） | 手順は `scripts/seed/README.md`。投入後はアプリ再起動（メモリキャッシュのため） |
-
 #### フェーズ 18: Firebase テレメトリ導入（Crashlytics / Analytics / Performance、2026-07-08 起票）
 
 > 実装完了（2026-07-08）: iOS のみ。**Crashlytics + Performance = 常時収集（同意不要）、Analytics = `analyticsConsent` 同意時のみ**（`Info.plist` で起動時 OFF → `AppState.applyTelemetryConsent` で有効化。IDFA 非依存で ATT 不要を維持）。SPM 3 プロダクト追加 + dSYM アップロード build phase + `.trackScreen` modifier（4 タブ + 主要画面）+ `PrivacyInfo.xcprivacy` 宣言まで実装済み、override 無しビルド成功。全体の Required Reason API 監査は「リリース前バックログ」の F-1。経緯は implementation_note 2026-07-08、プライバシー申告は app-store-metadata.md 6.1/6.3。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [x] | ユーザー: 実機/シミュレータで実挙動確認（Crashlytics テストクラッシュ送出 / Analytics DebugView で consent トグル ON→OFF / Performance トレース / `screen_view` 発火）+ 親が commit | 2026-07-21 ユーザー確認 OK。Analytics DebugView で consent ON→OFF gating + `screen_view` 発火を確認。Crashlytics テストクラッシュはアプリ内導線なし・Performance は反映遅延のため即時確認は対象外（後日コンソール観察） |
+> 目視: Analytics の consent gating と `screen_view` 発火は 2026-07-21 確認済み。**残る Crashlytics / Performance のコンソール観察は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md)「テレメトリ / 広告」**。
 
 ### 完了
 

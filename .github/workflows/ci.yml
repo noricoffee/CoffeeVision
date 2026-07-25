@@ -59,8 +59,13 @@ jobs:
           }
           EOF
 
+      # testAndroidHostTest はタスク名のみで指定し、全モジュール（shared/domain・core・data-*・
+      # feature/* + sharedUI）の commonTest / androidHostTest を一括で走らせる。
+      # モジュールを個別列挙すると、新規 feature 追加時にテストが CI から静かに漏れる
+      # （2026-07-25 の docs 敵対的レビューで、:shared:data-local だけを指定していたため
+      #  domain / core / feature/* の 300 件超が未実行だったことが発覚）。
       - name: Run shared tests and Android assembleDebug
-        run: ./gradlew :shared:data-local:testAndroidHostTest :androidApp:assembleDebug --stacktrace
+        run: ./gradlew testAndroidHostTest :androidApp:assembleDebug --stacktrace
 
   ios:
     name: iOS framework (Kotlin/Native link)

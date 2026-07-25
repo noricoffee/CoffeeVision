@@ -60,7 +60,7 @@
 ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。（最終棚卸し: 2026-07-22）
 
 - ドメインは **CoffeeRecord 主体**（2026-06-19 クリーンブレイク）: 1 杯 = 1 記録、`cafe: Cafe?`（null = セルフ抽出）、`rating` は 0.5 刻み `Double?`（null = 未評価、2026-07-12 B-4 で sentinel 廃止）、`tasting` は all-or-nothing（`TastingScores?`）、`tags: List<String>`。**産地は `origin: String?`（国名。`CoffeeOriginCatalog` から選択、2026-07-22 に自由入力→国ドロップダウン化）+ `region: String?`（エリア / 農園、任意自由入力・表示専用で分析非対象、migration 6 で追加）**。モデル・DB・Firestore 表現は `data-model.md` を真とする
-- CI（GitHub Actions）は `:shared:data-local:testAndroidHostTest` + `:androidApp:assembleDebug`（Android ジョブ。ダミー `google-services.json` を CI 内で生成）と `:shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）で構成
+- CI（GitHub Actions）は `testAndroidHostTest`（**全モジュール一括 = 360 件**。モジュール個別列挙は漏れるため禁止。2026-07-25 是正）+ `:androidApp:assembleDebug`（Android ジョブ。ダミー `google-services.json` を CI 内で生成）と `:shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）で構成。`xcodebuild` / `iosSimulatorArm64Test` は CI 非対象で親のローカル検証が担保
 - `CoffeeRepository` は `commonMain` で 2 段構成（`RemoteCoffeeDataSource` interface + `CoffeeRepositoryImpl` 合成クラス）。プラットフォーム別実装は `RemoteCoffeeDataSource` だけを書く。書き込みはローカル → リモート順、リモート失敗の扱いは `WritePolicy`（既定 `PropagateRemoteFailure`）
 - Firestore は `users/{uid}/coffees/{id}` の単一ドキュメント（`cafe` 任意埋め込み + `photos` 埋め込み配列 + `tasting` マップ + `tags` 配列。子サブコレクションなし）+ `users/{uid}` ルート（`analyticsConsent`）+ `beanProfiles`（サービス管理・read-only）。nullable はキー省略。`Photo.localPath` は書かず `fileName`（`Documents/photos/` フラット配置）で復元、`remoteUrl` は常に null（Storage 不採用・写真は端末ローカルのみ）
 - `AppContainer.startInitialSync()` は匿名サインイン → uid 確定 → リモート → ローカル同期購読 を起動コードから 1 行で呼べる
@@ -1236,3 +1236,16 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **トレードオフ**: `validate` / `buildRecord` を domain UseCase へ昇格する案は見送り。いずれも feature 層の `CoffeeDraft`（20 フィールドの UI 編集 draft）に依存し、domain へ持ち上げると UI-draft で domain を汚すため、feature モジュール内の純粋関数に留めた。
 
 **検証**: `CoffeeEditorViewModelTest` 20 件を無改変で全緑（testAndroidHostTest / `iosSimulatorArm64Test`）+ 親のフラグ無し `assembleSharedLogicDebugXCFramework`（link まで成功）+ **iosApp スキームの実 Swift ビルド `xcodebuild build ... -scheme iosApp` が `BUILD SUCCEEDED`**（`CoffeeEditorViewModelBridge.swift` 含む）。最終 3 ファイル: `CoffeeEditorViewModel.kt` 695 / `CoffeeRecordBuilder.kt` 141 / `CoffeeEditorMapping.kt` 88 行（全 800 以下）。
+
+### 2026-07-25: CI のテスト対象をモジュール個別列挙から `testAndroidHostTest` 一括指定へ
+
+- 領域: Build / CI
+- 関連: `.github/workflows/ci.yml`、`docs/architecture.md` §アーキテクチャ検証ルール
+
+**発見**: docs 全体の敵対的レビューで、`ci.yml` の Android ジョブが `:shared:data-local:testAndroidHostTest` **1 モジュールだけ**を指定していたことが判明（ジョブ名は "Android assembleDebug & shared tests"）。`shared/domain` / `core` / `feature/*` の commonTest — `FavoriteSignalsPersonaTest`・`OriginNormalizerTest`・VM テスト 7 本など — が **PR チェックで一度も実行されていなかった**。tasks.md 側では各フェーズで「テスト green」を根拠に完了扱いしてきたが、それは親のローカル実行であって CI の回帰網ではなかった。
+
+**是正**: `./gradlew testAndroidHostTest :androidApp:assembleDebug` へ変更（**タスク名のみ・プロジェクトパス無し**）。Gradle が全サブプロジェクトの同名タスクを解決するため、feature モジュール追加時に CI 側の追記が不要になり、「新規モジュールのテストが静かに漏れる」構造的な穴が塞がる。
+
+**トレードオフ**: 実行対象が 1 → 14 モジュール（`sharedUI` 含む）に増え CI 時間が伸びるが、ローカル実測は全キャッシュ有効時 5 秒 / テスト 360 件・37 クラスで、CI のコールドキャッシュでも許容範囲と判断。
+
+**残る穴（意図的）**: iOS ジョブは `assembleSharedLogicXCFramework`（Kotlin/Native リンク）までで、**`xcodebuild`（Swift 側のコンパイル）と `iosSimulatorArm64Test` は CI 非対象**のまま。macOS runner の実行時間コストが大きいため、Swift 側の回帰は親のローカル検証（`verify-kmp-ios` skill、フラグ無し `xcodebuild`）で担保する運用を明文化した（architecture.md に追記）。2026-07-25 の分割 PR で「KMP テスト green でも Swift ビルドは壊れる」実例が出ているので、この分担は意識的に守る。

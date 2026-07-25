@@ -87,8 +87,8 @@
 | [x] | ios-engineer: 4 面配線 — カフェ詳細（情報系の後・記録の前）/ 検索ドロップダウン（3 件目の後・結果 3 件未満は非表示）/ コーヒー記録タブ（下部固定、FAB を広告の上へ）/ 分析タブ（下部固定） | 2026-07-14 完了 |
 | [x] | 親: 検証（verify-kmp-ios、xcodebuild override 無し）+ Places データをターゲティングに渡していないかレビュー + implementation_note 記録 + commit | 2026-07-14 完了。override 無し BUILD SUCCEEDED + Gradle BUILD SUCCESSFUL 確認。Ads/ に Places 参照なし（コメントのみ）・素の Request + NPA フラグのみ確認 |
 | [x] | ios-engineer: **全面バナー化への再実装**（MediaView 必須判明による再編、requirements §11 改訂済み）— NativeAd 系 4 ファイル撤去、下部固定 2 面 = アンカーアダプティブバナー / インライン 2 面 = インラインアダプティブバナー（maxHeight 制限）、テスト用ユニット ID をバナー用に差し替え | 2026-07-14 完了。親再検証済み（build + Places 混入なし）。設計判断は implementation_note 2026-07-14 バナー再実装エントリ |
-| [ ] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット **2 つ**発行（カフェ詳細 / マップ検索）→ `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備。2026-07-16 の 11-3 撤去で 4 → 2 ユニットに縮小 |
-| [ ] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要 |
+| [x] | ユーザー: AdMob アカウント作成・アプリ登録・**バナー**広告ユニット **2 つ**発行（カフェ詳細 / マップ検索）→ `Secrets.xcconfig` へ本番 ID 設定 | コード外の準備。2026-07-16 の 11-3 撤去で 4 → 2 ユニットに縮小。**発行済み**（App ID + ユニット 2 件、値は `docs/admob-setup-todo.md` = git 非追跡）。`Secrets.xcconfig` には 3 行を**コメントアウトで記載**し、日常の開発・検証はデモ ID にフォールバックさせる運用（本番 ID の自己タップによる無効トラフィック回避）。リリースビルドへの供給は CI 経由（下記「CI リリースへの本番 AdMob ID 注入」） |
+| [x] | ユーザー: AdMob アプリと Firebase プロジェクトのコンソールリンク（任意だが公式強推奨。Analytics に広告収益イベントが流れる） | コード変更不要。リンク済み |
 | [x] | ユーザー: シミュレータでテスト広告の表示確認（4 面 / ATT 許可・拒否の両パス / ロード失敗時に枠が畳まれる） | 2026-07-15 完了。位置調整（記録タブ = リスト先頭インライン / 分析タブ = 高さ 90pt 上限）まで確認済み |
 
 #### 広告 no-fill 診断: Ad Inspector 導入（2026-07-22 起票）
@@ -112,12 +112,14 @@
 
 #### CI リリースへの本番 AdMob ID 注入（2026-07-22 起票）
 
-> `Secrets.xcconfig` は gitignore 済みで CI 追跡外。`release-testflight.yml` の「Restore secret files」は従来 `PLACES_API_KEY` しか書き出しておらず、**本番 AdMob ID を発行しても TestFlight ビルドは Base.xcconfig のデモ ID のまま出荷される**地雷があった（発見: 2026-07-22 のユーザー質問）。本番 ID 発行済みのため CI を先行配線する。
+> `Secrets.xcconfig` は gitignore 済みで CI 追跡外。`release-testflight.yml` の「Restore secret files」は従来 `PLACES_API_KEY` しか書き出しておらず、**本番 AdMob ID を発行しても TestFlight ビルドは Base.xcconfig のデモ ID のまま出荷される**地雷があった（発見: 2026-07-22 のユーザー質問）。**本番 ID は発行済み**（「広告導入」セクション参照。値は git 非追跡の `docs/admob-setup-todo.md`）。ただし `Secrets.xcconfig` では 3 行をコメントアウトしてデモ ID にフォールバックさせる運用のため、**ローカル・CI とも実行時はデモ ID**。書き出し漏れでリリースがデモ ID のまま出荷される事故を防ぐため CI 側を配線した。残るのは GitHub Secrets への登録（下記）のみ。
 
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | 親: `release-testflight.yml` の「Restore secret files」を拡張。`ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH` を env 追加し `Secrets.xcconfig` へ書き出し。**リリースは本番 ID 必須（未設定なら fail-fast）** + 非空担保後に書く（空文字で Base のデモ ID を上書きしてクラッシュ/403 になる罠を回避） | 2026-07-22 完了。YAML 妥当性（ruby）+ guard ロジック dry-run（未設定→fail / 全設定→4 行書き出し）を親が検証。commit で反映 |
 | [ ] | **ユーザー: GitHub リポジトリに Secrets 3 件を登録** — `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH`（本番 AdMob コンソールの値） | 未登録だとリリースワークフローが fail-fast で止まる（＝デモ ID 出荷を機械的に防止）。`gh secret set <NAME>` または GitHub Settings → Secrets and variables → Actions |
+
+#### 記録・分析タブの広告撤去（2026-07-16 起票）
 
 > ユーザビリティレビュー採用分。定着の核となる記録・振り返り 2 画面のバナーはリテンションを削る割に収益が小さいため**一度撤去**（再導入余地は残す — コンポーネントは git 履歴から復元可能）。広告はカフェ詳細 / マップ検索の 2 面に縮小。**仕様の正は requirements.md §11（11-3 = ✕ 撤去、2026-07-16 改訂済み）**。ATT フローは残存 2 面のため維持。プランは `.claude/plans/agile-knitting-fern.md`。
 
@@ -455,6 +457,22 @@
 | [ ] | `/memory` でロード確認（CLAUDE.md 常時 + `shared/**` のファイルを開いた際に kotlin-kmp.md が載ること） | **ユーザー作業**（セッション内で `/memory` 実行） |
 
 ### 完了
+
+#### docs 敵対的レビューの指摘対応（2026-07-25）
+
+> `docs/**` 全体をコード・CI・git 状態と突き合わせた敵対的レビューで検出した高重要度 7 件を是正。**CI の穴（#3）が実害あり**: Android ジョブが `:shared:data-local:testAndroidHostTest` 1 モジュールしか指定しておらず、domain / core / feature/* の commonTest 300 件超が PR チェックで未実行だった。判断は implementation_note 2026-07-25 CI エントリ。
+
+| 状態 | ID | 内容 | 備考 |
+|------|----|------|------|
+| [x] | #1 | `tasks.md`「広告導入」/「CI リリースへの本番 AdMob ID 注入」の本番 AdMob ID 状態を実態へ是正 | 「未発行」→ **発行済み**（値は git 非追跡の `docs/admob-setup-todo.md`）。`Secrets.xcconfig` ではコメントアウトしてデモ ID 運用中。ユーザー作業 2 行を `[x]` へ |
+| [x] | #2 | `app-store-metadata.md` §6.3 の AdMob 行から撤去済み 2 面（記録 / 分析タブ）を削除 | 審査申告に転記する原稿。実装していない面の申告を防ぐ |
+| [x] | #3 | `ci.yml` のテスト対象を `testAndroidHostTest` 一括指定へ + architecture / implementation_note の CI 記述を実態化 | ローカル検証: **360 件・37 クラス全 green**（`errors=0 / failures=0`）。iOS 側 `xcodebuild` が CI 非対象である点も architecture に明文化 |
+| [x] | #4 | `coding-conventions.md` §1.3 のドメインモデル例を `rating: Double?` へ（B-4 追随） | 「0.0 = 未評価 sentinel」の旧例をコピーされると sentinel が復活するため |
+| [x] | #5 | `kmp-bridge.md` の `PreferenceMatchAxis` を 4 値へ（`Processing` 追加、2026-07-20 追随） | 「`default` なし全網羅」と書いた箇所で case 欠落＝記述どおり書くとコンパイルエラーだった |
+| [x] | #6 | `data-model.md` §4.2 の `runRemote` サンプルを `runCatching` → `try/catch` + `CancellationException` 再スローへ | 実コードは元から正しい。docs だけが自プロジェクトの禁止パターン（coding-conventions §1.7）を例示していた |
+| [x] | #7 | `data-model.md` §2.1 の `upsert` に `brew_recipe` 列を追加（実体 `CoffeeRecord.sq` と一致） | 列 30・プレースホルダ 30 に是正。lessons 07-07「列追加は Mapper と upsert 両方」の再発防止 |
+
+> 未対応で残した指摘（重要度中）: 2026-07-24 の機能変更 3 件が tasks.md 未起票 / `verification-checklist.md` が 2026-07-08 以降未更新 / `admob-setup-todo.md` の除外が `.git/info/exclude`（ローカル限定）/ coding-conventions §1.4 とデフォルト引数の SKIE 制約の衝突 / app-store-metadata §7「共有機能なし」と 2-12 共有カードの不整合。着手時は本セクションを起点にする。
 
 #### 開発支援: ダミーデータ Scheme
 

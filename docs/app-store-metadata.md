@@ -163,7 +163,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
 | Firebase Analytics | Google | 製品利用分析（**同意時のみ**） | `screen_view`・自動収集イベント（起動/セッション等）。IDFA なし・クロスアプリ追跡なし |
 | Firebase Remote Config | Google | マップ POI 除外キーワードの設定値配信（**常時**、同意不要） | 設定値取得のためのリクエスト（Firebase Installation ID・アプリバージョン/デバイス構成）。ユーザーデータの送信なし（SDK 同梱マニフェストは Other Diagnostic Data / 非トラッキングを自己申告） |
-| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（カフェ詳細 / マップ検索結果シート / コーヒー記録・分析タブ下部固定。requirements.md §11） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
+| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（**カフェ詳細 / マップ検索結果シートの 2 面のみ**。コーヒー記録・分析タブの 2 面は 2026-07-16 に撤去済み = requirements.md §11-3 ✕） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
 | UMP SDK（User Messaging Platform） | Google | （コードから未使用） | Google Mobile Ads SDK の内部依存としてリンクされるのみで、API は一切呼ばない（同意 UI は自前プレプロンプト + ATT で完結。requirements.md §11）。EU 配信を始める場合に GDPR フォームとして再導入 |
 
 > Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。

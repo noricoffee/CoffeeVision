@@ -103,7 +103,7 @@ data class CoffeeRecord(
     val id: String,
     val cafe: Cafe?,               // null = セルフ抽出
     val visitedOn: LocalDate,
-    val rating: Double,            // 0.5 刻み。0.0 = 未評価 sentinel
+    val rating: Double?,           // 0.5..5.0（0.5 刻み）。null = 未評価（2026-07-12 B-4 で 0.0 sentinel 廃止）
     val name: String,
     val brewMethod: BrewMethod,
     val roastLevel: RoastLevel?,

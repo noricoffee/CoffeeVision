@@ -80,7 +80,7 @@ case .tasteProfileMatch(let match):   // match: RecommendationReasonTasteProfile
 }
 ```
 
-- **`enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod }` の Swift case 名は camelCase**: `.origin` / `.roastLevel` / `.brewMethod`（SKIE 標準変換。先頭のみ小文字化）。`@frozen` なので `switch` は `default` なし全網羅にする。**case 名の真は `.swiftinterface`**（Obj-C ヘッダ `.h` の表記は異なることがある。2026-06-22 B-4 で実地確認）。
+- **`enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }` の Swift case 名は camelCase**: `.origin` / `.roastLevel` / `.brewMethod` / `.processing`（SKIE 標準変換。先頭のみ小文字化。`Processing` は 2026-07-20 に 4 軸目として追加）。`@frozen` なので `switch` は `default` なし全網羅にする（軸を増やしたら iOS の `preferenceMatchAxisLabel` / `axisIcon` の追随が必須）。**case 名の真は `.swiftinterface`**（Obj-C ヘッダ `.h` の表記は異なることがある。2026-06-22 B-4 で実地確認）。
 - `MapViewModel.UIState` には `recommendedCafes: [RecommendedCafe]` と `recommendedPlaceIds: Set<String>`（ピン強調用）が加わる（既存フィールドは不変・加算的）。iOS は `makeMapViewModel(userId:)` ファクトリ経由で生成するため、`MapViewModel` のコンストラクタ引数追加（`cafeRecommendationProvider`）は Bridge 側に影響しない。
 
 ### ⚠ 重要: SKIE は「呼び出し方向限定」

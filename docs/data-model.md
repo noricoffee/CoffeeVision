@@ -710,11 +710,11 @@ INSERT OR REPLACE INTO coffee_record (
     cafe_latitude, cafe_longitude, cafe_photo_references,
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
-    name, brew_method, origin, region, variety, processing, roast_level, cup,
+    name, brew_method, origin, region, variety, processing, roast_level, cup, brew_recipe,
     sweetness, body, acidity, flavor, aftertaste,
     tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;
@@ -1115,11 +1115,20 @@ class CoffeeRepositoryImpl(
         }
     }
 
-    private suspend fun runRemote(block: suspend () -> Unit) =
+    // コルーチン内で runCatching は使わない（CancellationException まで握りつぶすため。
+    // coding-conventions.md §1.7）。CancellationException は先行 catch で再スローする。
+    private suspend fun runRemote(block: suspend () -> Unit) {
         when (writePolicy) {
             WritePolicy.PropagateRemoteFailure -> block()
-            WritePolicy.IgnoreRemoteFailure -> runCatching { block() }.let { }
+            WritePolicy.IgnoreRemoteFailure -> try {
+                block()
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                // Firestore のオフライン永続化による再送に委ねる
+            }
         }
+    }
 }
 ```
 

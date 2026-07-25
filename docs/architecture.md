@@ -228,7 +228,7 @@ kotlin.sourceSets.getByName("commonMain").dependencies {
 本プロジェクトは iOS のみリリースを想定していますが、KMP のモジュール分割アーキテクチャが両プラットフォームで成立することを実証するため、
 Android ターゲットを **「常にビルドが通り、共通 ViewModel を最小 UI で動かせる状態」** で維持します。
 
-- **CI**: PR 単位で iOS / Android 両方のビルドを実行。`./gradlew :shared:framework:assembleSharedLogicXCFramework` と `./gradlew :androidApp:assembleDebug` を必須チェックにする
+- **CI**: PR 単位で iOS / Android 両方のビルドを実行。`./gradlew :shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）と `./gradlew testAndroidHostTest :androidApp:assembleDebug`（Android ジョブ）を必須チェックにする。**テストはモジュールを個別列挙せず `testAndroidHostTest` のタスク名のみで指定する**（列挙すると新規 feature のテストが CI から静かに漏れるため。2026-07-25）。iOS ジョブは Kotlin/Native リンクまでで、`xcodebuild`（Swift 側）と `iosSimulatorArm64Test` は CI 対象外＝親のローカル検証（`verify-kmp-ios` skill）が担保する
 - **Android UI スコープ**: `feature/coffee-list` を Compose で表示する 1 画面のみ。編集・検索・写真撮影は実装しない
 - **共通レイヤーの完全性**: `data-firebase` の Android 実装は読み取り（`observe`）まで実装し、iOS 側 Swift 実装と同じインターフェース契約を満たすことを示す
 - **依存追従**: Kotlin / KMP / AGP / Compose は年 2〜3 回のメジャー追従までを許容範囲とする。Android 検証が壊れた場合は最優先で復旧する

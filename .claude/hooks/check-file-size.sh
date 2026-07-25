@@ -8,7 +8,7 @@
 #     教訓、2026-07-24）。分割規約は docs/coding-conventions.md /
 #     .claude/rules/{swift-ios,kotlin-kmp}.md
 #
-#   - docs/**.md 700 行超 → 棚卸し（curate-doc skill）
+#   - docs/**.md 500 行超 → 棚卸し（curate-doc skill）
 #     陳腐化チェック → 縮約 → 分離の 3 段。data-model.md 1246 行の教訓（2026-07-25。
 #     陳腐化 6 件 + 欠落 2 件 + データ欠損バグ 1 件を検出）。
 #     docs/tasks/lessons.md は「昇格しても発生源として残す」設計のため対象外。
@@ -18,7 +18,7 @@
 set -euo pipefail
 
 CODE_THRESHOLD=800
-DOCS_THRESHOLD=700
+DOCS_THRESHOLD=500
 
 input=$(cat)
 file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_response.filePath // empty')

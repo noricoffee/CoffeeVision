@@ -373,7 +373,7 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | kmp-engineer: `build-logic/.../kmp.feature.gradle.kts` の KDoc 陳腐化（「feature モジュールはまだ存在せず」「`feature/visit-list` を作るときに使う想定」）を是正 | architecture.md の陳腐化チェックで検出。feature は 8 個実在し `visit-*` は 2026-06-19 クリーンブレイクで全廃。`kmp.library` / `android.library` の KDoc も同時点検 |
+| [x] | kmp-engineer: `build-logic/.../kmp.feature.gradle.kts` の KDoc 陳腐化（「feature モジュールはまだ存在せず」「`feature/visit-list` を作るときに使う想定」）を是正 | 2026-07-25 完了。モジュール名は列挙せず「`settings.gradle.kts` を真とする」形へ。`kmp.library` は陳腐化なし、`android.library` は「適用する側はない」が今も事実（適用モジュール 0 件を親が grep で裏取り）のため変更不要と判断。親がフラグ無しで `:build-logic:convention:compileKotlin` + feature 2 モジュールの `compileKotlinIosSimulatorArm64` を BUILD SUCCESSFUL 再確認。commit `4cd45e1`（docs コミットに混入。下記 lessons 参照）|
 
 #### data-model.md 棚卸しの是正（2026-07-25 起票 / 完了）
 

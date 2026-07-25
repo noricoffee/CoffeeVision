@@ -78,6 +78,7 @@ class ExportCoffeeRecordsUseCaseTest {
         tasting: TastingScores? = null,
         tags: List<String> = emptyList(),
         brewRecipe: String? = null,
+        region: String? = null,
     ) = CoffeeRecord(
         id = id,
         userId = "user-1",
@@ -89,7 +90,7 @@ class ExportCoffeeRecordsUseCaseTest {
         name = "本日のコーヒー",
         brewMethod = BrewMethod.HandDrip,
         origin = "ケニア",
-        region = null,
+        region = region,
         variety = "SL28",
         processing = null,
         roastLevel = null,
@@ -123,6 +124,7 @@ class ExportCoffeeRecordsUseCaseTest {
             tasting = tasting(),
             tags = listOf("ラテアート", "浅煎り"),
             brewRecipe = "豆 15g / 湯 240ml / 92℃ / 2:30",
+            region = "ニエリ",
         )
         val useCase = ExportCoffeeRecordsUseCase(FakeCoffeeRepository(listOf(r)))
 
@@ -136,6 +138,7 @@ class ExportCoffeeRecordsUseCaseTest {
         assertEquals("2026-06-02", obj["visitedOn"]!!.jsonPrimitive.content)
         assertEquals("HandDrip", obj["brewMethod"]!!.jsonPrimitive.content)
         assertEquals("豆 15g / 湯 240ml / 92℃ / 2:30", obj["brewRecipe"]!!.jsonPrimitive.content)
+        assertEquals("ニエリ", obj["region"]!!.jsonPrimitive.content)
 
         val cafeObj = obj["cafe"]!!.jsonObject
         assertEquals("place-1", cafeObj["placeId"]!!.jsonPrimitive.content)

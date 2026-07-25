@@ -1232,8 +1232,8 @@ Kotlin / SQLDelight / Firestore に続く **第 4 の表現＝外部向けフォ
 ```
 
 - **`version` は互換性の契約**: 現在 1 固定。既存キーの意味変更・削除を伴う変更ではインクリメントし、下記の消費側も追随させる
-- **消費側**: `scripts/seed/seed-coffees.mjs`（開発用の Firestore 投入。envelope v1 をそのまま受け、null キー省略 / `Timestamp` 化 / `photos` 空化 / `userId` 付け替えの差分だけ吸収する）。**アプリ内のインポート機能は意図的に非対応**（復元は Firestore 同期 7-3 + iCloud Backup 7-2 が担う。経緯は [`implementation_note.md`](./implementation_note.md) 2026-07-13）
-- **`CoffeeRecord` にフィールドを追加したら DTO + Mapper も同時に更新する**（追随漏れは無言のデータ欠損になる）。2026-07-22 に追加した `region` が未追随で、現状のエクスポートは `region` を落とす（[`tasks.md`](./tasks.md) 参照）
+- **消費側**: `scripts/seed/seed-coffees.mjs`（開発用の Firestore 投入。envelope v1 をそのまま受け、null キー省略 / `Timestamp` 化 / `photos` 空化 / `userId` 付け替えの差分だけ吸収する）。**`toDocument` は明示的なキー allowlist なので、フィールド追加時はここも追随が必要**（未知キーは素通しされず落ちる）。**アプリ内のインポート機能は意図的に非対応**（復元は Firestore 同期 7-3 + iCloud Backup 7-2 が担う。経緯は [`implementation_note.md`](./implementation_note.md) 2026-07-13）
+- **`CoffeeRecord` にフィールドを追加したら DTO + Mapper も同時に更新する**（独立した `data class` の手写しなのでコンパイラが検出せず、追随漏れは無言のデータ欠損になる）。2026-07-22 に追加した `region` が唯一の追随漏れで、2026-07-25 に修正済み。恒久策として `CoffeeRecordExportMapperTest.fullyPopulatedRecord_allFieldsMapToExportDto` が `CoffeeRecord` 全フィールドと DTO を 1 対 1 で突き合わせる（教訓と 5 経路の点検手順は [`tasks/lessons.md`](./tasks/lessons.md) 2026-07-25）
 
 ---
 

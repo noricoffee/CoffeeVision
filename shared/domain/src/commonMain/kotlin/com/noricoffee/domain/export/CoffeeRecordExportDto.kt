@@ -23,6 +23,7 @@ data class CoffeeRecordExportDto(
     val name: String,
     val brewMethod: String,
     val origin: String? = null,
+    val region: String? = null,
     val variety: String? = null,
     val processing: String? = null,
     val roastLevel: String? = null,

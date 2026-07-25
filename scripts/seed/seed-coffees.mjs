@@ -143,6 +143,7 @@ function toDocument(record, userId, toTimestamp) {
     brewMethod: record.brewMethod,
     rating: record.rating,
     origin: record.origin,
+    region: record.region,
     variety: record.variety,
     processing: record.processing,
     roastLevel: record.roastLevel,

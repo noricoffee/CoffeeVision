@@ -25,6 +25,7 @@ object CoffeeRecordExportMapper {
         name = record.name,
         brewMethod = record.brewMethod.name,
         origin = record.origin,
+        region = record.region,
         variety = record.variety,
         processing = record.processing?.name,
         roastLevel = record.roastLevel?.name,

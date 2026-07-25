@@ -1,6 +1,6 @@
 ---
 name: coffee-record-column-addition
-description: CoffeeRecord に nullable TEXT 列を1つ追加する（cup と同型の属性追加）ときの全ファイル一覧と、見落としやすい LocalCoffeeRepository の upsert() 呼び出し
+description: CoffeeRecord に nullable TEXT 列を1つ追加する（cup と同型の属性追加）ときの全ファイル一覧と、見落としやすい LocalCoffeeRepository の upsert() 呼び出し・export DTO/Mapper 追随
 metadata:
   type: project
 ---
@@ -29,6 +29,13 @@ metadata:
    （sealed interface 側と private 拡張関数側、両方に同じ列挙文言がある）
 8. `shared/core/.../dev/DummyCoffeeData.kt` — `RawData` にフィールド追加（`= null` デフォルト推奨。
    既存 30 件の呼び出しを全部触らずに済む）
+9. **`shared/domain/.../domain/export/CoffeeRecordExportDto.kt` + `CoffeeRecordExportMapper.kt`**
+   （要件 §7-4 / `data-model.md` §8）— 2026-07-22 の `region` 追加ではここだけ追随漏れし、無言のデータ
+   欠損（2026-07-25 に `docs/data-model.md` 棚卸しで発覚・修正）。DTO の `data class` にフィールド追加
+   （`CoffeeRecord` と同じ並び順に揃える）+ `Mapper.toDto()` の 1 行。**忘れると `grep -rl
+   "CoffeeRecordExportDto\|CoffeeRecordExportMapper" shared --include="*.kt" | grep -v /build/`
+   でしか気づけない**（Kotlin コンパイラは検出しない。DTO は独立した `data class` で `CoffeeRecord` を
+   継承しないため）。次回からはカラム追加のたびにこの grep を横断点検の定番セットに含める
 
 ## 影響を受ける既存テストファイル（コンパイル対応のみ）
 

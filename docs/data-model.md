@@ -1,6 +1,11 @@
 # データモデル
 
-CoffeeVision のドメインモデルを **Kotlin（ドメイン）/ SQLDelight（ローカル DB）/ Firestore（クラウド）** の 3 表現で定義します。
+CoffeeVision のドメインモデルを **Kotlin（ドメイン）/ SQLDelight（ローカル DB）/ Firestore（クラウド）+ エクスポート JSON（§8）** の 4 表現で定義します。
+
+> **この doc に書くこと / 書かないこと**（2026-07-25 の棚卸しで確定。1246 → 901 行に縮約した際の基準）
+> - **書く**: フィールドの一覧・型・null 許容・意味、不変条件、表現間のマッピング規則、決定論的な集計ルール、設計上の決め事（なぜこの形か）
+> - **書かない**: ①**ソースの逐語コピー**（SQL クエリ本体 / Rules / 実装コード / 定数リストの中身 — 正本はファイル側。列定義や公開 API の「形」は仕様なので残す）②**経緯・実測値・不採用案**（→ [`implementation_note.md`](./implementation_note.md)）③**UI の見た目**（→ [`ui-ux-guidelines.md`](./ui-ux-guidelines.md)）
+> - 新しい表現・経路を足したら §8 の「写る先」と `.claude/rules/kotlin-kmp.md` のチェックリストも更新する（追随漏れ = 無言のデータ欠損。lessons 2026-07-25）
 
 > **2026-06-19 大改訂**: 「カフェ訪問（`Visit`）主体」から「**コーヒー記録（`CoffeeRecord`）主体**」へ再設計。`Visit` / `CoffeeItem` / `FoodItem` を廃止し、1 杯のコーヒー記録 `CoffeeRecord` を集約ルートにした。カフェは任意（`cafe: Cafe?`、null = セルフ抽出）。クリーンブレイク（データ移行なし）。経緯は [`implementation_note.md`](./implementation_note.md) 2026-06-19 エントリ参照。
 
@@ -121,37 +126,15 @@ data class Cafe(
 
 ## 1.3 enum
 
-```kotlin
-enum class BrewMethod {
-    Espresso,
-    HandDrip,
-    NelDrip,
-    FrenchPress,
-    AeroPress,
-    Syphon,
-    ColdBrew,
-    Other,
-}
+いずれも `shared/domain` の単純な enum（表示名は UI 側でローカライズ。永続化は `.name` 文字列 = §2.1 / §3.2）。
 
-enum class ProcessingMethod {
-    Natural,
-    Washed,
-    Honey,
-    Anaerobic,
-    Other,
-}
+| enum | 値（宣言順） |
+|---|---|
+| `BrewMethod` | `Espresso` / `HandDrip` / `NelDrip` / `FrenchPress` / `AeroPress` / `Syphon` / `ColdBrew` / `Other` |
+| `ProcessingMethod` | `Natural` / `Washed` / `Honey` / `Anaerobic` / `Other` |
+| `RoastLevel` | `Light` / `Cinnamon` / `Medium` / `High` / `City` / `FullCity` / `French` / `Italian` |
 
-enum class RoastLevel {
-    Light,
-    Cinnamon,
-    Medium,
-    High,
-    City,
-    FullCity,
-    French,
-    Italian,
-}
-```
+> DB / Firestore からの逆引きは `entries.firstOrNull { it.name == raw }` を使い、`valueOf`（未知値で例外）は使わない（lessons 2026-07-08）。
 
 ## 1.3a CoffeeOriginCatalog（産地の国ドロップダウン / 2026-07-22）
 
@@ -159,25 +142,9 @@ enum class RoastLevel {
 
 **配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/CoffeeOriginCatalog.kt`
 
-```kotlin
-object CoffeeOriginCatalog {
-    // 表示順 = このリスト順 = コーヒー生豆の生産量の概算ランキング順（ICO / FAO ベース。
-    // 上位は確度が高く、小規模産地の相対順は目安）。全て日本語表記。UI は先頭に「ブレンド」、
-    // 末尾に「その他」を添えて出す（ブレンド → 生産量順 → その他）。
-    val countries: List<String> = listOf(
-        "ブラジル", "ベトナム", "コロンビア", "インドネシア", "エチオピア", "ウガンダ",
-        "インド", "ホンジュラス", "ペルー", "メキシコ", "グアテマラ", "中国",
-        "ニカラグア", "コートジボワール", "コスタリカ", "ケニア", "タンザニア", "エルサルバドル",
-        "パプアニューギニア", "ラオス", "カメルーン", "タイ", "ベネズエラ", "コンゴ民主共和国",
-        "ルワンダ", "ブルンジ", "ハイチ", "エクアドル", "ドミニカ共和国", "フィリピン",
-        "ボリビア", "ミャンマー", "キューバ", "ザンビア", "イエメン", "マラウイ",
-        "ネパール", "東ティモール", "パナマ", "台湾", "ジャマイカ", "プエルトリコ", "ハワイ",
-    )
+`object CoffeeOriginCatalog` が `countries: List<String>`（コーヒー生産国 43 か国。**全て日本語表記**）と `BLEND = "ブレンド"`（複数産地。単一国に落とし込めないコーヒー）/ `OTHER = "その他"`（リスト外。UI は選択時に国名の自由入力欄を出す）を持つ。**国名リスト自体はここに複製しない**（正本はソース）。
 
-    const val BLEND: String = "ブレンド"   // 複数産地。単一国に落とし込めないコーヒー
-    const val OTHER: String = "その他"     // リスト外の産地。UI は選択時に国名の自由入力欄を出す
-}
-```
+**`countries` の並び順 = コーヒー生豆の生産量の概算ランキング順**（ICO / FAO ベース。上位は確度が高く、小規模産地の相対順は目安）。UI は先頭に「ブレンド」、末尾に「その他」を添えて出す。
 
 ### 設計上の決め事
 
@@ -243,71 +210,22 @@ data class CoffeeStats(
     val unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList(), // 好み合致 × 未記録の BeanProfile 提案（フェーズ 15-E-3。BeanProfile 未提供 / 信号なしは空）
 )
 
-data class TastingAverages(
-    val sweetness: Double?,                    // 甘味の平均（tasting ありの記録のみ、無ければ null）
-    val body: Double?,
-    val acidity: Double?,
-    val flavor: Double?,
-    val aftertaste: Double?,
-    val ratedCount: Int,                       // tasting を持つ記録の件数（all-or-nothing なので 5 要素共通）
-)
-
-data class RatingBucket(val rating: Double, val count: Int)
-
-data class CategoryStat(
-    val label: String,                         // enum.name / 正規化済み産地など
-    val count: Int,
-    val averageRating: Double?,                // その群の平均（未評価除外、全未評価なら null）
-)
-
-data class MonthlyStat(
-    val yearMonth: String,                     // "YYYY-MM"
-    val count: Int,
-    val averageRating: Double?,
-)
-
-data class CafeStat(
-    val placeId: String,
-    val name: String,
-    val count: Int,
-    val averageRating: Double?,
-)
-
-data class RecordDigest(
-    val name: String,
-    val rating: Double,
-    val cafeName: String?,                     // セルフ抽出は null
-    val visitedOn: LocalDate,
-)
-
-data class FavoriteSignals(
-    val bestBrewMethod: CategoryStat?,         // 収縮平均で全体平均を最も上回る抽出方法（弱い好み信号。閾値・正方向のみ）
-    val bestOrigin: CategoryStat?,
-    val bestRoastLevel: CategoryStat?,
-    val bestProcessing: CategoryStat? = null,  // 同上、精製方法（bestRoastLevel と対称。default null で加算的）
-    val dominantTastingAxis: TastingAxisCorrelation?,  // 評価と最も相関するテイスティング軸（|r| 閾値以上のみ）
-    val minSampleSize: Int,                    // この件数未満の群は信号にしない（既定 3）
-)
-
-data class TastingAxisCorrelation(
-    val axis: TastingAxis,                     // 相関が最大だった軸
-    val correlation: Double,                   // ピアソン相関係数 r（-1.0..1.0、符号付き）
-    val sampleSize: Int,                       // 相関の母数（rating!=null かつ tasting!=null の件数）
-)
-
-enum class TastingAxis { Sweetness, Body, Acidity, Flavor, Aftertaste }
-
-// フェーズ 12-C: FavoriteSignals と BeanProfile（§1.8）を突合した「好みやすい豆の特徴」。
-// PreferredBeanTraitsUseCase が決定論的に生成し、ObserveCoffeeStatsUseCase に
-// BeanProfileRepository? を注入したときだけ CoffeeStats.preferredBeanTraits に付加される（未注入 / 信号なしは null）。
-data class PreferredBeanTraits(
-    val matchedProfiles: List<BeanProfile>,   // bestOrigin ラベルと origin が部分一致するプロファイル
-    val dominantFlavorNotes: List<String>,    // マッチしたプロファイルの flavorNotes 頻度集計 top-5
-    val originHint: String?,                  // FavoriteSignals.bestOrigin のラベル（信号なしは null）
-    val roastLevelHint: String?,              // FavoriteSignals.bestRoastLevel のラベル（同上）
-    val dominantTastingAxis: TastingAxis?,    // FavoriteSignals.dominantTastingAxis の axis（同上）
-)
 ```
+
+構成要素（すべて `model/CoffeeStats.kt`。全 `averageRating` は「未評価除外・全未評価なら null」で共通）:
+
+| 型 | フィールド |
+|---|---|
+| `RatingBucket` | `rating: Double` / `count: Int` |
+| `CategoryStat` | `label: String`（enum 名 or 正規化済み産地）/ `count` / `averageRating: Double?` |
+| `MonthlyStat` | `yearMonth: String`（"YYYY-MM"）/ `count` / `averageRating: Double?` |
+| `CafeStat` | `placeId` / `name` / `count` / `averageRating: Double?` |
+| `RecordDigest` | `name` / `rating: Double` / `cafeName: String?`（セルフ抽出は null）/ `visitedOn: LocalDate` |
+| `TastingAverages` | 5 軸の平均 `Double?` + `ratedCount: Int`（all-or-nothing なので 5 軸共通の母数） |
+| `TastingAxis` | enum `Sweetness` / `Body` / `Acidity` / `Flavor` / `Aftertaste` |
+| `TastingAxisCorrelation` | `axis: TastingAxis` / `correlation: Double`（ピアソン r、符号付き）/ `sampleSize: Int` |
+| `FavoriteSignals` | `bestBrewMethod` / `bestOrigin` / `bestRoastLevel` / `bestProcessing`（各 `CategoryStat?`。収縮平均で全体平均を上回った軸のみ）/ `dominantTastingAxis: TastingAxisCorrelation?` / `minSampleSize: Int`（既定 3） |
+| `PreferredBeanTraits` | `matchedProfiles: List<BeanProfile>` / `dominantFlavorNotes`（flavorNotes 頻度 top-5）/ `originHint` / `roastLevelHint` / `dominantTastingAxis`（いずれも信号なしは null）。フェーズ 12-C。`model/PreferredBeanTraits.kt` |
 
 ### 集計ルール（決定論）
 
@@ -317,50 +235,35 @@ data class PreferredBeanTraits(
     1. 母数: `rating != null` の評価済みレコード。全体平均 `globalMean` を算出（評価済み 0 件なら 3 つとも `null`）。
     2. 候補: 各軸で件数 `>= minSampleSize`（既定 3）かつ平均評価ありの label。
     3. **経験ベイズ収縮**: 各候補の評価を `shrunkMean = (n·mean + k·globalMean) / (n + k)` で全体平均へ寄せる（`k = SHRINKAGE_PRIOR_WEIGHT`、既定 5 ＝「全体平均を 5 杯ぶん事前に混ぜる」）。少数群の極端値を抑える。
-    4. 選定: `shrunkMean` 最大の候補（n=1 外れ値に頑健な選定キー）。ただし信号化は **n 連動の信頼区間ゲート**で足切りする: `mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)`（一標本 z 検定近似。`globalStd` = 全評価済 rating の母標準偏差、`n` = 候補群の件数、`mean` = 候補群の生平均）。これを満たす最良候補だけ信号にする。**固定オフセット δ（`shrunkMean - globalMean > δ`）は特異度を上げられない**（最良群の偶然の上振れ＝winner's curse がサンプリングばらつき σ/√n に比例して膨らみ、固定 δ では止まらない。B-1b 100% / B-1c 不均等でも 86.7% と実測）。よって**ばらつき連動（n 連動）の閾値**で足切りする。`CATEGORY_MIN_EFFECT = 0.20` は「統計的有意だが実用上は誤差レベル」を弾く小さな絶対下限として併用してよい（z ゲートと AND）。
+    4. 選定: `shrunkMean` 最大の候補（n=1 外れ値に頑健な選定キー）。ただし信号化は **n 連動の信頼区間ゲート**で足切りする: `mean - globalMean > CATEGORY_Z · globalStd / sqrt(n)`（一標本 z 検定近似。`globalStd` = 全評価済 rating の母標準偏差、`n` = 候補群の件数、`mean` = 候補群の生平均）。これを満たす最良候補だけ信号にする。**固定オフセット δ では特異度が上がらない**（winner's curse がばらつき σ/√n に比例して膨らむため）＝ **閾値はばらつき連動（n 連動）にするのが要点**。`CATEGORY_MIN_EFFECT = 0.20` は「統計的有意だが実用上は誤差レベル」を弾く絶対下限として z ゲートと AND で併用する。
     5. 返す `CategoryStat` は**生の `averageRating` と `count`**（収縮値・effect-size は選定/足切りの内部利用のみ。`count` が小さければ言語化で「但し書き」に使う）。タイ時は件数多 → label 昇順で決定論化。
   - **好みの軸（`dominantTastingAxis`）= テイスティング軸と評価の相関**:
     1. 母数: `tasting != null` かつ `rating != null` の記録。`CORRELATION_MIN_SAMPLE`（既定 5）未満なら `null`。
     2. 5 軸それぞれと `rating` の**ピアソン相関係数 r**（符号付き）を計算。分散 0 の軸（全件同値）は相関定義不可のためスキップ。
-    3. `|r|` 最大の軸を採用。ただし **`|r| >= CORRELATION_ABS_FLOOR`（サンプル数連動の下限。下記）のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。**5 軸の max|r| を採る多重比較で偽陽性が乗る**（B-1b 実測 40%）ため、固定 0.3 ではなくサンプル数に応じて締める。
+    3. `|r|` 最大の軸を採用。ただし **`|r|` が下限（サンプル数連動。下記の定数）以上のときだけ**信号にする（弱すぎる相関は出さない）。`r > 0`＝「その軸が高いほど高評価」、`r < 0`＝「低いほど高評価」として言語化に渡す。**5 軸の max|r| を採る多重比較で偽陽性が乗る**ため、固定 0.3 ではなくサンプル数に応じて締める。
   - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
-  - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（カテゴリ z ゲート係数 ≈95% 信頼区間。B-1d sweep で確定。heavy-skew 偽陽性 9.3%・検出力 P2–P4 維持。`globalStd==0` は z ゲートをスキップしδ下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20`（z ゲートと AND する絶対下限）/ テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`CORRELATION_MIN_ABS = 0.3` と `CORRELATION_ABS_FLOOR_C = 1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。値は `FavoriteSignalsPersonaTest` の sweep（150 シード）で検出力 P1–P4・P7 維持を確認して確定。
-  - **既知の限界 / 経緯**: tasting 軸の偽陽性は 40%→22%（c 連動 floor、B-1c）。カテゴリ信号は固定 δ では下がらず（均等 100% / heavy-skew 86.7%、B-1d 前段実測）、**n 連動 z ゲートで根治**（B-1d 本体）。winner's curse は固定オフセットでなくばらつき連動の閾値で抑えるのが要点。詳細経緯は実装ノート 2026-06-22 B-1b〜B-1d。
+  - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（z ゲート係数 ≈95% 信頼区間。`globalStd == 0` は z ゲートをスキップし δ 下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20` / テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`0.3` と `1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。
+  - **これらの値の根拠（偽陽性率の実測値・不採用案・sweep 条件）は [`implementation_note.md`](./implementation_note.md) 2026-06-22「好み判定の統計設計」が正本**。定数を動かすときは `FavoriteSignalsPersonaTest`（150 シード）で検出力 P1–P4・P7 の維持を確認する。
 - **産地**: 分析が見るのは `origin`（国名）**のみ**。`region`（エリア / 農園）は表示専用で集計に使わない（2026-07-22 分離）。origin は国ドロップダウン（`CoffeeOriginCatalog` §1.3a）由来で概ね正規形に揃うが、`BeanProfile.origin` や legacy 自由文字列との名寄せのため引き続き `OriginNormalizer` を通す。グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`、2026-07-08 導入）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion`。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`（**`HIGHLIGHTS_MIN_RATING` のみ `private`** = UseCase 内部専用。同じ 4.0 を使う §1.7 の推薦は別定数 `ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING` を持つ）。
 
-> Phase A では `byBrewMethod` / `byRoastLevel` / `originRanking` / `monthlyTrend` / `topCafes` / `ratingHistogram` までを実装し、`favoriteSignals` は **Phase B-1（好み判定）で上記仕様により実体化**する（収縮平均＋相関軸。それ以前は全フィールド null の空 `FavoriteSignals`）。`ObserveCoffeeStatsUseCase` で `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す形を基本とする。`favoriteSignals` は階層3（要約・Q&A）の `buildPrompt` にも「弱い傾向＋件数の但し書き」として渡し、LLM は断定せず言語化する。
+> `ObserveCoffeeStatsUseCase` が `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す。`favoriteSignals` は階層3（要約・Q&A）の `buildPrompt` にも「弱い傾向＋件数の但し書き」として渡し、LLM は断定させない。
 
 ### 階層3（自然言語解釈）のインターフェース
 
 iOS の Foundation Models 実装を `shared/domain` のインターフェースで抽象化し、プラットフォーム非対称を吸収する（Firebase の `RemoteCoffeeDataSource` と同じパターン）。
 
-```kotlin
-// shared/domain — 階層3。iOS = Foundation Models 実装、Android = 注入しない（分析タブ非表示）
-interface CoffeeInsightProvider {
-    // 階層3 要約（Phase A-4 実装済）。CoffeeStats を入力に headline/body を構造化生成する。
-    @Throws(Exception::class)
-    suspend fun summarize(stats: CoffeeStats): CoffeeInsight
+**`interface CoffeeInsightProvider`**（iOS = Foundation Models 実装 / Android = 注入しない = 分析タブ非表示。全メソッド `suspend` + `@Throws`）:
 
-    // 対話 Q&A v1（Phase B-2）: 単発・ステートレス。digest（CoffeeStats）のみを文脈に質問へ回答する。
-    // 戻り値は整形済みの日本語プレーンテキスト（@Generable 不使用）。tool / 会話履歴は持たない。
-    @Throws(Exception::class)
-    suspend fun answer(question: String, stats: CoffeeStats): String
+| メソッド | 用途 |
+|---|---|
+| `summarize(stats): CoffeeInsight` | 階層3 要約。`CoffeeStats` から headline / body を構造化生成 |
+| `answer(question, stats): String` | 対話 Q&A v1。digest のみを文脈に 1 問 1 答。整形済み日本語プレーンテキスト（`@Generable` 不使用） |
+| `summarizeBeanTraits(traits): CoffeeInsight?` | 好みの豆傾向の言語化（12-C）。**null 返却可**（不可時は UI がフレーバータグのみ表示にフォールバック） |
 
-    // 好みの豆傾向の言語化（フェーズ 12-C）: PreferredBeanTraits を入力に「あなたが好みやすい豆の特徴」を生成する。
-    // iOS 実装は __summarizeBeanTraits(traits:completionHandler:) の protocol witness 形式。
-    // null 返却を許可（Foundation Models 不可時は UI がフレーバータグのみ表示にフォールバック）。
-    @Throws(Exception::class)
-    suspend fun summarizeBeanTraits(traits: PreferredBeanTraits): CoffeeInsight?
-}
-
-data class CoffeeInsight(
-    val headline: String,
-    val body: String,
-)
-```
+**`data class CoffeeInsight`**: `headline: String` / `body: String`。
 
 > `AnalysisViewModel` には `CoffeeInsightProvider?` を注入する（null = 階層3 非対応 = Android / Apple Intelligence 無効時）。**可否判定は iOS の注入時に行う**: `SystemLanguageModel` が `.available` のときだけ `CoffeeInsightProvider` の実装を注入し、不可なら null を渡す。`AnalysisViewModel` は `provider == null → InsightStatus.Unsupported` を既に実装済みのため、KMP 側を変更せず graceful degradation が成立する。iOS 実装は `summarize` 内で `LanguageModelSession` を用い、`@Generable` で `headline` / `body` を構造化生成する。`summarize` 自体の失敗（生成エラー等）は `Failed` 扱い。
 
@@ -378,45 +281,18 @@ data class CoffeeInsight(
 
 digest で答えられない**個別レコード単位の問い**（「○○カフェで飲んだコーヒーは？」「先月飲んだのは？」「エチオピアの記録は？」）に対応するため、Foundation Models の `Tool`（function calling）から KMP の生レコード照会を呼べるようにする。**v1 と同じ "計算は KMP・LLM は解釈と整形のみ" 原則を踏襲**し、絞り込みは KMP 側で行う。
 
-```kotlin
-// shared/domain — 9-4b。iOS の Foundation Models Tool から呼ばれる生レコード照会
-interface CoffeeRecordQuery {
-    // 単一の柔軟な検索。userId は実装が内部で解決するため Swift は filter だけ渡す。
-    @Throws(Exception::class)
-    suspend fun searchRecords(filter: CoffeeRecordFilter): List<CoffeeRecordSummary>
-}
+`shared/domain` に 3 つ（`model/CoffeeRecordQuery.kt`。フィールドごとのマッチ仕様は同ファイルの KDoc が詳しい）:
 
-data class CoffeeRecordFilter(
-    val origin: String? = null,        // 産地（部分一致・大小無視）
-    val brewMethod: String? = null,    // 抽出方法（enum 名/日本語ラベルに寛容マッチ）
-    val roastLevel: String? = null,    // 焙煎度（同上）
-    val cafeName: String? = null,      // カフェ名（部分一致）
-    val minRating: Double? = null,
-    val maxRating: Double? = null,
-    val fromYearMonth: String? = null, // "YYYY-MM" 以降（含む）
-    val toYearMonth: String? = null,   // "YYYY-MM" まで（含む）
-    val tastingMin: TastingScores? = null,  // テイスティング各軸の下限（null = 条件なし）。指定時に tasting=null のレコードは除外
-    val tastingMax: TastingScores? = null,  // テイスティング各軸の上限（null = 条件なし）。各軸は独立評価
-    val limit: Int = 10,
-)
-
-data class CoffeeRecordSummary(
-    val name: String,
-    val cafeName: String?,
-    val origin: String?,
-    val brewMethod: String,   // enum 名（iOS 側で日本語化）
-    val roastLevel: String?,  // enum 名 or null
-    val rating: Double,       // 0.0 = 未評価（LLM ブリッジ境界の明示 sentinel。domain の null を 0.0 に写す。下記「filter は全て String/Double/Int」参照）
-    val visitedOn: String,    // "YYYY-MM-DD"
-)
-```
+- **`interface CoffeeRecordQuery`**: `suspend fun searchRecords(filter): List<CoffeeRecordSummary>` の 1 メソッドのみ（`@Throws`）
+- **`data class CoffeeRecordFilter`**: `origin` / `brewMethod` / `roastLevel` / `cafeName` / `minRating` / `maxRating` / `fromYearMonth` / `toYearMonth`（"YYYY-MM"、両端含む）/ `tastingMin` / `tastingMax`（`TastingScores`）/ `limit`（既定 10・上限 100）。**全フィールド optional**（全 null = フィルタなし）
+- **`data class CoffeeRecordSummary`**: `name` / `cafeName?` / `origin?` / `brewMethod`（enum 名）/ `roastLevel?`（enum 名）/ `rating`（**非 null `Double`。`0.0` = 未評価**）/ `visitedOn`（"YYYY-MM-DD"）
 
 設計上の決め事:
 
 - **単一の柔軟な検索 tool**: 複数の専用 tool に分けず、`searchRecords` 1 本に絞り込み条件を optional で並べる。Foundation Models は引数説明が充実した単一 tool の方が安定し、KMP 照会 API も 1 メソッドで済む。
 - **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、未評価（domain の `rating == null`）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。**`CoffeeRecordSummary.rating` はこの境界の例外として `Double` のまま `0.0 = 未評価` を維持**（マッピングは `record.rating ?: 0.0`。domain の nullable 化 = 2026-07-12 B-4 後も、LLM ブリッジは primitive 主義を優先。iOS 側の `>= 0.5` 表示分岐はこの仕様に依存）。
 - **`origin`/`cafeName` はフィールド横断の free-text term**（2026-06-21 横断化）: 各 term が `record.cafe?.name`（カフェ名）/ `record.origin`（産地）/ `record.name`（コーヒー名）/ `record.variety`（品種）のいずれかに部分一致（大小無視）すればマッチ。両方指定時は AND（各 term がそれぞれ union のいずれかにヒット）。どちらも null ならこのテキスト条件は無視。背景: Foundation Models が `cafeName` と `origin` を誤分類しても確実にヒットさせるため（例: "フグレン" を `origin` に入れても cafe 名にマッチ）。トレードオフとして、コーヒー名に地名が含まれる場合の偽陽性が増えるが個人アプリ規模では許容。
-- **userId は実装が内部で解決**: `CoffeeRecordQueryImpl` は `authRepository.signInAnonymouslyIfNeeded()` で現在 uid を取得し、`coffeeRepository.observeAll(uid).first()` で全件取得 → Kotlin で filter 適用 → `visitedOn` 降順 → `limit` 件に切って `CoffeeRecordSummary` 化する。個人アプリ規模（数十〜数百件）のため全件読みで十分。`shared/domain` 内に置き、`CoffeeRepository` + `AuthRepository` インターフェースのみに依存させる（テスト容易）。`AppContainer` が組み立てて `val coffeeRecordQuery` で公開する。
+- **userId は実装（`CoffeeRecordQueryImpl`）が内部で解決**: Swift は filter だけ渡す。全件取得 → インメモリ filter → `visitedOn` 降順 → `limit` 件（個人アプリ規模の数十〜数百件では全件読みで十分）。`CoffeeRepository` + `AuthRepository` の**インターフェースのみに依存**させ（テスト容易）、`AppContainer` が組み立てて公開する。
 - **digest はベース文脈として併用（ハイブリッド）**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き `buildPrompt(stats)` の digest を含める。
 - **既存インターフェース・VM・UI は不変**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI は変更しない（変更は純粋に加算的）。ブリッジ方向（Swift→Kotlin calling direction）と配線は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
 
@@ -455,15 +331,9 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 ### 推薦ソースの抽象化（将来の差し替えポイント）
 
-```kotlin
-// 推薦の供給元。v1 はローカル決定論実装、将来はサーバ（GCP 等）リモート実装に差し替える。
-// MapViewModel はこの interface にだけ依存し、中身（ローカル集計 / 横断ベクトル類似）を知らない。
-interface CafeRecommendationProvider {
-    fun observeRecommendedCafes(userId: String): Flow<List<RecommendedCafe>>
-}
-```
+**`interface CafeRecommendationProvider`**: `fun observeRecommendedCafes(userId): Flow<List<RecommendedCafe>>` の 1 メソッドのみ。`MapViewModel` はこの interface にだけ依存し、中身（ローカル集計 / 横断ベクトル類似）を知らない。
 
-- **v1 実装 = `ObserveTasteMatchedCafesUseCase`**（`CafeRecommendationProvider` のローカル実装）。`CoffeeRepository.observeAll(userId)` ＋ `BuildCoffeeStatsUseCase` の `FavoriteSignals` から算出。
+- **v1 実装 = `ObserveTasteMatchedCafesUseCase`**（ローカル決定論）。`CoffeeRepository.observeAll(userId)` ＋ `BuildCoffeeStatsUseCase` の `FavoriteSignals` から算出。
 - **将来 9-6** はこの interface のリモート実装（横断ベクトル類似はサーバ側）を `AppContainer` で差し替えるだけ。`MapViewModel` / iOS UI / Foundation Models 言語化層は不変。
 
 ### 一致ルール（決定論 / v1 コンテンツベース）
@@ -499,10 +369,10 @@ interface CafeRecommendationProvider {
   - `highRatedCafes`: 高評価（rating ≥ 4.0）カフェの `[{placeId, lat, lng, rating}]`（地理制約に座標が要るため座標を持つ。店名は placeId から詳細解決）
   - `updatedAt`
 - **類似度**: `tastingVector` 5 軸 cosine を主軸に、`categoryPrefs` 4 軸の一致をスコア加味（tasting 未入力ユーザーはカテゴリで fallback して母集団が痩せない）。
-- **計算（Cloud Function / callable）**: クライアントが `{center, radiusMeters}` で呼ぶ → Function が Admin 特権で自プロファイル + 全 `sharedTasteProfiles` を read → 近傍上位 K 人選定 → K 人の `highRatedCafes` のうち「呼び出しユーザー未訪問」かつ「半径内」を placeId で集約（複数人が高評価した placeId ほど上位 = 票数）→ `[{placeId, lat, lng, similarUserCount}]` を返す（他人の uid・生データは返さない）。**横断 read はサーバ特権に閉じ、クライアントは他人のプロファイルを一切見ない**。
-- **コールドスタート**: 近傍 K・自己記録 N 未満は推薦 0（空 = ピンが出ないだけ・専用空状態 UI なし）。最小 K で「N 人が高評価」表示の個人特定を回避。閾値は定数化し実装時 sweep（9-5 の `FavoriteSignals` 定数運用に倣う）。
-- **理由表示**: `RecommendationReason.SimilarUsers(count)`。9-5（既訪問・ハートピン）と視覚区別。文言「あなたと味覚が近い人のおすすめ」は KMP でテンプレ生成（両 OS）。Foundation Models 言語化は iOS の任意上乗せ（必須でない）。
-- **未決**: 閾値定数（近傍 K / 自己記録 N / 半径 R）/ Function 内の類似計算（総当たり cosine vs Firestore ネイティブベクトル KNN。初期は総当たりで十分の想定）/ サーバーインフラ選定（Cloud Functions ランタイム・デプロイ・CI）/ FM 言語化を v1 に含めるか。
+- **計算は Cloud Function（callable）に閉じる**: クライアントは `{center, radiusMeters}` を渡し、`[{placeId, lat, lng, similarUserCount}]` だけ受け取る。**横断 read はサーバ特権のみで、クライアントは他人のプロファイル・uid・生データを一切見ない**（プライバシー設計の核）。
+- **理由表示**: `RecommendationReason.SimilarUsers(count)`。9-5（既訪問・ハートピン）と視覚区別。最小 K 未満は推薦を出さない（個人特定回避 + コールドスタート時は空 = ピンが出ないだけ）。
+
+> **意思決定 6 点の理由（同意フラグを分離した根拠 / クライアント直 KNN 案の不採用理由 / 役割分担 など）と未決事項（閾値 K・N・R / Function 内の類似計算方式 / インフラ選定 / FM 言語化の範囲）は [`implementation_note.md`](./implementation_note.md) 2026-07-21 が正本**。
 
 ---
 
@@ -510,27 +380,9 @@ interface CafeRecommendationProvider {
 
 好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計（永続化しない）。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
 
-```kotlin
-data class UnexploredBeanSuggestion(
-    val profile: BeanProfile,             // 提案する豆
-    val matchedOriginLabel: String,       // マッチ理由の表示用ラベル（FavoriteSignals.bestOrigin 由来）
-)
-```
+**`data class UnexploredBeanSuggestion`**: `profile: BeanProfile`（提案する豆）/ `matchedOriginLabel: String`（マッチ理由の表示用ラベル。`FavoriteSignals.bestOrigin` 由来）。
 
-**`SuggestUnexploredBeansUseCase`**（`shared/domain/.../usecase/`、決定論）:
-
-```kotlin
-class SuggestUnexploredBeansUseCase(
-    private val beanProfileMatchUseCase: BeanProfileMatchUseCase = BeanProfileMatchUseCase(),
-) {
-    operator fun invoke(
-        records: List<CoffeeRecord>,
-        profiles: List<BeanProfile>,
-        signals: FavoriteSignals,
-    ): List<UnexploredBeanSuggestion>   // 上位 SUGGESTED_BEANS_LIMIT 件
-    companion object { const val SUGGESTED_BEANS_LIMIT = 5 }
-}
-```
+**`SuggestUnexploredBeansUseCase`**（`shared/domain/.../usecase/`、決定論）: `invoke(records, profiles, signals)` → 上位 `SUGGESTED_BEANS_LIMIT`（= 5）件。
 
 - **好み合致**: `signals.bestOrigin`（非 null のとき）に対し、既存 `BeanProfileMatchUseCase`（§1.8 の origin ファジーマッチ・スコアリング）を再利用して候補を選定・並べる（DRY）。`bestRoastLevel` / `bestBrewMethod` は `BeanProfile` に対応フィールドが無いため使わない（origin 主軸）
 - **「未経験」判定 = (origin, variety) ペア**: `BeanProfile.variety != null` の候補は `(origin正規化, variety正規化)` ペアがユーザーの記録に無ければ未経験（同産地でも品種違いは別体験として提案）。`variety == null` の候補は origin のみで判定（その産地を一度でも記録済みなら経験済み扱い）。正規化は origin が `OriginNormalizer.normalize`（`buildOriginRanking` と同じ）、variety が `trim().lowercase()`（品種シノニムは対象外の非対称）
@@ -542,7 +394,7 @@ class SuggestUnexploredBeansUseCase(
 
 ## 1.8 BeanProfile（豆ナレッジ / フェーズ 12-B）
 
-> サービス管理のコーヒー豆知識データ。ユーザーの `CoffeeRecord` と `beanProfileId` では**紐付けしない**。`origin`（trim/lowercase）+ `processings`（enum 名）でファジーマッチし、記録入力時のサジェストや将来の分析強化（12-C）に活用する。
+> サービス管理のコーヒー豆知識データ。ユーザーの `CoffeeRecord` と `beanProfileId` では**紐付けしない**。`origin`（`OriginNormalizer` 経由）+ `processings`（enum 名）でファジーマッチし、記録入力時のサジェストや将来の分析強化（12-C）に活用する。
 
 **配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/BeanProfile.kt`（パッケージ `com.noricoffee.domain`）
 
@@ -569,16 +421,7 @@ data class BeanProfile(
 - score > 0 のもののみ、降順でソートして返す
 - `roastLevel` はロースター次第なので除外
 
-**Repository インターフェース**（`com.noricoffee.repository.BeanProfileRepository`）:
-
-```kotlin
-interface BeanProfileRepository {
-    suspend fun getAll(): List<BeanProfile>
-    suspend fun getByOrigin(origin: String): List<BeanProfile>
-}
-```
-
-`getAll()` はメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要）。
+**`interface BeanProfileRepository`**（`com.noricoffee.repository`）: `suspend getAll()` / `suspend getByOrigin(origin)`。どちらもメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要）。
 
 ---
 
@@ -719,31 +562,9 @@ CREATE TABLE coffee_record (
 
 CREATE INDEX coffee_record_by_user_visited ON coffee_record (user_id, visited_on DESC);
 CREATE INDEX coffee_record_by_cafe ON coffee_record (cafe_place_id);
-
-selectAll:
-SELECT * FROM coffee_record WHERE user_id = ? ORDER BY visited_on DESC, created_at DESC;
-
-selectById:
-SELECT * FROM coffee_record WHERE id = ?;
-
-selectByCafe:
-SELECT * FROM coffee_record WHERE user_id = ? AND cafe_place_id = ? ORDER BY visited_on DESC;
-
-upsert:
-INSERT OR REPLACE INTO coffee_record (
-    id, user_id, cafe_place_id, cafe_name, cafe_address,
-    cafe_latitude, cafe_longitude, cafe_photo_references,
-    cafe_website_url, cafe_maps_url,
-    visited_on, rating, notes,
-    name, brew_method, origin, region, variety, processing, roast_level, cup, brew_recipe,
-    sweetness, body, acidity, flavor, aftertaste,
-    tags,
-    created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-
-deleteById:
-DELETE FROM coffee_record WHERE id = ?;
 ```
+
+クエリは `selectAll`（user_id / visited_on DESC, created_at DESC）/ `selectById` / `selectByCafe` / `upsert`（`INSERT OR REPLACE`、全列）/ `deleteById`。**本体は `.sq` ファイルが正本**なのでここに複製しない。
 
 > `selectByCafe` は `cafe_place_id = ?` の等値マッチのため、cafe null（セルフ抽出）は自然に除外される（意図通り）。
 
@@ -764,21 +585,9 @@ CREATE TABLE photo (
 );
 
 CREATE INDEX photo_by_record ON photo (record_id, sort_order);
-
-selectByRecord:
-SELECT * FROM photo WHERE record_id = ? ORDER BY sort_order ASC;
-
-upsert:
-INSERT OR REPLACE INTO photo (
-    id, record_id, file_name, local_path, remote_url, width, height, created_at, sort_order
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?);
-
-deleteByRecord:
-DELETE FROM photo WHERE record_id = ?;
-
-deleteById:
-DELETE FROM photo WHERE id = ?;
 ```
+
+クエリは `selectByRecord`（sort_order ASC）/ `upsert` / `deleteByRecord` / `deleteById`（本体は `.sq` が正本）。
 
 > **FOREIGN KEY は接続ごとの opt-in（2026-07-03 確定）**: SQLite の外部キー制約は既定で OFF のため、`ON DELETE CASCADE` を機能させるには**本番ドライバ側で明示的に有効化する**必要がある。
 > - Android: `AndroidSqliteDriver` の `Callback.onConfigure` で `db.setForeignKeyConstraintsEnabled(true)`（onConfigure に置くことで migration 実行中は framework 側が自動で制約を外す挙動に乗る）
@@ -793,9 +602,20 @@ DELETE FROM photo WHERE id = ?;
 - 子テーブル（photo）は別クエリで取得し、Repository でまとめる（JOIN は使わず、`Flow.combine` で結合）
 - 写真の参照配列やタグ（`tags`）など複数値は **JSON 文字列**（`kotlinx.serialization`）で 1 列に格納する。`tags` は空文字（旧行）も空リストとして読む
 - `cafe_place_id` が null の行は `cafe = null` で組み立てる。非 null の行のみ `Cafe(...)` を構築する
-- **`brew_recipe`（フェーズ 15-E）**: migration `4.sqm` で `ALTER TABLE coffee_record ADD COLUMN brew_recipe TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `brew_recipe` を追加する。Mapper は他の nullable TEXT 列と同じ扱い
-- **`region`（産地の国ドロップダウン化、2026-07-22）**: migration `6.sqm` で `ALTER TABLE coffee_record ADD COLUMN region TEXT;`（既存行は NULL）。`upsert` の列リスト・VALUES にも `region` を追加する（`brew_recipe` と同じ nullable TEXT 扱い）。Mapper は他の nullable TEXT 列と同様に read/write する
-- **`rating` nullable 化（B-4、2026-07-12）**: migration `5.sqm`。SQLite は NOT NULL 撤廃の ALTER をサポートしないため**テーブル再作成方式**（新テーブル CREATE → `NULLIF(rating, 0.0)` で INSERT SELECT → 旧テーブル DROP → RENAME → インデックス再作成）。photo テーブルの FK（`record_id` → `coffee_record.id`、2026-07-03 本番有効化）をトランザクション内で壊さない手順にすること
+
+### migration の履歴と型
+
+| # | 内容 | 方式 |
+|---|---|---|
+| `2.sqm` | 孤児 photo 行の掃除（FK 有効化以前に発生。§2.2） | `DELETE` |
+| `3.sqm` | `saved_cafe` テーブル追加（15-A） | `CREATE TABLE` + `CREATE INDEX` |
+| `4.sqm` | `brew_recipe` 列追加（15-E） | `ALTER TABLE ADD COLUMN`（既存行 NULL） |
+| `5.sqm` | `rating` の NOT NULL 撤廃（B-4、2026-07-12） | **テーブル再作成**（下記） |
+| `6.sqm` | `region` 列追加（2026-07-22） | `ALTER TABLE ADD COLUMN`（既存行 NULL） |
+
+- **nullable 列の追加（4 / 6）**: `ALTER TABLE ADD COLUMN` + `upsert` の列リスト・VALUES にも追加 + Mapper の read/write。他の nullable TEXT 列と同じ扱い
+- **`rating` の nullable 化（5）**: SQLite は NOT NULL 撤廃の ALTER を持たないため**テーブル再作成方式**（新テーブル CREATE → `NULLIF(rating, 0.0)` で INSERT SELECT → 旧 DROP → RENAME → インデックス再作成）。photo の FK を壊さないよう `PRAGMA foreign_keys=0` で挟む
+- **フェーズ 7 のクリーンブレイク以後は、リリース前でも migration を書く運用**
 
 ## 2.4 SavedCafe.sq（フェーズ 15-A）
 
@@ -817,27 +637,11 @@ CREATE TABLE saved_cafe (
 );
 
 CREATE INDEX saved_cafe_by_user ON saved_cafe (user_id, saved_at DESC);
-
-selectAll:
-SELECT * FROM saved_cafe WHERE user_id = ? ORDER BY saved_at DESC;
-
-selectByPlaceId:
-SELECT * FROM saved_cafe WHERE user_id = ? AND place_id = ?;
-
-upsert:
-INSERT OR REPLACE INTO saved_cafe (
-    place_id, user_id, cafe_name, cafe_address,
-    cafe_latitude, cafe_longitude, cafe_photo_references,
-    cafe_website_url, cafe_maps_url,
-    note, saved_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-
-deleteByPlaceId:
-DELETE FROM saved_cafe WHERE user_id = ? AND place_id = ?;
 ```
 
-> - **migration**: 既存インストールへのテーブル追加のため `migrations/3.sqm`（`CREATE TABLE` + `CREATE INDEX`）を書く（フェーズ 7 のクリーンブレイク以後はリリース前でも migration を書く運用）
-> - 行 ↔ ドメイン変換は `db/Mapper.kt` に追加。`cafe_*` 列の直列化規則（photo_references の JSON 化等）は `coffee_record` と共通化する
+クエリは `selectAll`（saved_at DESC）/ `selectByPlaceId` / `upsert` / `deleteByPlaceId`（本体は `.sq` が正本）。
+
+> 行 ↔ ドメイン変換は `db/Mapper.kt`。`cafe_*` 列の直列化規則（photo_references の JSON 化等）は `coffee_record` と共通化する（migration は §2.3 の表）。
 
 ---
 
@@ -914,52 +718,24 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 ### `users/{uid}/coffees/{coffeeId}`
 
+フィールドは §1.1 の `CoffeeRecord` と同名・同順（enum は `.name` 文字列）。Firestore 固有の構造は 3 つのネストだけ:
+
 ```json
 {
-  "id": "uuid-v4",
-  "userId": "firebase-auth-uid",
-  "cafe": {
-    "placeId": "ChIJ...",
-    "name": "Blue Bottle 三軒茶屋",
-    "address": "東京都世田谷区...",
-    "latitude": 35.6448,
-    "longitude": 139.6694,
-    "photoReferences": ["AcJnMu..."],
-    "websiteUrl": "https://bluebottlecoffee.jp/",
-    "mapsUrl": "https://maps.google.com/?cid=..."
-  },
-  "visitedOn": "2026-06-02",
-  "rating": 4.5,
-  "notes": "ベリー系の華やかな酸味。落ち着いた木質の内装",
-  "name": "本日のコーヒー（ケニア カグモイニ）",
-  "brewMethod": "HandDrip",
-  "origin": "ケニア",
-  "region": "ニエリ",
-  "variety": "SL28",
-  "processing": "Washed",
-  "roastLevel": "Medium",
-  "cup": "ノリタケ",
-  "brewRecipe": "豆 15g / 湯 240ml / 92℃ / 2:30",
-  "tasting": {
-    "sweetness": 7,
-    "body": 5,
-    "acidity": 9,
-    "flavor": 7,
-    "aftertaste": 6
-  },
+  "id": "uuid-v4", "userId": "firebase-auth-uid",
+  "visitedOn": "2026-06-02", "rating": 4.5, "notes": "...",
+  "name": "本日のコーヒー（ケニア カグモイニ）", "brewMethod": "HandDrip",
+  "origin": "ケニア", "region": "ニエリ", "variety": "SL28",
+  "processing": "Washed", "roastLevel": "Medium",
+  "cup": "ノリタケ", "brewRecipe": "豆 15g / 湯 240ml / 92℃ / 2:30",
   "tags": ["ラテアート", "浅煎り"],
-  "photos": [
-    {
-      "id": "uuid-v4",
-      "fileName": "550e8400-e29b-41d4-a716-446655440000.jpg",
-      "width": 1920,
-      "height": 1080,
-      "createdAt": "<Timestamp>",
-      "sortOrder": 0
-    }
-  ],
-  "createdAt": "<Timestamp>",
-  "updatedAt": "<Timestamp>"
+
+  "cafe":    { "placeId": "ChIJ...", "name": "...", "...": "§1.2 の永続 8 フィールド" },
+  "tasting": { "sweetness": 7, "body": 5, "acidity": 9, "flavor": 7, "aftertaste": 6 },
+  "photos":  [ { "id": "uuid-v4", "fileName": "{photoId}.jpg", "width": 1920, "height": 1080,
+                 "createdAt": "<Timestamp>", "sortOrder": 0 } ],
+
+  "createdAt": "<Timestamp>", "updatedAt": "<Timestamp>"
 }
 ```
 
@@ -974,25 +750,10 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 ### `users/{uid}/savedCafes/{placeId}`（行きたい店 / フェーズ 15-A）
 
-```json
-{
-  "cafe": {
-    "placeId": "ChIJ...",
-    "name": "Blue Bottle 三軒茶屋",
-    "address": "東京都世田谷区...",
-    "latitude": 35.6448,
-    "longitude": 139.6694,
-    "photoReferences": ["AcJnMu..."],
-    "websiteUrl": "https://bluebottlecoffee.jp/",
-    "mapsUrl": "https://maps.google.com/?cid=..."
-  },
-  "note": "",
-  "savedAt": "<Timestamp>"
-}
-```
+フィールドは `cafe`（マップ）/ `note`（String、空文字可）/ `savedAt`（`Timestamp`）の 3 つだけ。
 
 - ドキュメント ID = `cafe.placeId`（§1.9 の自然キー方針）。保存 = `set`（上書き）、解除 = `delete` の冪等トグル
-- `cafe` マップは `coffees` と同じスナップショット 8 フィールドのみ（揮発フィールドは書かない）。nullable フィールドは null 時にキー省略（`coffees` と同じ直列化規則）
+- `cafe` マップは **`coffees` の `cafe` と完全に同形**（スナップショット 8 フィールドのみ・揮発フィールドは書かない・nullable は null 時キー省略）。JSON 例は上の `coffees` を参照
 - Security Rules は既存の `users/{uid}` 配下ワイルドカード（`match /{document=**}`）でカバーされるため**変更不要**
 
 ### `curatedCafes/{prefectureCode}`（都道府県別おすすめカフェ / フェーズ 19）
@@ -1022,42 +783,16 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 ---
 
-## 3.3 Security Rules（概略）
+## 3.3 Security Rules
 
-```
-rules_version = '2';
-service cloud.firestore {
-  match /databases/{database}/documents {
-    match /users/{uid} {
-      // users/{uid} ルートドキュメント（analyticsConsent フラグ保存用）
-      allow read, write: if request.auth != null && request.auth.uid == uid;
+**正本はリポジトリルートの `firestore.rules`**（ここに複製しない）。設計方針は 2 つだけ:
 
-      match /{document=**} {
-        // coffees サブコレクション等
-        allow read, write: if request.auth != null && request.auth.uid == uid;
-      }
-    }
+- **ユーザーデータ（`users/{uid}` とその配下すべて）**: 本人のみ read/write（`request.auth.uid == uid`）。ルートドキュメント（同意フラグ）とサブコレクションを `match /{document=**}` の 2 段でカバーする
+- **サービス管理のグローバルコレクション（`beanProfiles` / `curatedCafes`）**: 認証済みユーザーは read-only、`allow write: if false`（write は Admin SDK のみ）
 
-    match /beanProfiles/{beanId} {
-      // 豆ナレッジベース：認証済みユーザーは read-only。write は Admin SDK のみ
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-
-    match /curatedCafes/{prefectureCode} {
-      // 都道府県別おすすめカフェ：認証済みユーザーは read-only。write は Admin SDK のみ
-      allow read: if request.auth != null;
-      allow write: if false;
-    }
-  }
-}
-```
-
-> **上記は現行の `firestore.rules`（リポジトリルート）と一致した内容**。正本はファイル側で、この節はその写し。
+> `firebase deploy --only firestore:rules` はユーザー作業。
 >
-> **フェーズ 12-A 更新**: `users/{uid}` ルートドキュメントへのアクセスを明示的に追加。**フェーズ 12-B 更新**: `beanProfiles` グローバルコレクションを追加（認証済みユーザー read-only）。**フェーズ 19 更新**: `curatedCafes` グローバルコレクションを追加（同型）。`firebase deploy --only firestore:rules` はユーザー作業。
->
-> **9-6 で追加予定（設計確定 2026-07-21・未実装 / `firestore.rules` には未投入）**: `sharedTasteProfiles/{uid}` を `allow read, write: if request.auth != null && request.auth.uid == uid;`（本人のみ read/write）で追加する。他ユーザー横断 read は Cloud Function（Admin SDK）が Rules バイパスで行うため、Rules 側に横断 read の穴は開けない。
+> **9-6 で追加予定（設計確定 2026-07-21・未実装 / `firestore.rules` には未投入）**: `sharedTasteProfiles/{uid}` は本人のみ read/write。他ユーザー横断 read は Cloud Function（Admin SDK）が Rules バイパスで行うため、**Rules 側に横断 read の穴は開けない**。
 
 ---
 
@@ -1072,26 +807,10 @@ service cloud.firestore {
 
 各プラットフォームが書くのは `RemoteCoffeeDataSource` の実装のみ。書き込み順序（ローカル → リモート）や `startSync` はこの合成クラスに集約される。
 
-## 4.1 インターフェース例
+## 4.1 インターフェース
 
-```kotlin
-// shared/domain — UI から見える API
-interface CoffeeRepository {
-    fun observeAll(userId: String): Flow<List<CoffeeRecord>>
-    fun observeById(id: String): Flow<CoffeeRecord?>
-    fun observeByCafe(userId: String, placeId: String): Flow<List<CoffeeRecord>>
-
-    suspend fun save(record: CoffeeRecord)         // 新規・更新 共通
-    suspend fun delete(userId: String, id: String)
-}
-
-// shared/domain — プラットフォーム別に実装する薄いリモートアダプタ
-interface RemoteCoffeeDataSource {
-    fun observeChanges(userId: String): Flow<List<CoffeeRecord>>
-    suspend fun upload(record: CoffeeRecord)
-    suspend fun remove(userId: String, id: String)
-}
-```
+- **`CoffeeRepository`**（UI から見える API）: `observeAll(userId)` / `observeById(id)` / `observeByCafe(userId, placeId)` の 3 つの `Flow` + `suspend save(record)`（新規・更新 共通）/ `suspend delete(userId, id)`
+- **`RemoteCoffeeDataSource`**（プラットフォーム別に実装する薄いアダプタ）: `observeChanges(userId): Flow<List<CoffeeRecord>>` / `suspend upload(record)` / `suspend remove(userId, id)`
 
 ## 4.2 実装方針
 
@@ -1106,56 +825,7 @@ interface RemoteCoffeeDataSource {
   - リモート書き込みの失敗扱いは `WritePolicy` で切り替え可能（既定 `PropagateRemoteFailure` = 呼び出し元に伝播 / `IgnoreRemoteFailure` = SDK のオフライン永続化の再送に委ねる）
 - **写真** は端末ローカル（Documents 配下）にのみ保存する。Firestore の `coffees/{id}.photos` 配列には `fileName` / `width` / `height` / `createdAt` などメタデータのみを書き出し、`remoteUrl` は常に null（Storage 採用見送りのため）
 
-```kotlin
-// shared/core — local + remote を合成（commonMain。Firestore SDK は呼ばない）
-class CoffeeRepositoryImpl(
-    private val local: CoffeeRepository,            // SQLDelight（shared/data-local の LocalCoffeeRepository）
-    private val remote: RemoteCoffeeDataSource,      // プラットフォーム別実装を注入
-    private val writePolicy: WritePolicy = WritePolicy.PropagateRemoteFailure,
-) : CoffeeRepository {
-
-    override fun observeAll(userId: String): Flow<List<CoffeeRecord>> = local.observeAll(userId)
-
-    override suspend fun save(record: CoffeeRecord) {
-        local.save(record)                           // 1) まずローカル（UI 即時更新）
-        runRemote { remote.upload(record) }          // 2) 並行でリモート（WritePolicy に従う）
-    }
-
-    override suspend fun delete(userId: String, id: String) {
-        local.delete(userId, id)
-        runRemote { remote.remove(userId, id) }
-    }
-
-    fun startSync(userId: String, scope: CoroutineScope) {
-        scope.launch {
-            remote.observeChanges(userId).collect { records ->
-                // reconciliation: スナップショットに無い id は他端末で削除済みとみなしローカルからも削除
-                // （dev ダミーデータ DummyCoffeeData.ids はローカル専用のため除外）
-                val remoteIds = records.map { it.id }.toSet()
-                local.observeAll(userId).first()
-                    .filter { it.id !in remoteIds && it.id !in DummyCoffeeData.ids }
-                    .forEach { local.delete(userId, it.id) }
-                records.forEach { local.save(it) }
-            }
-        }
-    }
-
-    // コルーチン内で runCatching は使わない（CancellationException まで握りつぶすため。
-    // coding-conventions.md §1.7）。CancellationException は先行 catch で再スローする。
-    private suspend fun runRemote(block: suspend () -> Unit) {
-        when (writePolicy) {
-            WritePolicy.PropagateRemoteFailure -> block()
-            WritePolicy.IgnoreRemoteFailure -> try {
-                block()
-            } catch (e: CancellationException) {
-                throw e
-            } catch (_: Exception) {
-                // Firestore のオフライン永続化による再送に委ねる
-            }
-        }
-    }
-}
-```
+実装は `shared/core/.../repository/CoffeeRepositoryImpl.kt`（ここにコードを複製しない）。`WritePolicy` はその nested enum。`runRemote` が `IgnoreRemoteFailure` 時に `CancellationException` を先行 catch で再スローする点は [`coding-conventions.md`](./coding-conventions.md) §1.7 の要請。
 
 > iOS / Android が実装するのは `RemoteCoffeeDataSource`（Firestore SDK 直叩き）だけ。photos を埋め込み配列にしたため、observe は `coffees` リスナ 1 本で完結（子の都度取得は不要）、upload は単一ドキュメント `set`、remove は単一ドキュメント `delete` で済む。
 
@@ -1163,23 +833,8 @@ class CoffeeRepositoryImpl(
 
 `CoffeeRepository` と同じ 2 段構成をそのまま踏襲する（新パターンは持ち込まない）。
 
-```kotlin
-// shared/domain — UI から見える API
-interface SavedCafeRepository {
-    fun observeAll(userId: String): Flow<List<SavedCafe>>                       // マップピン / 一覧シート用
-    fun observeByPlaceId(userId: String, placeId: String): Flow<SavedCafe?>     // カフェ詳細のトグル状態用
-    suspend fun save(savedCafe: SavedCafe)                                      // 保存（同一 placeId は上書き）
-    suspend fun delete(userId: String, placeId: String)                         // 解除
-}
-
-// shared/domain — プラットフォーム別に実装する薄いリモートアダプタ
-interface RemoteSavedCafeDataSource {
-    fun observeChanges(userId: String): Flow<List<SavedCafe>>
-    suspend fun upload(savedCafe: SavedCafe)
-    suspend fun remove(userId: String, placeId: String)
-}
-```
-
+- `SavedCafeRepository`（`shared/domain`、UI から見える API）: `observeAll(userId)`（マップピン / 一覧シート用）/ `observeByPlaceId(userId, placeId)`（カフェ詳細のトグル状態用）/ `save(savedCafe)`（同一 placeId は上書き）/ `delete(userId, placeId)`
+- `RemoteSavedCafeDataSource`（`shared/domain`、プラットフォーム別実装）: `RemoteCoffeeDataSource` と完全に同型（`observeChanges` / `upload` / `remove`。キーが id → placeId になるだけ）
 - 合成クラス `SavedCafeRepositoryImpl`（`shared/core`）: 読み取りは SQLDelight を Single Source、書き込みはローカル → リモート順、`WritePolicy` 共用、`startSync` は **coffees と同じスナップショット reconciliation**（スナップショットに無い place_id のローカル行を削除。dev ダミーデータのような除外対象は無し）
 - 実装先: Android = `shared/data-firebase/androidMain`、iOS = `iosApp` 側 Swift（`FirebaseRepositories/` の既存 `RemoteCoffeeDataSource` 実装と同居）
 - ViewModel 配線（公開 API は加算的変更のみ）: `MapViewModel` に `savedCafes` の購読 + ピン用状態 + 一覧シート状態、`CafeDetailViewModel` に `isSaved` トグル状態と save/delete アクション

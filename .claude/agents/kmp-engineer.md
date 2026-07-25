@@ -151,6 +151,8 @@ CLAUDE.md（プロジェクト全体規約）はコンテキストに自動ロ�
 - `./gradlew :<module>:testAndroidHostTest` — ユニットテスト実行（タスク名に注意: `androidHostTest` はソースセット名でありタスクではない）
 - `./gradlew :<module>:compileTestKotlinIosSimulatorArm64` — iOS 側テストの構文・型検証
 
+**`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` を付けない。** Gradle ビルドがスキップされ「偽の BUILD SUCCEEDED」になる（lessons 2026-06-19）。どうしても付けざるを得なかった場合は**レポートの「検証結果」に明記する**（親がフラグ無しで再検証する必要があるため。無言で成功として報告するのが最悪）。フラグを使っていないなら「使っていない」と 1 行書く — 親はそれを見て再検証の要否を決める。
+
 ### sandbox の制約（重要）
 
 サブエージェントの実行環境では `xcode-select` が CommandLineTools を指すため、**`iosSimulatorArm64Test` などリンク・実行を伴うタスクは `MissingXcodeException` で失敗する**。これは自分の変更のせいではない。構文・型検証は `compileTestKotlinIosSimulatorArm64` で代替し、iOS ターゲットでのテスト実行は**レポートの「親への依頼」**として返す（親が `DEVELOPER_DIR` 付きで実行する）。
@@ -179,6 +181,7 @@ CLAUDE.md の規約どおり、同じアプローチで 2 回続けて失敗し�
 - Gradle ビルド: 実行コマンドと結果
 - テスト: 実行コマンドと結果（あれば）
 - iOS 向けコンパイル確認: 結果（必要な場合）
+- **`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` の使用有無**（使ったなら明記。使っていないなら「使っていない」と書く）
 
 ## 仕様 / トレードオフの論点（親への申し送り）
 - 実装中に出てきた設計判断（採用案 / 候補案 / 理由）
@@ -207,5 +210,6 @@ CLAUDE.md の規約どおり、同じアプローチで 2 回続けて失敗し�
 - 自分の判断で仕様を変える（既存 docs と矛盾する実装をする場合は必ずレポートで申告）
 - `commonMain` の公開 API を変えたのに「iOS 側追随依頼」をレポートに書き忘れる
 - `compileCommonMainKotlinMetadata` の成功だけを根拠に「ビルド確認済み」と報告する
+- `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` 付きの結果を、フラグ使用を明記せずに検証成功として報告する
 - ビルド未確認のまま「完了」と宣言する
 - 必読 docs を読まずに着手する

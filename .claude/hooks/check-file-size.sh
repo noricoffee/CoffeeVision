@@ -8,17 +8,25 @@
 #     教訓、2026-07-24）。分割規約は docs/coding-conventions.md /
 #     .claude/rules/{swift-ios,kotlin-kmp}.md
 #
-#   - docs/**.md 500 行超 → 棚卸し（curate-doc skill）
+#   - ストック型 docs（仕様の正本）500 行超 → 棚卸し（curate-doc skill）
 #     陳腐化チェック → 縮約 → 分離の 3 段。data-model.md 1246 行の教訓（2026-07-25。
-#     陳腐化 6 件 + 欠落 2 件 + データ欠損バグ 1 件を検出）。
-#     docs/tasks/lessons.md は「昇格しても発生源として残す」設計のため対象外。
-#     docs/talks/ は登壇資料でプロダクト仕様ではないため対象外。
+#     陳腐化 6 件 + 欠落 2 件 + データ欠損バグ 1 件を検出）
 #
-# 非ブロッキング（警告のみ・exit 0）。閾値は CODE_THRESHOLD / DOCS_THRESHOLD で調整可。
+#   - フロー型 docs（作業ログ = implementation_note / tasks）1200 行超 → 月次アーカイブ
+#     ストック型と閾値を分ける理由: 作業ログは append-only 気味に伸びるのが正常で、
+#     縮約で 500 行に収めようとすると経緯そのものを削る（歴史の破棄）。加えて dispatch
+#     ごとに触る doc なので 500 だとほぼ毎回鳴り、他 doc の警告まで読み飛ばす habit が
+#     つく（アラーム疲れで仕組みが無効化される）。2026-07-25 に 2 段化。
+#
+#   - 対象外: docs/tasks/lessons.md（「昇格しても発生源として残す」設計）/
+#     docs/talks/（登壇資料でプロダクト仕様ではない）
+#
+# 非ブロッキング（警告のみ・exit 0）。閾値は下記 3 定数で調整可。
 set -euo pipefail
 
 CODE_THRESHOLD=800
 DOCS_THRESHOLD=500
+FLOW_DOCS_THRESHOLD=1200
 
 input=$(cat)
 file=$(printf '%s' "$input" | jq -r '.tool_input.file_path // .tool_response.filePath // empty')
@@ -37,7 +45,12 @@ case "$rel" in
     ;;
   # 棚卸し対象外の docs（先に弾く）
   docs/tasks/lessons.md|docs/talks/*) exit 0 ;;
-  # 設計・仕様 docs
+  # フロー型 docs（作業ログ）— 縮約より月次アーカイブが効く
+  docs/implementation_note.md|docs/implementation-note-archive.md|docs/tasks.md)
+    threshold=$FLOW_DOCS_THRESHOLD
+    action="追記が止まった月をアーカイブへ切り出す時期です（curate-doc skill Phase 3 / 各 doc 前文の運用ルール）。"
+    ;;
+  # ストック型 docs（仕様の正本）
   docs/*.md|docs/*/*.md)
     threshold=$DOCS_THRESHOLD
     action="棚卸しを検討してください（curate-doc skill: 陳腐化チェック → 縮約 → 分離）。"

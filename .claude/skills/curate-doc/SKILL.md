@@ -13,11 +13,11 @@ description: docs/**.md が 500 行を超えたときの棚卸し手順。陳腐
 
 対象 doc がどれかで、この先の手順が変わる:
 
-| 型 | doc | 手順 |
-|---|---|---|
-| **ストック型の正本** | `data-model` / `analysis-model` / `requirements` / `architecture` / `coding-conventions` / `ui-ux-guidelines` / `kmp-bridge` / `app-store-metadata` / `paid-services` | Phase 1 → 2 →（まだ超えていれば）3 |
-| **フロー型** | `tasks.md` / `implementation_note.md` | Phase 2 →（作業ログは縮約が効かないので）**Phase 3 = 月次アーカイブへ凍結移送**。**規則は各 doc の前文が正本**（tasks: カテゴリ制 + 縮約 / note: 昇格パス + アーカイブ）なのでまず前文を読む |
-| **対象外** | `tasks/lessons.md` | 「昇格しても発生源として残す」設計。行数を理由に縮めない |
+| 型 | doc | 閾値 | 手順 |
+|---|---|---|---|
+| **ストック型の正本** | `data-model` / `analysis-model` / `requirements` / `architecture` / `coding-conventions` / `ui-ux-guidelines` / `kmp-bridge` / `app-store-metadata` / `paid-services` | 500 行 | Phase 1 → 2 →（まだ超えていれば）3 |
+| **フロー型** | `tasks.md` / `implementation_note.md` | 1200 行 | Phase 2 →（作業ログは縮約が効かないので）**Phase 3 = 月次アーカイブへ凍結移送**。**規則は各 doc の前文が正本**（tasks: カテゴリ制 + 縮約 / note: 昇格パス + アーカイブ）なのでまず前文を読む |
+| **対象外** | `tasks/lessons.md` / `talks/` | — | 「昇格しても発生源として残す」設計。行数を理由に縮めない |
 
 **完了条件**: 型を特定し、フロー型なら該当 doc の前文を読み終えた。
 

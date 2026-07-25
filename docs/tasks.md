@@ -369,8 +369,8 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | kmp-engineer: エクスポート DTO の `region` 追随漏れ修正（`CoffeeRecordExportDto` + `CoffeeRecordExportMapper` に `region` 追加 + テスト） | 2026-07-25 完了。DTO / Mapper に `region` 追加 + `CoffeeRecordExportMapperTest`（全フィールド突合）新設 + 既存 `ExportCoffeeRecordsUseCaseTest` に region ケース。**親がフラグ無しで再検証**: `iosSimulatorArm64Test` 5 件 pass / `assembleSharedLogicXCFramework` BUILD SUCCESSFUL（public DTO 変更のため SKIE 経由のリンクまで確認）。6 経路の横断点検で **`scripts/seed/seed-coffees.mjs` の `toDocument`（明示 allowlist）も同じく `region` を落としていたため親が修正**（`--dry-run` で実測確認）。他フィールドの漏れは無し → lessons 2026-07-25 に記録し `.claude/rules/kotlin-kmp.md` のチェックリストへ昇格 |
-| [ ] | kmp-engineer: `CuratedCafe.kt` KDoc のピン記述を実装に合わせる（現 KDoc「amber + star、トグルなし常時表示」→ 実装は system orange + `cup.and.saucer.fill` + ズームゲート非表示あり） | data-model §1.10 は実装と一致済み。KDoc だけが旧仕様 |
-| [ ] | kmp-engineer: `BeanProfile.kt` KDoc の例示を日本語表記に（現「"Ethiopia"」「"Geisha"」「"Chocolate"」→ 2026-07-08 確定の日本語統一規約と不一致） | data-model §1.8 / §3.2 の表記規約が正。Firestore 実データも日本語 |
+| [x] | kmp-engineer: `CuratedCafe.kt` KDoc のピン記述を実装に合わせる（現 KDoc「amber + star、トグルなし常時表示」→ 実装は system orange + `cup.and.saucer.fill` + ズームゲート非表示あり） | 2026-07-25 完了。見た目の詳細（pt / SF Symbol）は KDoc に書き写さず §1.10 参照に留め、「トグル対象外だがズームゲートで非表示になりうる」という挙動要点だけ残した（domain モデルを iOS の見た目仕様に密結合させない = 再陳腐化の予防） |
+| [x] | kmp-engineer: `BeanProfile.kt` KDoc の例示を日本語表記に（現「"Ethiopia"」「"Geisha"」「"Chocolate"」→ 2026-07-08 確定の日本語統一規約と不一致） | 2026-07-25 完了。あわせてクラス KDoc のマッチ方式記述も是正（`origin`（trim/lowercase）→ `OriginNormalizer.normalize` = trim + lowercase + シノニム辞書）。`flavorNotes` の「統一語彙から選ぶ・自由記述禁止」制約も明記（語彙 42 語は複製せず §3.2 参照） |
 
 #### docs / 設計判断バックログ（後回し可）
 

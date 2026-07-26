@@ -261,10 +261,21 @@ List { ... }
 
 ## 写真表示
 
-- 一覧では `AsyncImage` または独自のキャッシュ画像 View でサムネイル表示
+- 一覧・検索結果行では 1 枚をサムネイル表示（読み込み方法は下表）
 - 詳細では `ScrollView(.horizontal)` + `LazyHStack` で複数枚を横スワイプ
 - 全画面表示は `.fullScreenCover` + `MagnificationGesture` でピンチズーム
-- 写真本体は端末ローカル（Documents 配下）のファイルから読み込む（クラウド同期対象外。詳細は [`requirements.md`](./requirements.md) §7-2）
+
+**記録写真と Places 写真は読み込み方針が違う**。同じ横スクロール帯（`CafePhotoHeader`）に並べても、UI の作り方を揃えてはいけない。
+
+| | 記録写真（ユーザーが撮った写真） | Places 写真（カフェの写真） |
+|---|---|---|
+| 取得元 | 端末ローカル（`<Documents>/photos/`、`PhotoFileStore`） | Places Photo Media API の時限署名 URL を都度取得（`PlacePhotoLoader` → `PlacePhotoThumbnail` の `AsyncImage`） |
+| キャッシュ | 端末に永続保存（クラウド同期対象外。[`requirements.md`](./requirements.md) §7-2） | **独自の永続キャッシュは Places 規約で禁止**。`URLSession` / `AsyncImage` の標準 HTTP キャッシュのみ許容 |
+| 表示枚数 | 制限なし（全件） | **View 側で絞る**。画面再表示のたびに再リクエスト＝課金されるため（枚数と上限は [`paid-services.md`](./paid-services.md) が正） |
+| 失敗時 | `photo.badge.exclamationmark`（ファイル欠損を示す） | `photo`（ロード中は `ProgressView`） |
+| アクセシビリティ | 記録の一部なのでラベルを付ける | 装飾扱いで `.accessibilityHidden(true)`（`PlacePhotoThumbnail` 側で付与済み） |
+
+Places 写真に「一度読んだら保持する」独自キャッシュ層を挟む設計は規約違反になるため採らない。多く見せたい場合はキャッシュではなく段階読み込み（「さらに表示」でユーザー操作を挟む）で対応する。
 
 ---
 

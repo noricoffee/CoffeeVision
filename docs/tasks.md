@@ -111,7 +111,7 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | 親: `release-testflight.yml` の「Restore secret files」を拡張。`ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH` を env 追加し `Secrets.xcconfig` へ書き出し。**リリースは本番 ID 必須（未設定なら fail-fast）** + 非空担保後に書く（空文字で Base のデモ ID を上書きしてクラッシュ/403 になる罠を回避） | 2026-07-22 完了。YAML 妥当性（ruby）+ guard ロジック dry-run（未設定→fail / 全設定→4 行書き出し）を親が検証。commit で反映 |
-| [ ] | **ユーザー: GitHub リポジトリに Secrets 3 件を登録** — `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH`（本番 AdMob コンソールの値） | 未登録だとリリースワークフローが fail-fast で止まる（＝デモ ID 出荷を機械的に防止）。`gh secret set <NAME>` または GitHub Settings → Secrets and variables → Actions |
+| [x] | **ユーザー: GitHub リポジトリに Secrets 3 件を登録** — `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH`（本番 AdMob コンソールの値） | 2026-07-26 ユーザー登録完了。以降 TestFlight リリースは本番 ID で出荷される（未設定なら fail-fast する guard は維持） |
 
 #### 記録・分析タブの広告撤去（2026-07-16 起票）
 
@@ -380,7 +380,7 @@
 |------|----|------|----------------|
 | [ ] | B-1 | マルチデバイス書き込みの競合解決方針を明文化（`updatedAt` での last-writer-wins 等）。現状 remote→local は `INSERT OR REPLACE` で世代比較なし | 複数端末同期（要件 7-3、優先度○）を実装・検証する段階。単一端末では実害なし |
 | [x] | B-4 | `rating=0.0`=「未評価」の暗黙 sentinel を解消し、`CoffeeRecord.rating` を **nullable 化する**（2026-07-12 ユーザー決定） | 2026-07-13 完了。あわせて未評価のまま保存可に変更（従来はエディタで評価必須 = requirements と矛盾していた）。migration 5（0.0→NULL、JVM / NativeSqliteDriver 両方でテスト実証）+ Firestore は読み側で legacy 0.0 正規化。requirements §未決事項も消し込み済み。判断は implementation_note 2026-07-12、SQLDelight migrate の off-by-one は lessons 2026-07-13。**シミュレータ目視（未評価保存 → 表示 → 分析除外 → 既存 DB の migration）はユーザー作業** |
-| [ ] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 任意 |
+| [x] | D-1 | `ui-ux-guidelines.md` の写真サムネ記述に「Places 写真は永続キャッシュ禁止（規約）、ローカル写真とは読み込み方針が違う」旨を補足 | 2026-07-26 完了。「写真表示」節に記録写真 / Places 写真の対比表（取得元・キャッシュ・表示枚数・失敗時・アクセシビリティ）を追加し、実装（`PhotoFileStore` / `PlacePhotoLoader` / `PlacePhotoThumbnail`）と突き合わせて記載。**旧記述「一覧では `AsyncImage` または独自のキャッシュ画像 View でサムネイル表示」が Places 写真に適用すると規約違反を誘発する**ため削除。枚数上限は複製せず `paid-services.md` 参照 |
 
 #### MapTabView の分割リファクタ（God View 解体 / 2026-07-24 起票）
 

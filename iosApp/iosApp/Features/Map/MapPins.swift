@@ -160,7 +160,7 @@ struct CuratedCafePin: View {
                 .fill(Color.orange)
                 .frame(width: 34, height: 34)
                 .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
-                .shadow(color: Color.orange.opacity(0.5), radius: 4, x: 0, y: 2)
+                .shadow(color: Color.orange.opacity(0.4), radius: 4, x: 0, y: 2)
             Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)
                 .foregroundStyle(.white)

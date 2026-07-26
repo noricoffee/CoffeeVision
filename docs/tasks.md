@@ -429,7 +429,7 @@
 |------|----|------|--------|
 | [x] | MP-1 | ios-engineer: `VisitedCafePin` に白フチ（`Circle().stroke(Color(.systemBackground), lineWidth: 1.5)`）を追加。他ピン・色は無変更 | 2026-07-27 完了。1 行追加のみ（`.frame` 直後・`.shadow` 直前 = 既存 2 ピンと同じ挿入順）。フラグ無しで `BUILD SUCCEEDED`。訪問回数バッジは `ZStack` 全体への `.overlay(alignment: .topTrailing)` なので常にフチの上に描画され、欠け・被りは構造上起きない。**2026-07-27 ユーザー目視確認済み**（主従が戻り、バッジ近傍の見え方も問題なし）。commit `b685c56` |
 | [x] | MP-2 | ios-engineer: 残り 3 ピン（`RecommendedCafePin` / `SavedCafePin` / `SearchResultPin`）にも白フチを追加し、全 6 ピンで統一。色・サイズ・影は無変更 | 2026-07-27 完了。3 行追加のみ、挿入位置は既存 3 ピンと同順。フラグ無しで `BUILD SUCCEEDED`。`SearchResultPin` の選択時 `scaleEffect(1.3)` はフチ線幅も 1.95pt 相当に拡大するが、直径も 41.6pt に拡大するためフチ比率は約 4.7% で一定（周辺ピンの 5.4% より細い）→ 相似拡大であり修正不要と判断。**2026-07-27 ユーザー目視確認済み** |
-| [ ] | MP-3 | `CuratedCafePin` の影だけ `opacity(0.5)`（他の意味ピンは 0.4）。ui-ux-guidelines の curated 定義は「サイズと彩度で強調」であり影は仕様外の暗黙強調 → 0.4 に揃えるか判断する。**MP-2 の目視後に、まだおすすめが前に出て見えるときだけ着手**（過剰に抑えると「おすすめが目立つのは良い」というユーザー意図に反する） | 低 |
+| [x] | MP-3 | ios-engineer: `CuratedCafePin` の影を `opacity(0.5)` → `0.4` に揃える（他の意味ピンと同値。影は仕様外の暗黙強調だった） | 2026-07-27 完了（MP-2 の目視後にユーザー判断で着手）。数値 1 点のみ変更、`radius: 4 / y: 2` は不変。フラグ無しで `BUILD SUCCEEDED`。これで意味ピン 5 種が白フチ・影ともに完全に揃い、強弱はサイズと色だけが担う状態になった（`SearchResultPin` の選択時 0.6 / `AppleNearbyCafePin` の 0.25 は規則上の意図的な例外）。**2026-07-27 ユーザー目視確認済み** |
 
 ### 完了
 

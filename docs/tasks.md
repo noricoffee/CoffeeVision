@@ -422,10 +422,14 @@
 > ユーザー指摘: おすすめ（curated）ピンが訪問済みピンより目立つ。原因は色ではなく**白フチの非対称** — `CuratedCafePin` / `AppleNearbyCafePin` には `Circle().stroke(Color(.systemBackground), lineWidth: 1.5)` があるが `VisitedCafePin` には無く、36pt vs 34pt のサイズ差が打ち消されている。訪問済みに白フチを足して主従を戻す。**色は変更しない**（curated = `Color.orange` の色セマンティクスは維持）。
 >
 > 検討して見送った案（2026-07-27）: ① ロースト ランプ流用（訪問済み = イタリアン / おすすめ = ハイ）→ イタリアン #3A230D はダーク地図で 1.06:1 と同化、ハイ #8A715C は accent #8B5A2B と輝度 1.28:1 でほぼ同色。2026-07-18 に burnt orange が「訪問済みの茶と誤認」で orange へ戻した経緯の再演になるため不採用。② curated を mint 等の寒色へ変更 → まず①のフチ調整だけで足りるか見る（ユーザー判断）。
+>
+> MP-1 の目視確認後、**6 ピン全体でフチが不揃い**（当時 3/6 のみ）と判明したため MP-2 で統一（2026-07-27 ユーザー決定）。規則は ui-ux-guidelines「ピンの意匠ルール」に昇格、教訓と sweep 結果は [`tasks/lessons.md`](./tasks/lessons.md) 2026-07-27。
 
 | 状態 | ID | タスク | リスク |
 |------|----|------|--------|
 | [x] | MP-1 | ios-engineer: `VisitedCafePin` に白フチ（`Circle().stroke(Color(.systemBackground), lineWidth: 1.5)`）を追加。他ピン・色は無変更 | 2026-07-27 完了。1 行追加のみ（`.frame` 直後・`.shadow` 直前 = 既存 2 ピンと同じ挿入順）。フラグ無しで `BUILD SUCCEEDED`。訪問回数バッジは `ZStack` 全体への `.overlay(alignment: .topTrailing)` なので常にフチの上に描画され、欠け・被りは構造上起きない。**2026-07-27 ユーザー目視確認済み**（主従が戻り、バッジ近傍の見え方も問題なし）。commit `b685c56` |
+| [x] | MP-2 | ios-engineer: 残り 3 ピン（`RecommendedCafePin` / `SavedCafePin` / `SearchResultPin`）にも白フチを追加し、全 6 ピンで統一。色・サイズ・影は無変更 | 2026-07-27 完了。3 行追加のみ、挿入位置は既存 3 ピンと同順。フラグ無しで `BUILD SUCCEEDED`。`SearchResultPin` の選択時 `scaleEffect(1.3)` はフチ線幅も 1.95pt 相当に拡大するが、直径も 41.6pt に拡大するためフチ比率は約 4.7% で一定（周辺ピンの 5.4% より細い）→ 相似拡大であり修正不要と判断。**2026-07-27 ユーザー目視確認済み** |
+| [ ] | MP-3 | `CuratedCafePin` の影だけ `opacity(0.5)`（他の意味ピンは 0.4）。ui-ux-guidelines の curated 定義は「サイズと彩度で強調」であり影は仕様外の暗黙強調 → 0.4 に揃えるか判断する。**MP-2 の目視後に、まだおすすめが前に出て見えるときだけ着手**（過剰に抑えると「おすすめが目立つのは良い」というユーザー意図に反する） | 低 |
 
 ### 完了
 

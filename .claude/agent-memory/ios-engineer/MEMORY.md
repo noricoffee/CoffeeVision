@@ -13,6 +13,8 @@
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 
+- `MapPins.swift`（`iosApp/iosApp/Features/Map/`）の 6 ピンは白フチ（`.overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))`、`.frame` 直後・`.shadow` 直前）で統一済み（MP-2、2026-07-27）。今後ピンを追加するときはこの位置に揃える
+
 - `iosApp` の `IPHONEOS_DEPLOYMENT_TARGET` は 26.0（`API_AVAILABLE(ios(26.0))` は可用性チェック不要）。詳細は [location-mapkit.md](location-mapkit.md) の `MKMapItem.location` 項目参照
 - `iosApp.xcodeproj` は `PBXFileSystemSynchronizedRootGroup` 採用済み。フォルダ配下に新規 `.swift` を作成するだけで自動的にターゲットに含まれる（pbxproj を手編集する必要なし）。大型ファイル分割リファクタ（MapTabView 等）で新ファイルを切り出すときもこれで足りる
 - Edit ツールで全角括弧（（）等）を含む複数行ブロックを `old_string` に含めると、一見同じ文字に見えても "String to replace not found" で失敗することがある（2026-07-24 確認、原因未特定）。同じテキストでも全角括弧を含まない周辺行だけを対象にした小さい `old_string` に分割するか、`python3` で `open(path, encoding='utf-8')` して行番号ベースの `del lines[a:b]` / 置換を行うと確実（本タスクの MapTabView State 削除で多用）

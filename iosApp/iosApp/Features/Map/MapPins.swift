@@ -69,6 +69,7 @@ struct SearchResultPin: View {
             Circle()
                 .fill(Color.blue)
                 .frame(width: 32, height: 32)
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
                 .shadow(
                     color: Color.blue.opacity(isHighlighted ? 0.6 : 0.4),
                     radius: isHighlighted ? 6 : 4,
@@ -104,6 +105,7 @@ struct SavedCafePin: View {
             Circle()
                 .fill(Color.indigo)
                 .frame(width: size, height: size)
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
                 .shadow(color: Color.indigo.opacity(0.4), radius: 4, x: 0, y: 2)
             Image(systemName: "bookmark.fill")
                 .font(.caption2)
@@ -124,6 +126,7 @@ struct RecommendedCafePin: View {
             Circle()
                 .fill(Color.pink)
                 .frame(width: 38, height: 38)
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
                 .shadow(color: Color.pink.opacity(0.4), radius: 4, x: 0, y: 2)
             Image(systemName: "heart.fill")
                 .font(.caption.weight(.bold))

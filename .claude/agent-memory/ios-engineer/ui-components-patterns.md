@@ -19,10 +19,11 @@ metadata:
 
 - `BorderedProminentButtonStyle` と `BorderedButtonStyle` は別の具象型のため、三項演算子で `some ButtonStyle` に代入しようとすると `type 'ButtonStyle' has no member 'borderedProminent'/'bordered'` になる。見た目だけ変える（tint 切替）なら 1 つの style + `.tint(condition ? .indigo : nil)` で済ませるのが簡単。**style 自体を切り替える必要がある場合**は `@ViewBuilder` 関数にして `if condition { Button(...).buttonStyle(.borderedProminent) } else { Button(...).buttonStyle(.bordered) }` と分岐ごと丸ごと書き分ける（`CafeDetailView.saveButton` 参照。ラベル View は `let label = Label(...)` で 1 箇所に共通化できる）。
 
-## 「未評価に戻せる」UI は accessibilityAdjustableAction の decrement 下限 + 明示クリアボタンの二重導線にする（2026-07-13、StarRatingView nullable rating 対応で確認）
+## 「未評価に戻せる」UI は accessibilityAdjustableAction の decrement 下限 + 明示クリアボタンの二重導線にする（2026-07-13、StarRatingView nullable rating 対応で確認。2026-07-26 にレイアウトシフト修正で更新）
 
 - `rating: Double?` 化した `StarRatingView` は、read-only モードで `nil` のとき星を出さず `Text("未評価")`（`.foregroundStyle(.secondary)`）を表示する（星 0 個表示は「1つも星がない低評価」と誤読されるため避ける）。
-- 編集モードのクリア手段は 2 経路用意すると VoiceOver / タップ操作の両方をカバーできる: ① `accessibilityAdjustableAction` の `.decrement` を rating 0.5 未満に到達したら `nil` を返すよう実装（スワイプ操作の自然な延長）、② 星の右側に `xmark.circle.fill` の明示クリアボタン（`rating != nil` のときだけ表示、`.frame(minWidth: 44, minHeight: 44)` で 44pt 確保）。星の HStack 全体は `accessibilityElement(children: .ignore)` でグループ化しつつ、クリアボタンは**その外側**の別要素にする（グループに巻き込むと VoiceOver から個別にフォーカスできなくなるため）。
+- 編集モードのクリア手段は 2 経路用意すると VoiceOver / タップ操作の両方をカバーできる: ① `accessibilityAdjustableAction` の `.decrement` を rating 0.5 未満に到達したら `nil` を返すよう実装（スワイプ操作の自然な延長）、② 星の右側に `xmark.circle.fill` の明示クリアボタン（`.frame(minWidth: 44, minHeight: 44)` で 44pt 確保）。星の HStack 全体は `accessibilityElement(children: .ignore)` でグループ化しつつ、クリアボタンは**その外側**の別要素にする（グループに巻き込むと VoiceOver から個別にフォーカスできなくなるため）。
+- **クリアボタンは `if rating != nil { Button {...} }` で条件的に生成せず、常に生成した上で `.opacity(rating != nil ? 1 : 0)` + `.disabled(rating == nil)` + `.accessibilityHidden(rating == nil)` にする**（2026-07-26 修正）。`if` で View を出し入れすると、ボタンが持つ `.frame(minWidth: 44, minHeight: 44)` の分だけ親 `HStack` の幅が rating の有無で変わり、`LabeledContent` 等の右寄せスロットで星の位置が左右にシフトするバグになる（ユーザー報告で発覚）。同種の「固定 frame を持つ子 View を条件付きで HStack/VStack に出し入れる」実装は同じ落とし穴になりやすいので、常時レイアウトに乗せた上で `.opacity`/`.disabled`/`.accessibilityHidden` で見た目と操作性だけ切り替える。
 - `some View` を返す computed var 内で `if/else` 分岐を書くには `@ViewBuilder` 属性が必須（`body` プロパティ自体は View プロトコル要件により暗黙で付与されるが、任意の computed var には付かない）。
 
 ## UserDefaults + JSON（Codable）ローカルキャッシュは `enum` static メソッド + private struct Entry で完結する（2026-07-13、`ApplePoiNegativeCache` 新設で確認）

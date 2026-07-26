@@ -26,6 +26,15 @@
 
 ### 未完・バックログ
 
+#### 星評価のクリアボタンで星がずれる（2026-07-26 起票）
+
+> ユーザー報告: コーヒー記録エディタで星を入れると右側に「評価を未評価に戻す」バツボタンが現れ、その分だけ星の位置が左にずれる。原因は `StarRatingView.editableStars` がボタンを `if rating != nil` で**条件的に生成**していること（`Components/StarRatingView.swift`）。`LabeledContent` の右寄せレイアウトなので、ボタンの幅（44pt）が出入りするたびに星がシフトする。**仕様: バツボタンのスペースを常時確保し、未評価時は不可視・タップ不可・VoiceOver 非読み上げにする**（レイアウトを rating に依存させない）。編集モードの利用箇所は `CoffeeEditorView+Sections.swift:394` の 1 箇所のみで、read-only 経路（一覧 / 詳細 / シェアカード / カフェ詳細）は無影響。iosApp 完結・KMP 変更なし。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `StarRatingView.editableStars` のクリアボタンを常時レイアウトに含め、`rating == nil` のとき不可視 + `.disabled` + アクセシビリティ非公開にする。編集モード Preview に未評価↔評価済みの並びを足してずれないことを確認 | 2026-07-26 完了。`.opacity(rating != nil ? 1 : 0)` + `.disabled(rating == nil)` + `.accessibilityHidden(rating == nil)` の 3 点セット。Preview に未評価 / 3.5 星を縦並びした位置比較セクションを追加 |
+| [x] | 親: レポート評価 + override 無しビルド再検証 + commit + 目視項目を verification-checklist へ移送 | 2026-07-26 完了。親がフラグ無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認（`#Preview` マクロの SourceKit 診断は `PreviewsMacros` プラグイン未検出の IDE 偽陽性）。lessons 2026-07-26 記録 + 44pt 要素 31 箇所の sweep 済み（同型 2 件はいずれも実害なし）→ `.claude/rules/swift-ios.md` へ昇格。目視は verification-checklist「コーヒー記録」へ移送 |
+
 #### 産地を国ドロップダウン + 任意エリアに刷新（記録の手間削減 / 2026-07-22 起票）
 
 > `CoffeeRecord.origin` を自由入力 → `CoffeeOriginCatalog`（コーヒー生産国 ~43 か国 + 「ブレンド」/「その他」）の国ドロップダウン選択に。粒度は新フィールド `region`（エリア/農園・任意自由入力）で保持。origin は `String?` のまま（`OriginNormalizer`/`BeanProfile`突合/分析を無改修流用）、region は表示専用で分析非対象。iOS の BeanProfile 産地サジェストは撤去。未リリースのためクリーンブレイク。仕様は data-model §1.3a / requirements 2-1 / kmp-bridge「定数カタログの共有」/ implementation_note 2026-07-22。

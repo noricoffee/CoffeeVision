@@ -101,18 +101,20 @@ struct StarRatingView: View {
             }
             .sensoryFeedback(.selection, trigger: rating)
 
-            if rating != nil {
-                Button {
-                    onChange?(nil)
-                } label: {
-                    Image(systemName: "xmark.circle.fill")
-                        .font(size)
-                        .foregroundStyle(.secondary)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .accessibilityLabel(String(localized: "評価を未評価に戻す"))
+            Button {
+                onChange?(nil)
+            } label: {
+                Image(systemName: "xmark.circle.fill")
+                    .font(size)
+                    .foregroundStyle(.secondary)
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
+            .accessibilityLabel(String(localized: "評価を未評価に戻す"))
+            // 未評価時もスペースを確保し、星の位置が動かないようにする（クリック不可 + 不可視 + VoiceOver 非公開）
+            .opacity(rating != nil ? 1 : 0)
+            .disabled(rating == nil)
+            .accessibilityHidden(rating == nil)
         }
     }
 
@@ -215,6 +217,15 @@ private struct StarRatingViewEditorPreview: View {
                 .foregroundStyle(.secondary)
             StarRatingView(rating: rating, size: .caption2, onChange: { rating = $0 })
             StarRatingView(rating: rating, size: .title2, onChange: { rating = $0 })
+            Divider()
+            // 未評価⇄評価済みの切り替えで星の左端が動かないことを確認するための比較（クリアボタン分のスペースを固定確保）
+            Text("未評価 / 評価済みの位置比較（左端が揃うこと）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                StarRatingView(rating: nil, onChange: { _ in })
+                StarRatingView(rating: 3.5, onChange: { _ in })
+            }
         }
     }
 }

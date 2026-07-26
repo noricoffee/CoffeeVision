@@ -18,7 +18,7 @@
 - **xcconfig / Places / API キー / シリアライズ**: 既存 xcconfig の継承漏れ (06-10) / フォールバック宣言は `#include?` の前 (06-23) / REST DTO `emptyList` + `expectSuccess=false` で握り潰し・`encodeDefaults=false` で default フィールド脱落 (06-23)
 - **Coroutines / Flow / ViewModel scope / テスト**: test ヘルパは実装モジュール内で閉じる (06-08) / `androidMain` の `implementation` は推移しない・`callbackFlow` は ProducerScope を取り出す (06-10) / `runTest` 永続購読 Fake で `UncompletedCoroutinesError` (06-17) / `runCatching` はコルーチン内で使わない・所有 `viewModelScope` + `clear()` (06-24) / 所有 scope テストは `finally { clear() }` (06-25) / `combine` に `MutableStateFlow` で 60 秒タイムアウト (06-29) / `clear()` は iOS/Native で `advanceUntilIdle` drain 必須・interface メソッド追加で fake 追随漏れ (07-06)
 - **Kotlin/Native 言語仕様の罠**: KDoc 内 `/*` がネストコメント (06-08) / クロスモジュール nullable は smart cast 不可 (06-19) / `Map.mapNotNull` + `maxWith` が全 null・`maxWith(compareByDescending)` が逆 (06-22) / `enum.valueOf` は未知値で例外・`when(mode)` 早期 return で値を無言脱落・正規化辞書の contains 部分一致すれ違い (07-08)
-- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22)
+- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22) / 幅を持つ子 View の `if` 条件生成は右寄せコンテナで兄弟をずらす (07-26)
 - **統計 / 分析 / Foundation Models**: FM tool calling は instructions の逃げ道で呼ばれない (06-21) / 好み判定は無相関ペルソナで偽陽性率を測る・winner's curse は n 連動閾値 (06-22)
 - **プロセス / 設計 / 診断の姿勢**: 横断 doc は構造的に陳腐化 (06-16) / テストダブルの接続を本番と乖離させない・dev シードが本番バグをマスク・KMP テスト実行の環境メモ (07-03) / 無音フォールバックは偽バグ報告になる (07-06) / 地図の「表示」と「解決」の集合ズレ (07-08) / 外部 SDK の required 判定はクライアントで制御不能 (07-14) / レイアウト実測の再入ガードが過渡値を破棄 (07-15) / ドメインのフィールドが写る先は 5 経路・export DTO が抜けやすい (07-25) / background dispatch 中の `git add -A` はコミットを混ぜる (07-25)
 
@@ -781,3 +781,21 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 親の commit 権限（CLAUDE.md「commit / PR は親」）は「何をコミットしたか把握している」ことまで含む。**dispatch 中は `-A` を封じる**。`isolation: "worktree"` で隔離する選択肢もあるが、docs とコードを同時に扱う通常の dispatch では親のワークツリー共有が前提なので、コミット側で規律を持つ方が現実的。
 - **発生源**: 2026-07-25 の architecture.md 棚卸し。commit `4cd45e1` に `kmp.feature.gradle.kts` の KDoc 修正が混入。
 - **横展開点検（2026-07-25）**: 同セッションの他 4 コミット（`4ae4885` / `bbf51c6` / `48d908f` / `05a4871` / `2efb121`）を `git show --stat` で確認 → **いずれも意図した範囲のみ**（`bbf51c6` / `48d908f` / `05a4871` は同期 dispatch = 完了後にコミットしているため競合なし）。混入は background dispatch を使った 1 件だけだった。**background dispatch を使ったコミットに限って `-A` が危険**という条件が確定した。
+
+## 2026-07-26
+
+### 幅を持つ子 View を `if` で条件生成すると、状態変化のたびに兄弟がシフトする（右寄せコンテナで顕著）
+
+- **症状**: ユーザー報告「コーヒー記録の評価で星を入れると右側にバツボタンが出てきて星がずれる」。星をタップした瞬間に星 5 個が左へ動く。ビルドもテストも通り、機能的には正常動作していた（**目視でしか見つからない類**）
+- **原因の構造**: `StarRatingView.editableStars` がクリアボタンを `if rating != nil { Button {...} }` で条件生成していた。ボタンは `.frame(minWidth: 44, minHeight: 44)` を持つため、出現・消滅のたびに親 `HStack` の intrinsic 幅が 52pt（44 + spacing 8）変わる。呼び出し元が `LabeledContent` の**右寄せスロット**なので、幅の増加分がそのまま星の左シフトとして見える。**「条件付き表示」と「レイアウトを条件に依存させる」を区別していないのが根**。左寄せコンテナなら末尾の出入りは兄弟を動かさないので気づかれないが、右寄せ・中央寄せでは即座に露見する
+- **修正パターン**: 幅を持つ要素は**常時レイアウトに乗せ**、見た目と操作性だけを切り替える:
+  ```swift
+  Button { onChange?(nil) } label: { ... }
+      .opacity(rating != nil ? 1 : 0)      // 不可視
+      .disabled(rating == nil)             // 透明ボタンの誤タップ防止
+      .accessibilityHidden(rating == nil)  // VoiceOver に読ませない
+  ```
+  `.opacity(0)` 単体では**タップも VoiceOver も生きたまま**なので 3 点セットで扱う。`.hidden()` は frame を保つが操作可否の扱いが暗黙になるため、明示的な `.disabled` を選んだ。同じ問題を別方式で解決した先例が `TagChip`（件数バッジのはみ出し分を `badgeReservedInsets` で自身の境界内に先に確保）
+- **教訓**: **`if` で View を出し入れする前に「その要素は幅・高さを持つか」「親コンテナの alignment は何か」を見る**。幅を持つなら条件分岐ではなく `opacity` + `disabled` + `accessibilityHidden` で、レイアウトを状態から切り離す。特に `LabeledContent` / `HStack + Spacer` の右寄せスロットは、要素 1 個の出入りが全兄弟の位置に伝わる。Preview には**条件の両側を縦に並べたケース**を置くと、実装時点で左端の不揃いが目で分かる（今回追加済み）
+- **発生源**: `Components/StarRatingView.swift` の編集モード（評価の nullable 化 = B-4、2026-07-13 導入時にクリアボタンごと入った）。ユーザーが 2026-07-26 に報告するまで 13 日間気付かれず
+- **横展開点検（2026-07-26）**: `grep -rn "minWidth: 44\|width: 44\|minHeight: 44" iosApp/iosApp --include="*.swift"`（31 箇所）を起点に、「幅を持つ要素が `if` で条件生成され、かつ兄弟と水平に並ぶ」箇所を全件目視。同型は 2 件で**どちらも実害なし**: ①`MapFilterChipRow.swift:74`（`if !selectedTags.isEmpty` でクリアボタン）は**横スクロールのチップ列末尾・左寄せ**のため既存チップは動かない ②`MapTabView.swift:714`（`if TastePreferenceExtractor.makeIfAvailable() != nil` で ✨ ボタン）は**条件が端末能力で起動中に変化しない**ため実行時シフトが起きない。他は常時表示か `Spacer()` を挟む構成（`AnalysisQaViews` の Q&A クリア / 再試行、`CoffeeEditorView+Sections` のスライダー行 = `minWidth` 固定で安定）。`TagChip` は上記のとおり先に対処済み。**要修正は `StarRatingView` 1 件のみで対処済み**。判定基準（幅を持つか / alignment が右寄せか / 条件が実行中に変わるか）を `.claude/rules/swift-ios.md` の UI/UX 節へ昇格

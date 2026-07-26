@@ -31,6 +31,7 @@ struct VisitedCafePin: View {
             Circle()
                 .fill(Color.accentColor)
                 .frame(width: 36, height: 36)
+                .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
                 .shadow(color: Color.accentColor.opacity(0.4), radius: 4, x: 0, y: 2)
             Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)

@@ -417,6 +417,16 @@
 | [x] | M-3 | Phase 3 | 検索 + エリア検索を `@MainActor @Observable final class MapSearchController` へ。2026-07-24 完了: `MapSearchController.swift` 新設。camera 移動は `onRequestCamera`、キーボード解除は `onDismissKeyboard` のコールバック注入で SwiftUI 固有要素から分離。`@State` 初期値式から `self` 参照不可のため、コールバックは `.task`（searchBridge 生成と同じ初回ガード）内で `configureCallbacks` 事後配線（→ implementation_note 2026-07-24）。detent は M-1 と同じ FAB 二重消費理由で View 残置。MapTabView.swift 1132→968 行。親のフラグ無し再検証で `BUILD SUCCEEDED` | 高 |
 | [x] | M-4 | Phase 4 | 位置・カメラ（`currentLocationFAB` / `recenterToCurrentLocation` / `setupLocation` / `locationStream` / `setInitialCameraFromVisitedCafes`）を `MapTabView+Location.swift`（`extension MapTabView`）へ機械移動。2026-07-24 完了: 170 行移動で 968→798 行。extension 参照のため `cameraPosition`/`locationManager`/`didSetInitialCamera`/`pendingRecenter` を internal 化。親のフラグ無し再検証で `BUILD SUCCEEDED`。**分割完了: MapTabView.swift 2008→798 行（60%減）** | 低 |
 
+#### マップピンの主従関係の是正（2026-07-27 起票）
+
+> ユーザー指摘: おすすめ（curated）ピンが訪問済みピンより目立つ。原因は色ではなく**白フチの非対称** — `CuratedCafePin` / `AppleNearbyCafePin` には `Circle().stroke(Color(.systemBackground), lineWidth: 1.5)` があるが `VisitedCafePin` には無く、36pt vs 34pt のサイズ差が打ち消されている。訪問済みに白フチを足して主従を戻す。**色は変更しない**（curated = `Color.orange` の色セマンティクスは維持）。
+>
+> 検討して見送った案（2026-07-27）: ① ロースト ランプ流用（訪問済み = イタリアン / おすすめ = ハイ）→ イタリアン #3A230D はダーク地図で 1.06:1 と同化、ハイ #8A715C は accent #8B5A2B と輝度 1.28:1 でほぼ同色。2026-07-18 に burnt orange が「訪問済みの茶と誤認」で orange へ戻した経緯の再演になるため不採用。② curated を mint 等の寒色へ変更 → まず①のフチ調整だけで足りるか見る（ユーザー判断）。
+
+| 状態 | ID | タスク | リスク |
+|------|----|------|--------|
+| [x] | MP-1 | ios-engineer: `VisitedCafePin` に白フチ（`Circle().stroke(Color(.systemBackground), lineWidth: 1.5)`）を追加。他ピン・色は無変更 | 2026-07-27 完了。1 行追加のみ（`.frame` 直後・`.shadow` 直前 = 既存 2 ピンと同じ挿入順）。フラグ無しで `BUILD SUCCEEDED`。訪問回数バッジは `ZStack` 全体への `.overlay(alignment: .topTrailing)` なので常にフチの上に描画され、欠け・被りは構造上起きない。**2026-07-27 ユーザー目視確認済み**（主従が戻り、バッジ近傍の見え方も問題なし）。commit `b685c56` |
+
 ### 完了
 
 #### CoffeeEditorView 分割（2026-07-24 完了）

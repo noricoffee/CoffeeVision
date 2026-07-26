@@ -24,7 +24,6 @@ struct CoffeeEditorView: View {
     @Environment(\.dismiss) private var dismiss
 
     @State var isCafeSearchPresented: Bool = false
-    @State var newTagText: String = ""
 
     /// 現在地カフェサジェスト用の位置情報（新規作成モードのみ・許可済みのときだけ利用）。
     @State private var locationManager = LocationManager()

@@ -355,25 +355,51 @@ extension CoffeeEditorView {
             }
 
             HStack {
-                TextField(String(localized: "タグを追加..."), text: $newTagText)
-                    .font(.subheadline)
-                    .onSubmit {
-                        addTag()
-                    }
+                TextField(
+                    String(localized: "タグを追加..."),
+                    text: Binding(
+                        get: { viewModel.tagInput },
+                        set: { viewModel.onTagInputChanged($0) }
+                    )
+                )
+                .font(.subheadline)
+                .onSubmit {
+                    addTag()
+                }
                 Button(String(localized: "追加")) {
                     addTag()
                 }
-                .disabled(newTagText.trimmingCharacters(in: .whitespaces).isEmpty)
+                .disabled(viewModel.tagInput.trimmingCharacters(in: .whitespaces).isEmpty)
                 .font(.subheadline)
+            }
+
+            // 過去に使ったタグのサジェスト（要件 2-13）: 使用回数降順・部分一致絞り込み・
+            // 付与済み除外・上限 10 件はすべて KMP 側で適用済み。Swift 側でソート/フィルタしない。
+            if !viewModel.suggestedTags.isEmpty {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    HStack(spacing: 8) {
+                        ForEach(viewModel.suggestedTags, id: \.self) { tag in
+                            Button {
+                                viewModel.onTagAdded(tag)
+                            } label: {
+                                Label(tag, systemImage: "tag")
+                                    .font(.subheadline)
+                                    .lineLimit(1)
+                            }
+                            .buttonStyle(.bordered)
+                            .accessibilityLabel(String(localized: "タグを追加: \(tag)"))
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
             }
         }
     }
 
     private func addTag() {
-        let trimmed = newTagText.trimmingCharacters(in: .whitespaces)
+        let trimmed = viewModel.tagInput.trimmingCharacters(in: .whitespaces)
         guard !trimmed.isEmpty else { return }
         viewModel.onTagAdded(trimmed)
-        newTagText = ""
     }
 
     // MARK: - 記録 Section

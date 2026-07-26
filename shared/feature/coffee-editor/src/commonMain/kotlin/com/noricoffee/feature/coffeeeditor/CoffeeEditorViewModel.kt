@@ -71,6 +71,19 @@ import kotlinx.datetime.todayIn
  * （[onPlacesCafeSelected] / [onSuggestedCafeSelected] いずれも）チップは消える。
  * Nearby 検索の失敗は無音（補助機能のため [UIState.error] には流さない）。
  *
+ * ## タグサジェスト（要件 2-13）
+ *
+ * [onAppear] で [CoffeeRepository.observeAll] を継続購読し、全記録から集めたタグを使用回数降順
+ * （同数は昇順）で `allTagsByFrequency` に保持する。継続購読にする理由は、Firestore 同期が
+ * 完了する前にエディタを開くとローカル DB が空でサジェストが出ないまま固定されるため（後から
+ * 同期が終われば Flow の再 emit で埋まる）。
+ *
+ * [UIState.suggestedTags] は「付与済み除外 → [UIState.tagInput] で部分一致 → 上限 10 件」の順で
+ * `allTagsByFrequency` に適用した結果（[recomputeSuggestedTags]）。**絞り込みを先に行い、その後で
+ * 上限を適用する**順序が要点 — 逆順（先に上位 10 件を切ってから絞り込む）にすると 11 位以下の
+ * タグが検索しても永久に出せなくなる。再計算はタグ購読の emit / [onTagInputChanged] /
+ * [onTagAdded] / [onTagRemoved] / Edit・Duplicate の初期ロード完了、いずれのタイミングでも起こる。
+ *
  * @param coffeeRepository コーヒー記録の永続化と取得を担うリポジトリ
  * @param cafeRepository 現在地カフェサジェスト（Nearby 検索）を担うリポジトリ
  * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
@@ -175,6 +188,9 @@ class CoffeeEditorViewModel(
      *   内部で保持する選択済み [Cafe]（`selectedCafe`）の `placeId` を表示用に写した派生値
      * @property suggestedCafes 現在地カフェサジェスト（最大 3 件）。[Mode.Create] かつ cafe 未選択の
      *   ときだけ [onLocationAvailable] で反映される。カフェが選択されると空リストに戻る
+     * @property tagInput タグ入力欄の現在値。サジェストの絞り込みに使う（Swift の `@State` から移管）
+     * @property suggestedTags 過去の記録から集めたタグのサジェスト（使用回数降順 → 昇順、付与済み除外、
+     *   [tagInput] で部分一致、最大 10 件。要件 2-13）
      */
     data class UIState(
         val mode: Mode = Mode.Create,
@@ -185,6 +201,8 @@ class CoffeeEditorViewModel(
         val savedCoffeeId: String? = null,
         val selectedPlaceId: String? = null,
         val suggestedCafes: List<Cafe> = emptyList(),
+        val tagInput: String = "",
+        val suggestedTags: List<String> = emptyList(),
     )
 
     private val _state = MutableStateFlow(UIState())
@@ -209,6 +227,12 @@ class CoffeeEditorViewModel(
     // 現在地カフェサジェスト（Nearby 検索）Job。onLocationAvailable が複数回呼ばれた場合に前回を cancel する。
     private var suggestionJob: Job? = null
 
+    // タグカタログ購読 Job（要件 2-13）。onAppear のたびに前回を cancel して再購読する。
+    private var tagCatalogJob: Job? = null
+
+    // 全記録から集めたタグ（使用回数降順 → 昇順）。tagCatalogJob の collect のたびに更新する。
+    private var allTagsByFrequency: List<String> = emptyList()
+
     // --- ライフサイクル ---
 
     /**
@@ -224,7 +248,20 @@ class CoffeeEditorViewModel(
         loadJob?.cancel()
         saveJob?.cancel()
         suggestionJob?.cancel()
+        tagCatalogJob?.cancel()
         selectedCafe = null
+
+        tagCatalogJob = viewModelScope.launch {
+            coffeeRepository.observeAll(userId).collect { records ->
+                allTagsByFrequency = records
+                    .flatMap { it.tags }
+                    .groupingBy { it }.eachCount()
+                    .entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                    .map { it.key }
+                recomputeSuggestedTags()
+            }
+        }
 
         when (mode) {
             is Mode.Create -> {
@@ -236,12 +273,21 @@ class CoffeeEditorViewModel(
                         isLoading = false,
                         selectedPlaceId = null,
                         suggestedCafes = emptyList(),
+                        tagInput = "",
+                        suggestedTags = emptyList(),
                     )
                 }
             }
             is Mode.Edit -> {
                 _state.update {
-                    it.copy(mode = mode, isLoading = true, selectedPlaceId = null, suggestedCafes = emptyList())
+                    it.copy(
+                        mode = mode,
+                        isLoading = true,
+                        selectedPlaceId = null,
+                        suggestedCafes = emptyList(),
+                        tagInput = "",
+                        suggestedTags = emptyList(),
+                    )
                 }
                 loadJob = viewModelScope.launch {
                     val record = coffeeRepository.observeById(mode.coffeeId).first()
@@ -260,12 +306,20 @@ class CoffeeEditorViewModel(
                                 draft = record.toDraft(),
                             )
                         }
+                        recomputeSuggestedTags()
                     }
                 }
             }
             is Mode.Duplicate -> {
                 _state.update {
-                    it.copy(mode = mode, isLoading = true, selectedPlaceId = null, suggestedCafes = emptyList())
+                    it.copy(
+                        mode = mode,
+                        isLoading = true,
+                        selectedPlaceId = null,
+                        suggestedCafes = emptyList(),
+                        tagInput = "",
+                        suggestedTags = emptyList(),
+                    )
                 }
                 loadJob = viewModelScope.launch {
                     val record = coffeeRepository.observeById(mode.sourceCoffeeId).first()
@@ -284,6 +338,7 @@ class CoffeeEditorViewModel(
                                 draft = record.toDuplicateDraft(),
                             )
                         }
+                        recomputeSuggestedTags()
                     }
                 }
             }
@@ -291,12 +346,13 @@ class CoffeeEditorViewModel(
     }
 
     /**
-     * 画面消去時に呼ぶ。進行中の load / save Job をすべてキャンセルする。
+     * 画面消去時に呼ぶ。進行中の load / save / タグカタログ購読 Job をすべてキャンセルする。
      */
     fun onDisappear() {
         loadJob?.cancel()
         saveJob?.cancel()
         suggestionJob?.cancel()
+        tagCatalogJob?.cancel()
     }
 
     // --- フィールド更新（cafe 関連）---
@@ -481,14 +537,16 @@ class CoffeeEditorViewModel(
     /**
      * タグを追加する。
      *
-     * [tag] を trim した結果が空または既に存在する場合は no-op。
+     * [tag] を trim した結果が空または既に存在する場合は no-op。成功時は [UIState.tagInput] を
+     * 空に戻す（チップタップ経由の追加でも入力欄がクリアされる挙動に揃える）。
      *
      * @param tag 追加するタグ文字列（前後の空白は自動 trim される）
      */
     fun onTagAdded(tag: String) {
         val trimmed = tag.trim()
         if (trimmed.isBlank() || _state.value.draft.tags.contains(trimmed)) return
-        _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags + trimmed)) }
+        _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags + trimmed), tagInput = "") }
+        recomputeSuggestedTags()
     }
 
     /**
@@ -500,6 +558,39 @@ class CoffeeEditorViewModel(
      */
     fun onTagRemoved(tag: String) {
         _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags - tag)) }
+        recomputeSuggestedTags()
+    }
+
+    /**
+     * タグ入力欄が変化したときに呼ぶ。[UIState.tagInput] を更新し [UIState.suggestedTags] を再計算する。
+     *
+     * @param text 入力欄の現在値
+     */
+    fun onTagInputChanged(text: String) {
+        _state.update { it.copy(tagInput = text) }
+        recomputeSuggestedTags()
+    }
+
+    /**
+     * [UIState.suggestedTags] を再計算する（要件 2-13）。
+     *
+     * `allTagsByFrequency`（使用回数降順 → 昇順）に対して
+     * 「付与済み除外 → [UIState.tagInput] で部分一致（大小文字無視） → 上限 [MAX_SUGGESTED_TAGS]（10）件」
+     * の順で適用する。**絞り込みを先に行い、その後で上限を適用する順序を変えないこと** —
+     * 逆順にすると 11 位以下のタグが検索しても永久に出せなくなる（要件 2-13 確定事項）。
+     */
+    private fun recomputeSuggestedTags() {
+        _state.update { state ->
+            val alreadyAttached = state.draft.tags.toSet()
+            val query = state.tagInput
+            val filtered = allTagsByFrequency
+                .asSequence()
+                .filter { it !in alreadyAttached }
+                .filter { query.isBlank() || it.contains(query, ignoreCase = true) }
+                .take(MAX_SUGGESTED_TAGS)
+                .toList()
+            state.copy(suggestedTags = filtered)
+        }
     }
 
     /**
@@ -661,6 +752,13 @@ class CoffeeEditorViewModel(
          * 複製モード（[Mode.Duplicate]）では使わない（複製元の `name` を引き継ぐ）。
          */
         const val DEFAULT_COFFEE_NAME: String = "本日のコーヒー"
+
+        /**
+         * [UIState.suggestedTags] の最大件数（要件 2-13 確定事項）。
+         * Swift Bridge からは参照されないため `private` に留める（lessons 2026-07-25: public companion
+         * メンバは Swift から参照されうる公開 API になるため、必要最小限のみ public にする）。
+         */
+        private const val MAX_SUGGESTED_TAGS: Int = 10
 
         /**
          * [CoffeeDraft] の初期値を返す。

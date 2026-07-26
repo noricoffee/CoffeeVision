@@ -26,6 +26,20 @@
 
 ### 未完・バックログ
 
+#### 過去に使ったタグのサジェスト（要件 2-13 / 2026-07-26 起票）
+
+> ユーザー要望: タグが自由入力のみで毎回打ち直しになる。エディタのタグ入力欄の**下**に、過去の全記録から集めたタグを横スクロールのチップで出す（要件 2-8 のカフェサジェストと同じ操作感）。**仕様の正は requirements.md 2-13**（使用回数降順・同数昇順 / 最大 10 件 / 入力中は部分一致で**絞り込んでから**上限適用 / 付与済み除外 / 0 件時は行ごと非表示）。ロジックは `commonMain`（Android 実装時の二重化回避）。データモデルは不変。設計判断は implementation_note 2026-07-26、プランは `.claude/plans/soft-fluttering-thompson.md`。
+>
+> **公開 API 差分（合意書）**: `CoffeeEditorViewModel.UIState` に `tagInput: String` / `suggestedTags: List<String>` を追加、`fun onTagInputChanged(text: String)` を追加。`onTagAdded` / `onTagRemoved` はシグネチャ不変（内部で再計算 + `tagInput` クリア）。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: requirements 2-13 + implementation_note を確定（公開 API 差分の固定） | 2026-07-26 完了 |
+| [x] | kmp-engineer: `UIState` 2 プロパティ + `onTagInputChanged` + `recomputeSuggestedTags` + `onAppear` での `observeAll` 継続購読 + commonTest（順位 / 上限 / 絞り込み後の 11 位以下 / 付与済み除外 / 0 件） | 2026-07-26 完了。上限は `private const val MAX_SUGGESTED_TAGS = 10`（public companion は Swift 公開 API になるため private）。**再計算の起点は設計時の 3 つではなく 4 つ**だった — カタログ購読と記録ロードの起動順序レースで Edit/Duplicate の付与済み除外が効かない事象を実装中に発見し、初回ロード完了時の再計算を追加（implementation_note 追記済み）|
+| [x] | 親: 公開 API 差分の確認 + `iosSimulatorArm64Test` を override フラグ無しで再検証 | 2026-07-26 完了。親がフラグ無しで `iosSimulatorArm64Test` 29/29 green（`tests="29" failures="0"`）を独立確認 |
+| [x] | ios-engineer: Bridge 追随（`tagInput` / `suggestedTags` / `onTagInputChanged`）+ `tagsSection` にサジェストチップ行 + `@State newTagText` 撤去 | 2026-07-26 完了。2-8 カフェサジェストと同一構造（`ScrollView(.horizontal)` + `.bordered` + `Label(tag, systemImage: "tag")`）。Swift 側でのソート / フィルタ / prefix は無し（KMP 適用済みをそのまま表示）|
+| [x] | 親: 統合検証（verify-kmp-ios / override 無し xcodebuild）+ commit + 目視項目を verification-checklist へ移送 | 2026-07-26 完了。親がフラグ無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認（`No such module 'SharedLogic'` は xcframework 未インデックスの SourceKit 偽陽性）。差分レビューで見つけた挙動差（重複タグ手入力時に入力欄が残る）は許容と判断し implementation_note に記録 |
+
 #### 星評価のクリアボタンで星がずれる（2026-07-26 起票）
 
 > ユーザー報告: コーヒー記録エディタで星を入れると右側に「評価を未評価に戻す」バツボタンが現れ、その分だけ星の位置が左にずれる。原因は `StarRatingView.editableStars` がボタンを `if rating != nil` で**条件的に生成**していること（`Components/StarRatingView.swift`）。`LabeledContent` の右寄せレイアウトなので、ボタンの幅（44pt）が出入りするたびに星がシフトする。**仕様: バツボタンのスペースを常時確保し、未評価時は不可視・タップ不可・VoiceOver 非読み上げにする**（レイアウトを rating に依存させない）。編集モードの利用箇所は `CoffeeEditorView+Sections.swift:394` の 1 箇所のみで、read-only 経路（一覧 / 詳細 / シェアカード / カフェ詳細）は無影響。iosApp 完結・KMP 変更なし。

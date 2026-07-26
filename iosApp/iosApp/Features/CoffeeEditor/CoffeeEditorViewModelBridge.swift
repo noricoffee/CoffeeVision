@@ -23,6 +23,8 @@ final class CoffeeEditorViewModelBridge {
     private(set) var savedCoffeeId: String?
     private(set) var tags: [String] = []
     private(set) var suggestedCafes: [Cafe] = []
+    private(set) var tagInput: String = ""
+    private(set) var suggestedTags: [String] = []
 
     // MARK: - Init
 
@@ -214,6 +216,11 @@ final class CoffeeEditorViewModelBridge {
         kotlin.onTagRemoved(tag: tag)
     }
 
+    /// タグ入力欄が変化したときに呼ぶ（過去タグサジェストの絞り込み。要件 2-13）。
+    func onTagInputChanged(_ text: String) {
+        kotlin.onTagInputChanged(text: text)
+    }
+
     // MARK: - Private
 
     private func apply(_ state: CoffeeEditorViewModel.UIState) {
@@ -224,5 +231,7 @@ final class CoffeeEditorViewModelBridge {
         self.savedCoffeeId = state.savedCoffeeId
         self.tags = state.draft.tags
         self.suggestedCafes = state.suggestedCafes
+        self.tagInput = state.tagInput
+        self.suggestedTags = state.suggestedTags
     }
 }

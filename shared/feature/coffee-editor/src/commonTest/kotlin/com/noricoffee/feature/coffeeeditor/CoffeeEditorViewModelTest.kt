@@ -54,7 +54,10 @@ class CoffeeEditorViewModelTest {
         /** [observeById] が返す Flow。Edit モードの初回ロードに使う。 */
         val byIdFlow = MutableStateFlow<CoffeeRecord?>(null)
 
-        override fun observeAll(userId: String): Flow<List<CoffeeRecord>> = flowOf(emptyList())
+        /** [observeAll] が返す Flow。タグサジェスト（要件 2-13）の元データ。 */
+        val allRecordsFlow = MutableStateFlow<List<CoffeeRecord>>(emptyList())
+
+        override fun observeAll(userId: String): Flow<List<CoffeeRecord>> = allRecordsFlow
 
         override fun observeById(id: String): Flow<CoffeeRecord?> = byIdFlow
 
@@ -759,6 +762,185 @@ class CoffeeEditorViewModelTest {
 
             assertTrue(fake.savedRecords.isEmpty())
             assertNotNull(vm.state.value.error)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    // ─────────────────────────────────────────────────
+    // Tests — 2-13 タグサジェスト
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onAppear_tagCatalog_sortsByFrequencyDescendingThenAscending() = runTest {
+        val fake = FakeCoffeeRepository()
+        fake.allRecordsFlow.value = listOf(
+            sampleRecord(id = "r1", tags = listOf("zulu", "alpha")),
+            sampleRecord(id = "r2", tags = listOf("zulu", "alpha")),
+            sampleRecord(id = "r3", tags = listOf("zulu", "alpha", "mango")),
+        )
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            // zulu / alpha は同数（3 件）→ 昇順で alpha が先。mango は 1 件で最後。
+            assertEquals(listOf("alpha", "zulu", "mango"), vm.state.value.suggestedTags)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onAppear_tagCatalog_truncatesAtTen() = runTest {
+        val fake = FakeCoffeeRepository()
+        val tags = (1..11).map { "tag${it.toString().padStart(2, '0')}" }
+        fake.allRecordsFlow.value = tags.mapIndexed { index, tag ->
+            sampleRecord(id = "r$index", tags = listOf(tag))
+        }
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            assertEquals(10, vm.state.value.suggestedTags.size)
+            // 全タグ同頻度（1 件）のため昇順で上位 10（tag01..tag10）が採用され、tag11 は落ちる
+            assertEquals(tags.take(10), vm.state.value.suggestedTags)
+            assertTrue("tag11" !in vm.state.value.suggestedTags)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onTagInputChanged_filtersBeforeApplyingLimit_soRank11PlusTagsAreStillSearchable() = runTest {
+        // 絞り込み → 上限 10 の順序を固定する回帰テスト（要件 2-13）。
+        // 逆順（先に上位 10 件へ切ってから絞る）だと 11 位のタグは検索しても一切出てこなくなる。
+        val fake = FakeCoffeeRepository()
+        val tags = (1..11).map { "tag${it.toString().padStart(2, '0')}" }
+        fake.allRecordsFlow.value = tags.mapIndexed { index, tag ->
+            sampleRecord(id = "r$index", tags = listOf(tag))
+        }
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+            assertTrue("tag11" !in vm.state.value.suggestedTags)
+
+            vm.onTagInputChanged("tag11")
+
+            assertEquals(listOf("tag11"), vm.state.value.suggestedTags)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onTagInputChanged_matchesCaseInsensitively() = runTest {
+        val fake = FakeCoffeeRepository()
+        fake.allRecordsFlow.value = listOf(sampleRecord(id = "r1", tags = listOf("LatteArt")))
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            vm.onTagInputChanged("latte")
+
+            assertEquals(listOf("LatteArt"), vm.state.value.suggestedTags)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onTagAdded_removesTagFromSuggestions_andOnTagRemoved_bringsItBack() = runTest {
+        val fake = FakeCoffeeRepository()
+        fake.allRecordsFlow.value = listOf(sampleRecord(id = "r1", tags = listOf("浅煎り")))
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+            assertEquals(listOf("浅煎り"), vm.state.value.suggestedTags)
+
+            vm.onTagAdded("浅煎り")
+            assertTrue("浅煎り" !in vm.state.value.suggestedTags)
+            assertEquals(listOf("浅煎り"), vm.state.value.draft.tags)
+
+            vm.onTagRemoved("浅煎り")
+            assertEquals(listOf("浅煎り"), vm.state.value.suggestedTags)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onTagAdded_clearsTagInput() = runTest {
+        val fake = FakeCoffeeRepository()
+        fake.allRecordsFlow.value = listOf(sampleRecord(id = "r1", tags = listOf("浅煎り")))
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            vm.onTagInputChanged("浅煎")
+            assertEquals("浅煎", vm.state.value.tagInput)
+
+            vm.onTagAdded("浅煎り")
+
+            assertEquals("", vm.state.value.tagInput)
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onTagAdded_noOpWhenBlankOrDuplicate_doesNotClearTagInput() = runTest {
+        val fake = FakeCoffeeRepository()
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            vm.onTagInputChanged("  ")
+            vm.onTagAdded("   ")
+            assertEquals("  ", vm.state.value.tagInput, "空白のみの tag 追加は no-op のため tagInput は変化しない")
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun suggestedTags_emptyWhenNoRecordsOrNoTags() = runTest {
+        val fake = FakeCoffeeRepository()
+        fake.allRecordsFlow.value = listOf(sampleRecord(id = "r1", tags = emptyList()))
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Create, userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            assertTrue(vm.state.value.suggestedTags.isEmpty())
+        } finally {
+            vm.clear()
+        }
+    }
+
+    @Test
+    fun onAppear_edit_excludesAlreadyAttachedTagsFromSuggestionsOnInitialLoad() = runTest {
+        // Edit の初期ロード完了時にも再計算が走り、複製元の付与済みタグがサジェストから除外されることを確認する。
+        val initialRecord = sampleRecord(id = "record-1", tags = listOf("浅煎り"))
+        val fake = FakeCoffeeRepository()
+        fake.byIdFlow.value = initialRecord
+        fake.allRecordsFlow.value = listOf(
+            sampleRecord(id = "r-other", tags = listOf("浅煎り", "ラテアート")),
+            initialRecord,
+        )
+        val vm = CoffeeEditorViewModel(coffeeRepository = fake, cafeRepository = FakeCafeRepository(), scope = this)
+        try {
+            vm.onAppear(CoffeeEditorViewModel.Mode.Edit(initialRecord.id), userId = "user-1")
+            testScheduler.advanceUntilIdle()
+
+            // 「浅煎り」はこの記録に既に付与済みなので出ない。「ラテアート」は未付与なので出る。
+            assertEquals(listOf("ラテアート"), vm.state.value.suggestedTags)
         } finally {
             vm.clear()
         }

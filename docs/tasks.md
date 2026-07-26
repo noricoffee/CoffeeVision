@@ -534,6 +534,22 @@
 
 ### 未完あり
 
+#### ASO / グロース（2026-07-27 起票）
+
+> 「App Store で上位を狙うのに何が足りないか」の棚卸しから起票。**狙う土俵はカテゴリ総合ではなく検索キーワードでの上位**（フード/ドリンク総合は大手チェーン・デリバリーの枠）。機能面は作り込まれている一方、「見つけられる / 選ばれる / 続けてもらう / 評価される」の 4 系統が手つかずだった。原稿・申告の正は [`app-store-metadata.md`](./app-store-metadata.md)。
+>
+> **実測した欠落**（2026-07-27 に grep で確認）: `requestReview` / `SKStoreReview` = **0 件** / `UserNotifications` `FirebaseMessaging` = 0 件 / `WidgetKit` `AppIntent` `CoreSpotlight` = 0 件 / `.xcstrings` `.lproj` = 0 件（`String(localized:)` のキーが日本語のまま = 英語化にはカタログ整備が必要）。
+
+| 状態 | ID | タスク | 備考 |
+|------|----|------|------|
+| [x] | ASO-2 | 親: アプリ名のキーワード化 + サブタイトル改訂 + キーワード再構成 + 英語(U.S.) キーワード枠の新設（app-store-metadata §1 / §4 / §10 / 変更履歴） | 2026-07-27 完了。コード変更ゼロ。アプリ名 `CoffeeVision`（12 字）→ `CoffeeVision コーヒーマップ＆好み分析`（25 字、ユーザー確定）。**残るのは ASC 上の転記作業**（§10「App Store Connect 設定」の英語ロケール追加行）|
+| [ ] | ASO-1 | **レビュー依頼導線**（`AppStore.requestReview(in:)`）を成功体験の直後に置く。候補 = 分析タブで傾向信号が初めて出た瞬間（9-7 のプログレス充足）/ 記録 5 件・10 件到達 / 共有カードの共有完了後。Apple 側の年 3 回上限があるため `UserDefaults` でマイルストーン単位の再表示ガードを入れる | **効果／コスト比が最大**。星ゼロの新規アプリは検索で並んでも選ばれず、評価数は検索順位・カテゴリ順位・CVR すべてに効く。iosApp 完結・KMP 変更なし |
+| [ ] | ASO-3 | **オンボーディングの再設計**: 現状は初回起動で「データ利用同意 → 広告プレプロンプト → ATT」の許諾 3 連（`Features/Onboarding/` は `DataConsentOnboardingView.swift` の 1 枚のみ）。価値訴求を先に出し、許諾は最初の記録を保存した後へ回す。空状態（`CoffeeListView.swift` の `emptyView`）から「まず 1 杯記録する」への能動的な導線も併せて | D1 離脱と ATT 許諾率の両方に効く。要件・画面一覧（requirements §11-4 / 画面一覧「データ利用同意オンボーディング」）の改訂が前提なので親が仕様を先に固める |
+| [ ] | ASO-4 | **ストアページの CVR 投資**: ① App Preview 動画（マップ → 記録 → 分析の 15 秒）② スクショにキャプションを焼き込んだデザイン版（§5 のキャプション案を流用）③ Product Page Optimization（A/B テスト）と Custom Product Pages の活用 | §5 の現計画は生キャプチャ + キャプション案まで。②③ はどちらも ASC の無料機能 |
+| [ ] | ASO-5 | **リテンションのフック**: App Intents（「コーヒーを記録」の Siri / Shortcuts / Spotlight 露出）+ ホーム画面 Widget（今月の杯数 → タップで記録）。既存方針「記録の摩擦を削る」（要件 2-8 / 2-9 / 2-10）の延長で、機能追加ではなく入口の追加 | 旧「フェーズ 6」の Widget 行を実質引き継ぐ。CoreSpotlight への記録インデックス / 週次ふりかえり通知は後続候補（通知は 4 つ目の許諾になる点に注意）|
+| [ ] | ASO-6 | **★1 リスクの潰し込み**: ① 写真が機種変更で消える（要件 7-2、エクスポート JSON にも写真は含まれない）→ 設定画面とエクスポート時の期待値表示 ② 匿名アカウントは端末間で参照不可（要件 7-3）→ サインインの価値を設定画面で伝える ③ iPad の方針決め（`iosApp.xcodeproj/project.pbxproj` は `TARGETED_DEVICE_FAMILY = "1,2"` で iPad インストール可なのに、app-store-metadata §1 は「iPhone のみ」= 未検証レイアウトで動く状態）| 星が少ないうちの★1 は順位に致命的。①② は実装方針を変えるのではなく**アプリ内での期待値管理**で対応する |
+| [ ] | ASO-7 | 低コストで拾えるもの: ① In-App Events（「今月のコーヒーふりかえり」で検索結果・カテゴリにイベントカードを露出）② 共有カード footer の App Store 導線（現状 `CoffeeShareCardView.swift` の footer は `Text("CoffeeVision")` のみで URL / QR なし。2-12 の「カードの簡潔性」と衝突するので footer 1 行に収める範囲で）③ 小刻みなアップデート | ② は仕様（要件 2-12）の改訂が前提 |
+
 #### BeanProfile 初期データ整備（2026-07-08）
 
 > 完了分（2026-07-08）: seed データ `scripts/seed/bean-profiles.json`（主要産地 38 件・日本語表記統一・flavorNotes 統一語彙 42 語 = data-model.md §3.2）+ 冪等 upsert スクリプト `seed-bean-profiles.mjs` + README。`--dry-run` バリデーション全通過。確定仕様（grilling で親確定）と経緯は implementation_note 2026-07-08 エントリ。

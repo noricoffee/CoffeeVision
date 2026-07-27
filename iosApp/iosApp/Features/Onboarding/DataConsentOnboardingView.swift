@@ -39,7 +39,7 @@ struct DataConsentOnboardingView: View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: "cup.and.saucer.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.brown)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
             Text("アプリ改善へのご協力のお願い")
                 .font(.title2)
@@ -73,7 +73,7 @@ struct DataConsentOnboardingView: View {
     private func purposeRow(icon: String, text: String) -> some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: icon)
-                .foregroundStyle(.brown)
+                .foregroundStyle(Color.accentColor)
                 .frame(width: 20)
                 .accessibilityHidden(true)
             Text(text)
@@ -111,7 +111,7 @@ struct DataConsentOnboardingView: View {
                         .padding(.vertical, 14)
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(.brown)
+                .tint(Color.accentColor)
                 .accessibilityLabel(String(localized: "データ共有に同意してアプリを改善する"))
 
                 Button {
@@ -133,6 +133,11 @@ struct DataConsentOnboardingView: View {
 
 // MARK: - Preview
 
-#Preview {
+#Preview("Light") {
     DataConsentOnboardingView(appState: AppState())
+}
+
+#Preview("Dark") {
+    DataConsentOnboardingView(appState: AppState())
+        .preferredColorScheme(.dark)
 }

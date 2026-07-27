@@ -35,7 +35,7 @@ struct AdPrePromptView: View {
         VStack(alignment: .leading, spacing: 8) {
             Image(systemName: "megaphone.fill")
                 .font(.system(size: 48))
-                .foregroundStyle(.brown)
+                .foregroundStyle(Color.accentColor)
                 .accessibilityHidden(true)
             Text("広告について")
                 .font(.title2)
@@ -70,7 +70,7 @@ struct AdPrePromptView: View {
                     .padding(.vertical, 14)
             }
             .buttonStyle(.borderedProminent)
-            .tint(.brown)
+            .tint(Color.accentColor)
             .accessibilityLabel(String(localized: "広告についての説明を確認して続ける"))
             .padding(.horizontal, 24)
             .padding(.bottom, 32)
@@ -80,6 +80,11 @@ struct AdPrePromptView: View {
 
 // MARK: - Preview
 
-#Preview {
+#Preview("Light") {
     AdPrePromptView(appState: AppState())
+}
+
+#Preview("Dark") {
+    AdPrePromptView(appState: AppState())
+        .preferredColorScheme(.dark)
 }

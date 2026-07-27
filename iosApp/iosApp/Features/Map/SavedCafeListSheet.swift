@@ -75,7 +75,7 @@ struct SavedCafeListSheet: View {
                 if isRecorded {
                     Label(String(localized: "記録あり"), systemImage: "cup.and.saucer.fill")
                         .font(.caption2.weight(.medium))
-                        .foregroundStyle(.brown)
+                        .foregroundStyle(Color.accentColor)
                 }
             }
 

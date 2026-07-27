@@ -91,9 +91,9 @@ struct SearchResultPin: View {
 
 /// 保存済み（行きたい）店ピン（indigo + bookmark。フェーズ 15-A）。
 ///
-/// 既存 3 種ピン（訪問済み=accentColor / 好み一致=pink / 検索結果=blue）と区別できる
-/// 色（indigo）を採用し、`bookmark.fill` で「保存済み」を示す。
+/// 他ピンと区別できる色（indigo）を採用し、`bookmark.fill` で「保存済み」を示す。
 /// 「保存済み」チップ強調中はひとまわり大きく表示する（フェーズ 16）。
+/// 色・サイズの一覧は `docs/ui-ux-guidelines.md`「ピンの意匠ルール」参照。
 struct SavedCafePin: View {
     let savedCafe: SavedCafe
     let emphasized: Bool
@@ -143,12 +143,12 @@ struct RecommendedCafePin: View {
 /// おすすめカフェ（curated）ピン（system orange + cup.and.saucer.fill。フェーズ 19 意匠変更）。
 ///
 /// Google Maps の「人気 POI 強調」表現に寄せ、Apple 周辺ピン（`AppleNearbyCafePin`）と
-/// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、サイズ（34pt。Apple 周辺ピンの
-/// 28pt よりひとまわり大きい）と色の彩度だけで「同じカフェだが特に推されている」ことを
-/// 表現する。色は既存 5 色（accentColor / pink / indigo / blue / secondaryLabel）と被らない
-/// システムカラー `Color.orange` をそのまま使う（黒ミックスなし）。訪問済みピン（`accentColor`
-/// = 茶 #8B5A2B）と一目で区別できるよう明るいオレンジを維持する判断（シミュレータ確認
-/// フィードバックで黒ミックス濃色は茶に寄って見分けにくいと判定されたため）。
+/// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、サイズと色の彩度だけで
+/// 「同じカフェだが特に推されている」ことを表現する（サイズ・強弱ルールの詳細は
+/// `docs/ui-ux-guidelines.md`「ピンの意匠ルール」参照）。色は他ピンと被らないシステムカラー
+/// `Color.orange` をそのまま使う（黒ミックスなし）。訪問済みピン（茶系の `accentColor`）と
+/// 一目で区別できるよう明るいオレンジを維持する判断（シミュレータ確認フィードバックで
+/// 黒ミックス濃色は茶に寄って見分けにくいと判定されたため）。
 /// トグルなし。ズームゲート（`AppleNearbyCafeLoader.zoomGateRadiusMeters`）を Apple 周辺ピンと共用し、
 /// 可視領域が一定以上広い（ズームアウトした）ときは非表示にする（`displayedCuratedCafes` 参照）。
 struct CuratedCafePin: View {
@@ -169,10 +169,11 @@ struct CuratedCafePin: View {
     }
 }
 
-/// 周辺カフェ（Apple 検索由来）ピン。まだ記録も保存もしていない店を示す低強調ピン。
+/// 周辺カフェ（Apple 検索由来）ピン。まだ記録も保存もしていない店を示す低強調ピン（フェーズ 17）。
 ///
-/// 既存 4 種ピン（訪問済み=accentColor / 保存済み=indigo / 検索結果=blue / 好み一致=pink）より
-/// 明確に控えめな意匠（小径 24pt + ミュートしたセカンダリ配色）にする（フェーズ 17）。
+/// 低強調は最小サイズ・ミュートしたセカンダリ配色・弱い影で表現する（白フチ自体は
+/// 全ピン共通の「地図から切り離すための処理」であり強調の手段ではない）。
+/// ピン全種の意匠ルールの詳細は `docs/ui-ux-guidelines.md`「ピンの意匠ルール」参照。
 struct AppleNearbyCafePin: View {
     let cafe: ApplePoiCafe
 

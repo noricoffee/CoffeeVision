@@ -5,7 +5,7 @@
 本ドキュメントは CoffeeVision の **iOS（SwiftUI）** における UI/UX 設計方針を定めます。
 Apple の **Human Interface Guidelines（HIG）** をベースとし、iOS ネイティブの体験に沿った一貫性のある UI を提供することを目的とします。
 
-> Android（Compose Multiplatform）の UI ガイドラインは将来 `sharedUI/` を実装する段階で別途追加します。
+> Android（Compose Multiplatform）は `sharedUI/` に検証用 1 画面（`CoffeeListScreen`）が実装済みですが、リリース対象外のため UI ガイドラインは定めていません。Android を製品として作り込む段階で別途追加します。
 
 参考: [Apple Human Interface Guidelines](https://developer.apple.com/design/human-interface-guidelines/)
 
@@ -52,7 +52,7 @@ CoffeeVision のアクセントカラーは **コーヒー由来のブラウン�
 | 要素 | 規則 |
 |------|------|
 | 白フチ | **全ピン共通で `Circle().stroke(Color(.systemBackground), lineWidth: 1.5)`**。`.frame` の直後・`.shadow` の直前に置く |
-| 影 | `radius: 4, x: 0, y: 2` + 自色 `opacity(0.4)`。周辺ピンのみ低強調のため例外（`.black.opacity(0.25)`, `radius: 3`, `y: 1`）|
+| 影 | `radius: 4, x: 0, y: 2` + 自色 `opacity(0.4)`。例外は 2 つ: 周辺ピンは低強調のため `.black.opacity(0.25)` / `radius: 3` / `y: 1`、検索結果ピンは**選択中のみ** `opacity(0.6)` / `radius: 6`（選択の一時的な強調で、種別間の序列ではない）|
 | サイズ | 好み一致 38 > 訪問済み 36 > おすすめ 34 = 保存済み 34（強調中 38）> 検索結果 32（選択中は `scaleEffect(1.3)`）> 周辺 28 |
 
 **白フチの有無を混ぜない**。白フチは地図の情報密度から図形を切り離す効果が大きく、有無が混ざると数 pt のサイズ差を打ち消して意図しない序列が生まれる（訪問済みだけ白フチが無く、34pt のおすすめピンに負けて見えていた。2026-07-27 にユーザー指摘で全ピン統一。教訓は [`tasks/lessons.md`](./tasks/lessons.md) 2026-07-27）。
@@ -357,7 +357,7 @@ List { ... }
 
 - 致命的でないエラー（同期失敗・検索失敗など）は **画面上にバナー or トーストで控えめに表示**
   - 共通コンポーネント `View.errorToast(message:onDismiss:)`（`iosApp/iosApp/Components/ErrorToast.swift`）を使う。上部スライドイン / 約 4 秒で自動消去 + タップ・上スワイプで手動消去
-  - 複数のエラー源がある画面（例: Map の `bridge.error` + `bridge.poiLookupError`、CafeSearch の `bridge.error` + `locationManager.error`）は `activeToast` で優先順位付き単一値に集約し、`.errorToast` は 1 つだけ付ける（`.overlay(alignment: .top)` の衝突回避）
+  - 複数のエラー源がある画面（現状は `MapTabView` の `bridge.error` + `bridge.poiLookupError` + エリア検索 0 件の案内）は `activeToast` で優先順位付き単一値に集約し、`.errorToast` は 1 つだけ付ける（`.overlay(alignment: .top)` の衝突回避）。エラー源が 1 つの画面はそのまま `.errorToast(message: bridge.error)` でよい
   - 表示時に `AccessibilityNotification.Announcement` を投稿（VoiceOver 対応済）。`accessibilityReduceMotion` true 時は opacity のみで遷移
 - 致命的なエラー（保存失敗など）、およびアクションを伴うエラー（位置情報許可拒否 → 設定アプリ誘導など）は `.alert` で確認を求める
 - ネットワーク不通は「オフライン」表示にとどめ、Firestore の自動同期に任せる

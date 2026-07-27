@@ -271,7 +271,7 @@ CLAUDE.md が 240 行と公式推奨（200 行以下）を超過し、docs 二�
 - **`MapViewModel.onCafeSaveToggled` の保存判定は `savedCafes` リストから毎回導出**: cafe-detail 側 `onSaveToggled` が `UIState.isSaved` を使うのと非対称だが、MapViewModel は特定カフェの単一 `isSaved` 状態を持たないため
 - **`TasteSearchSheet` / sparkles 系の accentColor は pink 化対象外**: 「テイストで探す」（フィルタ / 検索操作 UI）と「好み一致」（推薦結果のセマンティクス）を別概念と整理。pink は推薦結果（recommendedCafePin・凡例・RecommendationMatchSheet の軸アイコン）のみ（注: ここで併記していた `TasteMapFilterSheet`「好みで絞り込む」は 2026-07-21 撤去済み）
 - **TagChip の count バッジ配色**: 選択時 = 白背景 + accentColor 文字、非選択時 = accentColor 背景 + 白文字（旧右上ボタンの indigo バッジ意匠を選択状態で反転させる形。仕様未記載のため実装判断）
-- **後続候補**: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きのまま孤立（visitedCafePin の brown→accentColor 化に未追随。SavedCafeListSheet.swift:78）。次にこのファイルを触るとき accentColor へ揃える
+- **後続候補**: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きのまま孤立（visitedCafePin の brown→accentColor 化に未追随）。2026-07-27 の棚卸しで**未解消のまま残っていることを確認**し tasks.md「マップピンの主従関係の是正」へ起票（行番号での指示は書かない = 前文ルール）
 
 ### 2026-07-07: 周辺カフェを Apple 検索由来の自前ピンに（フェーズ 17）
 
@@ -910,3 +910,17 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 - **再計算の起点は 4 つだった**。設計時は 3 つ（購読の emit / `onTagInputChanged` / `onTagAdded`・`onTagRemoved`）と見ていたが、`tagCatalogJob`（カタログ購読）と `loadJob`（記録ロード）は `onAppear` から**同時に launch される**ため、カタログ側の初回 emit がロード完了より先に走ると「付与済み除外」が `draft.tags` 未反映（空集合）の状態で計算される。以降 DB に変化がなければ再計算されないので、**Edit / Duplicate で既に付いているタグがサジェストに残り続ける**。Edit / Duplicate の初回ロード完了ブロックにも `recomputeSuggestedTags()` を置いて解消（`CoffeeEditorViewModelTest` で固定）。`kmp-engineer` が実装中に発見
 - **重複タグを手入力して「追加」を押したとき、入力欄が残るようになった**。従来は Swift 側が無条件に `newTagText = ""` していたが、クリアを KMP の `onTagAdded` 成功時に一本化した結果、重複で early return するケースではクリアされない。**この挙動を許容する**（「追加されなかった」ことが入力欄に残ることで分かる方が、無言で消えるより良い）。サジェストが出る以上、重複タグを手打ちする経路自体が稀になる
+
+### 2026-07-27: docs 棚卸し 第 2 巡 — 未実施 8 本への Phase 1 適用と data-model の閾値例外
+
+2026-07-25 の第 1 巡で触れなかった 8 本（coding-conventions / ui-ux-guidelines / requirements / app-store-metadata / paid-services / analysis-model / root README / verification-checklist）にコード突き合わせを通した。検出は**陳腐化 10 件 / 欠落 4 件 / コード側 2 件**で、内訳は tasks.md「docs 棚卸し 第 2 巡」に記載。ここには判断の理由だけ残す。
+
+**`data-model.md` 708 行を分割しない（ユーザー確定）**: ストック型の閾値 500 を超え続けているが、表現軸（§1 ドメイン / §2 SQLDelight / §3 Firestore）で切ると **1 エンティティにフィールドを足すときの追随先が複数 doc に散る**。フィールド追随漏れは `.claude/rules/kotlin-kmp.md` のチェックリストが 6 経路を潰しているとおり、このプロジェクトで最も実害が出ている失敗モード（2026-07-25 の `region` 欠損バグ）なので、その追随コストを上げる分割は行数削減と釣り合わない。性質で切れる軸は 2026-07-25 に使い切っている（永続しない派生集計 → `analysis-model.md`）。**閾値の例外は doc の前文に書き、フックのスクリプトは変えない**（フックは警告のみで、判断の正本は doc 側という役割分担を保つ）。
+
+**陳腐化は「その doc を触らない変更」で起きる**: 今回の 10 件は、いずれも**別の doc だけが追随して残りが取り残された**形をしている。広告 2 面の提示先が下部シートへ移った 2026-07-22 の変更では requirements §11-2 は当日更新されたが `paid-services.md` §2b が残った。`iosApp` のディレクトリ構成は `Ads/` 追加・`Bridge/` 廃止・`Utilities/` 新設と何度も変わったが、coding-conventions §2.2 のツリーは初期のまま。**変更のたびに「この事実を書いている doc は他にどれか」を引くコストが高いため追随が漏れる**という構造で、CLAUDE.md の「横断 doc の同時更新」だけでは防ぎきれていない。定期的な Phase 1 が事後の受け皿として機能している（第 1 巡 6 件 + 今回 10 件）。
+
+**`PrivacyInfo.xcprivacy` の TODO（2026-07-14 起票）を「変更不要」で閉じた**: privacy manifest は**そのバイナリ自身のコードが**収集・アクセスするものを宣言する枠組みで、埋め込んだ SDK の収集は SDK 同梱の manifest が宣言する。`iosApp` は `AdConsentCoordinator` で `ATTrackingManager` の状態確認と許可要求をするだけで `AdSupport` を import せず IDFA を直接読まないため、アプリ側 manifest は現状（`NSPrivacyTracking = false` / 収集 3 種）のままで整合する。一方 **App Store Connect の App Privacy 申告は SDK の挙動も含めて申告する**別枠組みなので、§6.1 の IDFA 行はそのまま必要。この 2 つの混同が「広告を入れたのに manifest が false でいいのか」という迷いの正体だったので、app-store-metadata §6.3 に切り分けを明記した。
+
+**root README の `core` は依存の向きごと間違っていた**: 「`core` = Result / Logger / Dispatchers」というレイヤー図は**一度も実在しなかった**（`shared/core` は最初から `AppContainer` = 合成ルートと Repository 合成実装）。矢印も `data-* → core` と最下層に描かれていたが、実際は `core` が `data-*` を束ねる側で向きが逆。architecture.md は 2026-07-25 の棚卸しで正しく直っていたので、**README だけが分割前（Phase 2.5 以前）の想像図のまま残っていた**ことになる。README は「玄関で最初に読まれる doc」なのに実装から最も遠い位置にあり、フック対象に入れた（2026-07-25）だけでは行数閾値でしか鳴らない。
+
+**ピン KDoc から pt 値・色の列挙を落とした**（`ios-engineer` の判断を追認）: `AppleNearbyCafePin` の「小径 24pt」は実装 28pt との実差だったが、あわせて `CuratedCafePin` / `SavedCafePin` の「既存 N 種ピン」「34pt / 28pt」「既存 5 色」といった**現時点では正しい記述も docs 参照へ置換**した。ピンは 4 → 5 → 6 種と増えており、数え上げを書いた KDoc は追加のたびに全件が陳腐化する。正本は `ui-ux-guidelines.md`「ピンの意匠ルール」1 箇所に集約する（2026-07-25 に `CuratedCafe.kt` で採った方針と同じ）。

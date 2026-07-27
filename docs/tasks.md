@@ -368,6 +368,27 @@
 
 ### 未完・バックログ
 
+#### docs 棚卸し 第 2 巡（2026-07-27 / 未実施 doc への Phase 1 適用）
+
+> 2026-07-25 の第 1 巡（data-model / implementation_note / kmp-bridge / architecture）で**触れていない 8 本**にコード突き合わせ（curate-doc Phase 1）を通した。行数閾値の超過は `data-model.md` 708 行のみで、今回の主目的は縮約ではなく**実装との乖離の検出**。検出は陳腐化 10 件 / 欠落 4 件 / コード側 2 件。
+> - **coding-conventions** — iosApp ツリーの `App/` `Bridge/` `Extensions/` が 3 つとも実在しない（実態は直下 + `Utilities/` + `PreviewSupport/` + `Ads/`）/ 「Dispatcher は `shared/core` の `platform/` パッケージ」が実在しない（`expect` は `data-local` の 2 件のみ）/ 「`Bridge/` のヘルパを通す」を SKIE の呼び出し方向 + `FlowBridge.swift` に是正 / アンカーリンク 2 箇所を本文名指しへ
+> - **ui-ux-guidelines** — 「将来 `sharedUI/` を実装する段階で」（実装済み）/ トースト集約の例に実在しない `locationManager.error`。ピン 6 種の意匠（白フチ・影・サイズ序列）は MP-1〜3 適用後の実装と一致を確認
+> - **paid-services** — 広告 2 面の記述が「マップ検索ドロップダウン」のまま（2026-07-22 に下部シートへ移設済み。requirements §11-2 だけ追随していた）。Places の FieldMask / 写真枚数（3→3 ずつ・上限 10 / 400・200・150px）は一致
+> - **root README** — `sharedLogic` の現在形 2 箇所 / `core` = 「Result / Logger / Dispatchers」（実体は AppContainer + Repository 合成）/ `sharedUI` モジュールの欠落
+> - **app-store-metadata** — 2026-07-14 から残っていた「`PrivacyInfo.xcprivacy` の追随を要確認」を解消（アプリのコードは IDFA を読まないため manifest は据え置きで整合。App Privacy 申告とは別枠組み）/ 変更履歴の日付順の乱れ
+> - **verification-checklist** — MP-1〜3（ピン意匠統一）の目視項目が無い → 追加
+> - **requirements / analysis-model** — 陳腐化 0 件（機能 ID 2-13・5-5・5-6・11-x、4 タブ、~43 か国、統計定数 5 種、`RECOMMEND_MIN_RATING` まで照合し一致）
+> - **data-model** — 708 行の閾値超過は**分割せず前文に例外理由を明記**する方針でユーザー確定（表現軸で切ると 1 エンティティの追随に複数 doc を往復することになる）
+>
+> 締めの機械検査（2026-07-27）: 節番号の dangling **0 件**（281 ファイルを照合。検出 5 件はいずれも「1 行に他 doc 名と自 doc の節番号が併存」による誤爆と、requirements §3/§4 の意図的欠番）/ code fence の対応 **全 doc 偶数** / doc 内のコード行番号参照は **live pointer 1 件を解消**（`SavedCafeListSheet.swift:78` → MP-4 として起票。残りは「この行番号が壊れた」等の史実記述）/ doc が名指しするファイル 186 種の生存確認（見つからない 19 件はプレースホルダ `N.sqm` / git 管理外 `Secrets.xcconfig`・`google-services.json` / 廃止済みを「旧」と明示した史実記述のみ）。
+>
+> 経緯は implementation_note 2026-07-27、教訓は lessons 2026-06-16 エントリへ再発実測として追記。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | ios-engineer: `iosApp/iosApp/ContentView.swift` を削除（KMP テンプレートの残骸。参照 0 件） | 2026-07-27 完了。`PBXFileSystemSynchronizedRootGroup` 採用のため pbxproj の編集は不要（削除も `rm` だけで足りることを実証）。implementation-note-archive 2026-07-03 の申し送り③「削除候補・要ユーザー確認」がここで解消 |
+| [x] | ios-engineer: `AppleNearbyCafePin` の KDoc 是正（「小径 24pt」→ 実装は 28pt / 白フチ追加後の現状に合わせる） | 2026-07-27 完了。あわせて `SavedCafePin`（「既存 3 種ピン」= 現在 6 種で数え違い）/ `CuratedCafePin`（pt 値・5 色の列挙）も docs 参照へ置換。ピンは 4 → 5 → 6 種と増えるため、数え上げを書いた KDoc は追加のたび全件陳腐化する（`CuratedCafe.kt` 2026-07-25 と同方針）。**親がフラグ無しで `** BUILD SUCCEEDED **` を独立再確認** |
+
 #### docs 棚卸し（2026-07-25 / curate-doc skill 制定と初適用）
 
 > 500 行超で棚卸しするルールを制定（`curate-doc` skill + `check-file-size.sh`）し、3 doc に適用。
@@ -430,6 +451,7 @@
 | [x] | MP-1 | ios-engineer: `VisitedCafePin` に白フチ（`Circle().stroke(Color(.systemBackground), lineWidth: 1.5)`）を追加。他ピン・色は無変更 | 2026-07-27 完了。1 行追加のみ（`.frame` 直後・`.shadow` 直前 = 既存 2 ピンと同じ挿入順）。フラグ無しで `BUILD SUCCEEDED`。訪問回数バッジは `ZStack` 全体への `.overlay(alignment: .topTrailing)` なので常にフチの上に描画され、欠け・被りは構造上起きない。**2026-07-27 ユーザー目視確認済み**（主従が戻り、バッジ近傍の見え方も問題なし）。commit `b685c56` |
 | [x] | MP-2 | ios-engineer: 残り 3 ピン（`RecommendedCafePin` / `SavedCafePin` / `SearchResultPin`）にも白フチを追加し、全 6 ピンで統一。色・サイズ・影は無変更 | 2026-07-27 完了。3 行追加のみ、挿入位置は既存 3 ピンと同順。フラグ無しで `BUILD SUCCEEDED`。`SearchResultPin` の選択時 `scaleEffect(1.3)` はフチ線幅も 1.95pt 相当に拡大するが、直径も 41.6pt に拡大するためフチ比率は約 4.7% で一定（周辺ピンの 5.4% より細い）→ 相似拡大であり修正不要と判断。**2026-07-27 ユーザー目視確認済み** |
 | [x] | MP-3 | ios-engineer: `CuratedCafePin` の影を `opacity(0.5)` → `0.4` に揃える（他の意味ピンと同値。影は仕様外の暗黙強調だった） | 2026-07-27 完了（MP-2 の目視後にユーザー判断で着手）。数値 1 点のみ変更、`radius: 4 / y: 2` は不変。フラグ無しで `BUILD SUCCEEDED`。これで意味ピン 5 種が白フチ・影ともに完全に揃い、強弱はサイズと色だけが担う状態になった（`SearchResultPin` の選択時 0.6 / `AppleNearbyCafePin` の 0.25 は規則上の意図的な例外）。**2026-07-27 ユーザー目視確認済み** |
+| [ ] | MP-4 | ios-engineer: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きで孤立している（`visitedCafePin` の brown → accentColor 化に未追随）。**訪問済みの意味なので `Color.accentColor` へ揃える**（ui-ux-guidelines「マップ概念の色セマンティクス」の「ブランド / 訪問済み」行）。色 1 点のみ、他は無変更 | 2026-07-27 の docs 棚卸しで未解消を再確認して起票（implementation_note 2026-07-06 の「後続候補」が起源）。ライト / ダーク両方の目視が要る |
 
 ### 完了
 

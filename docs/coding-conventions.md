@@ -218,8 +218,9 @@ fun onSaveTapped() {
 
 ## 1.9 expect / actual
 
-- `expect` 宣言は所属するレイヤーのモジュール内に置く（DB 系 `DatabaseDriverFactory` は `shared/data-local`、Dispatcher / プラットフォーム情報は `shared/core` の `platform/` パッケージ）
+- `expect` 宣言は所属するレイヤーのモジュール内に置く（現存するのは `shared/data-local` の `DatabaseDriverFactory` と、同モジュール commonTest の `createInMemoryTestSqlDriver` の 2 件のみ）
 - `actual` 実装は `iosMain` / `androidMain` に同名ファイルを置く
+- **Dispatcher は `expect` にしない**。ViewModel は注入された `CoroutineScope` の Dispatcher を尊重し、`AppContainer` が生成する `MainScope`（`SupervisorJob() + Dispatchers.Main`）を起点にする
 - できる限り **`expect` ではなく抽象インターフェースとコンストラクタ注入** を選ぶ（テスタビリティのため）
 - 詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照
 
@@ -304,10 +305,10 @@ API クライアント / エクスポートの `Json` 設定は **`encodeDefault
 
 ```
 iosApp/iosApp/
-├── App/
-│   ├── iOSApp.swift                 // @main・Firebase 初期化
-│   └── AppState.swift               // bootstrap・AppContainer 構築・タブ常駐 Bridge 保持
-├── Features/
+├── iOSApp.swift                     // @main・Firebase 初期化
+├── AppState.swift                   // bootstrap・AppContainer 構築・タブ常駐 Bridge 保持
+├── RootTabView.swift                // 4 タブ（マップ / コーヒー / 分析 / 設定）のルート
+├── Features/                        // 1 画面 = 1 ディレクトリ（View + ViewModelBridge）
 │   ├── CoffeeList/
 │   │   ├── CoffeeListView.swift
 │   │   └── CoffeeListViewModelBridge.swift
@@ -318,10 +319,14 @@ iosApp/iosApp/
 ├── Components/                      // 2 画面以上で共用する汎用 View（StarRatingView 等）
 ├── FirebaseRepositories/            // shared/domain の Repository インターフェースを Swift で実装
 │   ├── RemoteCoffeeDataSourceIosImpl.swift
-│   └── AuthRepositoryIosImpl.swift
-├── Bridge/                          // Flow / suspend / sealed を Swift から扱うヘルパ
-└── Extensions/
+│   ├── AuthRepositoryIosImpl.swift
+│   └── FlowBridge.swift             // Swift 実装が Kotlin へ Flow を返すためのブリッジ
+├── Ads/                             // AdMob バナー（View 層完結）
+├── Utilities/                       // LocationManager / PhotoFileStore / PlacePhotoLoader 等
+└── PreviewSupport/                  // PreviewSamples.swift（Preview 用ダミーデータ）
 ```
+
+> ディレクトリの正確な一覧はリポジトリを真とする（上記は構造を示す代表例）。
 
 ### `Components/` への配置基準
 
@@ -382,7 +387,8 @@ Button("追加") {
 ## 2.4 KMP（shared/* 共通層）の利用
 
 - `iosApp` は `SharedLogic`（`shared/framework` 由来の XCFramework。framework 名・import 名ともに `SharedLogic`）だけを参照する。個別の shared モジュールを直接参照しない
-- Kotlin の `suspend` / `Flow` は直接呼ばず、`Bridge/` のヘルパを通す
+- **Kotlin を「呼ぶ」方向は SKIE が変換済み**（`suspend` → `async` / `Flow` → `AsyncSequence`）なので、独自ラッパを挟まず直接 `await` / `for await` する
+- **Swift の実装が Kotlin へ `Flow` を「返す」方向は SKIE が効かない**。`FirebaseRepositories/FlowBridge.swift` の `CallbackFlow<T>` / `CallbackFlowOptional<T>` を使う（詳細は [`kmp-bridge.md`](./kmp-bridge.md)）
 - Kotlin で投げる例外は Swift では `NSError` として届く。受け側で型を見て分岐する
 - Firebase Repository の iOS 実装は `FirebaseRepositories/` 配下に置き、`shared/domain` のインターフェースに準拠させる
 - 詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照
@@ -442,7 +448,7 @@ Kotlin 側と同じ方針。**WHY** のみ書き、WHAT は書かない。
 ## 3.4 ファイルサイズと責務分割
 
 - **1 ファイル / 1 型が肥大化したら責務ごとに分割する**。目安は **コードファイル（`.swift` / `.kt`）800 行超**で分割を検討する（PostToolUse フック [`.claude/hooks/check-file-size.sh`](../.claude/hooks/check-file-size.sh) が Write/Edit 時に警告を出す。閾値はスクリプト内 `THRESHOLD` で調整可）。
-- 行数は機械的な目安であり絶対条件ではない。本質は「複数の独立責務が 1 つの型に同居していないか」。1 ファイル = 1 公開型の原則（[§1.2](#12-ファイル構成) / [§2.2](#22-ファイル構成)）と併せて判断する。
+- 行数は機械的な目安であり絶対条件ではない。本質は「複数の独立責務が 1 つの型に同居していないか」。1 ファイル = 1 公開型の原則（本ドキュメント §1.2 / §2.2）と併せて判断する。
 - 分割の型（iOS の例。実例は `MapTabView` 分割 M-0〜M-4 / `AnalysisView` 分割 / `CoffeeEditorView` 分割、lessons / implementation_note 2026-07-24）。フォーム系 View は `extension` を UI セクション用と非同期処理用の 2 ファイルに分けられる（`CoffeeEditorView+Sections` / `CoffeeEditorView+Photos`）:
   - **サブ View の独立構造体化**: 巨大 SwiftUI View 内の `@ViewBuilder` メソッドを `struct XxxView: View` へ切り出し、状態は init 引数 / `@Binding` で渡す
   - **状態・サービスの `@Observable` 隔離**: 検索・データ取得など独立した状態機械を `@Observable final class` へ分離（SwiftUI 固有の `@FocusState` / `cameraPosition` はコールバックで分離）

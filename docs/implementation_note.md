@@ -926,3 +926,13 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **`.brown` 直書きは「訪問済み」バッジ 1 件では終わらなかった**（MP-4 → MP-5）: 棚卸しの行番号検査で拾った `SavedCafeListSheet` の「記録あり」バッジ（`.brown` 直書き）を `Color.accentColor` へ揃えたが、横断点検で**オンボーディング系 2 画面にも同型が 5 箇所**残っていた（`DataConsentOnboardingView` = 見出しアイコン / 目的リスト 3 アイコン / CTA の `tint`、`AdPrePromptView` = 見出しアイコン / CTA の `tint`）。`.brown` はシステムの固定色で **AccentColor（light #8B5A2B / dark #C08552）と一致しない**ため、ダークモードでブランド色が 2 系統に割れるという同じ実害を抱える。`ui-ux-guidelines.md`「カラーの役割定義」は**マップ限定の色セマンティクスとは別に、アプリ全体で「アクセント = `.accentColor`」**を定めており、`tint(.brown)` は同 doc が Good 例として挙げる `tint(.accentColor)` に正面から反する。5 箇所はユーザーの目に見える意匠変更なので MP-5 として分離して判断を仰ぎ、**「5 箇所すべて accentColor へ揃える」でユーザー確定**（2026-07-27）。`AdPrePromptView`（広告説明画面）だけブランド色を外す案も提示したが、直前のデータ利用同意オンボーディングと地続きで表示される導入フローなので、統一を採った。これで `.brown` の直書きは `iosApp/**` から **0 件**になり、ブランド色の入り口は AccentColor 1 つに揃った。**「マップの色セマンティクス」表しか見ていないと、この種の逸脱は拾えない**（マップ外の画面が対象なので）— アプリ全体の「カラーの役割定義」表と両方を照合軸にする必要がある。
 
 **ピン KDoc から pt 値・色の列挙を落とした**（`ios-engineer` の判断を追認）: `AppleNearbyCafePin` の「小径 24pt」は実装 28pt との実差だったが、あわせて `CuratedCafePin` / `SavedCafePin` の「既存 N 種ピン」「34pt / 28pt」「既存 5 色」といった**現時点では正しい記述も docs 参照へ置換**した。ピンは 4 → 5 → 6 種と増えており、数え上げを書いた KDoc は追加のたびに全件が陳腐化する。正本は `ui-ux-guidelines.md`「ピンの意匠ルール」1 箇所に集約する（2026-07-25 に `CuratedCafe.kt` で採った方針と同じ）。
+
+### 2026-07-28: iPad を対象外で確定（`TARGETED_DEVICE_FAMILY` を 1 に）
+
+`app-store-metadata.md` §1 は初版から「デバイス = iPhone」と書いていたが、`iosApp.xcodeproj` は Xcode テンプレート既定の `TARGETED_DEVICE_FAMILY = "1,2"` のままで、**doc とプロジェクト設定が食い違っていた**（2026-07-27 の ASO 棚卸しで ASO-6 ③ として検出）。実害は 2 つ: ① App Store Connect は iPad 対応バイナリに対して **iPad スクリーンショットを必須要求**するため提出が止まる ② iPad に入る状態で iPad レイアウトを一度も検証していない（マップの下部ドラッグシート・分析タブのチャートはいずれも iPhone 幅前提）。**iPad 対象外でユーザー確定**（2026-07-28）し、設定側を doc に合わせた。
+
+あわせて `INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad`（Debug / Release 両方）も削除した。デバイスファミリから iPad を外した時点で参照されない死んだ設定で、残すと「iPad も見ている」という誤読を招く。`INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone` は不変。
+
+検証は**ビルド後の成果物**で取った: `xcodebuild -showBuildSettings` で `TARGETED_DEVICE_FAMILY = 1` / `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`、Debug ビルド `** BUILD SUCCEEDED **` の後に `plutil -extract UIDeviceFamily` で `coffeevision.app/Info.plist` が **`[1]`** であることを確認。pbxproj の値は `GENERATE_INFOPLIST_FILE = YES` 経由で `UIDeviceFamily` に変換されるため、**pbxproj の diff だけでは「ASC がどう解釈するか」の証明にならない**（ASC が見るのは成果物の `Info.plist`）。同種の Info.plist 生成系設定を変えたときは成果物側で確認する。
+
+将来 iPad 対応する場合は、この設定を戻すだけでは足りない（iPad スクショ / レイアウト検証 / `UIRequiresFullScreen` の要否判断がセットで要る）。

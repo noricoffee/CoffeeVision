@@ -19,7 +19,7 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | バージョン | 1.0 | `MARKETING_VERSION` |
 | ビルド番号 | 1 | `CURRENT_PROJECT_VERSION` |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
-| デバイス | iPhone | iPad 対応は未検証のため初回は iPhone のみ |
+| デバイス | iPhone | iPad 対応は未検証のため初回は iPhone のみ。**2026-07-28 に `TARGETED_DEVICE_FAMILY` を `"1,2"` → `1` へ変更**し、プロジェクト設定と本記述を一致させた（従来は iPad にインストール可能で、ASC が iPad スクショを必須要求する状態だった）|
 | プライマリカテゴリ | フード/ドリンク（Food & Drink） | **2026-07-22 ユーザー確定** |
 | セカンダリカテゴリ | ライフスタイル（Lifestyle） | **2026-07-22 ユーザー確定**（任意） |
 | 価格 | 無料 | アプリ内課金なし |

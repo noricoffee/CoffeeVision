@@ -352,7 +352,7 @@
 > - **KMP / iOS**: `CuratedCafe` + `CuratedCafeRepository`（BeanProfile パターン、one-shot + メモリキャッシュ、失敗時サイレント）。ピン優先順位: 訪問済み > 保存済み > 検索結果 > curated > Apple 周辺。Mapper は 1 ドキュメント → List で BeanProfile 型と非対称（implementation_note 2026-07-17）
 > - **ピン意匠（ユーザーフィードバックで 2 回改訂）**: star 意匠 → 通常カフェピンと同アイコン（`cup.and.saucer.fill`）の 34pt 拡大 + 素の `Color.orange`、Apple 周辺ピンと同じズームゲート（3000m）でズームイン時のみ表示（implementation_note 2026-07-18、色セマンティクスは ui-ux-guidelines 第 5 概念）
 > - **データ**: 東京 157 件投入済み（基準上位 100 = 評価 4.4/レビュー 100 件以上 + 人気枠 57 = 3.7/500 以上を枠外全件）。生成 → 人手レビュー → 投入の 2 段構成（`scripts/seed/generate-curated-cafes.mjs` / `seed-curated-cafes.mjs`）。coffee_shop タイプ厳格化でシーシャ・コンセプト店を排除、レビュー除外店は `EXCLUDED_NAME_KEYWORDS` で再混入防止。保存は placeId + 名前 + 座標 + 県コードのみ（Places 規約、詳細はタップ時 getDetails）
-> - **残課題（将来）**: 他県展開時は該当県の `subAreas` 定義 + 生成 → レビュー → 投入のみ（コード変更不要）。47 県フル展開時のメモリ面は UIState 全件保持のまま（描画はズームゲートで解消済み）
+> - **他県展開（2026-07-28）**: 9 県へ拡張することをユーザー確定。`subAreas` 定義（スクリプト側）は完了、生成 → レビュー → 投入はカテゴリ 4「リリース前バックログ」で追跡する。アプリコードの変更は不要。47 県フル展開時のメモリ面は UIState 全件保持のまま（描画はズームゲートで解消済み）
 
 #### フェーズ 6 既知バグ: エディタ buildCafe の Edit/Duplicate 分岐（2026-07-08 着手）
 
@@ -565,6 +565,8 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
+| [~] | **おすすめカフェ（`curatedCafes`）を 9 県へ拡張**（2026-07-28 起票 / ユーザー確定）。東京のみ投入済みの状態から、大阪 / 京都 / 神奈川 / 愛知 / 福岡 / 北海道 / 千葉 / 埼玉 を追加する | **47 県フルはやらない**（地方は評価 4.4・レビュー 100 件の基準を満たす店が 30 件に満たず人気枠のチェーンで埋まる + 30 日ごとのリフレッシュコストが県数に線形）。親が `generate-curated-cafes.mjs` の `PREFECTURES` に 8 県分の `subAreas` を定義済み（計 46 エリア → フル実行 124 コール）。**残（ユーザー作業）**: 生成 → 目視レビュー → `--dry-run` → 投入。手順とコマンドは `scripts/seed/README.md`（**単県実行は JSON を丸ごと上書きするため 9 県まとめて指定すること**） |
+| [ ] | **`beanProfiles` の本番 Firestore 投入状況を確認**（未投入なら投入） | seed データ 38 件とスクリプトは 2026-07-08 完成済み。未投入だと分析タブ「好みの豆の傾向」「未経験の豆への探索提案」とエディタの産地サジェストが空のまま出荷される（verification-checklist 15-E-3 の前提）|
 | [ ] | プライバシーポリシー更新（記録データをサービス改善に使用する旨の明記） | App Store 提出前に必須。**本文起草済み（`docs/legal/privacy-policy.html` / `support.html`、2026-07-21）** — 実装事実（app-store §6）ベースで収集データ / 第三者 / 権利 / オンデバイス AI / 広告 IDFA を網羅。**残（ユーザー作業）**: `[開発者名]` / `[サポートメールアドレス]` / `[〜 URL]` プレースホルダ差し替え → 静的ホスティング公開 → URL 化 → アプリ内リンク差し替え。9-6 協調フィルタ（未実装）は実装着手時に追記 |
 | [x] | **F-1**: `PrivacyInfo.xcprivacy` のアプリ全体 Required Reason API 網羅監査（File Timestamp / System Boot Time / Disk Space 等）。フェーズ 18 では UserDefaults（`CA92.1`）+ テレメトリ集計データ種別のみ宣言済み | 2026-07-12 完了。Swift 側 = UserDefaults のみ（宣言済み）。**`SharedLogic`（K/N ランタイム）が stat 系 6 シンボルをリンク**（`nm -u` 実測）→ FileTimestamp **C617.1** を追加宣言。Boot Time / Disk Space / Keyboard 該当なし、Firebase は SDK 同梱マニフェストで自己申告済み。`plutil -lint` OK。判断は implementation_note 2026-07-12 |
 | [x] | 逆変換 PoC 導線（分析タブ最下部の `TastePreferenceConversionView` への NavLink）を本番に含めるか判断する（含める / 設定の開発者向けへ移動 / 削除） | 2026-07-12 ユーザー決定: **本番に含める**。FM 非対応端末では `makeIfAvailable()` ガードで導線非表示をコード確認済み（`AnalysisView.swift`）→ 追加実装なし。判断は implementation_note 2026-07-12 |

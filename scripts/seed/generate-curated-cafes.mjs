@@ -11,7 +11,15 @@
 //   PLACES_API_KEY=... node generate-curated-cafes.mjs --prefectures 13
 //   PLACES_API_KEY=... node generate-curated-cafes.mjs --prefectures 13,27 --min-rating 4.3 --min-reviews 50
 //
-// コスト注意: Text Search（Pro SKU）を「2 クエリ × subAreas 数」回呼ぶ。東京（16 エリア）で約 32 回。
+// ⚠️ 本スクリプトは curated-cafes.json を **--prefectures に渡した県だけで丸ごと上書き**する。
+//    単県で実行すると他県のレビュー済みデータが JSON から消えるため（Firestore 側の
+//    ドキュメントは set() されず残るが、リポジトリ内の正本が失われる）、
+//    **投入済みの県を必ず全部含めて実行する**こと。
+//    2026-07-28 時点の投入対象 9 県:
+//      --prefectures 13,27,26,14,23,40,01,12,11
+//
+// コスト注意: Text Search（Pro SKU）を「2 クエリ × subAreas 数」回呼ぶ。
+//   東京（16 エリア）= 32 回 / 上記 9 県フル = 124 回。初回シードと定期リフレッシュ時のみ。
 
 import { writeFile } from "node:fs/promises";
 import path from "node:path";
@@ -20,7 +28,11 @@ import { fileURLToPath } from "node:url";
 // JIS X 0401 都道府県コード表。subAreas は検索カバレッジ用の主要エリア（省略時は県名 1 エリア）。
 // maxCafes は県ごとの上限（東京はカフェが多いため 100、他県は 30 — フェーズ 19 確定仕様）。
 const PREFECTURES = [
-  { code: "01", name: "北海道" },
+  {
+    code: "01",
+    name: "北海道",
+    subAreas: ["札幌 大通", "札幌 円山", "札幌駅", "函館", "小樽", "旭川"],
+  },
   { code: "02", name: "青森県" },
   { code: "03", name: "岩手県" },
   { code: "04", name: "宮城県" },
@@ -30,8 +42,16 @@ const PREFECTURES = [
   { code: "08", name: "茨城県" },
   { code: "09", name: "栃木県" },
   { code: "10", name: "群馬県" },
-  { code: "11", name: "埼玉県" },
-  { code: "12", name: "千葉県" },
+  {
+    code: "11",
+    name: "埼玉県",
+    subAreas: ["大宮", "浦和", "川越", "所沢", "川口"],
+  },
+  {
+    code: "12",
+    name: "千葉県",
+    subAreas: ["千葉", "船橋", "柏", "松戸", "市川"],
+  },
   {
     code: "13",
     name: "東京都",
@@ -42,7 +62,11 @@ const PREFECTURES = [
       "池袋", "代々木",
     ],
   },
-  { code: "14", name: "神奈川県" },
+  {
+    code: "14",
+    name: "神奈川県",
+    subAreas: ["横浜 関内", "横浜 元町", "鎌倉", "藤沢", "川崎", "小田原"],
+  },
   { code: "15", name: "新潟県" },
   { code: "16", name: "富山県" },
   { code: "17", name: "石川県" },
@@ -51,11 +75,23 @@ const PREFECTURES = [
   { code: "20", name: "長野県" },
   { code: "21", name: "岐阜県" },
   { code: "22", name: "静岡県" },
-  { code: "23", name: "愛知県" },
+  {
+    code: "23",
+    name: "愛知県",
+    subAreas: ["名古屋 栄", "名古屋 大須", "名古屋 覚王山", "名古屋 今池", "名古屋駅", "岡崎"],
+  },
   { code: "24", name: "三重県" },
   { code: "25", name: "滋賀県" },
-  { code: "26", name: "京都府" },
-  { code: "27", name: "大阪府" },
+  {
+    code: "26",
+    name: "京都府",
+    subAreas: ["京都 河原町", "京都 烏丸", "京都 北大路", "出町柳", "二条", "嵐山"],
+  },
+  {
+    code: "27",
+    name: "大阪府",
+    subAreas: ["大阪 中崎町", "大阪 北浜", "大阪 天満", "大阪 心斎橋", "大阪 福島", "難波"],
+  },
   { code: "28", name: "兵庫県" },
   { code: "29", name: "奈良県" },
   { code: "30", name: "和歌山県" },
@@ -68,7 +104,11 @@ const PREFECTURES = [
   { code: "37", name: "香川県" },
   { code: "38", name: "愛媛県" },
   { code: "39", name: "高知県" },
-  { code: "40", name: "福岡県" },
+  {
+    code: "40",
+    name: "福岡県",
+    subAreas: ["福岡 大名", "福岡 薬院", "福岡 今泉", "福岡 警固", "博多", "天神"],
+  },
   { code: "41", name: "佐賀県" },
   { code: "42", name: "長崎県" },
   { code: "43", name: "熊本県" },

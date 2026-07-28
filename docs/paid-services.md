@@ -30,7 +30,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 - Place Details は鮮度条件付きで最大 1 回（上表）
 - Photo Media はメモリキャッシュでセッション内の再取得を回避
 - API キーは iOS アプリ（Bundle ID）制限付き（`403 API_KEY_IOS_APP_BLOCKED` 診断が `PlacesClientImpl` に記載あり）
-- **アプリ外の一時コスト**: おすすめカフェのシード生成 `scripts/seed/generate-curated-cafes.mjs`（フェーズ 19）が Text Search を叩く（2 クエリ × subAreas 数。東京 = 16 エリアで約 32 回）。実行は初回シードと定期リフレッシュ時のみ
+- **アプリ外の一時コスト**: おすすめカフェのシード生成 `scripts/seed/generate-curated-cafes.mjs`（フェーズ 19）が Text Search を叩く（2 クエリ × subAreas 数）。**2026-07-28 に対象を東京 1 県 → 9 県へ拡張**（東京 / 大阪 / 京都 / 神奈川 / 愛知 / 福岡 / 北海道 / 千葉 / 埼玉）したため、フル実行 1 回あたり **32 回 → 124 回**。実行は初回シードと定期リフレッシュ（Places 規約のキャッシュ規定 30 日）時のみで、**県を増やすとリフレッシュのたびのコストが線形に増える**
 
 ---
 
@@ -40,7 +40,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 
 | プロダクト | 課金 | 利用状況 |
 |-----------|------|---------|
-| **Cloud Firestore** | **従量課金**（read / write / delete / ストレージ / 帯域） | 同期の本体。`users/{uid}`（analyticsConsent）+ `users/{uid}/coffees`（コーヒー記録）+ `users/{uid}` 配下の savedCafes 等のサブコレクション、`beanProfiles`（豆ナレッジベース、クライアント read-only・write は Admin SDK のみ）、`curatedCafes`（都道府県別おすすめカフェ、同型 read-only。フェーズ 19。マップ起動時に one-shot 全件 get = **最大 47 reads / 起動**、メモリキャッシュで再読なし。初期は東京 1 doc のみ）。オフライン永続化に同期を委ねる設計で独自同期キューなし。SQLDelight ローカル DB が検索・参照を担うため読み取りは同期時中心 |
+| **Cloud Firestore** | **従量課金**（read / write / delete / ストレージ / 帯域） | 同期の本体。`users/{uid}`（analyticsConsent）+ `users/{uid}/coffees`（コーヒー記録）+ `users/{uid}` 配下の savedCafes 等のサブコレクション、`beanProfiles`（豆ナレッジベース、クライアント read-only・write は Admin SDK のみ）、`curatedCafes`（都道府県別おすすめカフェ、同型 read-only。フェーズ 19。マップ起動時に one-shot 全件 get = **最大 47 reads / 起動**、メモリキャッシュで再読なし。2026-07-28 時点の投入対象は 9 県 = 9 reads / 起動）。オフライン永続化に同期を委ねる設計で独自同期キューなし。SQLDelight ローカル DB が検索・参照を担うため読み取りは同期時中心 |
 | Firebase Auth | 実質無料（電話認証なし） | 匿名認証 + Sign in with Apple のリンク。SMS を使わないため課金なし |
 | Cloud Storage for Firebase | **現状課金なし** | **採用見送り済み**。SDK リンクと `storage.rules` は残っているが、写真は端末ローカル（Documents/photos/）保存のみで `Photo.remoteUrl` は常に null。将来復活用にフィールド・rules を残置（data-model.md §1.4） |
 | Crashlytics / Analytics / Performance | 無料 | クラッシュレポート・利用分析・パフォーマンス計測 |

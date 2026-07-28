@@ -22,7 +22,8 @@ GOOGLE_APPLICATION_CREDENTIALS=/path/to/coffeevision-service-account.json node s
 ```
 
 - ドキュメント ID = `beanId`。JSON から項目を消した場合は Firebase Console で手動削除する
-- 投入後の確認: 実機の分析タブ「好みの豆の傾向」/「未経験の豆への探索提案」、エディタの産地サジェスト（`docs/tasks/verification-checklist.md` の 15-E-3 項目）。アプリはメモリキャッシュ（one-shot get）のため、投入後はアプリを再起動する
+- 投入後の確認: 実機の分析タブ「好みの豆の傾向」/「未経験の豆への探索提案」の 2 箇所（`docs/tasks/verification-checklist.md` の 15-E-3 項目）。アプリはメモリキャッシュ（one-shot get）のため、投入後はアプリを再起動する
+- **どちらのセクションも `FavoriteSignals.bestOrigin` が確定していないと出ない**（記録が少ない / 産地が分散していると null）。さらに bestOrigin の産地に対応する `BeanProfile` が無いと空になる。seed は 21 産地 38 件で、`CoffeeOriginCatalog` の 43 か国のうち 22 か国（ベトナム / メキシコ / ニカラグア / エクアドル 等）は未カバー
 
 ---
 

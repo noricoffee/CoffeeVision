@@ -940,12 +940,6 @@
         "longitude": 139.7066452
       },
       {
-        "placeId": "ChIJ2X4OvjvhGGAR2TYEZs3uefI",
-        "name": "星乃珈琲店 立川若葉町店",
-        "latitude": 35.7220608,
-        "longitude": 139.4328684
-      },
-      {
         "placeId": "ChIJV5_Pq2PyGGARZLJdE9LKenw",
         "name": "珈琲亭 七つ森",
         "latitude": 35.700139199999995,
@@ -1198,12 +1192,6 @@
         "longitude": 135.5041282
       },
       {
-        "placeId": "ChIJcevQihPnAGAR6FF_0muzY4A",
-        "name": "エクセルシオール カフェ 心斎橋店",
-        "latitude": 34.669844999999995,
-        "longitude": 135.5013632
-      },
-      {
         "placeId": "ChIJUwazsMbmAGARs4kKsCY3L-g",
         "name": "西洋茶館",
         "latitude": 34.703165999999996,
@@ -1214,42 +1202,6 @@
         "name": "OSA COFFEE",
         "latitude": 34.708881,
         "longitude": 135.5047462
-      },
-      {
-        "placeId": "ChIJFw9rZxPnAGAROdQ2c0AQe6M",
-        "name": "ドトールコーヒーショップ 難波店",
-        "latitude": 34.6676479,
-        "longitude": 135.5012332
-      },
-      {
-        "placeId": "ChIJ8xdg6GvnAGARGUcBWz4EfyI",
-        "name": "コメダ珈琲店 なんばCITY店",
-        "latitude": 34.6632167,
-        "longitude": 135.50261110000002
-      },
-      {
-        "placeId": "ChIJ59XxIW3nAGARdjkgMugNycI",
-        "name": "カフェ・ベローチェ 難波西口店",
-        "latitude": 34.6642848,
-        "longitude": 135.4989005
-      },
-      {
-        "placeId": "ChIJ4eC4_OXmAGARpd_tC0ylQUE",
-        "name": "カフェ・ベローチェ 淀屋橋店",
-        "latitude": 34.6926402,
-        "longitude": 135.50139439999998
-      },
-      {
-        "placeId": "ChIJgSC-tRLnAGARcIQ7Ls2oyGs",
-        "name": "タリーズコーヒー 近鉄難波ビル店",
-        "latitude": 34.6667967,
-        "longitude": 135.4997891
-      },
-      {
-        "placeId": "ChIJ46ZOEGvnAGARhOLRviqT9i8",
-        "name": "星乃珈琲店 なんば千日前店",
-        "latitude": 34.665697099999996,
-        "longitude": 135.5034302
       }
     ]
   },
@@ -1576,24 +1528,6 @@
         "longitude": 135.691467
       },
       {
-        "placeId": "ChIJuablc5oIAWAR-p5y7lFCJ7A",
-        "name": "上島珈琲店 京都四条烏丸店",
-        "latitude": 35.0048878,
-        "longitude": 135.7612103
-      },
-      {
-        "placeId": "ChIJMWjeHJoIAWAR9Pfvw73iYTU",
-        "name": "エクセルシオール カフェ 四条烏丸店",
-        "latitude": 35.003540799999996,
-        "longitude": 135.7609041
-      },
-      {
-        "placeId": "ChIJPdT56IYIAWARbEgBDIiByfk",
-        "name": "星乃珈琲店 河原町店",
-        "latitude": 35.0055467,
-        "longitude": 135.7690005
-      },
-      {
         "placeId": "ChIJf4c8zpUIAWARIasKlKU3ixQ",
         "name": "御多福珈琲",
         "latitude": 35.0035406,
@@ -1780,52 +1714,10 @@
         "longitude": 139.54723629999998
       },
       {
-        "placeId": "ChIJS6qYFMFFGGAR19_87gXB73U",
-        "name": "コメダ珈琲店 鎌倉小町店",
-        "latitude": 35.3208497,
-        "longitude": 139.5519406
-      },
-      {
-        "placeId": "ChIJAQAdnqJgGGARY1HIc8ALPUA",
-        "name": "星乃珈琲店",
-        "latitude": 35.5302759,
-        "longitude": 139.6995527
-      },
-      {
-        "placeId": "ChIJf_QM_eFcGGARLnP5-GlcIO4",
-        "name": "カフェ ルノアール 横浜元町店",
-        "latitude": 35.441441,
-        "longitude": 139.65026179999998
-      },
-      {
         "placeId": "ChIJOWdUophgGGARMSr0Wznr1WQ",
         "name": "丸福珈琲店 川崎アゼリア店",
         "latitude": 35.5303658,
         "longitude": 139.6985608
-      },
-      {
-        "placeId": "ChIJUbrMNr1gGGARc_xKSi9z5Mg",
-        "name": "エクセルシオール カフェ 相鉄フレッサイン川崎駅東口店",
-        "latitude": 35.5301407,
-        "longitude": 139.7017788
-      },
-      {
-        "placeId": "ChIJ96pr3SNhGGARTnnZqXC5jPY",
-        "name": "ドトール珈琲店 川崎ゼロゲート店",
-        "latitude": 35.5293209,
-        "longitude": 139.6979632
-      },
-      {
-        "placeId": "ChIJVVVlVMpPGGARHf1b5oeUNTc",
-        "name": "カフェ・ベローチェ 南藤沢店",
-        "latitude": 35.3382623,
-        "longitude": 139.49011249999998
-      },
-      {
-        "placeId": "ChIJ2bDVguFcGGARt2ujZVagGAk",
-        "name": "コメダ珈琲店 横浜元町店",
-        "latitude": 35.4402962,
-        "longitude": 139.6479487
       }
     ]
   },
@@ -2008,40 +1900,16 @@
         "longitude": 136.8903354
       },
       {
-        "placeId": "ChIJXbX4O9JwA2ARhHShPNDlSl0",
-        "name": "ドトールコーヒーショップ 名古屋栄店",
-        "latitude": 35.1663119,
-        "longitude": 136.90680039999998
-      },
-      {
         "placeId": "ChIJU8Q_Z8SiBGARgn-T6e6UrYk",
         "name": "咲ら珈琲",
         "latitude": 34.97425090000001,
         "longitude": 137.1625551
       },
       {
-        "placeId": "ChIJ67ovT-92A2ARqxs1wOFBdHY",
-        "name": "珈琲所コメダ珈琲店 名古屋駅西店",
-        "latitude": 35.171056,
-        "longitude": 136.8780255
-      },
-      {
-        "placeId": "ChIJU81OodNwA2ARI-4QUmtpOcQ",
-        "name": "コメダ珈琲店 栄三丁目店",
-        "latitude": 35.167567399999996,
-        "longitude": 136.90550869999998
-      },
-      {
         "placeId": "ChIJZSG1oM5wA2ARNbtDZNY2IZg",
         "name": "やば珈琲店 栄店",
         "latitude": 35.1617163,
         "longitude": 136.9078147
-      },
-      {
-        "placeId": "ChIJJ6DR229wA2ARUAiy5qo9sfs",
-        "name": "コメダ珈琲店 覚王山店",
-        "latitude": 35.1675556,
-        "longitude": 136.9530556
       }
     ]
   },
@@ -2266,12 +2134,6 @@
         "longitude": 130.4001793
       },
       {
-        "placeId": "ChIJsTkIK8iRQTURlIc-Dy20kM0",
-        "name": "コメダ珈琲店 博多駅東店",
-        "latitude": 33.5881792,
-        "longitude": 130.4234332
-      },
-      {
         "placeId": "ChIJXzP-SoSRQTURjz7KafrNNBo",
         "name": "マヌコーヒー 大名店",
         "latitude": 33.5865236,
@@ -2288,24 +2150,6 @@
         "name": "白金茶房",
         "latitude": 33.5783366,
         "longitude": 130.4053765
-      },
-      {
-        "placeId": "ChIJq6q6Eo6RQTURzTgjuvG2NEg",
-        "name": "カフェ・ベローチェ 天神一丁目店",
-        "latitude": 33.592289799999996,
-        "longitude": 130.3996062
-      },
-      {
-        "placeId": "ChIJf2k-qpGRQTURkiCzcz9Ql8A",
-        "name": "コメダ珈琲店 福岡天神南店",
-        "latitude": 33.589263900000006,
-        "longitude": 130.40351859999998
-      },
-      {
-        "placeId": "ChIJB1yKWMiRQTURST8UQJMHxQw",
-        "name": "カフェ・ベローチェ 博多駅筑紫口店",
-        "latitude": 33.590576999999996,
-        "longitude": 130.4228598
       }
     ]
   },
@@ -2524,12 +2368,6 @@
         "longitude": 140.7931879
       },
       {
-        "placeId": "ChIJVdkUyWjhCl8R3mZuvxm7Ktw",
-        "name": "コメダ珈琲店 小樽運河通り店",
-        "latitude": 43.201302399999996,
-        "longitude": 140.999941
-      },
-      {
         "placeId": "ChIJL6ONVJspC18Rl9-QN-T7Qh4",
         "name": "BARISTART COFFEE",
         "latitude": 43.0583246,
@@ -2546,18 +2384,6 @@
         "name": "珈琲プラザ コージーコーナー",
         "latitude": 43.0659992,
         "longitude": 141.35032719999998
-      },
-      {
-        "placeId": "ChIJWWcxjoQpC18RB9KEPtSjmAU",
-        "name": "ドトールコーヒーショップ 札幌狸小路店",
-        "latitude": 43.0571845,
-        "longitude": 141.3532284
-      },
-      {
-        "placeId": "ChIJxQes25wpC18RCqqlKuEjY9Y",
-        "name": "ドトールコーヒーショップ 札幌大通西３丁目店",
-        "latitude": 43.060085799999996,
-        "longitude": 141.3531872
       },
       {
         "placeId": "ChIJq6p6KFDgCl8Rvgh2K0GkqnI",
@@ -2744,24 +2570,6 @@
         "name": "高倉町珈琲 大宮店",
         "latitude": 35.901426799999996,
         "longitude": 139.637178
-      },
-      {
-        "placeId": "ChIJv4AdVFfaGGARgrNH4VMnRCY",
-        "name": "倉式珈琲店 ルミネ川越店",
-        "latitude": 35.9068713,
-        "longitude": 139.48261499999998
-      },
-      {
-        "placeId": "ChIJVVWpYUHBGGARMV1YE_Sd6QM",
-        "name": "ドトール珈琲農園 大宮駅東口店",
-        "latitude": 35.907412900000004,
-        "longitude": 139.62491
-      },
-      {
-        "placeId": "ChIJM4YAYG6TGGARA0osrynigYk",
-        "name": "カフェ・ベローチェ 川口店",
-        "latitude": 35.8013323,
-        "longitude": 139.7192422
       },
       {
         "placeId": "ChIJ8cbrIG-TGGARclYJ2FQoEUk",

@@ -19,7 +19,8 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
 
     /// `AppRootView` の `preferredColorScheme` と同じキーで同期する。
-    @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.system.rawValue
+    /// 既定値も `AppRootView` と揃える（片方だけ変えると初回表示と Picker 選択状態がずれる）。
+    @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.light.rawValue
 
     /// データエクスポートの進行状態。
     @State private var exportState: ExportState = .idle

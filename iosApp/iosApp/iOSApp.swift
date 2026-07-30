@@ -68,7 +68,9 @@ private struct AppRootView: View {
     var appState: AppState
 
     /// 設定画面で選択されたテーマを永続化するキー。`SettingsView` と同じキーを参照する。
-    @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.system.rawValue
+    /// 未設定時の既定は `.light`（OS のダーク設定には追従させない。ユーザーが設定画面で
+    /// `system` / `dark` を選んだ場合のみそちらに切り替わる）。
+    @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.light.rawValue
 
     var body: some View {
         if appState.uid != nil,

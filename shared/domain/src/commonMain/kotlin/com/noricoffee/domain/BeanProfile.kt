@@ -6,7 +6,9 @@ package com.noricoffee.domain
  * Firestore のグローバルコレクション `beanProfiles/{beanId}` を read-only で参照するサービス管理データ。
  * ユーザーの [CoffeeRecord] と `beanProfileId` では紐付けしない。
  * `origin` は `OriginNormalizer.normalize`（trim + lowercase + シノニム辞書）を通した上でファジーマッチし、
- * 記録入力時のサジェストや将来の分析強化（12-C）に活用する。マッチ方式・スコアの正本は `docs/data-model.md` §1.8。
+ * 分析タブの2機能（[com.noricoffee.domain.usecase.PreferredBeanTraitsUseCase]「好みの豆の傾向」/
+ * [com.noricoffee.domain.usecase.SuggestUnexploredBeansUseCase]「未経験の豆への探索提案」）に活用する。
+ * マッチ方式・スコアの正本は `docs/data-model.md` §1.8。
  *
  * @see [docs/data-model.md] §1.8
  */

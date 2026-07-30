@@ -18,7 +18,7 @@ import kotlinx.serialization.json.Json
  * Swift からの呼び出しシグネチャ（`.swiftinterface` で裏取り済み）:
  * `exportCoffeeRecordsUseCase.invoke(userId: String) async throws -> String`
  * （SKIE は `operator fun invoke` を Swift の `callAsFunction` には変換しない。
- * `AppContainer.beanProfileMatchUseCase` 等、他の UseCase も同様に `.invoke(...)` 呼び出しになる）
+ * `DeleteAccountUseCase` 等、他の UseCase も同様に `.invoke(...)` 呼び出しになる）
  *
  * @param coffeeRepository エクスポート対象のコーヒー記録を観測するリポジトリ
  */

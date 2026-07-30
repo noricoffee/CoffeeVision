@@ -984,3 +984,17 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **Cloud Functions によるリアルタイム集約（案 1）は捨てない**。スキーマが `placeId → 産地リスト`である限り集約元が手作業でもユーザーデータでも同じなので、**案 2 を先に作れば案 1 が後から差し込める**。案 1 を先に採ると、現行の `analyticsConsent`（文言は「コーヒー記録の統計情報を匿名で収集します」で Firebase Analytics の gating 専用）では記録内容を他ユーザーの推薦に使う同意として足りず、別トグルか文言改訂 + App Privacy 申告の更新 + 新規課金（Functions）が同時に乗る。順序として案 2 が先。
 
 **実装時に確認すること**: ① 産地の粒度（国止まりか `region` まで持つか。細かくすると人手コストと `OriginNormalizer` のシノニム辞書の守備範囲が変わる）② 「この店ではこの産地が飲める」は時期で変わるのでシングルオリジンの入れ替わりに耐える文言にする（断定を避ける）③ **産地は自前データなので Places 規約の 30 日キャッシュ規定の対象外**という整理で進めているが、規約原文で再確認してから着手する。
+
+### 2026-07-31: 産地サジェスト撤去の残骸を削除 — デッドコードは 3 つでなく 4 つだった
+
+2026-07-22 に撤去したエディタの産地サジェストの名残を削除した（kmp-engineer → ios-engineer の順で 2 回 dispatch、計 59 + 25 行削除）。
+
+**着手前の見立ては「`AppContainer.beanProfileMatchUseCase` と `BeanProfileRepository.getByOrigin` の 2 つ」だったが、実際は 4 シンボルだった**。追加で出たのは `shared/framework` の `AppContainer.fetchBeanSuggestions(origin:processing:)` で、これは `@Throws` 付きの **SKIE 経由で Swift に公開されていたブリッジ関数**。当初の 2 つが「repository と container のプロパティ」という同じ層にあったため、その層だけを見て数えていた。**撤去した機能の残骸を数えるときは、ドメイン層だけでなくブリッジ層（`shared/framework` の `AppContainer` 拡張）まで見る**。ブリッジ関数は iOS からしか呼ばれない前提で作るので、Kotlin 側の grep では「宣言 1 件・参照 0 件」に見えて死んでいることに気づきにくい。
+
+**`getByOrigin` の KDoc は自分が死んでいることを明記していた**（「本番コードに呼び出し元が無いため実害はないが、新規に呼び出す場合は…」= 2026-07-22 の撤去時に書かれたもの）。デッドコードだと分かった時点で消さず注記に留めると、注記ごと残り続ける。
+
+**削除の順序は KMP → iOS** で固定した。Swift 側はプロトコル要件に無い余分なメソッドがあってもコンパイルが通るので KMP を先に消しても壊れないが、逆順にすると Kotlin の interface が要求するメソッドが未実装になり Swift が壊れる。**プロトコル要件を減らす変更は、要件を出す側（Kotlin）から先に**。
+
+**残したもの**: `BeanProfileMatchUseCase` クラス本体とそのテスト。`SuggestUnexploredBeansUseCase` がコンストラクタのデフォルト引数で自前に合成しており（`AppContainer` のインスタンスは経由していない）、探索提案の origin ファジーマッチはこのクラスが現役で担っている。「`AppContainer` のプロパティが死んでいる = クラスも死んでいる」ではない点に注意。
+
+**検証**: `commonMain` の public API 削除なので lessons 2026-07-25 に従い**親がフラグ無しで実 Swift ビルドまで確認**した（`xcodebuild -scheme iosApp -configuration Debug` → `** BUILD SUCCEEDED **`）。ios-engineer 側は生成済み `.swiftinterface` に `getByOrigin` が無いことも裏取りしている。なお削除後に SourceKit が `No such module 'FirebaseFirestore'` を出したが、これは IDE のインデックス由来で実ビルドには影響しない。

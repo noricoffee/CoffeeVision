@@ -205,7 +205,7 @@ data class VisitedCafe(
 
 > サービス管理のコーヒー豆知識データ。ユーザーの `CoffeeRecord` と `beanProfileId` では**紐付けしない**。`origin`（`OriginNormalizer` 経由）+ `processings`（enum 名）でファジーマッチし、分析タブの 2 機能に活用する。
 >
-> **現行の消費先は分析タブのみ**（2026-07-28 確認）: ①「好みの豆の傾向」（`PreferredBeanTraitsUseCase`）②「未経験の豆への探索提案」（`SuggestUnexploredBeansUseCase` / 要件 9-8）。起票時（12-B）にあった**エディタの産地サジェストは 2026-07-22 の産地ドロップダウン化で撤去済み**。その名残で `AppContainer.beanProfileMatchUseCase` と `BeanProfileRepository.getByOrigin` は現在どこからも呼ばれていない（`BeanProfileMatchUseCase` 自体は `SuggestUnexploredBeansUseCase` が内部で合成して使用中）。
+> **現行の消費先は分析タブのみ**（2026-07-28 確認）: ①「好みの豆の傾向」（`PreferredBeanTraitsUseCase`）②「未経験の豆への探索提案」（`SuggestUnexploredBeansUseCase` / 要件 9-8）。起票時（12-B）にあった**エディタの産地サジェストは 2026-07-22 の産地ドロップダウン化で撤去済み**で、その名残のデッドコード（`AppContainer.beanProfileMatchUseCase` / `AppContainer.fetchBeanSuggestions` / `BeanProfileRepository.getByOrigin` + 実装 2 つ）は **2026-07-31 に削除済み**。`BeanProfileMatchUseCase` クラス自体は `SuggestUnexploredBeansUseCase` が内部で合成して使用中のため存続する。
 
 **配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/BeanProfile.kt`（パッケージ `com.noricoffee.domain`）
 
@@ -232,7 +232,7 @@ data class BeanProfile(
 - score > 0 のもののみ、降順でソートして返す
 - `roastLevel` はロースター次第なので除外
 
-**`interface BeanProfileRepository`**（`com.noricoffee.repository`）: `suspend getAll()` / `suspend getByOrigin(origin)`。どちらもメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要）。
+**`interface BeanProfileRepository`**（`com.noricoffee.repository`）: `suspend getAll()` のみ。メモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要）。
 
 ---
 

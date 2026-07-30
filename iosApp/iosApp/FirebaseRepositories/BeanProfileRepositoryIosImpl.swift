@@ -12,10 +12,6 @@ import SharedLogic
 /// SKIE の SuspendInterop は「Swift から Kotlin を呼ぶ方向」にしか効かないため、
 /// Swift で Kotlin interface を実装する際は Obj-C 互換シグネチャを使う:
 /// - `getAll()` → `func __getAll(completionHandler:)`
-/// - `getByOrigin(origin:)` → `func __getByOrigin(origin:completionHandler:)`
-///
-/// `__getByOrigin` の内部では SKIE が生成した `async throws` 版の `getAll()` を呼ぶことで
-/// キャッシュを再利用しクライアントサイドフィルタを適用する。
 ///
 /// 詳細は `docs/kmp-bridge.md` §SKIE の利用 を参照。
 final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository {
@@ -46,31 +42,6 @@ final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository {
             } ?? []
             self?.cache = profiles
             completionHandler(profiles, nil)
-        }
-    }
-
-    // MARK: - __getByOrigin
-
-    /// 指定産地（trim/lowercase 完全一致）のプロファイルを返す。
-    ///
-    /// `getAll()` の結果をクライアントサイドでフィルタする（Firestore クエリなし）。
-    /// Kotlin interface: `@Throws(Exception::class) suspend fun getByOrigin(origin: String): List<BeanProfile>`
-    func __getByOrigin(
-        origin: String,
-        completionHandler: @escaping @Sendable ([BeanProfile]?, (any Error)?) -> Void
-    ) {
-        // SKIE が生成した async throws 版の getAll() を呼んでキャッシュを取得する
-        Task {
-            do {
-                let all = try await getAll()
-                let normalizedOrigin = origin.trimmingCharacters(in: .whitespaces).lowercased()
-                let filtered = all.filter {
-                    $0.origin.trimmingCharacters(in: .whitespaces).lowercased() == normalizedOrigin
-                }
-                completionHandler(filtered, nil)
-            } catch {
-                completionHandler(nil, error)
-            }
         }
     }
 }

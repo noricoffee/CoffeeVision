@@ -7,7 +7,6 @@ import com.noricoffee.dev.DummyCoffeeData
 import com.noricoffee.domain.model.CoffeeInsightProvider
 import com.noricoffee.domain.model.CoffeeRecordQuery
 import com.noricoffee.domain.model.CoffeeRecordQueryImpl
-import com.noricoffee.domain.usecase.BeanProfileMatchUseCase
 import com.noricoffee.domain.usecase.ExportCoffeeRecordsUseCase
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.BeanProfileRepository
@@ -134,9 +133,6 @@ class AppContainer(
         curatedCafeRepository = curatedCafeRepository,
         scope = MainScope(),
     )
-
-    /** [BeanProfileMatchUseCase] は純粋関数なのでインスタンスを内部で生成する。 */
-    val beanProfileMatchUseCase: BeanProfileMatchUseCase = BeanProfileMatchUseCase()
 
     private val db: AppDatabase = AppDatabase(sqlDriver)
 

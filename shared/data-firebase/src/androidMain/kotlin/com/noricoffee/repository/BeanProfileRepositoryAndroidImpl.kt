@@ -66,16 +66,4 @@ class BeanProfileRepositoryAndroidImpl(
             }
         }
     }
-
-    /**
-     * 指定産地の豆プロファイルを取得する（クライアントサイドフィルタ）。
-     *
-     * [getAll] の結果を `origin.trim().lowercase()` で等値フィルタして返す。
-     * Firestore クエリは使わない（件数が少ないためクライアントサイドで十分）。
-     */
-    @Throws(Exception::class)
-    override suspend fun getByOrigin(origin: String): List<BeanProfile> {
-        val normalizedInput = origin.trim().lowercase()
-        return getAll().filter { it.origin.trim().lowercase() == normalizedInput }
-    }
 }

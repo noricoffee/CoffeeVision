@@ -414,6 +414,15 @@
 | [x] | kmp-engineer: `CuratedCafe.kt` KDoc のピン記述を実装に合わせる（現 KDoc「amber + star、トグルなし常時表示」→ 実装は system orange + `cup.and.saucer.fill` + ズームゲート非表示あり） | 2026-07-25 完了。見た目の詳細（pt / SF Symbol）は KDoc に書き写さず §1.10 参照に留め、「トグル対象外だがズームゲートで非表示になりうる」という挙動要点だけ残した（domain モデルを iOS の見た目仕様に密結合させない = 再陳腐化の予防） |
 | [x] | kmp-engineer: `BeanProfile.kt` KDoc の例示を日本語表記に（現「"Ethiopia"」「"Geisha"」「"Chocolate"」→ 2026-07-08 確定の日本語統一規約と不一致） | 2026-07-25 完了。あわせてクラス KDoc のマッチ方式記述も是正（`origin`（trim/lowercase）→ `OriginNormalizer.normalize` = trim + lowercase + シノニム辞書）。`flavorNotes` の「統一語彙から選ぶ・自由記述禁止」制約も明記（語彙 42 語は複製せず §3.2 参照） |
 
+#### 産地サジェスト撤去の残骸削除（2026-07-31 起票 / 完了）
+
+> エディタの産地サジェスト（2026-07-22 に産地ドロップダウン化で撤去）の名残で、呼び出し元ゼロのまま残っていた 4 シンボルを削除。`BeanProfileMatchUseCase` クラス本体は `SuggestUnexploredBeansUseCase` が内部で合成して使用中のため存続。経緯は implementation_note 2026-07-31。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | kmp-engineer: `AppContainer.beanProfileMatchUseCase` / `AppContainer.fetchBeanSuggestions` / `BeanProfileRepository.getByOrigin` + Android 実装を削除 | 2026-07-31 完了。59 行削除。`ExportCoffeeRecordsUseCase` KDoc の宙に浮いた `beanProfileMatchUseCase` 参照も `DeleteAccountUseCase` へ差し替え。フラグ無しで `:shared:framework:compileKotlinIosSimulatorArm64` + domain / core / data-firebase のテスト BUILD SUCCESSFUL |
+| [x] | ios-engineer: `BeanProfileRepositoryIosImpl.__getByOrigin` とクラス doc の言及を削除 | 2026-07-31 完了。**親がフラグ無しで `xcodebuild ... -scheme iosApp` を `** BUILD SUCCEEDED **` 再検証**（`commonMain` の public API 削除のため = lessons 2026-07-25）。ios-engineer 側で `.swiftinterface` に `getByOrigin` が無いことも裏取り済み |
+
 #### docs / 設計判断バックログ（後回し可）
 
 > 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない。必要になったフェーズで着手する（経緯は [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリ）。

@@ -42,10 +42,33 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 |-----------|------|---------|
 | **Cloud Firestore** | **従量課金**（read / write / delete / ストレージ / 帯域） | 同期の本体。`users/{uid}`（analyticsConsent）+ `users/{uid}/coffees`（コーヒー記録）+ `users/{uid}` 配下の savedCafes 等のサブコレクション、`beanProfiles`（豆ナレッジベース、クライアント read-only・write は Admin SDK のみ）、`curatedCafes`（都道府県別おすすめカフェ、同型 read-only。フェーズ 19。マップ起動時に one-shot 全件 get = **最大 47 reads / 起動**、メモリキャッシュで再読なし。2026-07-28 時点の投入対象は 9 県 = 9 reads / 起動）。オフライン永続化に同期を委ねる設計で独自同期キューなし。SQLDelight ローカル DB が検索・参照を担うため読み取りは同期時中心 |
 | Firebase Auth | 実質無料（電話認証なし） | 匿名認証 + Sign in with Apple のリンク。SMS を使わないため課金なし |
-| Cloud Storage for Firebase | **現状課金なし** | **採用見送り済み**。SDK リンクと `storage.rules` は残っているが、写真は端末ローカル（Documents/photos/）保存のみで `Photo.remoteUrl` は常に null。将来復活用にフィールド・rules を残置（data-model.md §1.4） |
+| Cloud Storage for Firebase | **現状課金なし** | **採用見送り済み**。SDK リンクと `storage.rules` は残っているが、写真は端末ローカル（Documents/photos/）保存のみで `Photo.remoteUrl` は常に null。将来復活用にフィールド・rules を残置（data-model.md §1.4）。**復活時のコストは「写真 1 枚のサイズ × 枚数」でほぼ決まる**（保存料・転送料とも）ため、下の「写真 1 枚のサイズ」を参照。**復活着手時にコスト再見積もり** |
 | Crashlytics / Analytics / Performance | 無料 | クラッシュレポート・利用分析・パフォーマンス計測 |
 | Remote Config | 無料 | マップ POI 除外キーワードの配信（`map_poi_excluded_name_keywords`、`ApplePoiFilterConfig`）。起動時 fetch 1 回・最小フェッチ間隔は SDK 既定 12h（2026-07-13） |
 | Cloud Functions（**9-6 協調フィルタ / 設計確定・未実装**） | **従量課金**（呼び出し回数 / 実行時間 / アウトバウンド）— 未発生 | 味覚プロファイル横断の近傍計算 callable。Admin 特権で全 `sharedTasteProfiles` を read（**ユーザー数に線形**）→ 近傍 cosine → 推薦カフェを返す。マップの推薦要求時に呼ぶ（起動毎ではない）。将来は地理事前フィルタ / Firestore ネイティブ KNN で read を削減。**実装着手時にコスト再見積もり**（設計は requirements 9-6 / analysis-model §2） |
+
+### 写真 1 枚のサイズ（Storage 復活時のコスト変数）
+
+写真は現在ローカル完結で**課金は発生していない**が、1 枚のサイズは Storage を復活させた場合の保存料・転送料をそのまま決めるため、ここに記録する。
+
+**2026-08-01 に保存時リサイズを導入**（長辺 2048px 上限 / JPEG q0.8 / 1 記録あたり 10 枚上限。`ImageDownsampler`）。それ以前はリサイズが無く、PhotosPicker のフル解像度をそのまま JPEG 再エンコードしていた。
+
+以下は**実測値**（2026-08-01。iOS シミュレータランタイム同梱のサンプル写真に、旧挙動 = フル解像度 q0.85 と新挙動 = 長辺 2048px q0.8 の両方を適用して計測）。
+
+| 元画像 | 元ファイル | 旧挙動（フル解像度 q0.85） | 新挙動（2048px / q0.8） |
+|---|---|---|---|
+| 4032×3024 **HEIC** | 2.68MB | **4.39MB（×1.64 に膨張）** | 1.31MB |
+| 4288×2848 JPEG | 1.81MB | 2.05MB | 0.41MB |
+| 1668×2500 JPEG | 1.21MB | 1.15MB | 0.70MB |
+| 800×600 JPEG | 0.11MB | — | 0.10MB（**拡大せず原寸**） |
+
+**要点は HEIC の行**。HEIC は同画質で JPEG の約半分なので、フル解像度のまま JPEG へ再エンコードすると **元より大きくなる**（×1.64）。現行 iPhone の既定フォーマットは HEIC なので、これが実際に最も多いケースだった。JPEG 由来の写真は旧挙動でもほぼ等倍（×0.93〜1.13）で、膨張は HEIC 固有。
+
+削減率は元画像の解像度と被写体のディテール量に依存し、**約 1.6〜5 倍**（12MP HEIC の代表ケースで 4.39MB → 1.31MB ＝ 約 3.4 倍）。長辺が 2048px に近い元画像ほど削減は小さい。年間の目安は 1 日 1 杯・平均 1.5 枚で**約 1.6GB → 約 0.4GB**。
+
+上限を 2048px に置いた根拠は、写真を最大解像度で使うのが共有カードの 1080×1350px（requirements 2-12）だから。**この値を上げると Storage 復活時のコストが比例して増える。**
+
+課金以外に 2 つの含意がある。①写真のバックアップは iCloud Backup に委ねる方針（requirements 7-2）だが **iCloud 無料枠は 5GB** なので、リサイズ前のペースはバックアップ失敗を招き、ASO-6 ①「機種変更で写真が消える」の実発生確率を押し上げていた ②クラウド保持を選ぶ場合、**Firebase Storage の対抗案として CloudKit がある**（§3 参照）。
 
 ---
 
@@ -63,9 +86,11 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 - **Apple MapKit / Apple Maps POI**: ネイティブアプリでの MapKit 利用は無料。マップ表示・POI タップ自体には課金なし（POI 解決で Places `searchText` を叩いた時点で課金）
 - **Sign in with Apple**: Apple Developer Program 年会費以外の従量課金なし
 - **Foundation Models（分析タブ 階層 3）**: Apple のオンデバイス LLM。API 課金なし
+- **CloudKit（未採用 / 写真クラウド保持の対抗案）**: private database はデータが**ユーザー自身の iCloud 容量**を消費するため、**開発者側の従量課金はゼロ**。iOS 単独リリース（Android はリリース対象外）なので選択肢になる。identity が iCloud アカウントになる副次効果があり、Firebase 匿名アカウントのままでも機種変更で写真が引き継がれる（要件 7-3 の制約を部分的に回避）。ただし KMP 共通層からは使えず iosApp 側 Swift 完結になる。**写真をクラウドに置くかを判断する段階で Firebase Storage と比較すること**（どちらを選んでも上記のリサイズが前提）
 
 ---
 
 ## 更新ルール
 
 - Places のエンドポイント追加 / FieldMask 変更、Firestore の同期対象コレクション追加、Storage 復活などコスト構造が変わる変更では、同じ変更内でこのドキュメントを更新する（親の責務）
+- **「今は無料だから対象外」で判断しない**。このドキュメントの対象は冒頭のとおり「課金が発生する**または将来発生しうる**もの」で、`Cloud Storage` / `Cloud Functions` のように**未採用でも行がある**。将来の課金額を決める変数（写真の解像度・枚数上限など）を変えるときは、課金が現時点でゼロでも更新対象（2026-08-01 に写真リサイズで一度見落として指摘を受けた）

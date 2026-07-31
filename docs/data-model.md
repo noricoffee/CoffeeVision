@@ -170,7 +170,9 @@ data class Photo(
 )
 ```
 
-> 現状は `localPath` / `fileName` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。写真ファイルは Documents 配下のフラットな `photos/` ディレクトリに置く（recordId 別ディレクトリにしない）。Create モードでも recordId 確定前に写真を保存できる + CoffeeRecord 削除時は `CoffeeRecord.photos` の id を順に物理削除する設計。`localPath` と `fileName` は冗長に見えるが、`localPath` は端末側 DB の即時読み込み用、`fileName` は Firestore メタデータの最小単位として両方持つ。
+> 現状は `localPath` / `fileName` が常に非 null（端末ローカル保存）、`remoteUrl` は常に null（将来 Storage 復活用にフィールドだけ残置）。写真ファイルは Documents 配下のフラットな `photos/` ディレクトリに置く（recordId 別ディレクトリにしない）。
+>
+> **保存時にリサイズする**（2026-08-01）: 取り込み時に**長辺 2048px 上限 / JPEG q0.8** へ縮小してから書き出す（`ImageDownsampler`、iOS 側）。元画像が 2048px 以下なら拡大せず原寸のまま通す。したがって **`width` / `height` は縮小後の実ピクセル数**であり、元画像の寸法ではない。1 記録あたりの枚数上限は 10 枚。値の根拠は [`requirements.md`](./requirements.md) 未決事項の該当行、コスト面は [`paid-services.md`](./paid-services.md) §2「写真 1 枚のサイズ」。Create モードでも recordId 確定前に写真を保存できる + CoffeeRecord 削除時は `CoffeeRecord.photos` の id を順に物理削除する設計。`localPath` と `fileName` は冗長に見えるが、`localPath` は端末側 DB の即時読み込み用、`fileName` は Firestore メタデータの最小単位として両方持つ。
 
 ## 1.5 VisitedCafe（集計モデル）
 

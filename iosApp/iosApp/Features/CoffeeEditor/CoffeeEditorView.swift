@@ -12,6 +12,11 @@ import CoreLocation
 /// - cafe は任意（セルフ抽出も可）。カフェ未選択の場合は「セルフ抽出」として保存
 struct CoffeeEditorView: View {
 
+    // MARK: - 定数
+
+    /// 1 記録あたりの写真枚数の合計上限（新規追加分 + 既存写真の合計）。
+    static let maxPhotoCount = 10
+
     // MARK: - Properties
 
     let mode: any CoffeeEditorViewModelMode

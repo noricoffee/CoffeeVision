@@ -281,9 +281,9 @@ List { ... }
 
 | | 記録写真（ユーザーが撮った写真） | Places 写真（カフェの写真） |
 |---|---|---|
-| 取得元 | 端末ローカル（`<Documents>/photos/`、`PhotoFileStore`） | Places Photo Media API の時限署名 URL を都度取得（`PlacePhotoLoader` → `PlacePhotoThumbnail` の `AsyncImage`） |
+| 取得元 | 端末ローカル（`<Documents>/photos/`、`PhotoFileStore`）。**保存時に長辺を縮小してから書き出す**（`ImageDownsampler`。解像度・品質の値は [`requirements.md`](./requirements.md) が正） | Places Photo Media API の時限署名 URL を都度取得（`PlacePhotoLoader` → `PlacePhotoThumbnail` の `AsyncImage`） |
 | キャッシュ | 端末に永続保存（クラウド同期対象外。[`requirements.md`](./requirements.md) §7-2） | **独自の永続キャッシュは Places 規約で禁止**。`URLSession` / `AsyncImage` の標準 HTTP キャッシュのみ許容 |
-| 表示枚数 | 制限なし（全件） | **View 側で絞る**。画面再表示のたびに再リクエスト＝課金されるため（枚数と上限は [`paid-services.md`](./paid-services.md) が正） |
+| 表示枚数 | **添付されている全件を表示する**（View 側で絞らない）。ただし添付そのものに 1 記録あたりの上限があり、エディタのピッカー側で制限する（枚数は [`requirements.md`](./requirements.md) が正） | **View 側で絞る**。画面再表示のたびに再リクエスト＝課金されるため（枚数と上限は [`paid-services.md`](./paid-services.md) が正） |
 | 失敗時 | `photo.badge.exclamationmark`（ファイル欠損を示す） | `photo`（ロード中は `ProgressView`） |
 | アクセシビリティ | 記録の一部なのでラベルを付ける | 装飾扱いで `.accessibilityHidden(true)`（`PlacePhotoThumbnail` 側で付与済み） |
 

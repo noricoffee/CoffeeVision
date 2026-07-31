@@ -55,6 +55,7 @@ xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -sdk iphonesimulator 
 - **「重い」報告**: 最初に (a) Release/Profile で再現するか (b) デバッガをデタッチして再現するか を切り分ける。debug 限定なら実在しない問題（K/N 非最適化 + os_log 転送のアーティファクト）なので追わない
 - **外部 API が「0 件」を返す**: 「本当に空 200 か / 握り潰した非 2xx か」を疑う。Ktor `expectSuccess` と DTO のデフォルト値がエラーを正常デコードに化けさせる経路（2026-06-23）。curl で実送信ボディを突き合わせる
 - **Kotlin scope のリーク検証**: Instruments で Swift Bridge を見ても検出できない。collector に `.onCompletion { println }` を一時的に仕込み、push→pop で完了ログが出るか（コルーチンの寿命）で見る（2026-06-24）
+- **シミュレータの GUI を操作する検証は、サブエージェントには頼めない**: `osascript` / System Events は権限待ちでタイムアウトし、`simctl` にタップ / スワイプの送出コマンドが無い。よって「ピッカーで選ぶ」「ボタンを押す」を含む経路の実測は**サブエージェントに依頼しても取れない**。代わりに **UI を通らない同等物**を測らせる（例: 画像処理なら、実装と同一の API・同一オプションを使う検証スクリプトを書かせ、シミュレータランタイム同梱の実データ `.../<runtime>.simruntime/Contents/Resources/SampleContent/Media/DCIM/100APPLE/` に適用する）。これでアルゴリズムの正しさまでは裏取りできるので、**残る「UI 経由で実際にそう保存されるか」だけをユーザーの目視項目に落とす**（2026-08-01 写真リサイズ）
 
 ## 完了条件チェックリスト
 

@@ -460,14 +460,22 @@ extension CoffeeEditorView {
                 .frame(height: 116)
             }
 
+            let remainingCount = CoffeeEditorView.maxPhotoCount - photos.count
+            let addLabel = remainingCount > 0
+                ? String(localized: "写真を追加")
+                : String(localized: "写真は最大\(CoffeeEditorView.maxPhotoCount)枚までです")
+
+            // maxSelectionCount に 0 を渡すと「無制限」の意味になるため、上限到達時も 1 以上を渡し、
+            // `.disabled` でピッカー自体を開けなくして枚数を確定させる。
             PhotosPicker(
                 selection: $selectedPickerItems,
-                maxSelectionCount: 10,
+                maxSelectionCount: max(remainingCount, 1),
                 matching: .images
             ) {
-                Label(String(localized: "写真を追加"), systemImage: "plus")
+                Label(addLabel, systemImage: "plus")
             }
-            .accessibilityLabel(String(localized: "写真を追加"))
+            .disabled(remainingCount <= 0)
+            .accessibilityLabel(addLabel)
         }
     }
 

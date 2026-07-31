@@ -26,6 +26,19 @@
 
 ### 未完・バックログ
 
+#### 写真の保存時リサイズ + 枚数上限（2026-08-01 起票）
+
+> ASO-6 ①「写真が機種変更で消える」の対策コスト試算の過程で、**写真が一切リサイズされずに保存されていた**ことが判明（`CoffeeEditorView+Photos.swift` が `jpegData(compressionQuality: 0.85)` のみ）。用途の最大は共有カード 1080×1350px なのに、フル解像度をそのまま保存していた。**実測: 12MP HEIC が 4.39MB → 1.31MB**（HEIC はフル解像度 JPEG 再エンコードで ×1.64 に膨張していた）、年間 約 1.6GB → 約 0.4GB。**確定値: 長辺 2048px / JPEG q0.8 / 1 記録 10 枚**（2026-08-01 ユーザー決定）。requirements 未決事項「写真の最大枚数 / サイズ上限」を両半分とも消し込む。iosApp 完結・KMP 変更なし。プランは `.claude/plans/streamed-humming-lighthouse.md`、経緯は implementation_note 2026-08-01。
+>
+> 課金以外の含意 2 つ: ①requirements 7-2 が写真のバックアップを iCloud Backup に委ねているが **iCloud 無料枠は 5GB** で、旧ペースはバックアップ失敗を招き ASO-6 ①の実発生確率を自ら押し上げていた ②将来 Storage を復活させる場合のコストが約 1/3.4 になる（paid-services §2 に実測表）。**写真をクラウドに置くか自体は今回の判断対象外** — Firebase Storage と CloudKit（private database はユーザーの iCloud 容量を消費するので開発者課金ゼロ）の比較は、置くと決めた段階で行う。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 親: docs 確定（requirements 未決事項 + §2 写真行 / data-model §1.4 / paid-services §2 + §3 / implementation_note / ui-ux-guidelines 写真対比表） | 2026-08-01 完了。**`paid-services` は当初「更新不要」と誤判断しユーザー指摘で是正** → CLAUDE.md へ不作為分を昇格 + lessons 2026-08-01。その sweep で `ui-ux-guidelines.md:286`「表示枚数 = 制限なし（全件）」の誤読リスクも検出・是正 |
+| [x] | ios-engineer: `ImageDownsampler.swift` 新設（ImageIO `CGImageSourceCreateThumbnailAtIndex`）+ `handlePickerSelection` 差し替え + `photosSection` の枚数ガード | 2026-08-01 完了。上限は `CoffeeEditorView.maxPhotoCount`（両 extension から参照）。`maxSelectionCount` は `max(remaining, 1)` + `.disabled` で **0 = 無制限**の罠を回避。ImageIO 採用理由は `UIImage(data:)` の 48MP≒190MB メモリピーク回避 |
+| [x] | 親: フラグ無しビルド再検証 + 実測値の確認 | 2026-08-01 完了。親がフラグ無しで `** BUILD SUCCEEDED **` を独立再確認（`OVERRIDE_KOTLIN_*` が環境に 0 件であることも確認）。**プランの推定「約 1/7」は楽観的で、実測は約 1.6〜5 倍の削減**だったため docs の数値を実測へ差し替え（implementation_note 参照）。膨張側の見立て（HEIC ×1.64）は方向・桁とも一致 |
+| [ ] | **ユーザー: シミュレータ / 実機で目視**（verification-checklist「コーヒー記録」へ移送済み） | サンドボックスから PhotosPicker をタップ操作できず、UI 経由の `<Documents>/photos/*.jpg` 実測は未取得。**筆頭は縦向き写真が横倒しにならないこと**（EXIF transform） |
+
 #### 過去に使ったタグのサジェスト（要件 2-13 / 2026-07-26 起票）
 
 > ユーザー要望: タグが自由入力のみで毎回打ち直しになる。エディタのタグ入力欄の**下**に、過去の全記録から集めたタグを横スクロールのチップで出す（要件 2-8 のカフェサジェストと同じ操作感）。**仕様の正は requirements.md 2-13**（使用回数降順・同数昇順 / 最大 10 件 / 入力中は部分一致で**絞り込んでから**上限適用 / 付与済み除外 / 0 件時は行ごと非表示）。ロジックは `commonMain`（Android 実装時の二重化回避）。データモデルは不変。設計判断は implementation_note 2026-07-26、プランは `.claude/plans/soft-fluttering-thompson.md`。

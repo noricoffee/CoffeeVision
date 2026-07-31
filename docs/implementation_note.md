@@ -998,3 +998,29 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **残したもの**: `BeanProfileMatchUseCase` クラス本体とそのテスト。`SuggestUnexploredBeansUseCase` がコンストラクタのデフォルト引数で自前に合成しており（`AppContainer` のインスタンスは経由していない）、探索提案の origin ファジーマッチはこのクラスが現役で担っている。「`AppContainer` のプロパティが死んでいる = クラスも死んでいる」ではない点に注意。
 
 **検証**: `commonMain` の public API 削除なので lessons 2026-07-25 に従い**親がフラグ無しで実 Swift ビルドまで確認**した（`xcodebuild -scheme iosApp -configuration Debug` → `** BUILD SUCCEEDED **`）。ios-engineer 側は生成済み `.swiftinterface` に `getByOrigin` が無いことも裏取りしている。なお削除後に SourceKit が `No such module 'FirebaseFirestore'` を出したが、これは IDE のインデックス由来で実ビルドには影響しない。
+
+### 2026-08-01: 写真の保存時リサイズ — リサイズが「無かった」ことの発見と、副作用の広さ
+
+- 関連: `iosApp/iosApp/Utilities/ImageDownsampler.swift` / `iosApp/iosApp/Features/CoffeeEditor/CoffeeEditorView+Photos.swift` / requirements 未決事項「写真の最大枚数 / サイズ上限」/ paid-services §2「写真 1 枚のサイズ」
+
+ASO-6 ①「写真が機種変更で消える」の**対策コストを試算する過程で**、写真が一切リサイズされずに保存されていたことが判明した。`handlePickerSelection` は `UIImage(data:)` → `jpegData(compressionQuality: 0.85)` だけで、PhotosPicker のフル解像度をそのまま再エンコードしていた。**HEIC は同画質で JPEG の約半分なので、取り込むと元より大きくなる**。実測（下記）で 12MP HEIC が 2.68MB → **4.39MB（×1.64）** と確認できた。一方このアプリが写真を最大解像度で使うのは共有カードの 1080×1350px だけで、用途を大きく超えた解像度を保存していたことになる。
+
+**確定値は長辺 2048px / JPEG q0.8 / 1 記録 10 枚**（ユーザー決定）。2048 は共有カード 1080×1350px と全画面表示（6.7 インチ @3x = 1290px）の両方に余裕を持たせた値。1600px 案もあったが、将来カードを高解像度化したときに再び足りなくなるため 2048 を採った。
+
+**`UIImage(data:)` ではなく ImageIO の `CGImageSourceCreateThumbnailAtIndex` を使う**。前者は 48MP 機で約 190MB のビットマップを展開してしまい、10 枚連続取り込みでメモリピークが問題になる。サムネイル API はデコード時点で縮小するのでこれを回避できる。オプション 3 点（`CreateThumbnailFromImageAlways` = 埋め込みサムネイルを掴まない / `ThumbnailMaxPixelSize` = 長辺上限・元が小さければ拡大しない / `CreateThumbnailWithTransform` = EXIF の向きをピクセルに焼き込む）はいずれも外すと不具合になる。特に最後の 1 つを落とすと**縦向き写真が横倒しで保存される**ため、目視確認の筆頭項目にした。
+
+**影響が課金以外に 2 方向へ伸びていた**:
+- **iCloud Backup**: requirements 7-2 は写真のバックアップを iCloud Backup に委ねているが、**iCloud 無料枠は 5GB**。旧ペース（1 日 1 杯・平均 1.5 枚で年 約 1.6GB）はバックアップ失敗を招く水準で、**ASO-6 ①の実発生確率を自分で押し上げていた**。リサイズ後は年 約 0.4GB
+- **将来の Storage 復活コスト**: 写真 1 枚のサイズは保存料・転送料をそのまま決める変数（paid-services §2 に実測表）
+
+**枚数ガードは iOS 側に置いた**。`onPhotoUpserted` は `commonMain` だが、これはピッカーの選択制限という UI 入力側の制約で、Android はリリース対象外かつエディタ画面自体が未実装なので二重化のリスクが現時点で無い。KMP の公開 API を変えずに済み 1 dispatch で閉じた。なお `PhotosPicker` の `maxSelectionCount` に **0 を渡すと「無制限」の意味になる**ため、上限到達時は残り枚数 0 を渡さず `.disabled` で塞いでいる。
+
+**既存写真の一括再圧縮はしない**（未リリースでテスト端末は再インストールが既定運用。data-model.md のクリーンブレイク方針と同じ）。
+
+**クラウド保持そのものは今回の判断対象外**。Firebase Storage と CloudKit（private database はユーザーの iCloud 容量を消費するので開発者課金ゼロ。iOS 単独リリースなので選択肢になる）の比較は、写真をクラウドに置くと決めた段階で行う。どちらを選んでもリサイズが前提になるため、順序としてリサイズを先に単独で入れた。
+
+**検証で分かった、当初見積もりの外れ方**: プラン段階では「1 枚 約 3.5MB → 約 0.5MB ＝ 約 1/7」と**推定**していたが、実測は **約 1.6〜5 倍の削減**（12MP HEIC の代表ケースで 4.39MB → 1.31MB ＝ 約 3.4 倍）で、削減率を楽観的に見積もっていた。原因は縮小後サイズを解像度比だけで外挿したこと（ピクセル数は 1/4 以下になるが、JPEG のバイト数はディテール量に効くので比例して落ちない）。**膨張側の見立て（HEIC が JPEG 再エンコードで大きくなる）は方向・桁とも合っていた**（×1.64）。docs の数値は推定を消して実測に差し替えた。なお削減率は元画像の解像度に依存し、長辺が 2048px に近い写真ほど小さい（実測に 1668×2500 → ×0.61 のケースあり）。
+
+**エンドツーエンドは未確認**: サンドボックスから PhotosPicker をタップ操作できないため（`osascript` / System Events が権限待ちでタイムアウト、`simctl` にタップ送出コマンドが無い）、実アプリの `handlePickerSelection` → `PhotoFileStore.save` を通した `<Documents>/photos/*.jpg` の実測は取れていない。上記は `ImageDownsampler` と同一の ImageIO オプションを実写真に適用した検証で、アルゴリズムの正しさ（2048px キャップ / 拡大しない / EXIF orientation=6 が幅高さの入れ替わった portrait ピクセルとして出力される）までを裏取りしたもの。UI 経由の確認は verification-checklist へ。
+
+- 経緯: 当初 `paid-services.md` は「写真はローカル完結で課金対象サービスを使っていないから更新不要」と判断したが、**ユーザー指摘で誤りと判明**。同 doc の対象は冒頭で「課金が発生する**または将来発生しうる**もの」と定義されており、`Cloud Storage` は未採用のまま行が存在していた。判断の前に doc を開いていなかった（lessons 2026-08-01）

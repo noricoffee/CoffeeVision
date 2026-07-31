@@ -6,21 +6,27 @@ import PhotosUI
 
 extension CoffeeEditorView {
 
-    /// PhotosPicker 選択後の処理。Data 取得 → JPEG 変換 → Photo_ 生成 → VM に通知。
+    /// PhotosPicker 選択後の処理。Data 取得 → ダウンサンプリング + JPEG 変換 → Photo_ 生成 → VM に通知。
+    ///
+    /// 合計枚数が `CoffeeEditorView.maxPhotoCount` に達したら以降の選択分は取り込まずに打ち切る
+    /// （UI 側の `PhotosPicker.maxSelectionCount` とは別に、実際の変更点である `onPhotoUpserted` の
+    /// 手前で不変条件を守る）。
     func handlePickerSelection(_ items: [PhotosPickerItem]) async {
         for item in items {
+            guard viewModel.draft.photos.count < CoffeeEditorView.maxPhotoCount else { break }
+
             guard let data = try? await item.loadTransferable(type: Data.self),
-                  let uiImage = UIImage(data: data),
-                  let jpegData = uiImage.jpegData(compressionQuality: 0.85) else {
+                  let downsampled = ImageDownsampler.downsampledJPEG(
+                      from: data,
+                      maxPixelSize: ImageDownsampler.maxPixelSize,
+                      quality: ImageDownsampler.jpegQuality
+                  ) else {
                 continue
             }
 
             let photoId = UUID().uuidString.lowercased()
             let fileName = "\(photoId).jpg"
             let localPath = "photos/\(fileName)"
-
-            let widthPx = Int32(uiImage.size.width * uiImage.scale)
-            let heightPx = Int32(uiImage.size.height * uiImage.scale)
 
             let epochMillis = Int64(Date().timeIntervalSince1970 * 1000)
             let createdAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
@@ -32,12 +38,12 @@ extension CoffeeEditorView {
                 fileName: fileName,
                 localPath: localPath,
                 remoteUrl: nil,
-                width: KotlinInt(value: widthPx),
-                height: KotlinInt(value: heightPx),
+                width: KotlinInt(value: downsampled.widthPx),
+                height: KotlinInt(value: downsampled.heightPx),
                 createdAt: createdAt
             )
 
-            pendingImageData[photoId] = jpegData
+            pendingImageData[photoId] = downsampled.jpegData
             viewModel.onPhotoUpserted(item: photo)
         }
         selectedPickerItems = []

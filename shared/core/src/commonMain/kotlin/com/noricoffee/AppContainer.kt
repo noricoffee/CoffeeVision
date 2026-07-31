@@ -40,10 +40,8 @@ import kotlinx.coroutines.MainScope
  *
  * 通常用途（iOS / Android のアプリ起動時）では **scope 引数なし** のセカンダリコンストラクタを
  * 使い、内部で [MainScope]（`SupervisorJob() + Dispatchers.Main`）を生成させること。
- * Android の Swift 側から見える初期化シグネチャは
- * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:)` になる。
- * iOS で Foundation Models を注入する場合は
- * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:coffeeInsightProvider:)` を使う。
+ * iOS は [CoffeeInsightProvider] を注入する版、Android は省略する版を使う（使い分けと
+ * 具体的な呼び出しシグネチャは各セカンダリコンストラクタの KDoc を参照）。
  *
  * scope を引数で受け取るプライマリコンストラクタは **テスト用途専用**（TestDispatcher の差し替え等）。
  */
@@ -112,7 +110,7 @@ class AppContainer(
      * `init(sqlDriver:remoteCoffeeDataSource:remoteSavedCafeDataSource:authRepository:placesApiKey:beanProfileRepository:curatedCafeRepository:)`
      *
      * iOS では Phase A-4 以降に `CoffeeInsightProvider` 実装を注入するため、
-     * iOS の `AppState.swift` では上の 8 引数セカンダリコンストラクタを使うこと。
+     * iOS の `AppState.swift` では上の `coffeeInsightProvider` を受け取るセカンダリコンストラクタを使うこと。
      */
     constructor(
         sqlDriver: SqlDriver,

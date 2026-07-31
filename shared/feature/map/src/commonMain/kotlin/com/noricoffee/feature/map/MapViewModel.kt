@@ -76,7 +76,7 @@ class MapViewModel(
      * @property recommendedPlaceIds [recommendedCafes] から導出した placeId の集合。
      *   iOS 側のマップピン強調（区別ピン判定）に使う
      * @property showVisited 訪問済みカフェのピンを表示するか
-     * @property searchResultPlaces 検索タブの検索結果カフェ一覧（マップ上の第 4 種ピン）。
+     * @property searchResultPlaces マップ内埋め込み検索バーの検索結果カフェ一覧（検索結果ピン用）。
      *   空リストのとき非表示。[onSearchResultsUpdated] で更新し [onSearchResultsCleared] でクリアする。
      *   永続化しない一時データ（タブ切り替えや別カフェ選択まで保持する）
      * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
@@ -103,7 +103,7 @@ class MapViewModel(
         val selectedTags: Set<String> = emptySet(),
         val availableTags: List<String> = emptyList(),
         /**
-         * 「行きたい店」一覧（savedAt 降順、フェーズ 15-A）。マップの 4 種目ピン / 一覧シート用。
+         * 「行きたい店」一覧（savedAt 降順、フェーズ 15-A）。マップの行きたい店ピン / 一覧シート用。
          * [com.noricoffee.repository.SavedCafeRepository.observeAll] を購読して常時最新化する。
          */
         val savedCafes: List<SavedCafe> = emptyList(),

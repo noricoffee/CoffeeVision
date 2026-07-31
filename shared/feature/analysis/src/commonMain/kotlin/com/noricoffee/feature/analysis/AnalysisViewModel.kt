@@ -101,7 +101,7 @@ class AnalysisViewModel(
      *   [FavoriteSignals.minSampleSize]（既定 3）を参照する
      * @property correlationThreshold テイスティング相関信号（[FavoriteSignals.dominantTastingAxis]）に必要な最小件数。
      *   [BuildCoffeeStatsUseCase.CORRELATION_MIN_SAMPLE]（既定 5）を参照する
-     * @property hasAnySignal [FavoriteSignals] のいずれかの信号（カテゴリ 3 種 + 相関軸）が既に出ているか
+     * @property hasAnySignal [FavoriteSignals] のカテゴリ軸のいずれか、または相関軸の信号が既に出ているか
      */
     data class AnalysisReadiness(
         val ratedCount: Int,
@@ -416,7 +416,7 @@ class AnalysisViewModel(
 }
 
 /**
- * [FavoriteSignals] のいずれかの信号（カテゴリ 4 種 + 相関軸）が既に出ているかを判定する（内部ヘルパ）。
+ * [FavoriteSignals] のカテゴリ軸のいずれか、または相関軸の信号が既に出ているかを判定する（内部ヘルパ）。
  */
 private fun FavoriteSignals.hasAnySignal(): Boolean =
     bestBrewMethod != null ||

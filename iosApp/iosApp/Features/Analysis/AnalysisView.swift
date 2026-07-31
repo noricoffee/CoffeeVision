@@ -52,20 +52,16 @@ struct AnalysisView: View {
             viewModel.onDisappear()
         }
         // レビュー依頼（要件 9-8 / ASO-1）: 分析タブで傾向信号が初めて出た瞬間に 1 回だけ提示する。
-        // `.task` は表示時点で既に readiness.hasAnySignal == true のケース（2 回目以降のタブ訪問。
-        // ブリッジは TabBar 常時生存でキャッシュ済みの readiness を即座に読める）をカバーし、
-        // `.onChange` は nil/false → true の遷移（初めて信号が出た瞬間）をカバーする。
-        // ReviewPrompt 側にマイルストーンフラグがあるため二重呼び出しは無害。
-        .task {
-            if viewModel.readiness?.hasAnySignal == true {
-                await ReviewPrompt.requestIfFirstSignalReached()
-            }
-        }
-        .onChange(of: viewModel.readiness?.hasAnySignal) { _, hasAnySignal in
-            guard hasAnySignal == true else { return }
-            Task {
-                await ReviewPrompt.requestIfFirstSignalReached()
-            }
+        // `.task(id:)` は id（readiness.hasAnySignal）が変化するたびに前のタスクをキャンセルして
+        // 再起動するため、以下の両方を単一の構造化タスクでカバーする:
+        // - 表示時点で既に true のケース（2 回目以降のタブ訪問。ブリッジは TabBar 常時生存で
+        //   キャッシュ済みの readiness を即座に読める）
+        // - nil/false → true の遷移（初めて信号が出た瞬間）
+        // ReviewPrompt 内の 1.5 秒遅延中にビューが消えても（id 変化・タブ離脱とも）構造化タスクとして
+        // キャンセルされる。ReviewPrompt 側にマイルストーンフラグがあるため複数回の起動は無害。
+        .task(id: viewModel.readiness?.hasAnySignal) {
+            guard viewModel.readiness?.hasAnySignal == true else { return }
+            await ReviewPrompt.requestIfFirstSignalReached()
         }
     }
 

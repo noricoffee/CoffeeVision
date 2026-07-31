@@ -126,11 +126,9 @@ struct CoffeeEditorView: View {
                     dismiss()
                 }
             }
-            .onChange(of: selectedPickerItems) { _, newItems in
-                guard !newItems.isEmpty else { return }
-                Task {
-                    await handlePickerSelection(newItems)
-                }
+            .task(id: selectedPickerItems) {
+                guard !selectedPickerItems.isEmpty else { return }
+                await handlePickerSelection(selectedPickerItems)
             }
             .alert(
                 String(localized: "写真の保存に失敗しました"),

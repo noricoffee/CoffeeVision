@@ -12,6 +12,7 @@ paths:
 - **1 ファイル / 1 型が肥大化したら責務分割**（目安: **800 行超**で分割検討。PostToolUse フック `check-file-size.sh` が警告）。SwiftUI View はサブ View の独立構造体化・状態/サービスの `@Observable` 隔離・`extension` 分離で切り出す（`MapTabView` 分割が実例。lessons / implementation_note 2026-07-24）
 - `switch` は全ケースを網羅する（`default` は極力使わない）
 - 観測タスクの破棄はブリッジの `deinit` 起点（`kotlin.clear()`）。タブ常駐 View では `.onDisappear` で observation を cancel しない
+- **`.onChange(of:) { Task { ... } }` を書かない。`.task(id:)` を使う**。`.onChange` から起こす `Task { }` は**非構造化タスク**でビューのライフサイクルに紐づかないため、ビュー消滅後もキャンセルされずに走り続ける（遅延や重い処理を含むと、閉じた画面のための処理・別画面上へのダイアログ提示になる）。`.task(id:)` は **①表示時に 1 回 ②`id` 変化のたびに前タスクをキャンセルして再起動 ③ビュー消滅時にキャンセル** をまとめて満たすので、「初期状態 + 遷移」の両方を 1 本でカバーできる。`await Task.sleep` 等を挟む場合は `try?` がキャンセルを飲み込むので `guard !Task.isCancelled` を明示的に置く（lessons 2026-08-01）
 
 ## UI/UX（iOS）
 

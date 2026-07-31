@@ -64,20 +64,22 @@
 
 ## 現在生きてる方針サマリ（手動メンテ）
 
-ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。（最終棚卸し: 2026-07-25）
+ノート本文がスクロールしないと読めない長さになる前に、ここに **今生きてる方針だけ** を一行サマリで列挙する。陳腐化したら削除、昇格したら削除（昇格先 doc を見ればわかるため）。（最終棚卸し: 2026-08-01）
+
+> **このサマリに「数え上げ」と「構成要素の列挙」を書かない**（2026-08-01 の棚卸しで制定）。引数の個数・公開プロパティ一覧・コレクション一覧は、依存が 1 つ増えるたびに**全項目がまとめて嘘になる**うえ、増やした本人はソースしか見ないので気づけない。実際この棚卸しでは「プライマリ 7 / iOS 6 / Android 5 引数」（実際は 9 / 8 / 7）と削除済みの `beanProfileMatchUseCase` が残っていた。**書くのは「どこを真とするか」と、数えなくても変わらない構造・不変条件だけ**（`CuratedCafe.kt` KDoc で 2026-07-25 に同じ判断をしている）。
 
 - ドメインは **CoffeeRecord 主体**（2026-06-19 クリーンブレイク）: 1 杯 = 1 記録、`cafe: Cafe?`（null = セルフ抽出）、`rating` は 0.5 刻み `Double?`（null = 未評価、2026-07-12 B-4 で sentinel 廃止）、`tasting` は all-or-nothing（`TastingScores?`）、`tags: List<String>`。**産地は `origin: String?`（国名。`CoffeeOriginCatalog` から選択、2026-07-22 に自由入力→国ドロップダウン化）+ `region: String?`（エリア / 農園、任意自由入力・表示専用で分析非対象、migration 6 で追加）**。モデル・DB・Firestore 表現は `data-model.md` を真とする
 - CI（GitHub Actions）は `testAndroidHostTest`（**全モジュール一括 = 360 件**。モジュール個別列挙は漏れるため禁止。2026-07-25 是正）+ `:androidApp:assembleDebug`（Android ジョブ。ダミー `google-services.json` を CI 内で生成）と `:shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）で構成。`xcodebuild` / `iosSimulatorArm64Test` は CI 非対象で親のローカル検証が担保
 - `CoffeeRepository` は `commonMain` で 2 段構成（`RemoteCoffeeDataSource` interface + `CoffeeRepositoryImpl` 合成クラス）。プラットフォーム別実装は `RemoteCoffeeDataSource` だけを書く。書き込みはローカル → リモート順、リモート失敗の扱いは `WritePolicy`（既定 `PropagateRemoteFailure`）
-- Firestore は `users/{uid}/coffees/{id}` の単一ドキュメント（`cafe` 任意埋め込み + `photos` 埋め込み配列 + `tasting` マップ + `tags` 配列。子サブコレクションなし）+ `users/{uid}` ルート（`analyticsConsent`）+ `beanProfiles`（サービス管理・read-only）。nullable はキー省略。`Photo.localPath` は書かず `fileName`（`Documents/photos/` フラット配置）で復元、`remoteUrl` は常に null（Storage 不採用・写真は端末ローカルのみ）
+- Firestore は `users/{uid}/coffees/{id}` の単一ドキュメント（`cafe` 任意埋め込み + `photos` 埋め込み配列 + `tasting` マップ + `tags` 配列。子サブコレクションなし）+ `users/{uid}` ルート（`analyticsConsent`）+ サービス管理・read-only の `beanProfiles` / `curatedCafes`。**コレクションの正確な一覧は `firestore.rules` を真とする**。nullable はキー省略。`Photo.localPath` は書かず `fileName`（`Documents/photos/` フラット配置）で復元、`remoteUrl` は常に null（Storage 不採用・写真は端末ローカルのみ）
 - `AppContainer.startInitialSync()` は匿名サインイン → uid 確定 → リモート → ローカル同期購読 を起動コードから 1 行で呼べる
-- `AppContainer` は scope 引数ありのプライマリ（7 引数）が**テスト専用**。通常は scope なしセカンダリ 2 系統 — iOS = 6 引数（`coffeeInsightProvider` 注入）/ Android = 5 引数（provider 省略 = null）。公開プロパティは `coffeeRepository` / `cafeRepository` / `authRepository` / `coffeeInsightProvider` / `beanProfileRepository` / `beanProfileMatchUseCase` / `coffeeRecordQuery`、開発用に `seedDummyData` / `clearDummyData`（DEBUG + ダミーデータ Scheme 限定）
+- `AppContainer` は scope 引数ありのプライマリが**テスト専用**。通常は scope なしのセカンダリ 2 系統 — iOS = `coffeeInsightProvider` 注入あり / Android = 省略（null）。開発用に `seedDummyData` / `clearDummyData`（DEBUG + ダミーデータ Scheme 限定）。**引数の個数と公開プロパティの一覧はここに書かない**（依存が増えるたびに全滅する）— `AppContainer.kt` を真とする
 - `applicationId` / iOS バンドル ID は `com.noricoffee.coffeevision` で統一。共通ライブラリの Android namespace は各モジュール個別（`com.noricoffee.<module>` 系）で applicationId と分離
 - SKIE 0.10.12 を `shared/framework` umbrella に適用。**SKIE は呼び出し方向限定**で、Swift で Kotlin interface を実装する側は Obj-C 互換シグネチャ（completion handler / Kotlin Flow 戻り値）を実装する（`__answer(...)` 等の protocol witness）。Swift で Kotlin `Flow` を返す実装は `FlowBridge.swift` の `CallbackFlow` / `CallbackFlowOptional`（`Kotlinx_coroutines_coreFlow` 準拠クラス）が正規パターン（2026-07-10 実態訂正: 旧記述「MutableStateFlow 直接構築が第一候補」は結局未使用）。SQLDelight 生成行型と同名のドメインモデルは Swift 側で末尾アンダースコア付きになる（現状 `Photo` → `Photo_`。`coffee_record` からは `Coffee_record` が生成されるため `CoffeeRecord` は衝突しない）
 - Firebase Security Rules はリポジトリ管理（`firestore.rules` / `firebase.json` / `.firebaserc`）+ `firebase deploy` 運用。path uid 検証 + `users/{uid}` ルート明示 + `beanProfiles` read-only（2026-07-01 デプロイ済）。`storage.rules` は残置のみ未デプロイ
 - `build-logic/convention/` の Convention Plugin（`kmp.library` / `kmp.feature` / `android.library`）は precompiled script plugin 方式（`gradlePlugin { register }` 不使用）。`build-logic/settings.gradle.kts` で version catalog を明示共有。`kmp.library` は `jvmToolchain(N)` を付けず `compilerOptions.jvmTarget` のみ指定
 - `shared/core` には `AppContainer` / `CoffeeRepositoryImpl` / `DummyCoffeeData`（dev 用）。`shared/data-local` が SQLDelight の単独管理者（`LocalCoffeeRepository` / Mapper / DriverFactory expect/actual。合成リポジトリのテストは expect/actual ドライバの制約で data-local の commonTest に妥協配置）。`shared/data-firebase/androidMain` に Android Firebase 実装（`AuthRepositoryAndroidImpl` / `RemoteCoffeeDataSourceAndroidImpl` / `CoffeeFirestoreMapper` / `BeanProfileRepositoryAndroidImpl`）、iOS 実装は `iosApp` Swift
-- iOS 向け umbrella は `shared/framework`（baseName / XCFramework 名とも `SharedLogic`、Swift は `import SharedLogic`）。全 shared モジュールを `api` + `export` で再公開 + `linkerOpts("-lsqlite3")`。**feature を追加したら api / export に 1 行ずつ追記**。モジュールの正確な一覧は `settings.gradle.kts` を真とする（現状 feature は coffee-list / coffee-detail / coffee-editor / cafe-search / map / cafe-detail / account / analysis の 8 個）
+- iOS 向け umbrella は `shared/framework`（baseName / XCFramework 名とも `SharedLogic`、Swift は `import SharedLogic`）。全 shared モジュールを `api` + `export` で再公開 + `linkerOpts("-lsqlite3")`。**feature を追加したら api / export に 1 行ずつ追記**。モジュールの正確な一覧は `settings.gradle.kts` を真とする（同じ行で「真とする」と言いながら列挙も併記していたため、2026-08-01 の棚卸しで列挙を削除）
 - `AppContainer` の ViewModel ファクトリ（`makeCoffeeListViewModel()` 等）は **`shared/framework` の拡張関数**（`AppContainerViewModelFactory.kt`）として配置（`core → feature` の循環依存回避）。feature 追加ごとに追記する
 - ViewModel は注入 scope の Job を親にした**所有 `viewModelScope`（SupervisorJob 子スコープ）+ `clear()`** を持つ（2026-06-24。push/pop 画面の collector 増殖リーク対策）。Bridge は `deinit` で `kotlin.clear()` を呼ぶ。**KMP のコルーチン内で `runCatching` は使わない**。→ いずれも 2026-07-02 に `coding-conventions.md`（§1.2 / §1.6 / §1.7）へ昇格済み。経緯は本ノート 2026-06-24 エントリ
 - iOS Bridge は `@MainActor @Observable` + `Task { for await state in kotlin.state { apply(state) } }` パターン。生存スコープは、タブ常駐画面（coffee-list / map / analysis 等）= `AppState` で 1 つ保持、push / sheet 画面（coffee-detail / coffee-editor / cafe-detail）= View 内 `@State` で遷移ごとに生成・`deinit` 回収。**タブ常駐 View の `onDisappear` で observation を止めない**（2026-06-25 の検索停止バグ再発防止）
@@ -1060,3 +1062,20 @@ ASO-6 ①「写真が機種変更で消える」の**対策コストを試算す
 **レビューで見つけた穴: `try? await Task.sleep` はキャンセルを飲み込む**。`try?` は失敗時に `nil` を返すだけで実行は次行へ進むため、遅延中に `.task` がキャンセルされても（= ユーザーが 1.5 秒以内に分析タブを離れても）そのまま提示に進み、**マップタブの上にダイアログが出る**。1.5 秒遅延は「何を評価するのか分かる状態で出す」ためのものなので、この経路では目的が反転していた。sleep 直後に `guard !Task.isCancelled`（**フラグを立てる前に return** = キャンセル回は試行に数えず次回再試行）を追加して是正。
 
 - 残存制約: `.onChange` 側は `Task { }` で非構造化タスクを起こしているためビューのライフサイクルではキャンセルされず、同じレースが残る。「どのタブが前面か」を `ReviewPrompt` から知る手段がなく、構造化するには `.task(id:)` への作り替えが要るため今回は追わない。提示は端末あたり 1 回きりなので影響は限定的（`ReviewPrompt.requestIfFirstSignalReached` の KDoc にも明記）。
+
+### 2026-08-01: implementation_note の棚卸し — 行数は閾値未満だったが、サマリは壊れていた
+
+- 関連: 本ノート「現在生きてる方針サマリ」/ `.claude/skills/curate-doc/SKILL.md` / lessons 2026-08-01
+
+`curate-doc` skill の Phase 0 で型を判定したところ **フロー型 / 1062 行 = 閾値 1200 行未満**で、規則上はアーカイブ不要だった。コードブロック比率も **1%（11 行）** で Phase 2（縮約）も効かない。つまり **skill のルーティングどおりに進めると「やることなし」で終わる状態**だった。
+
+そこで present-tense の節（「現在生きてる方針サマリ」）だけコードと突き合わせたところ、**陳腐化 2 件 + 欠落 4 件 + コード側の誤り 1 件**が出た。日付付きエントリは*その時点の記録*なので古くなるのが正常だが、サマリは現在形で断言していて、しかも doc の冒頭にあって最初に読まれる。**skill のフロー型ルーティングに「present-tense の節にだけ Phase 1」を追加**した。
+
+検出したもの:
+- 陳腐化: `AppContainer` の引数個数「プライマリ 7 / iOS 6 / Android 5」→ 実際は **9 / 8 / 7** / 公開プロパティ列挙に削除済みの `beanProfileMatchUseCase`（2026-07-31 削除）
+- 欠落: 公開プロパティに `savedCafeRepository` / `curatedCafeRepository` / `exportCoffeeRecordsUseCase` / `placesApiKey` / Firestore コレクションに `curatedCafes`
+- コード側: `AppContainer` のクラス KDoc の Swift init シグネチャ 2 件が古く、**同ファイル内のセカンダリコンストラクタ KDoc と矛盾**（→ tasks B-9 に起票。棚卸し中にコードは触らない）
+
+**原因は 1 つで、数え上げと構成要素の列挙**。要素が増えるたびに個数と一覧が同時に古くなるうえ、増やした本人はソースしか見ないので気づく契機がない。修正は個々の値を直すのではなく **「どこを真とするか」を書いて数えるのをやめる**方向に倒し、前文にルールとして明文化した。3 例目なので lessons へ昇格（`CuratedCafe.kt` 2026-07-25 / `SavedCafePin` 2026-07-27 / 本件）。
+
+**アーカイブ（Phase 3）は見送り**（ユーザー確定）。前例の 2026-07-25 は 2026-06 を月末から 25 日後に凍結しており、2026-07 を月末 1 日後に凍結するのは早い。07-25〜07-31 の docs 棚卸し・ASO 系エントリは現在も参照中。**次の契機は 1200 行到達（あと約 135 行）か 8 月中旬**。

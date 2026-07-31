@@ -16,7 +16,9 @@ description: docs/**.md が 500 行を超えたときの棚卸し手順。陳腐
 | 型 | doc | 閾値 | 手順 |
 |---|---|---|---|
 | **ストック型の正本** | `data-model` / `analysis-model` / `requirements` / `architecture` / `coding-conventions` / `ui-ux-guidelines` / `kmp-bridge` / `app-store-metadata` / `paid-services` | 500 行 | Phase 1 → 2 →（まだ超えていれば）3 |
-| **フロー型** | `tasks.md` / `implementation_note.md` | 1200 行 | Phase 2 →（作業ログは縮約が効かないので）**Phase 3 = 月次アーカイブへ凍結移送**。**規則は各 doc の前文が正本**（tasks: カテゴリ制 + 縮約 / note: 昇格パス + アーカイブ）なのでまず前文を読む |
+| **フロー型** | `tasks.md` / `implementation_note.md` | 1200 行 | **present-tense の節にだけ Phase 1** → Phase 2 →（作業ログは縮約が効かないので）**Phase 3 = 月次アーカイブへ凍結移送**。**規則は各 doc の前文が正本**（tasks: カテゴリ制 + 縮約 / note: 昇格パス + アーカイブ）なのでまず前文を読む |
+
+> **フロー型でも「今こうなっている」と書いてある節は Phase 1 の対象**（2026-08-01 追加）。日付付きエントリは*その時点の記録*なので古くなるのが正常だが、`implementation_note` の「現在生きてる方針サマリ」や `tasks.md` のセクション前文は**現在形で断言している**ため、実装とずれたら普通に嘘になる。しかもこの種の節は doc の冒頭にあって最初に読まれる。2026-08-01 の棚卸しでは、行数が閾値未満（1062 < 1200）でアーカイブ不要だったにもかかわらず、サマリ側から陳腐化 2 件 + 欠落 4 件 + コード側の誤り 1 件が出た。**行数で不要と判断しても、present-tense 節の照合だけは通す。**
 | **対象外** | `tasks/lessons.md` / `talks/` | — | 「昇格しても発生源として残す」設計。行数を理由に縮めない |
 
 **完了条件**: 型を特定し、フロー型なら該当 doc の前文を読み終えた。

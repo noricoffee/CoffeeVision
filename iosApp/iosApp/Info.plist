@@ -19,7 +19,7 @@
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>近くのカフェの検索と、地図上での現在地表示のために現在地を使用します。</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>カフェで撮った写真を訪問記録に添えるため、写真ライブラリへのアクセスを使用します</string>
+	<string>カフェで撮った写真をコーヒー記録に添えるため、写真ライブラリへのアクセスを使用します。</string>
 	<key>NSUserTrackingUsageDescription</key>
 	<string>よりご興味に近い広告を表示し、アプリを無料でご利用いただくために利用状況を計測します。</string>
 	<key>PLACES_API_KEY</key>

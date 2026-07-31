@@ -131,7 +131,7 @@ struct AccountView: View {
                 Text(String(localized: "アカウントを引き継ぐ"))
                     .font(.headline)
 
-                Text(String(localized: "Apple ID でサインインすると、複数のデバイス間で記録を同期できます。現在の訪問記録はそのまま引き継がれます。"))
+                Text(String(localized: "Apple ID でサインインすると、複数のデバイスで記録を見られるようになります。いまのコーヒー記録はそのまま引き継がれます。写真はこの端末に残るため、他のデバイスには表示されません。"))
                     .font(.body)
                     .foregroundStyle(.secondary)
             }
@@ -209,7 +209,7 @@ struct AccountView: View {
             .disabled(viewModel.isProcessing)
             .frame(minHeight: 44)
         } footer: {
-            Text(String(localized: "アカウントを削除すると、すべての訪問記録と写真も削除されます。"))
+            Text(String(localized: "アカウントを削除すると、すべてのコーヒー記録と写真も削除されます。"))
                 .font(.caption)
         }
     }
@@ -373,7 +373,7 @@ private struct AccountViewDemo: View {
                         VStack(alignment: .leading, spacing: 12) {
                             Text("アカウントを引き継ぐ")
                                 .font(.headline)
-                            Text("Apple ID でサインインすると、複数のデバイス間で記録を同期できます。現在の訪問記録はそのまま引き継がれます。")
+                            Text("Apple ID でサインインすると、複数のデバイスで記録を見られるようになります。いまのコーヒー記録はそのまま引き継がれます。写真はこの端末に残るため、他のデバイスには表示されません。")
                                 .font(.body)
                                 .foregroundStyle(.secondary)
                         }
@@ -419,7 +419,7 @@ private struct AccountViewDemo: View {
                         Label("アカウントを削除", systemImage: "person.crop.circle.badge.minus")
                     }
                 } footer: {
-                    Text("アカウントを削除すると、すべての訪問記録と写真も削除されます。")
+                    Text("アカウントを削除すると、すべてのコーヒー記録と写真も削除されます。")
                         .font(.caption)
                 }
             }

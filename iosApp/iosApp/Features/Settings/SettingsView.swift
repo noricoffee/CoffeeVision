@@ -52,6 +52,7 @@ struct SettingsView: View {
             Form {
                 accountSection
                 consentSection
+                storageLocationSection
                 exportSection
                 themeSection
                 appInfoSection
@@ -121,6 +122,35 @@ struct SettingsView: View {
         }
     }
 
+    /// データの保存先セクション。
+    ///
+    /// コーヒー記録（クラウド）と写真（端末ローカル）の保存先の違いを常時表示する。
+    /// 状態に依存しない静的セクションのため `@State` もブリッジ購読も持たない。
+    private var storageLocationSection: some View {
+        Section {
+            HStack {
+                Label(String(localized: "コーヒー記録"), systemImage: "icloud")
+                Spacer()
+                Text(String(localized: "クラウドに保存"))
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+
+            HStack {
+                Label(String(localized: "写真"), systemImage: "iphone")
+                Spacer()
+                Text(String(localized: "この端末のみ"))
+                    .foregroundStyle(.secondary)
+            }
+            .accessibilityElement(children: .combine)
+        } header: {
+            Text(String(localized: "データの保存先"))
+        } footer: {
+            Text(String(localized: "コーヒー記録は Apple ID でサインインしておくと、機種変更のあとも続けて使えます。写真はこの端末の中だけに保存され、クラウドやエクスポートには含まれません。"))
+                .font(.caption)
+        }
+    }
+
     /// データエクスポートセクション。
     ///
     /// KMP `ExportCoffeeRecordsUseCase` で全記録を JSON 文字列化し、一時ファイルに書き出して
@@ -158,7 +188,7 @@ struct SettingsView: View {
         } header: {
             Text(String(localized: "データのエクスポート"))
         } footer: {
-            Text(String(localized: "コーヒー記録を JSON 形式で書き出します。写真本体は含まれません。"))
+            Text(String(localized: "コーヒー記録を JSON 形式で書き出します。写真本体は含まれないため、写真は端末のバックアップで残してください。"))
                 .font(.caption)
         }
     }

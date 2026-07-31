@@ -1079,3 +1079,15 @@ ASO-6 ①「写真が機種変更で消える」の**対策コストを試算す
 **原因は 1 つで、数え上げと構成要素の列挙**。要素が増えるたびに個数と一覧が同時に古くなるうえ、増やした本人はソースしか見ないので気づく契機がない。修正は個々の値を直すのではなく **「どこを真とするか」を書いて数えるのをやめる**方向に倒し、前文にルールとして明文化した。3 例目なので lessons へ昇格（`CuratedCafe.kt` 2026-07-25 / `SavedCafePin` 2026-07-27 / 本件）。
 
 **アーカイブ（Phase 3）は見送り**（ユーザー確定）。前例の 2026-07-25 は 2026-06 を月末から 25 日後に凍結しており、2026-07 を月末 1 日後に凍結するのは早い。07-25〜07-31 の docs 棚卸し・ASO 系エントリは現在も参照中。**次の契機は 1200 行到達（あと約 135 行）か 8 月中旬**。
+
+### 2026-08-01: ASO-3 オンボーディング再設計は見送り — ただし「ATT は後ろへ回せない」は誤りだった
+
+- 関連: `iosApp/iosApp/Ads/AdConsentCoordinator.swift` / `iosApp/iosApp/Ads/BannerAdLoader.swift` / `iosApp/iosApp/AppState.swift` / tasks ASO-3（取り下げ）
+
+ASO-3 に着手し、現状把握と技術的制約の確認を終えて grilling の Q1（初回起動に何を見せるか）を出した時点で、**ユーザー判断により現状維持で確定**。初回起動の「データ利用同意 → 広告プレプロンプト → ATT」の 3 連はそのまま残す。コード変更ゼロ。
+
+**起票文の「価値訴求を先に出し、許諾は最初の記録を保存した後へ回す」は親が書いた提案**であって確定仕様ではなかった。tasks.md の備考が確定仕様のように読めたため、取り下げにあたって明記した（再検討時に前提を引き継がせないため）。
+
+**着手前の直感が誤りだったので記録する**: 「広告 2 面（カフェ詳細 / マップ検索）は初回起動直後から到達できるので、ATT ダイアログを後ろへ回すと ATT 未実施のまま広告が出てポリシー違反になる」と考えて、これが再設計の最大の障害だと見ていた。**実際には障害ではない**。`AdConsentCoordinator.isPersonalizedAdsAllowed` は `ATTrackingManager.trackingAuthorizationStatus == .authorized` **のみ** true で、`.notDetermined`（未実施）も `.denied` と同じ扱いになる。`BannerAdLoader.makeRequest()` はこれを見て `npa=1` を付けるので、**ATT を訊く前の広告は自動的に非パーソナライズになる**。つまり ATT ダイアログの位置は広告の掲出可否と独立に決められる。将来 ASO-3 を再検討するなら、ここは制約として数えなくてよい。
+
+**現状フローの構造**（再検討時の起点として）: `showConsentOnboarding`（Firestore `users/{uid}` の不在で true）→ `onConsentGranted` / `onConsentDeclined` → `presentAdConsentFlowIfNeeded()`（`UserDefaults` の `hasCompletedAdConsentFlow` で 1 回きり）→ `onAdPrePromptContinue()` → `AdConsentCoordinator.run()` → ATT。2 画面とも `RootTabView` の `.sheet` + `interactiveDismissDisabled()` で、既定タブはマップ。`CoffeeListView.emptyView` は `ContentUnavailableView` で**能動的な CTA ボタンを持たない**（説明文のみ）。

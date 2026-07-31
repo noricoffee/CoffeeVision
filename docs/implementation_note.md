@@ -1040,3 +1040,23 @@ ASO-6 ①「写真が機種変更で消える」の**対策コストを試算す
 **トレードオフ: 設定画面に「未サインイン」状態は出さない**。`AccountViewModelBridge.account` は `onAppear()` を呼ぶまで nil で、`AppState` は `uid` は持つが `isAnonymous` を持たない。設定画面から購読を張ると `AccountView` の `onDisappear()` が pop 時に同じ購読を切って状態が固まる。ブリッジを init 購読に変えれば解けるが、**4 ブリッジすべてが `onAppear`/`onDisappear` 型で統一されている**ため、コピー変更のために観測ライフサイクルの規約を崩すのは割に合わないと判断した。静的コピーは匿名 / サインイン済みのどちらで読んでも正しい。条件表示は必要になった時点で別途。
 
 **副産物**: requirements の画面一覧（設定画面の行）に**データエクスポートが載っていなかった**（実装は `SettingsView.exportSection` に存在）。今回の追記に合わせて補完した。
+
+### 2026-08-01: ASO-1 レビュー依頼 — 「OFF 出荷」の助言を撤回した理由と、フラグを試行時に立てる理由
+
+- 関連: `iosApp/iosApp/Utilities/ReviewPrompt.swift` / `RemoteConfigBootstrap.swift` / `AnalysisView.swift` / requirements 9-8
+
+**助言を途中で変えた**。ASO-1 を最初に検討した時点では「実装はしてよいが、Remote Config で事実上 OFF にして出荷し、crash-free 率を見てから開放する」と述べた。理由は **ASO-6 ①②（写真消失・匿名アカウントの期待値管理）が未対応**で、★1 の原因を放置したままレビューを催促することになるため。その ASO-6 が同日に完了した（commit `e622afb`）ことで前提が解消したので、**ON 出荷 + キルスイッチ**に切り替えた（ユーザー確定）。オフのまま出荷すると星は 1 つも増えず、ASO-1 の価値がそのまま失われる。
+
+**発火点を「傾向信号の初出」1 つに絞った**。候補には記録 N 件到達と共有カードの共有完了もあったが、①件数だけでは「価値を感じた」証拠にならない ②`ShareLink`（SwiftUI）は完了コールバックを持たず、共有とキャンセルを区別するには `UIActivityViewController` への置き換えが要る — の 2 点で見送り。傾向信号は「アプリが初めてユーザーについて何かを言い当てた」瞬間で、かつ信号が出るには相応の記録数（相関軸は最低 5 件 + 2σ ゲート）が要るため、engagement の代理指標を別途持たなくてよい。分析タブを開かないユーザーには永久に出ないという欠点は許容した。
+
+**フラグは「提示を試みた時点」で立てる**。`AppStore.requestReview(in:)` は**実際にダイアログが表示されたかを返さない**（Apple 側の年 3 回上限、ユーザーの OS 設定で出ないことがある）。成功可否で分岐する設計にはできないので、試行 1 回で確定させる。結果として「OS 側の都合で出なかった」ケースでは二度と出ないが、これは Apple の設計思想（アプリ側に表示可否を握らせない）に沿った割り切り。
+
+**`.task` と `.onChange` の両方から呼ぶ**。`AnalysisViewModel.onAppear()` は購読中なら no-op（2026-07-16 の再生成抑止）のため、2 回目以降のタブ訪問では新しい emission が来ず `.onChange` が発火しない。表示時点で既に `hasAnySignal = true` のケース（アップデート後の既存ユーザー、タブ再訪）を `.task` 側で拾う。マイルストーンフラグがあるので二重呼び出しは無害。
+
+**Remote Config の fetch を中立な受け皿へ移した**。従来 fetch は `ApplePoiFilterConfig.fetchAndActivate()` が担っており、`RemoteConfig` はシングルトンなので activate は全キーに効く = レビュー用のキーも「たまたま読める」状態だった。**この依存は名前から読み取れず、「POI フィルタの設定を消したらレビュー依頼が固まる」という将来の事故になる**ため、`RemoteConfigBootstrap.fetchAndActivate()` を新設して `iOSApp.swift` の呼び出しを差し替えた（ロジックは移動のみ・挙動不変）。
+
+**未設定時のフォールバックは「出荷時 ON」の生命線**で、取り違えると**意図と逆に一切発火しない**（しかもレビューが増えないだけなので壊れていることに気づく手段がない）。`FIRRemoteConfigValue.boolValue` は non-optional で、**キーが存在しないときは型の静的既定値 `false` を返す**ため、素直に読むと OFF になる。実装は `value.source != .static` で「remote にも in-app defaults にも値が無い」状態を判別し、そのときだけ `true` に倒している（Firebase SDK の `FIRRemoteConfigSourceStatic` = "The data doesn't exist, return a static initialized value." まで確認済み）。親が当初想定した `setDefaults` でも解けるが、`source` 判定の方が「未設定」と「明示的 false」を確実に区別できる。
+
+**レビューで見つけた穴: `try? await Task.sleep` はキャンセルを飲み込む**。`try?` は失敗時に `nil` を返すだけで実行は次行へ進むため、遅延中に `.task` がキャンセルされても（= ユーザーが 1.5 秒以内に分析タブを離れても）そのまま提示に進み、**マップタブの上にダイアログが出る**。1.5 秒遅延は「何を評価するのか分かる状態で出す」ためのものなので、この経路では目的が反転していた。sleep 直後に `guard !Task.isCancelled`（**フラグを立てる前に return** = キャンセル回は試行に数えず次回再試行）を追加して是正。
+
+- 残存制約: `.onChange` 側は `Task { }` で非構造化タスクを起こしているためビューのライフサイクルではキャンセルされず、同じレースが残る。「どのタブが前面か」を `ReviewPrompt` から知る手段がなく、構造化するには `.task(id:)` への作り替えが要るため今回は追わない。提示は端末あたり 1 回きりなので影響は限定的（`ReviewPrompt.requestIfFirstSignalReached` の KDoc にも明記）。

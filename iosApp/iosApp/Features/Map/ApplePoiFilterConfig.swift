@@ -12,7 +12,9 @@ import FirebaseRemoteConfig
 ///   実質無効化できる）
 /// - remote 未取得（初回起動・オフライン含む）/ 空文字 / parse 失敗のときは bundled デフォルトに
 ///   フォールバックする。つまりコンソールにパラメータが存在しなくても現行挙動と完全同一
-/// - fetch は起動時に 1 回（`fetchAndActivate()`）。`minimumFetchInterval` は SDK 既定（12h）のまま
+/// - fetch 自体はこの型の責務ではない。`RemoteConfigBootstrap.fetchAndActivate()`（`iOSApp.init()` から
+///   起動時に 1 回呼ばれる）が全キー分をまとめて fetch + activate する（ASO-1 実装時に fetch ロジックを
+///   中立的な場所へ移設。`minimumFetchInterval` は SDK 既定（12h）のまま）
 enum ApplePoiFilterConfig {
 
     private static let remoteConfigKey = "map_poi_excluded_name_keywords"
@@ -41,16 +43,5 @@ enum ApplePoiFilterConfig {
             return defaultExcludedNameKeywords
         }
         return Set(keywords)
-    }
-
-    /// アプリ起動時に 1 回呼ぶ。Remote Config の最新値を fetch + activate する。
-    ///
-    /// 失敗しても無視する（bundled デフォルトへフォールバックする設計のため致命的ではない）。
-    static func fetchAndActivate() async {
-        do {
-            _ = try await RemoteConfig.remoteConfig().fetchAndActivate()
-        } catch {
-            print("[CoffeeVision] ApplePoiFilterConfig.fetchAndActivate failed (ignored): \(error)")
-        }
     }
 }

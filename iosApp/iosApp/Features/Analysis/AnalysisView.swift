@@ -51,6 +51,22 @@ struct AnalysisView: View {
         .onDisappear {
             viewModel.onDisappear()
         }
+        // レビュー依頼（要件 9-8 / ASO-1）: 分析タブで傾向信号が初めて出た瞬間に 1 回だけ提示する。
+        // `.task` は表示時点で既に readiness.hasAnySignal == true のケース（2 回目以降のタブ訪問。
+        // ブリッジは TabBar 常時生存でキャッシュ済みの readiness を即座に読める）をカバーし、
+        // `.onChange` は nil/false → true の遷移（初めて信号が出た瞬間）をカバーする。
+        // ReviewPrompt 側にマイルストーンフラグがあるため二重呼び出しは無害。
+        .task {
+            if viewModel.readiness?.hasAnySignal == true {
+                await ReviewPrompt.requestIfFirstSignalReached()
+            }
+        }
+        .onChange(of: viewModel.readiness?.hasAnySignal) { _, hasAnySignal in
+            guard hasAnySignal == true else { return }
+            Task {
+                await ReviewPrompt.requestIfFirstSignalReached()
+            }
+        }
     }
 
     // MARK: - Loading

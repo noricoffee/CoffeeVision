@@ -27,11 +27,11 @@ struct iOSApp: App {
         Firestore.firestore().settings = settings
         print("[CoffeeVision] Firestore persistent cache enabled")
 
-        // Apple POI 名前フィルタの除外キーワードを Remote Config から取得する（名前フィルタの
-        // Remote Config 外部注入、2026-07-13）。同意フローとは無関係に取得してよく、
-        // 失敗・未取得時は bundled デフォルトへフォールバックするため fire-and-forget でよい。
+        // Remote Config の fetch + activate（POI 名前フィルタ・レビュー依頼キルスイッチ等、
+        // 全キー共通）。同意フローとは無関係に取得してよく、失敗・未取得時は各機能側の
+        // フォールバックに委ねるため fire-and-forget でよい。
         Task {
-            await ApplePoiFilterConfig.fetchAndActivate()
+            await RemoteConfigBootstrap.fetchAndActivate()
         }
 
         // Google Mobile Ads SDK は同意フロー（ATT）の結果を待たずアプリ起動時に開始する

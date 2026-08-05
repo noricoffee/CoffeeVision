@@ -282,10 +282,10 @@ CoffeeVision を初めてリリースしました。
 - [x] 輸出コンプライアンス（暗号化）: 標準 HTTPS + Apple 標準の SHA256 nonce のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済み → App Store Connect の暗号化アンケートは自動スキップされる
 
 ### ビルド / 技術
-- [ ] `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` が App Store Connect のバージョンと一致
+- [ ] `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION` が App Store Connect のバージョンと一致（`iosApp/Configuration/Config.xcconfig` は `1.0` / `1`。ASC 側で 1.0 を作れば一致する）
 - [ ] リリースビルドで Places API キーが正しく注入される（`Secrets.xcconfig` の Release 設定）
 - [ ] `GoogleService-Info.plist`（本番 Firebase プロジェクト）が同梱されている
-- [ ] Firestore Security Rules が本番にデプロイ済
+- [x] Firestore Security Rules が本番にデプロイ済（2026-08-06 ユーザーが Console で確認。`users/{uid}` / `beanProfiles` / `curatedCafes` の 3 ブロック）
 - [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / **2026-08-06 にユーザーが Console で再確認**。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
 - [ ] App Icon（light / dark / tinted）が全サイズ揃っている
 - [ ] アーカイブ（Archive）→ App Store Connect へアップロード成功

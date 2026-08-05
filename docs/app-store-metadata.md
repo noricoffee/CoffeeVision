@@ -293,6 +293,7 @@ CoffeeVision を初めてリリースしました。
 - [x] Firestore Security Rules が本番にデプロイ済（2026-08-06 ユーザーが Console で確認。`users/{uid}` / `beanProfiles` / `curatedCafes` の 3 ブロック）
 - [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / **2026-08-06 にユーザーが Console で再確認**。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
 - [x] App Icon（light / dark / tinted）が全サイズ揃っている — 2026-08-06 確認。`iosApp/iosApp/Assets.xcassets/AppIcon.appiconset` に 3 バリアントとも 1024×1024 の単一サイズで存在（iOS 17+ の single-size 方式。他サイズは actool が生成）。**この項目は TestFlight 成功では証明できない** — dark / tinted は任意で、欠けていてもビルド・アップロードとも通るため、資産カタログを直接見る必要がある
+- [x] App Icon / LaunchLogo に **SF Symbols を使っていない** — 2026-08-06 に意匠刷新と同時に解消。SF Symbols のライセンス条項はシンボルをアプリアイコン / ロゴに使うことを禁じており、旧アイコンは `cup.and.saucer.fill` を PNG に焼き込んでいた（リジェクト要因になり得た）。現在は `iosApp/scripts/generate_app_icon.swift` の自前パス描画で、`grep -rn "systemSymbolName" iosApp/` が 0 件であることが検証手段（implementation_note 2026-08-06）
 - [x] アーカイブ（Archive）→ App Store Connect へアップロード成功 — `release-testflight.yml` で実績あり（2026-08-06 時点で run 19〜22 が連続 success、TestFlight で実機動作確認済み）。本番提出時も同ワークフローを使う
 
 > 輸出コンプライアンス: 本アプリの暗号利用は標準 HTTPS（Firebase / Google Places）と Sign in with Apple の nonce ハッシュ（CryptoKit SHA256 = Apple 標準・ハッシュは暗号化に非該当）のみで、いずれも免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済みのため、提出のたびの暗号化アンケートは不要になる。

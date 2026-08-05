@@ -209,6 +209,7 @@ Button { viewModel.onAddTapped() } label: {
 
 - アイコンは **SF Symbols** を使用する
 - 一貫性のため、画面共通の意味には共通のシンボルを使う
+- ⚠️ **これはアプリ内 UI に限った話**。SF Symbols のライセンス条項はシンボルを**アプリアイコン / ロゴ / 商標**に使うことを禁じているため、`AppIcon` と `LaunchLogo` には使えない。両者は `iosApp/scripts/generate_app_icon.swift` の自前パス描画で生成する（2026-08-06 に SF Symbol 焼き込みから移行。implementation_note 2026-08-06）
 
 | 意味 | SF Symbol |
 |------|----------|

@@ -286,7 +286,7 @@ CoffeeVision を初めてリリースしました。
 - [ ] リリースビルドで Places API キーが正しく注入される（`Secrets.xcconfig` の Release 設定）
 - [ ] `GoogleService-Info.plist`（本番 Firebase プロジェクト）が同梱されている
 - [ ] Firestore Security Rules が本番にデプロイ済
-- [ ] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
+- [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / **2026-08-06 にユーザーが Console で再確認**。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
 - [ ] App Icon（light / dark / tinted）が全サイズ揃っている
 - [ ] アーカイブ（Archive）→ App Store Connect へアップロード成功
 

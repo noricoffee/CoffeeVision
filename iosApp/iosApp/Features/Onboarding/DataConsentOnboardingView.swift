@@ -5,7 +5,7 @@ import SwiftUI
 /// - 「同意する」→ AppState.onConsentGranted() → シート dismiss
 /// - 「今はしない」→ AppState.onConsentDeclined() → シート dismiss
 ///
-/// プライバシーポリシー URL は App Store 提出前に差し替えること（現在はプレースホルダー）。
+/// プライバシーポリシーは GitHub Pages で公開。本文の正本は `docs/legal/privacy-policy.html`。
 struct DataConsentOnboardingView: View {
 
     var appState: AppState
@@ -83,7 +83,7 @@ struct DataConsentOnboardingView: View {
     }
 
     private var privacyLinkSection: some View {
-        Link(destination: URL(string: "https://example.com/privacy")!) {
+        Link(destination: URL(string: "https://noricoffee.github.io/CoffeeVision/privacy-policy.html")!) {
             HStack(spacing: 4) {
                 Text("プライバシーポリシーを読む")
                     .font(.footnote)

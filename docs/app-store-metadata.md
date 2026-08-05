@@ -201,11 +201,13 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 
 | 項目 | URL | 状態 |
 |------|-----|------|
-| プライバシーポリシー URL | （**本文起草済み**: `docs/legal/privacy-policy.html`。公開・URL 化が必要） | 位置情報 / Firebase / Places / 広告 IDFA / 同意 / 権利を実装事実ベースで記載済み（2026-07-21）。名義・メール・URL はプレースホルダ差し替え要 |
-| サポート URL | （**本文起草済み**: `docs/legal/support.html`。公開・URL 化が必要） | FAQ + 問い合わせ先。名義・メール・ポリシー URL はプレースホルダ差し替え要 |
+| プライバシーポリシー URL | `https://noricoffee.github.io/CoffeeVision/privacy-policy.html` | 2026-08-06 公開。位置情報 / Firebase / Places / 広告 IDFA / 同意 / 権利を実装事実ベースで記載（2026-07-21 起草） |
+| サポート URL | `https://noricoffee.github.io/CoffeeVision/support.html` | 2026-08-06 公開。FAQ + 問い合わせ先 |
 | マーケティング URL | （任意） | 未定 |
 
-> ⚠️ プライバシーポリシー URL とサポート URL は App Store 申請の必須項目。リリース前に用意が必要（GitHub Pages 等で可）。
+> **公開方式**: GitHub Pages（`.github/workflows/pages.yml`）。**`docs/legal/` のみ**を Pages アーティファクトにしており、`docs/` 配下の設計 doc は Web 公開されない。ソースは `docs/legal/*.html` 単一で、`develop` への push で自動デプロイされる。名義は `noricoffee`、2 ページは相対パスで相互リンク。
+>
+> 本文を改訂したら**アプリ内の表示も自動的に追随する**（`DataConsentOnboardingView` は URL を開くだけ）。ただし収集項目や第三者 SDK を変える変更では、§6.1 / §6.3 と `PrivacyInfo.xcprivacy` の 3 点セットで整合を取ること。
 
 ---
 
@@ -266,8 +268,9 @@ CoffeeVision を初めてリリースしました。
 - [x] アプリ名のキーワード化（2026-07-27 ユーザー確定「CoffeeVision コーヒーマップ＆好み分析」/ 25 字。`CFBundleDisplayName` は `CoffeeVision` のまま据え置き）
 
 ### 必須の外部準備
-- [ ] プライバシーポリシー URL の作成・公開
-- [ ] サポート URL の作成・公開
+- [x] プライバシーポリシー URL の作成・公開（2026-08-06 / GitHub Pages。§6.4 参照）
+- [x] サポート URL の作成・公開（2026-08-06 / GitHub Pages。§6.4 参照）
+- [ ] **サポート用メールアドレスの発行 → 2 ページの連絡先に反映**（アプリ専用アドレスを新規作成する方針。作成までは `[サポートメールアドレス]` のまま公開されている）
 - [ ] App Review 連絡先情報の記入
 - [ ] スクリーンショット（6.9" / 6.5" 各サイズ）の撮影・最終枚数決定
 

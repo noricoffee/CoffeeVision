@@ -1091,3 +1091,21 @@ ASO-3 に着手し、現状把握と技術的制約の確認を終えて grillin
 **着手前の直感が誤りだったので記録する**: 「広告 2 面（カフェ詳細 / マップ検索）は初回起動直後から到達できるので、ATT ダイアログを後ろへ回すと ATT 未実施のまま広告が出てポリシー違反になる」と考えて、これが再設計の最大の障害だと見ていた。**実際には障害ではない**。`AdConsentCoordinator.isPersonalizedAdsAllowed` は `ATTrackingManager.trackingAuthorizationStatus == .authorized` **のみ** true で、`.notDetermined`（未実施）も `.denied` と同じ扱いになる。`BannerAdLoader.makeRequest()` はこれを見て `npa=1` を付けるので、**ATT を訊く前の広告は自動的に非パーソナライズになる**。つまり ATT ダイアログの位置は広告の掲出可否と独立に決められる。将来 ASO-3 を再検討するなら、ここは制約として数えなくてよい。
 
 **現状フローの構造**（再検討時の起点として）: `showConsentOnboarding`（Firestore `users/{uid}` の不在で true）→ `onConsentGranted` / `onConsentDeclined` → `presentAdConsentFlowIfNeeded()`（`UserDefaults` の `hasCompletedAdConsentFlow` で 1 回きり）→ `onAdPrePromptContinue()` → `AdConsentCoordinator.run()` → ATT。2 画面とも `RootTabView` の `.sheet` + `interactiveDismissDisabled()` で、既定タブはマップ。`CoffeeListView.emptyView` は `ContentUnavailableView` で**能動的な CTA ボタンを持たない**（説明文のみ）。
+
+### 2026-08-06: プライバシーポリシー / サポートを GitHub Pages で公開
+
+- 関連: `.github/workflows/pages.yml` / `docs/legal/*.html` / `iosApp/iosApp/Features/Onboarding/DataConsentOnboardingView.swift` / app-store-metadata §6.4
+
+App Store 提出の必須項目 2 件（プライバシーポリシー URL / サポート URL）を解消。本文は 2026-07-21 に起草済みだったので、今回やったのは公開手段の選定とプレースホルダの消し込み。
+
+**公開範囲を `docs/legal/` に絞った**。リポジトリは public なので「`develop` の `/docs` フォルダを Pages のソースにする」だけでも動くが、それだと `tasks.md` / `implementation_note.md` / `architecture.md` まで**Web サイトとして配信され検索インデックスの対象になる**。リポジトリが読めることと、サイトとして公開されることは露出の度合いが違う。GitHub Actions（`upload-pages-artifact` の `path: docs/legal`）にすれば、ソースを `docs/legal/` 単一に保ったまま 2 ページだけを配信できる。
+
+- `actions/configure-pages@v5` の **`enablement: true`** で Pages サイト自体も自動作成させ、Settings > Pages の手動操作を不要にした
+- ページ間リンクは**相対パス**（`privacy-policy.html`）。同一公開ルートに並ぶので、絶対 URL にするとカスタムドメインへ移すときに壊れる
+- 公開ルートが 404 になるのを避けるため `index.html`（2 ページへの目次）を新設
+- 発火ブランチは `develop` 単独。`main` と併記すると同一サイトへの二重デプロイになり、どちらが最後に勝つかが不定になる
+
+**副産物: 起草者向けの指示文が本文に混ざっていた**。`privacy-policy.html` §5（子どものプライバシー）の直後に `<div class="note">※ App Store の年齢レーティング設定と整合させてください。対象年齢の方針が異なる場合はこの記述を調整してください。</div>` があり、**そのまま公開すればエンドユーザーに見える**状態だった。app-store-metadata §7 の想定レーティング 4+ と本文（13 歳未満を主たる対象としない）は既に整合しているので、指示文は役目を終えたものとして削除。`.placeholder`（未確定箇所をアクセント色 + bold で目立たせる装飾）も同様に、値を埋めた後は「ここだけ強調された連絡先」に見えるので span ごと撤去した。
+
+- 影響: 本文を改訂すると `develop` への push だけでアプリ内表示まで追随する（`DataConsentOnboardingView` は URL を開くだけで、文面を持たない）。ただし収集項目や第三者 SDK を変える改訂では app-store-metadata §6.1 / §6.3 と `PrivacyInfo.xcprivacy` の 3 点セットで整合を取る必要がある
+- 未了: サポート用メールアドレスは**アプリ専用を新規作成する方針**（ユーザー確定）でアドレス未定のため、2 ページの連絡先は `[サポートメールアドレス]` のまま公開されている。ASC へ URL を登録する前に差し替えること

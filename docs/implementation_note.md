@@ -1100,7 +1100,7 @@ App Store 提出の必須項目 2 件（プライバシーポリシー URL / サ
 
 **公開範囲を `docs/legal/` に絞った**。リポジトリは public なので「`develop` の `/docs` フォルダを Pages のソースにする」だけでも動くが、それだと `tasks.md` / `implementation_note.md` / `architecture.md` まで**Web サイトとして配信され検索インデックスの対象になる**。リポジトリが読めることと、サイトとして公開されることは露出の度合いが違う。GitHub Actions（`upload-pages-artifact` の `path: docs/legal`）にすれば、ソースを `docs/legal/` 単一に保ったまま 2 ページだけを配信できる。
 
-- `actions/configure-pages@v5` の **`enablement: true`** で Pages サイト自体も自動作成させ、Settings > Pages の手動操作を不要にした
+- **Pages サイトの作成はワークフローからはできない**。当初 `actions/configure-pages@v5` の `enablement: true` で自動作成させて GitHub UI 操作を省く構成にしたが、初回実行が `Create Pages site failed. Error: Resource not accessible by integration`（run 31021287789）で落ちた。既定の `GITHUB_TOKEN` は `pages: write` を与えても **Create Pages site API に必要な admin 権限を持たない**（`pages: write` はデプロイ用で、サイトの新規作成は別枠）。`gh api -X POST repos/noricoffee/CoffeeVision/pages -f build_type=workflow` を**一度だけ人手で**叩いて有効化し、ワークフローからは `enablement` を外した。同じ構成を他リポジトリで組むときも「サイトの有効化は 1 回きりの手作業」と割り切るのが早い
 - ページ間リンクは**相対パス**（`privacy-policy.html`）。同一公開ルートに並ぶので、絶対 URL にするとカスタムドメインへ移すときに壊れる
 - 公開ルートが 404 になるのを避けるため `index.html`（2 ページへの目次）を新設
 - 発火ブランチは `develop` 単独。`main` と併記すると同一サイトへの二重デプロイになり、どちらが最後に勝つかが不定になる

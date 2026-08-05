@@ -37,7 +37,7 @@
 | [x] | 親: docs 確定（requirements 未決事項 + §2 写真行 / data-model §1.4 / paid-services §2 + §3 / implementation_note / ui-ux-guidelines 写真対比表） | 2026-08-01 完了。**`paid-services` は当初「更新不要」と誤判断しユーザー指摘で是正** → CLAUDE.md へ不作為分を昇格 + lessons 2026-08-01。その sweep で `ui-ux-guidelines.md:286`「表示枚数 = 制限なし（全件）」の誤読リスクも検出・是正 |
 | [x] | ios-engineer: `ImageDownsampler.swift` 新設（ImageIO `CGImageSourceCreateThumbnailAtIndex`）+ `handlePickerSelection` 差し替え + `photosSection` の枚数ガード | 2026-08-01 完了。上限は `CoffeeEditorView.maxPhotoCount`（両 extension から参照）。`maxSelectionCount` は `max(remaining, 1)` + `.disabled` で **0 = 無制限**の罠を回避。ImageIO 採用理由は `UIImage(data:)` の 48MP≒190MB メモリピーク回避 |
 | [x] | 親: フラグ無しビルド再検証 + 実測値の確認 | 2026-08-01 完了。親がフラグ無しで `** BUILD SUCCEEDED **` を独立再確認（`OVERRIDE_KOTLIN_*` が環境に 0 件であることも確認）。**プランの推定「約 1/7」は楽観的で、実測は約 1.6〜5 倍の削減**だったため docs の数値を実測へ差し替え（implementation_note 参照）。膨張側の見立て（HEIC ×1.64）は方向・桁とも一致 |
-| [ ] | **ユーザー: シミュレータ / 実機で目視**（verification-checklist「コーヒー記録」へ移送済み） | サンドボックスから PhotosPicker をタップ操作できず、UI 経由の `<Documents>/photos/*.jpg` 実測は未取得。**筆頭は縦向き写真が横倒しにならないこと**（EXIF transform） |
+| [ ] | **ユーザー: シミュレータ / 実機で目視**（verification-checklist「写真の保存時リサイズ + 枚数上限」へ移送済み） | サンドボックスから PhotosPicker をタップ操作できず、UI 経由の `<Documents>/photos/*.jpg` 実測は未取得。**筆頭は縦向き写真が横倒しにならないこと**（EXIF transform） |
 
 #### 過去に使ったタグのサジェスト（要件 2-13 / 2026-07-26 起票）
 
@@ -60,7 +60,7 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [x] | ios-engineer: `StarRatingView.editableStars` のクリアボタンを常時レイアウトに含め、`rating == nil` のとき不可視 + `.disabled` + アクセシビリティ非公開にする。編集モード Preview に未評価↔評価済みの並びを足してずれないことを確認 | 2026-07-26 完了。`.opacity(rating != nil ? 1 : 0)` + `.disabled(rating == nil)` + `.accessibilityHidden(rating == nil)` の 3 点セット。Preview に未評価 / 3.5 星を縦並びした位置比較セクションを追加 |
-| [x] | 親: レポート評価 + override 無しビルド再検証 + commit + 目視項目を verification-checklist へ移送 | 2026-07-26 完了。親がフラグ無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認（`#Preview` マクロの SourceKit 診断は `PreviewsMacros` プラグイン未検出の IDE 偽陽性）。lessons 2026-07-26 記録 + 44pt 要素 31 箇所の sweep 済み（同型 2 件はいずれも実害なし）→ `.claude/rules/swift-ios.md` へ昇格。目視は verification-checklist「コーヒー記録」へ移送 |
+| [x] | 親: レポート評価 + override 無しビルド再検証 + commit + 目視項目を verification-checklist へ移送 | 2026-07-26 完了。親がフラグ無し `xcodebuild ... ** BUILD SUCCEEDED **` を独立再確認（`#Preview` マクロの SourceKit 診断は `PreviewsMacros` プラグイン未検出の IDE 偽陽性）。lessons 2026-07-26 記録 + 44pt 要素 31 箇所の sweep 済み（同型 2 件はいずれも実害なし）→ `.claude/rules/swift-ios.md` へ昇格。目視は verification-checklist「星評価のレイアウト固定」へ移送 |
 
 #### 産地を国ドロップダウン + 任意エリアに刷新（記録の手間削減 / 2026-07-22 起票）
 
@@ -356,7 +356,7 @@
 > - **17-C** 最近傍が別店を拾う → 名前一致優先 + 最近傍フォールバック
 > - **17-D** 真因 = Google 型フィルタそのもの（Apple の cafe 分類と食い違い候補にすら入らない）→ **型フィルタなし `searchByNameNear`（名前 + 位置バイアス）→ タップ座標最近傍（名前一致優先）、見つからなければ「該当なし」**
 >
-> 判断は implementation_note 2026-07-07 フェーズ 17 エントリ、教訓（表示⇄解決の集合ズレ / 同系統 2 回失敗で再計画）は lessons 2026-07-08。最終目視は verification-checklist.md「マップ / カフェ探索」。
+> 判断は implementation_note 2026-07-07 フェーズ 17 エントリ、教訓（表示⇄解決の集合ズレ / 同系統 2 回失敗で再計画）は lessons 2026-07-08。最終目視は verification-checklist.md「17-D（POI タップ解決）」。
 
 #### フェーズ 19: 都道府県別おすすめカフェのマップ強調表示（2026-07-16 起票）
 
@@ -623,7 +623,7 @@
 #### フェーズ 18: Firebase テレメトリ導入（Crashlytics / Analytics / Performance、2026-07-08 起票）
 
 > 実装完了（2026-07-08）: iOS のみ。**Crashlytics + Performance = 常時収集（同意不要）、Analytics = `analyticsConsent` 同意時のみ**（`Info.plist` で起動時 OFF → `AppState.applyTelemetryConsent` で有効化。IDFA 非依存で ATT 不要を維持）。SPM 3 プロダクト追加 + dSYM アップロード build phase + `.trackScreen` modifier（4 タブ + 主要画面）+ `PrivacyInfo.xcprivacy` 宣言まで実装済み、override 無しビルド成功。全体の Required Reason API 監査は「リリース前バックログ」の F-1。経緯は implementation_note 2026-07-08、プライバシー申告は app-store-metadata.md 6.1/6.3。
-> 目視: Analytics の consent gating と `screen_view` 発火は 2026-07-21 確認済み。**残る Crashlytics / Performance のコンソール観察は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md)「テレメトリ / 広告」**。
+> 目視: Analytics の consent gating と `screen_view` 発火は 2026-07-21 確認済み。**残る Crashlytics / Performance のコンソール観察は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md)「フェーズ18 の残務」**。
 
 ### 完了
 

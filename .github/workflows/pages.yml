@@ -30,10 +30,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # enablement: true で Pages サイト自体も自動作成する（Settings > Pages の手動操作が不要）
+      # Pages サイト自体（build_type: workflow）は 2026-08-06 に有効化済み。
+      # enablement: true は GITHUB_TOKEN の権限では Create Pages site が 403 になるため使わない。
       - uses: actions/configure-pages@v5
-        with:
-          enablement: true
 
       - uses: actions/upload-pages-artifact@v3
         with:

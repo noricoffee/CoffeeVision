@@ -286,12 +286,12 @@ CoffeeVision を初めてリリースしました。
   - **`MARKETING_VERSION = 1.0`**（`iosApp/Configuration/Config.xcconfig`、CI でも上書きしない）。ASC 側でバージョン 1.0 を作れば一致する
   - **`CURRENT_PROJECT_VERSION` はビルド番号で、CI が採番する** — `release-testflight.yml` の Archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を `xcodebuild archive` に渡し、xcconfig の `1` を上書きする。**手で上げる必要はない**（2026-08-06 時点で run_number = 22、次のリリースは 23）
   - ⚠️ `github.run_number` は**ワークフローの同一性に紐づく連番**。`release-testflight.yml` をリネーム / 削除して作り直すとカウンタが 1 に戻り、ASC が「ビルド番号が既存以下」で受け付けなくなる。このファイル名は変えない
-- [ ] リリースビルドで Places API キーが正しく注入される（`Secrets.xcconfig` の Release 設定）
-- [ ] `GoogleService-Info.plist`（本番 Firebase プロジェクト）が同梱されている
+- [x] リリースビルドで Places API キーが正しく注入される（`Secrets.xcconfig` の Release 設定）— **2026-08-06 に TestFlight ビルドでカフェ検索の動作を確認**（Release 構成で実キーが通っている実証。CI 側の書き出しは `release-testflight.yml` の「Restore secret files」）
+- [x] `GoogleService-Info.plist`（本番 Firebase プロジェクト）が同梱されている — 同上。匿名 Auth → Firestore 同期が動かないとアプリが機能しないため、TestFlight での通常利用が実証になる
 - [x] Firestore Security Rules が本番にデプロイ済（2026-08-06 ユーザーが Console で確認。`users/{uid}` / `beanProfiles` / `curatedCafes` の 3 ブロック）
 - [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / **2026-08-06 にユーザーが Console で再確認**。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
-- [ ] App Icon（light / dark / tinted）が全サイズ揃っている
-- [ ] アーカイブ（Archive）→ App Store Connect へアップロード成功
+- [x] App Icon（light / dark / tinted）が全サイズ揃っている — 2026-08-06 確認。`iosApp/iosApp/Assets.xcassets/AppIcon.appiconset` に 3 バリアントとも 1024×1024 の単一サイズで存在（iOS 17+ の single-size 方式。他サイズは actool が生成）。**この項目は TestFlight 成功では証明できない** — dark / tinted は任意で、欠けていてもビルド・アップロードとも通るため、資産カタログを直接見る必要がある
+- [x] アーカイブ（Archive）→ App Store Connect へアップロード成功 — `release-testflight.yml` で実績あり（2026-08-06 時点で run 19〜22 が連続 success、TestFlight で実機動作確認済み）。本番提出時も同ワークフローを使う
 
 > 輸出コンプライアンス: 本アプリの暗号利用は標準 HTTPS（Firebase / Google Places）と Sign in with Apple の nonce ハッシュ（CryptoKit SHA256 = Apple 標準・ハッシュは暗号化に非該当）のみで、いずれも免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済みのため、提出のたびの暗号化アンケートは不要になる。
 

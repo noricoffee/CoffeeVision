@@ -26,16 +26,6 @@
 
 ### 未完・バックログ
 
-#### テイスティングスライダーを tap-to-seek 化（2026-08-06 起票）
-
-> ユーザー報告: コーヒー記録の追加 / 編集で、テイスティング 5 スライダーが**つまみを正確に掴まないと動かせない**。原因は標準 `Slider` の仕様（トラックのタップは無視され、thumb のドラッグのみを受ける）で、`CoffeeEditorView+Sections.swift` の `tastingSliderRow` がそのまま使っている。**仕様: トラック上のどこをタップ / ドラッグしても、その x 位置に対応する値へ即座に変わり、以後は指に thumb が追従する**（tap-to-seek）。1〜10 / step 1 のスナップ、`accessibilityAdjustableAction` を含む既存のアクセシビリティ、標準 Slider の見た目、step 移動時の触覚フィードバックはいずれも維持する。iosApp 完結・KMP 変更なし。
-
-| 状態 | タスク | 備考 |
-|------|------|------|
-| [x] | ios-engineer: `tastingSliderRow` を tap-to-seek 対応に（ヒットレイヤーで `DragGesture(minimumDistance: 0)` を受け、thumb インセット補正込みで値を算出） | 2026-08-06 完了。`TappableTastingSlider`（`CoffeeEditorView+Sections.swift` 内 private）。標準 `Slider` を `.allowsHitTesting(false)` で描画専用にし、透明レイヤーのジェスチャーで駆動 |
-| [x] | 親: レビューで挙動バグ 2 件を指摘し追加 dispatch（①スクロール開始時の値書き換え ②`onEnded` 未発火時の固着） | 2026-08-06 完了。いずれも `.simultaneousGesture` 採用の副作用。①は縦優勢判定 → 開始値へロールバック、②は `onChanged` 側でのジェスチャー開始検出で解決。経緯は implementation_note 2026-08-06 |
-| [x] | 親: override 無しビルド再検証 + commit + 目視項目を verification-checklist へ移送 | 2026-08-06 完了。親がフラグ無しで `** BUILD SUCCEEDED **` + `> Task :shared:framework:...` の Gradle 実行を独立確認（`OVERRIDE_KOTLIN_*` は環境・pbxproj とも 0 件）。目視は verification-checklist パス 2「テイスティングスライダーの tap-to-seek」へ移送 |
-
 #### 写真の保存時リサイズ + 枚数上限（2026-08-01 起票）
 
 > ASO-6 ①「写真が機種変更で消える」の対策コスト試算の過程で、**写真が一切リサイズされずに保存されていた**ことが判明（`CoffeeEditorView+Photos.swift` が `jpegData(compressionQuality: 0.85)` のみ）。用途の最大は共有カード 1080×1350px なのに、フル解像度をそのまま保存していた。**実測: 12MP HEIC が 4.39MB → 1.31MB**（HEIC はフル解像度 JPEG 再エンコードで ×1.64 に膨張していた）、年間 約 1.6GB → 約 0.4GB。**確定値: 長辺 2048px / JPEG q0.8 / 1 記録 10 枚**（2026-08-01 ユーザー決定）。requirements 未決事項「写真の最大枚数 / サイズ上限」を両半分とも消し込む。iosApp 完結・KMP 変更なし。プランは `.claude/plans/streamed-humming-lighthouse.md`、経緯は implementation_note 2026-08-01。
@@ -384,6 +374,10 @@
 #### 産地シノニム正規化 OriginNormalizer（2026-07-08 着手）
 
 > 完了（2026-07-08）: 「Ethiopia」「イルガチェフェ」→「エチオピア」の名寄せを `object OriginNormalizer`（trim → lowercase → シノニム辞書完全一致、辞書外は素通し）で決定論のまま実現し、全 origin 正規化ポイント 5 箇所に適用（ベクトル検索は過剰と判断し見送り）。domain 170 件 green（iOS / Android）+ 統合ビルド成功。仕様反映は analysis-model.md §1 / data-model.md §1.8、経緯は implementation_note 2026-07-08、複合語×辞書のすれ違いは lessons 2026-07-08。
+
+#### テイスティングスライダーの tap-to-seek 化（2026-08-06 起票）
+
+> 完了（2026-08-06）: ユーザー報告「つまみを正確に掴まないと動かせない」への対応。標準 `Slider` を `.allowsHitTesting(false)` で描画専用にし、重ねた透明レイヤーの `DragGesture(minimumDistance: 0)` で駆動する `TappableTastingSlider`（`CoffeeEditorView+Sections.swift`）で tap-to-seek 化。つまみ半径ぶんのインセット補正込み。本体はむしろ `Form` 内でのジェスチャー共存で、親レビューで副作用 2 件（touch down 発火による値の書き換え / `onEnded` 未発火でのラッチ固着）を潰した。ビルドは親がフラグ無しで独立再検証、実操作もユーザー確認済み。経緯は implementation_note 2026-08-06、教訓と sweep は lessons 2026-08-06、規約は `.claude/rules/swift-ios.md` へ昇格。
 
 ---
 

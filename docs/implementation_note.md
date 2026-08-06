@@ -936,7 +936,7 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 あわせて `INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad`（Debug / Release 両方）も削除した。デバイスファミリから iPad を外した時点で参照されない死んだ設定で、残すと「iPad も見ている」という誤読を招く。`INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone` は不変。
 
-検証は**ビルド後の成果物**で取った: `xcodebuild -showBuildSettings` で `TARGETED_DEVICE_FAMILY = 1` / `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`、Debug ビルド `** BUILD SUCCEEDED **` の後に `plutil -extract UIDeviceFamily` で `coffeevision.app/Info.plist` が **`[1]`** であることを確認。pbxproj の値は `GENERATE_INFOPLIST_FILE = YES` 経由で `UIDeviceFamily` に変換されるため、**pbxproj の diff だけでは「ASC がどう解釈するか」の証明にならない**（ASC が見るのは成果物の `Info.plist`）。同種の Info.plist 生成系設定を変えたときは成果物側で確認する。
+検証は**ビルド後の成果物**で取った: `xcodebuild -showBuildSettings` で `TARGETED_DEVICE_FAMILY = 1` / `SUPPORTED_PLATFORMS = iphoneos iphonesimulator`、Debug ビルド `** BUILD SUCCEEDED **` の後に `plutil -extract UIDeviceFamily xml1 -o -` で `coffeevision.app/Info.plist` が **`[1]`** であることを確認（**`-o -` は必須** — 付けないと `plutil -extract` は抽出結果で**元ファイルを上書きする**。2026-08-06 に親がこの行のコマンドをそのまま流用して成果物 `Info.plist` を 6 バイトに破壊した。lessons 2026-08-06）。pbxproj の値は `GENERATE_INFOPLIST_FILE = YES` 経由で `UIDeviceFamily` に変換されるため、**pbxproj の diff だけでは「ASC がどう解釈するか」の証明にならない**（ASC が見るのは成果物の `Info.plist`）。同種の Info.plist 生成系設定を変えたときは成果物側で確認する。
 
 将来 iPad 対応する場合は、この設定を戻すだけでは足りない（iPad スクショ / レイアウト検証 / `UIRequiresFullScreen` の要否判断がセットで要る）。
 
@@ -1135,3 +1135,21 @@ App Store 提出の必須項目 2 件（プライバシーポリシー URL / サ
 
 - 副作用: light バリアントの背景下端色が `#5A3A22` → `#4E3020` に変わっている（新意匠のコントラスト調整。dark / tinted は不変）
 - `grep -rn "systemSymbolName" iosApp/` = **0 件**が、以後この問題の回帰検出手段になる（app-store-metadata の提出前チェックリストに項目化した）
+
+### 2026-08-06: アプリが「英語バンドル」として振る舞っていた — 単一言語アプリの死角
+
+App Store 用スクリーンショットの目視中に、記録エディタの `DatePicker` が日本語端末でも `Aug 6, 2026` と英語表記になることを発見した。実装作業ではなく**撮影という別作業で見つかった**もので、そのまま提出していれば日本のユーザーに英語日付が出ていた。
+
+原因はアプリの有効ローカライゼーションが `en` のみだったこと（`project.pbxproj` の `developmentRegion = en` / `knownRegions = (en, Base)` / `.lproj` 0 件 / `CFBundleLocalizations` 無し）。iOS は端末が `ja_JP` でも `Locale.current` を英語にフォールバックさせる。
+
+**修正は `.lproj` を新設しない最小構成を採った**: `developmentRegion` を `ja`、`knownRegions` に `ja`、`Info.plist` に `CFBundleLocalizations = [ja]`。文字列リテラルは 1 つも変えていない。既存 docs の「UI は日本語のみ・`.xcstrings` / `.lproj` は未整備」という記述と矛盾しない — 今回直したのは**文言ではなく OS が判定する実効言語**であり、多言語化に踏み出したわけではない。App Store で英語(U.S.) ロケールを「キーワード枠としてのみ」使う方針（app-store-metadata §4）にも影響しない。
+
+**検証はビルド成果物の `Info.plist` を実読みして行った**（`CFBundleDevelopmentRegion = ja` / `CFBundleLocalizations = [ja]` / `.lproj` 0 件）。pbxproj の diff もビルド成功も実効ロケールの証明にならない点は、2026-07-28 の `UIDeviceFamily` 検証と同じ構図。
+
+**副産物 — 修正が別の潜在バグを顕在化させた**: 横断点検で `SettingsView.writeExportFile` の `DateFormatter` が `locale` 未設定なのを検出した。固定 `dateFormat = "yyyyMMdd"` でも**暦法はロケール依存**なので、端末の暦法が和暦だとファイル名の年が和暦年になる。修正前は `en` フォールバックでグレゴリオ暦に落ちていたため、**今回の `ja` 化で初めて踏みうる状態になった**。「ロケールを正しくする修正が、ロケール依存の別バグを起こす」という順序があるので、この種の修正では**依存箇所の点検を修正と同じ変更に含める**必要がある。
+
+**さらにその点検が、初期から存在した実バグを掘り当てた**: `CoffeeEditorView` の `LocalDate ↔ Date` 変換が `Calendar.current` を使っており、端末の暦法が和暦だと記録日が壊れる。親が PoC で実測したところ、表示は `2026-08-06` → **`4044-08-06`**、Firestore への保存値は **`0008-08-06`**（元号年が西暦欄に入る）で、**永続データまで壊れる**性質だった。`Calendar(identifier: .gregorian)` に固定し（タイムゾーンは `TimeZone.current` を維持）是正。未リリースのため実ユーザーへの被害はない。
+
+**実装方針として固定する**: `LocalDate ↔ Date` の変換は `CoffeeEditorView.gregorianCalendar` 経由で行い、**`Calendar.current` は使わない**。`Calendar.current` は「ユーザーに見せる書式」のための API であって、ドメインの西暦年月日を変換するための API ではない。同じ理由で固定書式の `DateFormatter` には `locale = en_US_POSIX` を明示する（Apple QA1480）。
+
+教訓（`.lproj` 無しでも実効言語の設定は要る / `plutil -extract` の破壊挙動 / `Calendar.current` の暦法依存）は lessons 2026-08-06 に記録。

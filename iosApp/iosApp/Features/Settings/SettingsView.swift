@@ -291,6 +291,7 @@ struct SettingsView: View {
     /// ファイル名は `coffeevision-export-YYYYMMDD.json`。
     private func writeExportFile(json: String) throws -> URL {
         let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyyMMdd"
         let fileName = "coffeevision-export-\(formatter.string(from: Date())).json"
         let url = FileManager.default.temporaryDirectory.appendingPathComponent(fileName)

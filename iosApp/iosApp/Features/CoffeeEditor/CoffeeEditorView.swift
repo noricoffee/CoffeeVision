@@ -191,16 +191,27 @@ struct CoffeeEditorView: View {
 
     // MARK: - LocalDate ↔ Date 変換
 
+    /// 西暦の年月日を扱うための固定カレンダー。
+    ///
+    /// `Calendar.current` は端末の「暦法」設定（和暦・仏暦など）に追従するため、
+    /// `LocalDate.year` のような西暦年をそのまま渡すと誤った日付になる。
+    /// タイムゾーンは端末のものを維持しつつ、暦法だけグレゴリオ暦に固定する。
+    private var gregorianCalendar: Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone.current
+        return calendar
+    }
+
     func localDateToDate(_ localDate: Kotlinx_datetimeLocalDate) -> Date {
         var components = DateComponents()
         components.year = Int(localDate.year)
         components.month = Int(localDate.monthNumber)
         components.day = Int(localDate.dayOfMonth)
-        return Calendar.current.date(from: components) ?? Date()
+        return gregorianCalendar.date(from: components) ?? Date()
     }
 
     func dateToLocalDate(_ date: Date) -> Kotlinx_datetimeLocalDate {
-        let components = Calendar.current.dateComponents([.year, .month, .day], from: date)
+        let components = gregorianCalendar.dateComponents([.year, .month, .day], from: date)
         return Kotlinx_datetimeLocalDate(
             year: Int32(components.year ?? 2026),
             monthNumber: Int32(components.month ?? 1),

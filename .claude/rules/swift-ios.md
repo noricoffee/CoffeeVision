@@ -14,6 +14,9 @@ paths:
 - 観測タスクの破棄はブリッジの `deinit` 起点（`kotlin.clear()`）。タブ常駐 View では `.onDisappear` で observation を cancel しない
 - **`.onChange(of:) { Task { ... } }` を書かない。`.task(id:)` を使う**。`.onChange` から起こす `Task { }` は**非構造化タスク**でビューのライフサイクルに紐づかないため、ビュー消滅後もキャンセルされずに走り続ける（遅延や重い処理を含むと、閉じた画面のための処理・別画面上へのダイアログ提示になる）。`.task(id:)` は **①表示時に 1 回 ②`id` 変化のたびに前タスクをキャンセルして再起動 ③ビュー消滅時にキャンセル** をまとめて満たすので、「初期状態 + 遷移」の両方を 1 本でカバーできる。`await Task.sleep` 等を挟む場合は `try?` がキャンセルを飲み込むので `guard !Task.isCancelled` を明示的に置く（lessons 2026-08-01）
 
+- **ドメインの日付を変換するときに `Calendar.current` / `DateFormatter` の既定ロケールを使わない**。どちらも端末設定（**暦法**は言語・地域とは別軸）に追従するため、和暦端末では西暦年が元号年として解釈される。実測: `LocalDate(2026-08-06)` の表示が `4044-08-06`、Firestore への保存値が `0008-08-06` になり**永続データが壊れた**。`DateComponents(year:month:day:)` を組み立てる / 取り出すコードが目印で、そこは `Calendar(identifier: .gregorian)`（タイムゾーンだけ `TimeZone.current` を維持）に固定する。固定書式の `DateFormatter` には `locale = Locale(identifier: "en_US_POSIX")` を明示（Apple QA1480）。**表示用の書式化**（「今日」「3 日前」等）に `Calendar.current` を使うのは正しい（lessons 2026-08-06）
+- **単一言語アプリでも「バンドルの実効言語」は明示する**。`.lproj` / `.xcstrings` を持たなくても、`project.pbxproj` の `developmentRegion` が `en` のままだと iOS が `Locale.current` を英語にフォールバックさせ、**OS が描画する部分（`DatePicker` 等）だけが英語**になる。文字列リテラルが日本語なので画面は日本語に見え、壊れ方がまだらで気づきにくい。検証は**ビルド成果物の `Info.plist` を実読み**する（`plutil -extract KEY xml1 -o -` — **`-o -` を省くと元ファイルを上書き破壊する**）（lessons 2026-08-06）
+
 ## UI/UX（iOS）
 
 - カラーはシステムカラー（`.primary` / `Color(.systemBackground)` など）を優先する。反転するセマンティックカラーを背景に使うときは前景も連動させる

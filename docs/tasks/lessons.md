@@ -869,3 +869,43 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 「初期状態 + 変化」を両方拾いたくなったら、`.task` と `.onChange` を並べるのではなく **`.task(id:)` を思い出す**。2 経路に分けた瞬間、片方だけキャンセル可能という非対称が入る。`.claude/rules/swift-ios.md` へ一般則として昇格済み
 - **発生源**: `AnalysisView`（ASO-1 レビュー依頼、2026-08-01 実装 → 同日 B-8 で是正）
 - **横展開点検（2026-08-01）**: `grep -rn -A3 "\.onChange(of:" iosApp --include="*.swift" | grep "Task {"` で全件抽出 → **2 件**（`AnalysisView` = B-8 本体 / `CoffeeEditorView:129` の写真取り込み）。後者は**ユーザーに見える不具合はなかった**（写真がディスクに書かれるのは `saveWithPhotoFlush()` = 保存ボタン経路のみなので、エディタを閉じてもファイルは漏れない）が、閉じたエディタのために最大 10 枚のデコードとダウンサンプルを続ける資源の無駄であり、かつ**片方だけ直すと次に書く人がどちらを真似ればよいか分からなくなる**ため同じ変更で `.task(id:)` 化した。**是正後の再実行で 0 件**
+
+---
+
+## 2026-08-06
+
+### 「UI 文言は日本語のみ」という方針は、バンドルの**実効言語**までは決めてくれない
+
+- **症状**: App Store 用スクリーンショットを撮っていて、記録エディタの「記録日」が **`Aug 6, 2026`** と英語表記になっているのを発見。シミュレータ側は `AppleLanguages = (ja-JP)` / `AppleLocale = ja_JP` で正しく日本語設定だった。**実機・リリースビルドでも同じ**で、日本のユーザーに英語の日付が出る状態のまま提出直前まで来ていた
+- **原因の構造**: アプリの有効ローカライゼーションが `en` だけだったため、iOS が端末言語に関わらず `Locale.current` を英語にフォールバックさせていた。実測は `project.pbxproj` の `developmentRegion = en` / `knownRegions = (en, Base)` / ビルド成果物の `CFBundleDevelopmentRegion = en` / `.lproj` **0 件** / `CFBundleLocalizations` キー無し。**厄介なのは壊れ方が「まだら」なこと** — 画面の文字列は `String(localized:)` のキーが日本語リテラルなのでそのまま日本語に見え、**OS が描画する部分（`DatePicker`）だけが英語になる**。アプリ全体が英語になるなら一目で分かるが、1 コンポーネントだけなので気づきにくい。加えて開発者は英語日付を見ても違和感を持ちにくい。docs には「UI は日本語のみ（`.xcstrings` / `.lproj` は未整備）」と正しく書かれていたが、**それが実効ロケールを壊しているとは誰も繋げていなかった**。`.lproj` が無いことは「ローカライズしていない」の説明としては正しく、そこで思考が止まる
+- **修正パターン**: `.lproj` を新設せずに直せる。`project.pbxproj` の `developmentRegion` を `ja`、`knownRegions` に `ja`、`Info.plist` に `CFBundleLocalizations = [ja]` の 3 点。文字列リテラルは一切変えない（直すのは OS が判定する実効言語だけ）。**検証はビルド成果物の `Info.plist` を実読みする** — pbxproj の diff もビルド成功も、実効ロケールの証明にならない（同じ教訓が implementation_note 2026-07-28 の `UIDeviceFamily` 検証にもある）
+- **教訓**: **「UI 文言のローカライズ方針」と「バンドルの実効言語」は独立した 2 つの設定**。前者が「日本語のみ・カタログ不要」でも、後者は明示しないと Xcode テンプレート既定の `en` が残る。単一言語アプリほど「ローカライズしていないのだから設定も要らない」と考えてしまい、この穴に落ちる。**OS 描画コンポーネント（`DatePicker` / `UIDatePicker` / システムアラートのボタン / 共有シート）の言語**が、自前文言とは別系統で決まることを覚えておく
+- **発生源**: App Store スクリーンショット撮影（2026-08-06）。`05-record-editor.png` を親が目視して発見。**撮影という「実装と無関係な作業」でなければ提出まで気づかなかった**可能性が高い
+- **横展開点検（2026-08-06）**: `grep -rn "DatePicker\|DateFormatter\|NumberFormatter\|RelativeDateTimeFormatter\|ListFormatter\|MeasurementFormatter\|\.formatted(" iosApp/iosApp --include='*.swift'` で全件抽出 → **2 件**。①`CoffeeEditorView+Sections.swift:409` の `DatePicker` = 本件 ②`SettingsView.swift:293` の `DateFormatter`（エクスポートファイル名 `yyyyMMdd`）→ **`locale` 未設定のヒットあり**。固定 `dateFormat` でも**暦法はロケール依存**なので、端末の暦法が和暦だと `yyyy` が和暦年になり `coffeevision-export-00080806.json` になる。**今回の `ja` 化でむしろ顕在化しうる**（修正前は `en` フォールバックでグレゴリオ暦に落ちていた）ため `ios-engineer` へ dispatch → `locale = Locale(identifier: "en_US_POSIX")` を追加して是正済み。`.formatted(` は 0 件。※サブエージェントの初回レポートはこの箇所を「明示 `dateFormat` の数字のみパターンでロケール非依存・影響なし」と評価していたが、**`dateFormat` の固定と暦法の固定は別物**で成立しない。**この dispatch の横展開点検がさらに重い実バグを掘り当てた**（下記 `Calendar.current` のエントリ）
+
+### `plutil -extract` は `-o` を省くと**元ファイルを抽出結果で上書きする**（名前に反して破壊的）
+
+- **症状**: `developmentRegion` 修正の検証で `plutil -extract CFBundleLocalizations json <app>/Info.plist` を実行。以降 `CFBundleLocalizations` も `CFBundleDisplayName` も `GADApplicationIdentifier` も「キーが存在しない」と返るようになり、**サブエージェントの正しい報告を「実態と食い違う」とユーザーに報告してしまった**。実際は成果物 `Info.plist` が 6 バイトの `["ja"]` に化けていた（`file` コマンドが `JSON data` と判定して発覚）
+- **原因の構造**: `plutil -extract KEY FORMAT FILE` は `-o` 省略時に **FILE を抽出結果で上書きする**。`extract` という語感は読み取り専用だが実際は破壊的で、`-o -`（標準出力）を付けて初めて非破壊になる。**発見を遅らせたのは実行順序**: 1 回目（`CFBundleDevelopmentRegion raw`）は無傷のファイルを読んで `ja` を正しく返し、その 1 回目の実行で**まだ壊れていない**。壊れるのはそのコマンド自身の副作用なので、**2 回目以降の「キーが無い」を新しい事実として読んでしまう**。さらに悪いことに、これは**検証行為そのものが対象を壊す**構図なので、「検証結果がおかしい → 対象を疑う」方向に思考が向き、「検証手段を疑う」方向には向かいにくい
+- **修正パターン**: 読み取り目的なら必ず **`plutil -extract KEY xml1 -o -`**。あるいは破壊的オプションを持たない `plutil -p` / `defaults read` を使う。ビルド成果物を壊した場合は該当ファイルを削除して再ビルドすれば復旧する（ソースは無傷）
+- **教訓**: **「読み取りのつもり」のコマンドでも、引数にファイルパスを取るなら破壊的でないか確認する**。特に検証フェーズでは、同じコマンドを対象を変えて繰り返すため、1 つの誤用が全ての観測を汚染する。**観測結果が直前の報告と食い違ったら、対象より先に観測手段を疑う**（今回はサブエージェントの報告が正しく、親の観測が壊れていた）
+- **発生源**: 2026-08-06、親による `developmentRegion` 修正の再検証。ユーザーへ誤った食い違い報告をした後、`stat` / `file` で自己是正
+- **横展開点検（2026-08-06）**: `grep -rn "plutil -extract"` をリポジトリ全体（`.claude/**` / `docs/**` / スクリプト / CI YAML 含む）に実行 → **3 件**。①②`.claude/agent-memory/ios-engineer/xcode-development-region.md` の 2 件 = **`-o -` 付きで正しい**（サブエージェント側は正しく使えていた。変更不要）③`docs/implementation_note.md:939`（2026-07-28 の `UIDeviceFamily` 検証記録）が **`-o` 無しで記載**されており、**親が今回まさにこの行を流用して破壊した**。→ `-o -` 付きに是正し、省略時の破壊挙動を注記して**同じ踏み方が再発しないようにした**。CI / スクリプトでの使用は 0 件（`release-testflight.yml` は `plutil` 自体を使っていない）
+
+### `Calendar.current` は端末の「暦法」設定に追従する — 西暦の年月日を扱う変換で使うとデータが壊れる
+
+- **症状**: 端末の設定（一般 > 言語と地域 > **カレンダー**）を和暦にしているユーザーが記録日を扱うと、`CoffeeEditorView` の `LocalDate ↔ Date` 変換が**往復とも壊れる**。親が PoC（`Calendar(identifier: .japanese)` で `Calendar.current` を再現）で実証した実測値:
+
+  | | 修正前 | 修正後 |
+  |---|---|---|
+  | `localDateToDate(LocalDate(2026-08-06))` の表示 | **4044-08-06**（「令和2026年」と解釈される） | 2026-08-06 |
+  | `dateToLocalDate(2026-08-06)` の結果 | `LocalDate(year: 8, ...)` | `LocalDate(year: 2026, ...)` |
+  | Firestore に保存される文字列 | **`0008-08-06`** | `2026-08-06` |
+
+  表示が数千年ずれるだけでなく、**元号年が西暦欄に書き込まれて永続化される**ため、同期先の Firestore データまで壊れる
+- **原因の構造**: `Calendar.current` が追従するのは端末の**暦法設定**で、これは**言語・地域設定とは独立した軸**（日本語 + 西暦、日本語 + 和暦のどちらもあり得る）。`LocalDate.year` は kotlinx-datetime の**西暦年**なので、それを和暦カレンダーの `DateComponents.year` に渡すと元号年として解釈される。逆方向では元号年が取り出されて `LocalDate.year` に入る。**両方向とも型は合っていてコンパイルも通り、西暦設定の端末では完全に正しく動く**ため、開発中に踏むことがまずない。「`Calendar.current` = 端末に合わせる = 正しい」という直感が、ドメインモデルの西暦年を扱う文脈では逆に働く
+- **修正パターン**: `Calendar(identifier: .gregorian)` を明示し、**タイムゾーンだけ `TimeZone.current` を維持する**（暦法は固定、地域時刻は端末に追従、が正しい組み合わせ）。`DateComponents(year:month:day:)` を**組み立てる / 取り出す**コードが目印で、そこに `Calendar.current` があれば疑う。表示用の書式化（「今日」「3日前」等）に使うぶんには `Calendar.current` が正しい
+- **教訓**: **`Calendar.current` / `Calendar.autoupdatingCurrent` は「ユーザーに見せるため」の API であって「データを変換するため」の API ではない**。ドメイン層の日付（ISO-8601 / 西暦）とプラットフォームの `Date` を橋渡しする箇所では暦法を固定する。同じ理屈が固定書式の `DateFormatter`（`locale = en_US_POSIX` が必要、Apple QA1480）にも適用され、**この 2 つはセットで点検する**
+- **発生源**: `CoffeeEditorView.localDateToDate` / `dateToLocalDate`（`DatePicker` とドメインモデルの橋渡し）。**プロジェクト初期から存在していた**が、未リリースのため実ユーザーへの被害はない
+- **発見経路が示すこと — sweep が sweep を生んだ**: 発端は App Store スクショ撮影中の英語日付（上記 `developmentRegion` エントリ）。①その sweep で `SettingsView` の `DateFormatter` を検出 → ②その修正 dispatch に「同型箇所の点検」を含めたところ、③**依頼していない `Calendar.current` の実バグ**が出た。**1 段目の sweep では見つからなかった**（1 段目は「ロケール依存の書式 API」を探しており、`Calendar` は対象語に入れていなかった）。教訓としては、**sweep のパターンは最初の症状から連想した語だけで組むと、同じ根（ロケール/暦法という環境依存）の別 API を取りこぼす**。ロケール系を点検するときの語彙セットは `DateFormatter` / `NumberFormatter` / `.formatted(` / `Locale` に加えて **`Calendar(` / `Calendar.current` / `TimeZone`** まで含める
+- **横展開点検（2026-08-06、`ios-engineer` 実施 + 親が結果を確認）**: `iosApp` を `DateFormatter` / `ISO8601DateFormatter` / `Calendar(` / `Calendar.current` で grep → 該当は `CoffeeEditorView` の 2 箇所のみで**修正済み**。**該当なし**: `PreviewSamples.swift:29` は既に `.gregorian` 明示 / `CoffeeDetailView`・`CoffeeShareCardView` の `formattedDate` は `String(format: "%04d/%02d/%02d")` で `LocalDate` の整数フィールドを直接展開（`Calendar` 非経由）/ `CoffeeFirestoreMapper.parseIsoLocalDate` は `"-"` split の整数変換のみ。**`shared/**`（Kotlin）も点検 → 同型なし**: 日付は `kotlinx-datetime` の `LocalDate` と `LocalDate.parse` / `.toString()` のみで、`SimpleDateFormat` / `java.time.format.DateTimeFormatter` / `java.util.Calendar` は 0 件。`kotlinx-datetime` の `LocalDate` は ISO-8601 固定で暦法・ロケール非依存

@@ -2,14 +2,14 @@
 
 - [Swift Charts / カスタム Path チャート](swiftui-charts.md) — レーダーチャート自前描画、enum 固定順マージ + 色ランプ（分析タブ）
 - [SKIE ブリッジ実地パターン](skie-bridge-interop.md) — Equatable、nullable Double、data class 破壊的変更、sealed class 新 case、Firestore Repo 2 段構成、object カタログ + legacy フォールバック Picker
-- [UI コンポーネント / ローカルキャッシュパターン](ui-components-patterns.md) — TagChip、AccentColor 形式、buttonStyle 分岐バグ、StarRatingView nullable、UserDefaults キャッシュ、段階読み込み、ShareLink、単一レコード削除(isDeleted+pending写真)、下部ドラッグシート(Button+simultaneousGesture)、排他的複数シート+連動強調は enum item + .sheet(item:)
+- [UI コンポーネント / ローカルキャッシュパターン](ui-components-patterns.md) — TagChip、AccentColor 形式、buttonStyle 分岐バグ、StarRatingView nullable、UserDefaults キャッシュ、段階読み込み、ShareLink、単一レコード削除(isDeleted+pending写真)、下部ドラッグシート(Button+simultaneousGesture)、排他的複数シート+連動強調は enum item + .sheet(item:)、tap-to-seek スライダー(標準Slider描画専用化+透明DragGesture+simultaneousGesture)
 - [位置情報 / MapKit 実装パターン](location-mapkit.md) — LocationManager 無音取得、MKLocalPointsOfInterestRequest 常時ピン、MKMapItem.location、Places locationBias は範囲制限でないためクライアント側 MKCoordinateRegion 矩形フィルタが要る
 - [xcodebuild 検証の落とし穴](xcodebuild-verification.md) — tail で Gradle ログが消える、destination 名確認、-list の Schemes 位置
 - [Firebase SPM pbxproj 手動追加](firebase-spm-pbxproj.md) — 一般手順 + FirebaseAnalyticsWithoutAdIdSupport 廃止
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意 + Bool キー「未設定→true」は `.source == .static` で判定（DerivedData checkout の `.m` まで裏取り）
 - [AdMob アダプティブバナー実装パターン](admob-native-ads.md) — ネイティブ→バナー再編の経緯、SPM モジュール名の罠、BannerView/AdSize API、UMP をコードから呼ばない理由、`.task` 発火の罠と GeometryReader 幅計測
 - [ImageRenderer 共有カード画像生成パターン](image-renderer-share-card.md) — 固定フレーム+clipped、scaleEffect+frame での固定高さコンポーネント圧縮、可変レイアウトの高さ配分計算、PreviewSamples 4 種の使い回し
-- [SwiftUI View 分割の落とし穴](swiftui-view-splitting.md) — 別ファイル extension への private 移動でアクセス不能になる問題、複数消費者が要る算出値は親に残し子へ down-flow で渡す設計判断、fetch ロジックを `@Observable` サービスへ隔離（クラス全体 `@MainActor`・共有 static しきい値・dedup は引数渡し）、`@State` 保持クラスのコールバックが兄弟 `@State`/`@FocusState` を要る場合は `.task` で事後配線、`@Bindable` ローカル宣言でメンバー単位 Binding、行番号一括削除は範囲内の無関係ヘルパー混入を grep で事前チェック、呼び出し元が同一新ファイルに収まるかで private 温存/internal 化を仕分ける（AnalysisView 分割）
+- [SwiftUI View 分割の落とし穴](swiftui-view-splitting.md) — 別ファイル extension への private 移動でアクセス不能になる問題、複数消費者が要る算出値は親に残し子へ down-flow で渡す設計判断、fetch ロジックを `@Observable` サービスへ隔離（クラス全体 `@MainActor`・共有 static しきい値・dedup は引数渡し）、`@State` 保持クラスのコールバックが兄弟 `@State`/`@FocusState` を要る場合は `.task` で事後配線、`@Bindable` ローカル宣言でメンバー単位 Binding、行番号一括削除は範囲内の無関係ヘルパー混入を grep で事前チェック、呼び出し元が同一新ファイルに収まるかで private 温存/internal 化を仕分ける（AnalysisView 分割）、extension 途中への Edit 挿入で後続メンバーが誤ネストする brace 崩壊（新規宣言はブロック外側に置く/開閉括弧数を機械チェック）
 - [AppKit アイコン生成 script パターン](appkit-icon-generation.md) — `generate_app_icon.swift`（NSBezierPath 自前描画、SF Symbols 禁止）、透過 PNG の穴あけは `.copy` 合成、`eyeOutline` は正方形前提なのでオフスクリーン `NSImage` 合成で回避、App Store アイコンはアルファ禁止なので `CGContext(.noneSkipLast)` で描く、検証は Release/Archive の成果物で行う（actool は Debug では alpha を残す）
 - [Xcode developmentRegion と実効ロケール](xcode-development-region.md) — `.lproj` 無しでも `developmentRegion`/`CFBundleLocalizations` が DatePicker 等の OS 書式言語を左右する、`plutil -extract` での検証コマンド、`.app` 名は `PRODUCT_NAME` 由来
 

@@ -1153,3 +1153,18 @@ App Store 用スクリーンショットの目視中に、記録エディタの 
 **実装方針として固定する**: `LocalDate ↔ Date` の変換は `CoffeeEditorView.gregorianCalendar` 経由で行い、**`Calendar.current` は使わない**。`Calendar.current` は「ユーザーに見せる書式」のための API であって、ドメインの西暦年月日を変換するための API ではない。同じ理由で固定書式の `DateFormatter` には `locale = en_US_POSIX` を明示する（Apple QA1480）。
 
 教訓（`.lproj` 無しでも実効言語の設定は要る / `plutil -extract` の破壊挙動 / `Calendar.current` の暦法依存）は lessons 2026-08-06 に記録。
+
+### 2026-08-06: テイスティングスライダーの tap-to-seek — ジェスチャー共存で 2 段の副作用を踏んだ
+
+ユーザー報告「つまみを正確に掴まないと動かせない。つまみじゃないところをタップしても変わるようにしたい」への対応。標準 `Slider` はトラックのタップを無視し thumb のドラッグしか受けない仕様なので、SwiftUI の範囲では自前ジェスチャーに置き換えるしかない。
+
+**構成**: 標準 `Slider` を `.allowsHitTesting(false)` で**描画専用**にし、同じ frame に重ねた `Color.clear` の `DragGesture(minimumDistance: 0)` で駆動する（`TappableTastingSlider`、`CoffeeEditorView+Sections.swift` 内 private）。トラック / thumb を自前描画する全自作は見た目の再現コストが高いので採らなかった。値の算出は **thumb 半径ぶんのインセット補正**込み（トラックの描画幅は View 幅ではなく左右に半径ぶん詰まっている。補正しないと両端に到達できない）。thumb 直径はシミュレータでの実測手段がないため標準サイズの近似値 **28pt** を定数化した — 目視でズレたらこの定数を調整する前提でコメントを残してある。触覚は `.sensoryFeedback(.selection, trigger: value)` で標準 Slider の step 移動時のフィードバックを代替。
+
+**この変更の本体は tap-to-seek そのものではなく、`Form`（List）内でジェスチャーを共存させる部分だった**。初回実装から親のレビューで 2 段の副作用が出た:
+
+1. **`.gesture` はスクロールを奪う** → `.simultaneousGesture` に変更（ios-engineer の判断）。だが `DragGesture(minimumDistance: 0)` は **touch down の瞬間に `onChanged` が発火する**ため、今度は「Form を縦スクロールしようとしてスライダー行に指を置いただけで、その x 位置の値に書き換わる」が発生する。テイスティングは 5 本並ぶので指が乗る確率が高く、**保存されるデータが黙って変わる**方向のバグだった。対策は、ジェスチャー開始時の値を保持し、縦方向の移動が支配的（`|height| > 10pt` かつ `|height| > |width|`）になったらスクロール意図と判定して**開始値へロールバック**し、以後そのジェスチャー中は更新しない。一瞬値が変わって戻るちらつきは許容した（データが壊れるより軽い）
+2. **その状態リセットを `onEnded` だけに置くと固着する**。SwiftUI のジェスチャーは他のジェスチャーに競り負けて**キャンセル**されたとき `onEnded` を呼ばない。スクロールが本格的に始まった経路でこれが起きると `isScrollDominant = true` が残り、**そのスライダーが以後まったく反応しなくなる**（＝1 の対策が 1 より悪い壊れ方を生む）。対策は `onChanged` 側で毎イベント「これは新しいジェスチャーの最初のイベントか」（`translation` が 0.1pt 未満）を判定して状態をまとめて初期化すること。`onEnded` のリセットは保険として残した
+
+**一般化**: `ScrollView` / `List` の中に `minimumDistance: 0` のドラッグジェスチャーを置くときは、①スクロールを奪わないか ②touch down だけで副作用が出ないか ③ジェスチャーがキャンセルされても状態が復元するか、の 3 点をセットで確認する。①だけ見て `.simultaneousGesture` にすると ②③ が残る。**状態リセットをジェスチャー終端イベントに依存させず、開始イベント側で初期化する**のが ③ の一般解。
+
+ビルドは親がフラグ無しの `xcodebuild` で再検証済み（`> Task :shared:framework:...` が走った上での `** BUILD SUCCEEDED **`）。実操作（タップ位置の一致 / 端 1・10 への到達 / スクロール共存 / 固着の回帰 / VoiceOver）は verification-checklist パス 2 へ移送。

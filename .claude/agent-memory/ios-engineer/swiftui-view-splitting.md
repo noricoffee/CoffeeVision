@@ -57,6 +57,12 @@ metadata:
 - 逆に本体（メインファイル）の `body`/`toolbarContent` から呼ばれる Photos 側の関数（`handlePickerSelection` は `.onChange` から、`saveWithPhotoFlush` は `toolbarContent` から）も同じ理由で internal 化必須。
 - `@State` プロパティも同様: 宣言はメインファイルに残し、Sections/Photos 両方の extension から読み書きするもの（`viewModel` / `pendingImageData` など）は、たとえ片方の extension からしか実際には呼ばれなくても、**宣言ファイルと参照ファイルが別なら internal 化が要る**（`private` はファイルスコープであり "呼び出し元の数" ではなく "宣言ファイルと参照ファイルが同じか" で判定する）。
 
+## `extension` の途中に Edit で新しい top-level 型を挿し込むと、後続メンバーが誤ってネストして brace 崩壊する（2026-08-06、テイスティングスライダー tap-to-seek 対応で確認）
+
+- `extension Foo { ... memberA(); memberB(); ... }` の**途中のメンバー（memberA）直後**に「新しい独立した `struct`/`Preview` を追加したい」場合、`old_string` を「memberA の閉じ `}` を含めてそこで extension も閉じ、新 struct を挟んで別ファイルのように続ける」形の `new_string` に置き換えると、**新 struct 以降に置いた閉じ忘れの `}` が、後ろに残っている memberB 以降を意図せず新 struct の内側にネストさせてしまう**（1 つの Edit 呼び出しでは new_string の外側にある「その後に続く元の内容」の位置関係までは制御できないため）。症状は "extraneous '}' at top level" ではなく、むしろ逆に **後方の関数がどこか別の型の内側に閉じ込められてコンパイルは通らないのに、エラーメッセージが発生箇所と無関係な位置に出る**ことがある。
+- 安全な手順: ① 新しい top-level 宣言は「対象 extension の**完全な終端（最後のメンバーの後）**」に追加する。extension の途中に置きたい場合でも、まず extension 全体を最後まで維持したまま新宣言をファイル末尾に置き、その後で `tastingSliderRow` のようなメンバー内部から新宣言を参照するだけにすれば、brace 構造を作り直す必要がない。② それでも構造を動かした場合は、`python3 -c "s=open(path).read(); print(s.count('{'), s.count('}'))"` で開き括弧・閉じ括弧の総数が一致するかを機械的に確認してから `Read` で目視確認する（今回は 1 回目の Edit で `}` の過不足に気づかず、`Read` で気づいて `python3` の `del lines[...]` ベースの再構成で修正した）。
+- 教訓: 複数メンバーを持つ `extension`/`class`/`struct` の**内部**を Edit で触るときは、`old_string`/`new_string` の中で開き `{` と閉じ `}` の対応を全部自分で完結させ、「ここで型/extension を閉じてまた別のを開く」ような操作は避け、新規宣言は既存ブロックの外側（前後）に追加する方が事故が少ない。
+
 ## 参照: [ui-components-patterns.md](ui-components-patterns.md) の「排他的な複数種シート」パターンとは独立の論点
 
 上記は「1 つの View を複数の小さい View 構造体に割る」ときの状態設計の話で、`ui-components-patterns.md` の enum item シートパターン（表示状態の排他制御）とは別の関心事。

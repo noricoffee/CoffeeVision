@@ -309,26 +309,19 @@ extension CoffeeEditorView {
                     .monospacedDigit()
                     .frame(minWidth: 44, alignment: .trailing)
             }
-            Slider(
-                value: Binding(
-                    get: { Double(value) },
-                    set: { onChanged(Int($0.rounded())) }
-                ),
-                in: 1...10,
-                step: 1
-            )
-            .accessibilityLabel(label)
-            .accessibilityValue(String(localized: "\(label) \(value)/10"))
-            .accessibilityAdjustableAction { direction in
-                switch direction {
-                case .increment:
-                    onChanged(min(value + 1, 10))
-                case .decrement:
-                    onChanged(max(value - 1, 1))
-                @unknown default:
-                    break
+            TappableTastingSlider(value: value, range: 1...10, onChanged: onChanged)
+                .accessibilityLabel(label)
+                .accessibilityValue(String(localized: "\(label) \(value)/10"))
+                .accessibilityAdjustableAction { direction in
+                    switch direction {
+                    case .increment:
+                        onChanged(min(value + 1, 10))
+                    case .decrement:
+                        onChanged(max(value - 1, 1))
+                    @unknown default:
+                        break
+                    }
                 }
-            }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel(String(localized: "\(label) \(value)/10"))
@@ -495,3 +488,207 @@ extension CoffeeEditorView {
         }
     }
 }
+
+// MARK: - TappableTastingSlider（tap-to-seek 対応スライダー）
+
+/// テイスティングスライダー専用の tap-to-seek コンポーネント。
+///
+/// 標準 `Slider` はトラック部分のタップを無視し thumb のドラッグしか受け付けないため、
+/// 「トラックのどこをタップしても即座にその位置の値へ変わり、そのまま指を滑らせると
+/// thumb が追従する」体験を実現するには標準 `Slider` の描画をそのまま使いつつ、
+/// ジェスチャーだけを透明なレイヤーに差し替える必要がある。
+///
+/// 構成:
+/// - 標準 `Slider` を `.allowsHitTesting(false)` にして「見た目の描画専用」にする
+///   （渡された `value` をそのまま表示するだけで、自身はタッチを受け取らない）
+/// - 同じ frame に重ねた `Color.clear` に `DragGesture(minimumDistance: 0)` を付け、
+///   タップ（＝距離 0 のドラッグ開始）とドラッグ追従の両方をこのレイヤー 1 つで処理する
+/// - Form/List の縦スクロールと共存させるため `.simultaneousGesture` を使う。その代償として
+///   touch down 直後の `onChanged` でタップ位置の値へ即書き換わってしまうため、縦方向優勢と
+///   判定した時点で以後の更新を止め、ジェスチャー開始時点の値へロールバックする
+private struct TappableTastingSlider: View {
+
+    /// 現在値（1...10 などの整数域）
+    let value: Int
+
+    /// 値域（step は常に 1 固定）
+    let range: ClosedRange<Int>
+
+    /// 値変更時のコールバック。スナップ後の整数値のみが渡される（中間値は流れない）
+    let onChanged: (Int) -> Void
+
+    /// 標準 `Slider` のつまみ（knob）の概算直径。
+    ///
+    /// つまみの中心は左右それぞれこの半径ぶん内側までしか移動できない
+    /// （トラックの描画幅 ＝ View 幅そのものではなく、左右に半径ぶん詰まっている）。
+    /// この補正をせずに View 幅そのものから値を算出すると、両端（最小値/最大値）に
+    /// 到達できない・端付近で値が飛ぶ、という不具合になる。
+    /// システムスライダーの標準的なつまみサイズ（約 28pt）を採用した近似値。
+    /// 実機/シミュレータで見た目と算出値がズレる場合はここを調整する。
+    private static let thumbDiameter: CGFloat = 28
+
+    /// 「縦スクロールしようとしただけ」と判定するしきい値（pt）。
+    ///
+    /// `DragGesture(minimumDistance: 0)` は touch down の瞬間に `onChanged` が発火するため、
+    /// Form を縦スクロールしようとしてスライダー行に指を置いただけでもタップ位置の値へ
+    /// 書き換わってしまう。縦方向の移動量がこのしきい値を超え、かつ横方向の移動量より
+    /// 大きくなった時点で「スクロール意図」と判定し、以後そのジェスチャーが終わるまで
+    /// 値の更新を止めてジェスチャー開始時点の値へ戻す。
+    private static let scrollDominanceThreshold: CGFloat = 10
+
+    /// このジェスチャーが始まった時点の値。スクロールと判定したときの復帰先
+    @State private var dragStartValue: Int?
+
+    /// このジェスチャーが「縦スクロール」と判定済みかどうか（判定後は値更新を一切行わない）
+    @State private var isScrollDominant = false
+
+    /// 直近で `onChanged` に通知した値。SwiftUI の再描画が来る前に複数の `onChanged`
+    /// イベントが連続発火しても、外部の `value`（1 フレーム遅れうる）ではなくこちらと
+    /// 比較することで、同一ジェスチャー内の重複通知をより確実に避ける
+    @State private var lastNotifiedValue: Int?
+
+    var body: some View {
+        GeometryReader { geometry in
+            ZStack {
+                Slider(
+                    value: .constant(Double(value)),
+                    in: Double(range.lowerBound)...Double(range.upperBound),
+                    step: 1
+                )
+                .allowsHitTesting(false)
+
+                // `.simultaneousGesture` を使う（`.gesture` だと Form/List の縦スクロール用パン
+                // ジェスチャーより優先されてしまい、スライダー行の上から始めた縦スワイプで
+                // スクロールできなくなる）。ただし `.simultaneousGesture` だけでは
+                // touch down 直後の `onChanged` でタップ位置の値へ書き換わってしまうため、
+                // 縦方向優勢と判定したら値をロールバックする処理を `handleDragChanged` に持たせている
+                Color.clear
+                    .contentShape(Rectangle())
+                    .simultaneousGesture(
+                        DragGesture(minimumDistance: 0)
+                            .onChanged { drag in
+                                handleDragChanged(drag, width: geometry.size.width)
+                            }
+                            .onEnded { _ in
+                                handleDragEnded()
+                            }
+                    )
+            }
+        }
+        // 44×44pt のタップ領域確保（トラック自体は細いため縦方向のヒット領域を拡張する）
+        .frame(height: 44)
+        // 標準 Slider が持つ「値が変わった瞬間の触覚フィードバック」を tap-to-seek でも再現する。
+        // trigger（value）が実際に変化したときだけ発火するため、同じ値に張り付いている間の連続発火は起きない
+        .sensoryFeedback(.selection, trigger: value)
+        // 単一の操作要素として扱う（呼び出し元で accessibilityLabel/value/adjustableAction を付与する）
+        .accessibilityElement(children: .ignore)
+    }
+
+    /// 新しいジェスチャーの最初のイベントとみなす translation のしきい値（pt）。
+    ///
+    /// SwiftUI は他のジェスチャー（List のスクロール用パン）に競り負けて認識をキャンセルした場合
+    /// `onEnded` を呼ばない。`onEnded` だけに状態リセットを頼ると、キャンセルされた次に同じ
+    /// スライダーへ触れたときに古い `isScrollDominant`/`dragStartValue` が残り、二度と操作できなく
+    /// なる（「データが勝手に変わる」より悪い固着）。そのため **`onChanged` 側で「これは新しい
+    /// ジェスチャーの最初のイベントか」を毎回判定し、そこで状態をまとめて初期化する**方式にする。
+    /// touch down 直後の最初のイベントは `translation` が理論上ゼロだが、浮動小数点の完全一致比較は
+    /// 避け、微小な閾値未満なら「開始イベント」とみなす。
+    private static let gestureStartTranslationThreshold: CGFloat = 0.1
+
+    /// ドラッグ中の 1 イベントを処理する。
+    ///
+    /// - 新しいジェスチャーの最初のイベントで状態（開始値・縦優勢フラグ・直近通知値）をまとめて初期化する
+    /// - 縦方向優勢と判定したら以後は値更新をやめ、記憶しておいた開始時の値へ戻す
+    /// - それ以外（タップ直後・横方向のドラッグ）は従来どおり即座に位置から値を算出して通知する
+    private func handleDragChanged(_ drag: DragGesture.Value, width: CGFloat) {
+        let translation = drag.translation
+        let isGestureStart = abs(translation.width) < Self.gestureStartTranslationThreshold
+            && abs(translation.height) < Self.gestureStartTranslationThreshold
+        if isGestureStart {
+            dragStartValue = value
+            isScrollDominant = false
+            lastNotifiedValue = nil
+        }
+
+        if !isScrollDominant {
+            if abs(translation.height) > Self.scrollDominanceThreshold,
+               abs(translation.height) > abs(translation.width) {
+                isScrollDominant = true
+            }
+        }
+
+        if isScrollDominant {
+            if let startValue = dragStartValue {
+                notify(startValue)
+            }
+            return
+        }
+
+        updateValue(from: drag.location.x, width: width)
+    }
+
+    /// ジェスチャー正常終了時の状態リセット。
+    ///
+    /// これは保険であり、状態の正の初期化は上記 `handleDragChanged` の「ジェスチャー開始判定」側で
+    /// 行う（`onEnded` は他のジェスチャーに競り負けてキャンセルされた場合に呼ばれないため、
+    /// ここだけに頼ると固着する）。
+    private func handleDragEnded() {
+        dragStartValue = nil
+        isScrollDominant = false
+        lastNotifiedValue = nil
+    }
+
+    /// タップ/ドラッグ位置の x 座標から値を算出し、通知する。
+    private func updateValue(from x: CGFloat, width: CGFloat) {
+        guard width > 0 else { return }
+        let radius = Self.thumbDiameter / 2
+        let usableWidth = max(width - Self.thumbDiameter, 1)
+        let clampedX = min(max(x - radius, 0), usableWidth)
+        let fraction = clampedX / usableWidth
+        let span = Double(range.upperBound - range.lowerBound)
+        let newValue = Int((Double(range.lowerBound) + fraction * span).rounded())
+        notify(newValue)
+    }
+
+    /// 直近の通知値と比較し、実際に変化しているときだけ `onChanged` を呼ぶ。
+    private func notify(_ newValue: Int) {
+        guard newValue != (lastNotifiedValue ?? value) else { return }
+        lastNotifiedValue = newValue
+        onChanged(newValue)
+    }
+}
+
+// MARK: - Preview（TappableTastingSlider: 1 / 5 / 10 のつまみ位置確認）
+
+#Preview("TappableTastingSlider") {
+    VStack(alignment: .leading, spacing: 24) {
+        ForEach([1, 5, 10], id: \.self) { fixedValue in
+            VStack(alignment: .leading, spacing: 4) {
+                Text("固定値 \(fixedValue)/10（つまみ位置の目視確認用）")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                TappableTastingSlider(value: fixedValue, range: 1...10, onChanged: { _ in })
+            }
+        }
+
+        Divider()
+
+        TappableTastingSliderInteractivePreview()
+    }
+    .padding()
+}
+
+/// 実機/シミュレータでタップ・ドラッグの挙動を試すための対話的プレビュー
+private struct TappableTastingSliderInteractivePreview: View {
+    @State private var value = 5
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("操作確認用（タップ・ドラッグで値: \(value)/10）")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            TappableTastingSlider(value: value, range: 1...10, onChanged: { value = $0 })
+        }
+    }
+}
+

@@ -50,4 +50,38 @@ EOF
 
 ## ビルド検証は Debug + シミュレータで十分（アセット差し替えのみなら Kotlin framework は UP-TO-DATE でよい）
 
-アイコン/画像アセットだけの変更では `shared:framework` 系タスクは `UP-TO-DATE` のままで問題ない（Kotlin 公開 API 変更が絡まないため）。`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS Simulator,name=iPhone 17' build`（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無し）で `** BUILD SUCCEEDED **` を確認すれば足りる。
+アイコン/画像アセットだけの変更では `shared:framework` 系タスクは `UP-TO-DATE` のままで問題ない（Kotlin 公開 API 変更が絡まないため）。`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS Simulator,name=iPhone 17' build`（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無し）で `** BUILD SUCCEEDED **` を確認すれば足りる。ただしアルファチャンネルの有無を検証したいときは Debug/シミュレータでは不十分（次項参照）。
+
+## App Store アイコンはアルファチャンネルを持てない — CGContext(noneSkipLast) + NSGraphicsContext(cgContext:flipped:) で描く（2026-08-06）
+
+`renderAppIcon`（`AppIcon.appiconset` の 3 バリアント）は当初 `NSBitmapImageRep(hasAlpha: true, samplesPerPixel: 4)` の `NSGraphicsContext` に描画していたため、意匠が全面不透明でも PNG に不要なアルファチャンネルが残っていた（`sips -g hasAlpha` が `yes`）。App Store の 1024×1024 アイコンはアルファ・透過禁止で、`ITMS-90717 Invalid App Store Icon` の原因になりうる。
+
+修正パターン: `CGContext(data: nil, ..., bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)` でアルファ無しコンテキストを作り、`NSGraphicsContext(cgContext: cgCtx, flipped: false)` でラップして `NSGraphicsContext.current` に設定すれば、既存の `NSBezierPath`/`NSGradient`/`NSColor` 描画コードを一切変えずに使い回せる（`flipped: false` は元の `NSBitmapImageRep` 版と同じ非フリップ座標系を維持するために必須）。書き出しは `rep.representation(using: .png, ...)` ではなく `cgCtx.makeImage()` → `CGImageDestinationCreateWithURL` + `CGImageDestinationAddImage` + `CGImageDestinationFinalize`（`import ImageIO` / `import UniformTypeIdentifiers` が要る）。同じ手法は `screenshots/compose-captions.swift` が先行実績。
+
+**LaunchLogo はこの対象外**（起動画面用の透過 PNG で意図的にアルファを持つ。`renderLaunchLogo` は変更不要）。
+
+### 検証は「ソースの sips」だけでなく「ビルド成果物、しかも Release/Archive」で行う
+
+- ソース 1024px PNG の `sips -g hasAlpha` が `no` になっていることは必要条件だが十分ではない。`.app` バンドル直下の `AppIcon60x60@2x.png` / `AppIcon76x76@2x~ipad.png` は **actool が Debug/シミュレータビルドでは常にアルファチャンネル付き（RGBA コンテナ、中身は不透明）で書き出す**（ソースにアルファがあってもなくても `hasAlpha: yes` のまま — 2026-08-06 に両パターンで実測して確認）。ここだけを見て「直っていない」と判断しないこと。
+- **Release configuration での `xcodebuild archive`**（`-scheme iosApp -configuration Release -destination 'generic/platform=iOS' -archivePath <path>.xcarchive archive`）まで行うと、actool に `--compress-pngs` が付き、この段階で `AppIcon60x60@2x.png` 等のアルファチャンネルが実際に落ちる（`hasAlpha: no`）。ただしこれは**ソースのアルファ有無に関係なく Release では常に起きる**（旧アルファ付きソースでアーカイブしても `hasAlpha: no` になることを実測確認済み）。つまりこの 2 ファイルの alpha 状態は ASC 提出物としての実害が薄く、`ITMS-90717` の対象は 1024×1024 のマーケティングアイコン（Assets.car 内、`ASSETCATALOG_COMPILER_FLATTENED_APP_ICON_PATH` で書き出される `ProductIcon.png` 相当）側と考えられる。ローカルの `xcodebuild archive` が実行する `builtin-validationUtility -validate-for-store` はアルファチャンネル起因の警告を一切出さない（ASC アップロード時のサーバ側チェックとは別物）ので、ローカルビルドでの「warning 無し」を「ASC も通る」の確証にはできない。
+- 検証コマンド一式（この切り分けに使った）:
+  ```bash
+  # Debug/シミュレータ（速いが actool の alpha strip が効かない環境）
+  DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
+    -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Debug \
+    -destination 'platform=iOS Simulator,name=iPhone 17' \
+    -derivedDataPath /path/to/DerivedData clean build > build.log 2>&1
+
+  # Release/Archive（実際の提出物に近い経路。--compress-pngs が効く）
+  DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
+    -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
+    -destination 'generic/platform=iOS' \
+    -archivePath /path/to/coffeevision.xcarchive archive > archive.log 2>&1
+
+  sips -g hasAlpha /path/to/coffeevision.xcarchive/Products/Applications/coffeevision.app/AppIcon60x60@2x.png
+
+  # Assets.car 内の 1024 レンディションの Opaque フラグ（ios-marketing idiom は
+  # シミュレータ/デバイス実行用ビルドには含まれず、Release archive でのみ生成される点に注意）
+  xcrun assetutil --info <app>/Assets.car | python3 -c "import json,sys; [print(e) for e in json.load(sys.stdin) if e.get('Name')=='AppIcon' and 'RenditionName' in e]"
+  ```
+- 意匠が変わっていないことの確認は、旧 PNG とのバイト一致ではなく（アルファ除去でエンコード結果が変わるため）、両方を `CGImageSourceCreateImageAtIndex` で読み `premultipliedLast` の RGBA バッファに描画し直して RGB 成分だけを比較するとよい（アルファは無視）。今回の意匠（全面不透明）では旧アルファチャンネルは全ピクセル `255` で、RGB 差分もゼロだった。

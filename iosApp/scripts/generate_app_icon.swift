@@ -17,7 +17,10 @@
 // per Apple's license terms.
 
 import AppKit
+import CoreGraphics
 import Foundation
+import ImageIO
+import UniformTypeIdentifiers
 
 // MARK: - Helpers
 
@@ -95,14 +98,26 @@ func drawCup(cx: CGFloat, cy: CGFloat, u: CGFloat, ink: NSColor, bg: () -> Void)
 
 func renderAppIcon(top: NSColor, bottom: NSColor, ink: NSColor, to path: String) {
     let size: CGFloat = 1024
-    let rep = NSBitmapImageRep(
-        bitmapDataPlanes: nil,
-        pixelsWide: Int(size), pixelsHigh: Int(size),
-        bitsPerSample: 8, samplesPerPixel: 4,
-        hasAlpha: true, isPlanar: false,
-        colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0
-    )!
-    let ctx = NSGraphicsContext(bitmapImageRep: rep)!
+
+    // App Store icons must not carry an alpha channel (transparency is
+    // rejected at submission / breaks rendering in App Store Connect).
+    // The mark fully covers the canvas (gradient background, no cutouts
+    // reach the edge), so dropping alpha changes nothing visually — it
+    // only removes the (fully-opaque) alpha plane from the PNG encoding.
+    // `.noneSkipLast` gives a context with no alpha channel at all, so
+    // there is nothing downstream (PNG encoder included) that could
+    // reintroduce transparency.
+    guard let cgCtx = CGContext(
+        data: nil,
+        width: Int(size), height: Int(size),
+        bitsPerComponent: 8, bytesPerRow: 0,
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue
+    ) else {
+        fatalError("Failed to create CGContext for \(path)")
+    }
+
+    let ctx = NSGraphicsContext(cgContext: cgCtx, flipped: false)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = ctx
 
@@ -122,9 +137,17 @@ func renderAppIcon(top: NSColor, bottom: NSColor, ink: NSColor, to path: String)
 
     NSGraphicsContext.restoreGraphicsState()
 
-    let png = rep.representation(using: .png, properties: [:])!
+    guard let image = cgCtx.makeImage() else {
+        fatalError("Failed to make CGImage for \(path)")
+    }
     let url = URL(fileURLWithPath: path)
-    try! png.write(to: url)
+    guard let dest = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+        fatalError("Failed to create image destination for \(path)")
+    }
+    CGImageDestinationAddImage(dest, image, nil)
+    guard CGImageDestinationFinalize(dest) else {
+        fatalError("Failed to write PNG to \(path)")
+    }
     print("Wrote: \(path)")
 }
 

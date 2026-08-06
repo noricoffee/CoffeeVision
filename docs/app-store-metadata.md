@@ -307,25 +307,29 @@ CoffeeVision を初めてリリースしました。
 - [x] プライバシーポリシー URL の作成・公開（2026-08-06 / GitHub Pages。§6.4 参照）
 - [x] サポート URL の作成・公開（2026-08-06 / GitHub Pages。§6.4 参照）
 - [x] サポート用メールアドレスの発行 → 2 ページの連絡先に反映（2026-08-06 / `noricoffee593@gmail.com`。App Review 連絡先とも揃える）
-- [ ] App Review 連絡先情報の記入
-- [x] スクリーンショット（**6.9" のみ**）の撮影・最終枚数決定 — 2026-08-06 完了。**6 枚**を `screenshots/6.9/` に配置（§5 参照）。6.5" は不要
+- [x] App Review 連絡先情報の記入（2026-08-06 ユーザー入力済み。姓名 / メールは §8、電話番号は ASC 上のみ）
+- [x] スクリーンショット（**6.9" のみ**）の撮影・最終枚数決定 — 2026-08-06 完了。**6 枚**を撮影し（原本 `screenshots/6.9/`）、キャッチコピーを焼き込んだ `screenshots/submit/` を提出物とした（§5 参照）。6.5" は不要
 
 ### App Store Connect 設定
-- [ ] **英語(U.S.) ロケールを追加**し、名前 / サブタイトル / 説明文 / スクショは日本語を転記、keywords だけ §4.3 の英語 15 語を入れる（**ユーザー作業**。アプリ本体は英語化しないため、英語の説明文は入れない = §4 の注記）
-- [ ] App のプライバシー（§6）を申告
-- [ ] 年齢制限アンケート（§7）を回答
-- [ ] 価格・配信地域の設定（無料 / **配信国は日本のみで確定**。2026-07-14 広告仕様 grilling にて。GDPR 同意フォーム不要の前提条件なので、将来 EU へ拡大する場合は UMP の GDPR フォーム実装が先）
+- [x] **英語(U.S.) ロケールを追加**し、名前 / サブタイトル / 説明文 / スクショは日本語を転記、keywords だけ §4.3 の英語 15 語を入れる（2026-08-06 ユーザー実施。アプリ本体は英語化しないため、英語の説明文は入れない = §4 の注記）
+- [x] App のプライバシー（§6）を申告（2026-08-06 ユーザー実施。**9-6 味覚プロファイル共有の行は未実装のため申告に含めていない** = §6.1 の ⚠ 注記どおり）
+- [x] 年齢制限アンケート（§7）を回答（2026-08-06 ユーザー実施）
+- [x] 価格・配信地域の設定（2026-08-06 ユーザー実施。無料 / **配信国は日本のみで確定**。2026-07-14 広告仕様 grilling にて。GDPR 同意フォーム不要の前提条件なので、将来 EU へ拡大する場合は UMP の GDPR フォーム実装が先）
 - [x] 輸出コンプライアンス（暗号化）: 標準 HTTPS + Apple 標準の SHA256 nonce のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済み → App Store Connect の暗号化アンケートは自動スキップされる
 
 ### ビルド / 技術
 - [x] `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`（2026-08-06 確認）
   - **`MARKETING_VERSION = 1.0`**（`iosApp/Configuration/Config.xcconfig`、CI でも上書きしない）。ASC 側でバージョン 1.0 を作れば一致する
-  - **`CURRENT_PROJECT_VERSION` はビルド番号で、CI が採番する** — `release-testflight.yml` の Archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を `xcodebuild archive` に渡し、xcconfig の `1` を上書きする。**手で上げる必要はない**（2026-08-06 時点で run_number = 22、次のリリースは 23）
+  - **`CURRENT_PROJECT_VERSION` はビルド番号で、CI が採番する** — `release-testflight.yml` の Archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を `xcodebuild archive` に渡し、xcconfig の `1` を上書きする。**手で上げる必要はない**（現在値は `gh run list --workflow=release-testflight.yml` で確認する。**ここに具体値を書かない** — 実行のたびに古くなる。lessons 2026-08-01「数え上げは要素が増えるたびに嘘になる」）
   - ⚠️ `github.run_number` は**ワークフローの同一性に紐づく連番**。`release-testflight.yml` をリネーム / 削除して作り直すとカウンタが 1 に戻り、ASC が「ビルド番号が既存以下」で受け付けなくなる。このファイル名は変えない
 - [x] リリースビルドで Places API キーが正しく注入される（`Secrets.xcconfig` の Release 設定）— **2026-08-06 に TestFlight ビルドでカフェ検索の動作を確認**（Release 構成で実キーが通っている実証。CI 側の書き出しは `release-testflight.yml` の「Restore secret files」）
 - [x] `GoogleService-Info.plist`（本番 Firebase プロジェクト）が同梱されている — 同上。匿名 Auth → Firestore 同期が動かないとアプリが機能しないため、TestFlight での通常利用が実証になる
 - [x] Firestore Security Rules が本番にデプロイ済（2026-08-06 ユーザーが Console で確認。`users/{uid}` / `beanProfiles` / `curatedCafes` の 3 ブロック）
 - [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / **2026-08-06 にユーザーが Console で再確認**。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
+- [x] **App Icon がアルファチャンネルを持たない** — 2026-08-06 に「ASC でアイコンが表示されない」というユーザー報告を機に、ソース 3 バリアントが `hasAlpha: yes` であることを検出し是正（`iosApp/scripts/generate_app_icon.swift` の描画を `CGContext(.noneSkipLast)` へ）。3 枚とも `hasAlpha: no` / RGB 差分ゼロ（アルファ面は元から全ピクセル不透明だったため**意匠は不変**）
+  - **検証は Release / Archive で行う。Debug ビルドでは判定できない** — 派生 PNG（`AppIcon60x60@2x.png` 等）は **Debug では常に `hasAlpha: yes`**（actool が RGBA コンテナで書き出すため。ソースのアルファ有無と**無関係**）、**Release では常に `no`**。親が当初「Debug 成果物の該当 PNG を見れば分かる」と指示したが、実測で**新旧どちらのソースでも同じ値**になり検証手段として成立しなかった（lessons 2026-08-06）
+  - 2026-08-06 の Release アーカイブ実測: 派生 PNG 2 枚とも `hasAlpha: no`、`Assets.car` の 1024 レンディション 3 種とも `Opaque=True`（`xcrun assetutil --info`）
+  - ⚠ **この修正が「ASC で表示されない」症状の原因だった確証はない**。アルファ付きのまま TestFlight run #23 が `success` しており `ITMS-90717` は出ていなかった。ローカルの `builtin-validationUtility -validate-for-store` はアルファをチェックしないため、**最終確認は ASC への実アップロードでしか取れない**。なお ASC の「App 情報」ページのアイコンは**提出済みバージョンのマーケティングアイコン**を表示するため、審査に出す前は空欄が正常
 - [x] App Icon（light / dark / tinted）が全サイズ揃っている — 2026-08-06 確認。`iosApp/iosApp/Assets.xcassets/AppIcon.appiconset` に 3 バリアントとも 1024×1024 の単一サイズで存在（iOS 17+ の single-size 方式。他サイズは actool が生成）。**この項目は TestFlight 成功では証明できない** — dark / tinted は任意で、欠けていてもビルド・アップロードとも通るため、資産カタログを直接見る必要がある
 - [x] App Icon / LaunchLogo に **SF Symbols を使っていない** — 2026-08-06 に意匠刷新と同時に解消。SF Symbols のライセンス条項はシンボルをアプリアイコン / ロゴに使うことを禁じており、旧アイコンは `cup.and.saucer.fill` を PNG に焼き込んでいた（リジェクト要因になり得た）。現在は `iosApp/scripts/generate_app_icon.swift` の自前パス描画で、`grep -rn "systemSymbolName" iosApp/` が 0 件であることが検証手段（implementation_note 2026-08-06）
 - [x] アーカイブ（Archive）→ App Store Connect へアップロード成功 — `release-testflight.yml` で実績あり（2026-08-06 時点で run 19〜22 が連続 success、TestFlight で実機動作確認済み）。本番提出時も同ワークフローを使う

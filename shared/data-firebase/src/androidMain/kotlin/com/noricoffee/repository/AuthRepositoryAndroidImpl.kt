@@ -153,6 +153,18 @@ class AuthRepositoryAndroidImpl : AuthRepository {
     }
 
     /**
+     * Firestore `users/{uid}` ルートドキュメント自体を削除する。
+     *
+     * 呼び出し前に対象 uid のサブコレクション（coffees / savedCafes）の削除が
+     * 完了していること（[DeleteAccountUseCase] 参照。カスケード削除されないため）。
+     */
+    @Throws(Exception::class)
+    override suspend fun deleteUserProfile() {
+        val uid = auth.currentUser?.uid ?: throw Exception("Not signed in")
+        awaitTask(firestore.collection("users").document(uid).delete())
+    }
+
+    /**
      * Firebase Auth からユーザー本体を削除する。
      *
      * `currentUser?.delete()` を `Task` 経由で suspend 化する。

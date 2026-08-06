@@ -477,6 +477,19 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 > **2026-06-30 追記（フェーズ 12-A）**: `users/{uid}` ルートドキュメント（`coffees` の親）にユーザープロフィールフィールドを追加。現在は `analyticsConsent: Boolean` のみ。ドキュメントが存在しない（新規ユーザー）場合は `analyticsConsent = false` と同義に扱う。
 
+### アカウント削除で消す範囲（2026-08-06 是正）
+
+**`users/{uid}` 配下は 1 つ残らず削除する**。要件 1-4 / 公開済みプライバシーポリシー（`docs/legal/privacy-policy.html`）/ App Store ガイドライン 5.1.1(v) の要求で、`DeleteAccountUseCase` が次の順序で実行する:
+
+1. `users/{uid}/savedCafes/{placeId}` 全件
+2. `users/{uid}/coffees/{coffeeId}` 全件
+3. `users/{uid}` ルートドキュメント（`AuthRepository.deleteUserProfile()`）
+4. Firebase Auth ユーザー本体（`AuthRepository.deleteAuthUser()`）
+
+**この順序は仕様**。①Firestore はドキュメントを削除しても**サブコレクションをカスケードしない**のでサブコレクションが先、②Auth ユーザー削除後は §3.3 の Rules（`request.auth.uid == uid`）により `users/{uid}` 配下へ一切到達できなくなるので **Auth 削除は必ず最後**。逆順にすると、本人も運営も消せない孤児データが永久に残る。
+
+**`users/{uid}` 配下にサブコレクションを追加したら、この一覧と `DeleteAccountUseCase` の両方を更新する**（`savedCafes` はフェーズ 15-A で追加された際に削除経路へ追随せず、2026-08-06 の実機検証で消し残りとして発見された。経緯は [`implementation_note.md`](./implementation_note.md) 2026-08-06）。`beanProfiles` / `curatedCafes` はサービス管理のグローバルコレクションなので削除対象外。
+
 写真本体は Firestore / Storage に同期せず、端末の Documents 配下にのみ保存します（[`requirements.md`](./requirements.md) §7-2）。
 
 ### なぜ photos を埋め込み配列にしたか

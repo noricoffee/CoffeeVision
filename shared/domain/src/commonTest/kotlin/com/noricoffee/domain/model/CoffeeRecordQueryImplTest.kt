@@ -52,6 +52,7 @@ class CoffeeRecordQueryImplTest {
         override suspend fun deleteAuthUser() = Unit
         override suspend fun updateAnalyticsConsent(consent: Boolean) = Unit
         override fun observeAnalyticsConsent(): Flow<Boolean> = MutableStateFlow(false)
+        override suspend fun deleteUserProfile() = Unit
     }
 
     // ----- テスト用ヘルパ -----

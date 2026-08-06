@@ -1,10 +1,12 @@
 package com.noricoffee.feature.account
 
 import com.noricoffee.domain.model.AuthAccount
+import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.domain.usecase.DeleteAccountUseCase
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.repository.AuthRepository
 import com.noricoffee.repository.CoffeeRepository
+import com.noricoffee.repository.SavedCafeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
@@ -67,6 +69,8 @@ class AccountViewModelTest {
         override suspend fun updateAnalyticsConsent(consent: Boolean) = Unit
 
         override fun observeAnalyticsConsent(): Flow<Boolean> = flowOf(false)
+
+        override suspend fun deleteUserProfile() = Unit
     }
 
     private class FakeCoffeeRepository(
@@ -83,6 +87,13 @@ class AccountViewModelTest {
             deleteError?.let { throw it }
             deletedIds.add(id)
         }
+    }
+
+    private class FakeSavedCafeRepository : SavedCafeRepository {
+        override fun observeAll(userId: String): Flow<List<SavedCafe>> = flowOf(emptyList())
+        override fun observeByPlaceId(userId: String, placeId: String): Flow<SavedCafe?> = flowOf(null)
+        override suspend fun save(savedCafe: SavedCafe) = Unit
+        override suspend fun delete(userId: String, placeId: String) = Unit
     }
 
     private val anonymousAccount = AuthAccount(
@@ -108,7 +119,7 @@ class AccountViewModelTest {
         val fakeAuth = FakeAuthRepository(initialAccount = anonymousAccount)
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
         testScheduler.advanceUntilIdle()
@@ -126,7 +137,7 @@ class AccountViewModelTest {
         val fakeAuth = FakeAuthRepository(initialAccount = null)
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
         testScheduler.advanceUntilIdle()
@@ -144,7 +155,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 
@@ -167,7 +178,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 
@@ -190,7 +201,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 
@@ -212,7 +223,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 
@@ -234,7 +245,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(fakeCoffee, fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(fakeCoffee, FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 
@@ -257,7 +268,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(fakeCoffee, fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(fakeCoffee, FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 
@@ -279,7 +290,7 @@ class AccountViewModelTest {
 
         val vm = AccountViewModel(
             authRepository = fakeAuth,
-            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), fakeAuth),
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
             scope = this,
         )
 

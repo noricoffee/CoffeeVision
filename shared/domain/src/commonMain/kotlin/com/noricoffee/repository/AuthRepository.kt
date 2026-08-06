@@ -117,4 +117,24 @@ interface AuthRepository {
      * SKIE により Swift 側では `AsyncSequence` として扱える。
      */
     fun observeAnalyticsConsent(): Flow<Boolean>
+
+    /**
+     * Firestore `users/{uid}` ルートドキュメント自体を削除する。
+     *
+     * **呼び出しタイミング**: [com.noricoffee.domain.usecase.DeleteAccountUseCase] から
+     * [deleteAuthUser] の**直前**に呼ぶこと。Firestore はルートドキュメントを削除しても
+     * サブコレクション（`coffees` / `savedCafes`）をカスケード削除しないため、
+     * このメソッドを呼ぶ時点でサブコレクションの削除が完了していなければならない。
+     *
+     * また、[deleteAuthUser] より先に呼ぶ必要がある。Firestore Security Rules は
+     * `request.auth.uid == uid` を要求するため、Auth ユーザー削除後は `users/{uid}` 配下に
+     * 一切アクセスできなくなり、ルートドキュメントが永久に孤児化する。
+     *
+     * uid は実装側が `currentUser` から内部解決する（[updateAnalyticsConsent] と同様）。
+     * 未サインインの場合は例外を投げる。
+     *
+     * Swift から呼び出されるため `@Throws(Exception::class)` を付与する。
+     */
+    @Throws(Exception::class)
+    suspend fun deleteUserProfile()
 }

@@ -70,6 +70,11 @@ kmp-engineer が commit 済みでも `shared/framework/build/**` は古いまま
 
 Kotlin `data class Cafe(placeId, name, address, latitude, longitude, photoReferences, websiteUrl, mapsUrl, openNow = null, weekdayDescriptions = emptyList(), phoneNumber = null, priceLevel = null, googleRating = null, userRatingCount = null)` は、末尾 6 フィールドが Kotlin 側でデフォルト値を持っていても **SKIE は defaultArgumentInterop 非対応（既存ルール参照）のため 8 引数の短縮 init は生成されない**。`Cafe(placeId:...:mapsUrl:)` のような呼び出しはビルドエラーになる。他のドメインモデル（`CuratedCafe` 等）から最小限のフィールドだけで `Cafe` を組み立てたい場合は、`openNow: nil, weekdayDescriptions: [], phoneNumber: nil, priceLevel: nil, googleRating: nil, userRatingCount: nil` を明示的にすべて渡す（`grep -n "instancetype)initWithPlaceId" SharedLogic.h` で該当クラスの init が 1 本だけか確認してから使う。似た名前の `CafeExportDto` は別クラスで 8 引数版しか持たないため取り違えに注意）。
 
+## 既存メソッドと同型シグネチャの interface に新規メソッドを 1 本足すケースは、`.swiftinterface`（`async throws` 糖衣のみ）ではなく Obj-C ヘッダの `swift_name` 属性で裏取りすれば足りる（2026-08-06、`AuthRepository.deleteUserProfile()` 追加で確認）
+
+- Kotlin 側で `@Throws(Exception::class) suspend fun deleteUserProfile()`（既存 `deleteAuthUser()` と完全に同型: 引数なし・戻り値なし）を追加したケースでは、`.swiftinterface` は両方とも `public func deleteXxx() async throws` としか出ず区別がつかない。Obj-C ヘッダ（`SharedLogic.h`）の `- (void)deleteUserProfileWithCompletionHandler:...  __attribute__((swift_name("deleteUserProfile(completionHandler:)")))` で協定名を確認するのが確実（`grep -n "deleteUserProfile" SharedLogic.h`）。
+- protocol 実装側（`AuthRepositoryIosImpl` のような NSObject 準拠クラス）で書く実際のメソッド名は、この swift_name そのままではなく **`__` プレフィックスを付けた `__deleteUserProfile(completionHandler:)`**（同ファイルの既存 `__deleteAuthUser`/`__updateAnalyticsConsent` と同じ witness パターン）。「同じ interface 内の既存メソッドと引数の有無・型が完全一致するなら、その既存メソッドの実装をそのままコピーして名前だけ変える」のが最も確実で、`.swiftinterface` を読みに行く前に既存 witness を探すほうが早い。
+
 ## Kotlin `object` の `val List<String>` カタログ + `const val` 特殊値を Swift `Picker` の選択肢にする際、legacy 自由入力値のフォールバック表示は「動的に選択肢へ追加」で native Picker のまま解決できる（2026-07-22、産地ドロップダウン化で確認）
 
 - `CoffeeOriginCatalog.shared.countries: [String]` / `.BLEND` / `.OTHER` は SKIE 経由でそのまま `[String]` / `String` として読める（`docs/kmp-bridge.md` の記載どおり、追加のブリッジコード不要）。

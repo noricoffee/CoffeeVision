@@ -178,6 +178,7 @@ fun AppContainer.makeAccountViewModel(): AccountViewModel =
         authRepository = authRepository,
         deleteAccountUseCase = DeleteAccountUseCase(
             coffeeRepository = coffeeRepository,
+            savedCafeRepository = savedCafeRepository,
             authRepository = authRepository,
         ),
         scope = scope,

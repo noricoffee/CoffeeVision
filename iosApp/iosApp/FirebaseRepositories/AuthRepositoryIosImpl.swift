@@ -180,6 +180,36 @@ final class AuthRepositoryIosImpl: NSObject, AuthRepository {
         }
     }
 
+    // MARK: - deleteUserProfile
+
+    /// Firestore `users/{uid}` ルートドキュメント自体を削除する。
+    ///
+    /// 呼び出し元（DeleteAccountUseCase）は必ず `deleteAuthUser` の**直前**に本メソッドを呼ぶこと。
+    /// Firestore はルートドキュメントを削除してもサブコレクション（`coffees` / `savedCafes`）を
+    /// カスケード削除しないため、本メソッドを呼ぶ時点でサブコレクションの削除が完了していなければならない。
+    /// また、Auth ユーザー削除後は Security Rules（`request.auth.uid == uid`）により
+    /// `users/{uid}` に一切到達できなくなるため、順序が逆転するとルートドキュメントが永久に孤児化する。
+    func __deleteUserProfile(
+        completionHandler: @escaping @Sendable ((any Error)?) -> Void
+    ) {
+        guard let uid = Auth.auth().currentUser?.uid else {
+            completionHandler(
+                NSError(
+                    domain: "AuthRepositoryIosImpl",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "サインインセッションが見つかりません。"]
+                )
+            )
+            return
+        }
+        Firestore.firestore()
+            .collection("users")
+            .document(uid)
+            .delete { error in
+                completionHandler(error)
+            }
+    }
+
     // MARK: - deleteAuthUser
 
     /// Firebase Auth からユーザー本体を削除する。

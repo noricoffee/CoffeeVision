@@ -25,3 +25,4 @@
 - [Kotlin VM ファイル分割パターン](kotlin_vm_file_split_pattern.md) — 800 行超の Kotlin ViewModel を top-level internal 関数抽出で分割する手順（nested 型は不可・暗黙参照の引数化・const val の re-export 回避）
 - [タグカタログサジェストパターン](tag_catalog_suggestion_pattern.md) — 頻度ランキング+絞り込み+上限の3段パイプライン設計。Edit/Duplicate 非同期ロード完了時にも recompute が要る理由。String.format が commonTest で不可な罠
 - [公開 API メソッド削除チェックリスト](dead_api_removal_checklist.md) — interface メソッド削除時に見落としがちな KDoc 内の名指し参照 + Swift 側の余剰 override（コンパイラでは検出不可）
+- [複数 Repository をまたぐ順序保証削除の拡張パターン](cascade_delete_ordered_stage_pattern.md) — DeleteAccountUseCase 型の N 段階削除に新ステージを挟む手順。共通 callOrder による順序テスト設計 + `data-firebase` の Android compile タスク名の罠 + Swift 側無引数 suspend fun の `__` + completionHandler 裏取り方法

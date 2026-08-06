@@ -1168,3 +1168,30 @@ App Store 用スクリーンショットの目視中に、記録エディタの 
 **一般化**: `ScrollView` / `List` の中に `minimumDistance: 0` のドラッグジェスチャーを置くときは、①スクロールを奪わないか ②touch down だけで副作用が出ないか ③ジェスチャーがキャンセルされても状態が復元するか、の 3 点をセットで確認する。①だけ見て `.simultaneousGesture` にすると ②③ が残る。**状態リセットをジェスチャー終端イベントに依存させず、開始イベント側で初期化する**のが ③ の一般解。
 
 ビルドは親がフラグ無しの `xcodebuild` で再検証済み（`> Task :shared:framework:...` が走った上での `** BUILD SUCCEEDED **`）。実操作（タップ位置の一致 / 端 1・10 への到達 / スクロール共存 / 固着の回帰 / VoiceOver）は verification-checklist パス 2 へ移送。
+
+### 2026-08-06: アカウント削除の消し残し — 「消せなかった」ではなく「消す対象を数えていなかった」
+
+- 関連: `DeleteAccountUseCase` / `AuthRepository` / `AuthRepositoryAndroidImpl` / `AuthRepositoryIosImpl.swift` / `data-model.md` §3.1 / `docs/legal/privacy-policy.html`
+
+verification-checklist パス 6「アカウント削除の revoke 完走」を実機で実行中、**Firestore コンソールで `users/{uid}/coffees` は空になっているのに `savedCafes` が残っている**のをユーザーが発見した。`DeleteAccountUseCase` は coffees のループ削除 → `deleteAuthUser()` の 2 段しか持っておらず、**`users/{uid}` 配下 3 要素のうち 2 つ（ルートドキュメントと `savedCafes`）に一度も触れていなかった**。
+
+**発見経路が示唆的**: revoke（Apple 側のトークン失効）の検証をしていて、その過程で開いた Firestore コンソールの表示から見つかっている。テストも型検査もこの種の欠落を検出しない — 消し忘れたコレクションは、コードのどこにも現れないからだ。既存テストは「coffees が消えてから `deleteAuthUser` が呼ばれること」を検証しており、**書いた分については正しかった**。
+
+**性質**: 単なるゴミ残りではない。`firestore.rules` は `users/{uid}` 配下を `request.auth.uid == uid` でガードしているので、Auth ユーザーを削除した瞬間に**残留データは本人が二度と読めず消せない、運営側からのみ見える永久孤児**になる。しかも公開済みプライバシーポリシー（`docs/legal/privacy-policy.html`「アカウント削除により削除されます」「削除時にはクラウド上の記録データも削除されます」）と要件 1-4 に対する明確な違反で、App Store 5.1.1(v) の観点でもリリースブロッカー。
+
+**修正は 4 段の順序が仕様そのもの**（savedCafes → coffees → ルート doc → `deleteAuthUser`）。順序が効く理由が 2 つあり、どちらも守らないと消し残る:
+
+- **Firestore はドキュメントを消してもサブコレクションをカスケードしない**ため、サブコレクションが先
+- **Auth ユーザー削除後は Rules で `users/{uid}` 配下に一切触れなくなる**ため、Auth 削除は必ず最後。ここを逆にすると「削除処理は成功したのに永久に消せないデータが生まれる」
+
+**savedCafes 側に新しい API を足さずに済んだ**のが設計上の収穫。当初はローカルの `deleteByUser` クエリとリモートの `removeAll(userId)` を追加する想定だったが、`SavedCafeRepository` の既存 `observeAll(userId)` + `delete(userId, placeId)` で足りる（`SavedCafeRepositoryImpl.delete()` がローカル DB とリモートの両方を消し、`AppContainer` の既定 `WritePolicy.PropagateRemoteFailure` によりリモート削除失敗が例外として伝播して削除全体が中断する）。**coffees の削除と全く同じ形**になり、SQLDelight の変更もプラットフォーム実装 2 本（Swift / Android）の変更もゼロで済んだ。新規 API が要ったのは `users/{uid}` ルート doc を消す `AuthRepository.deleteUserProfile()` の 1 本だけ。
+
+**「coffees は削除せず将来の好み分析に使う」案を検討し、不採用にした**（ユーザー提案）。目的自体は正当だが、この形では成立しない:
+
+- **公開済みのプライバシーポリシーと正面から矛盾する**。既に対外的に「削除されます」と約束しているものを実装が残す側に倒すと、単なる仕様差ではなく虚偽の表示になる
+- `users/{uid}` 配下に残す形は、匿名化を一切伴わない**個人紐付きデータの保持**そのもの。しかも Rules の構造上「本人だけがアクセスできず運営だけが持っている」状態になり、説明が難しい
+- 分析に必要なのは 1 杯ごとの個票ではなく**集約値**（テイスティング 5 軸の平均、産地・焙煎の傾向）で、個票の保持は要件から導かれない
+
+将来やるなら、**削除時に残すのではなく、同意に基づいて最初から個人と切り離した派生データを別の場所に置く**設計になる。枠組みは既に 12-D（9-6 協調フィルタ / `analysis-model.md` §2）にあり、`recommendationConsent` と `sharedTasteProfiles` がそれ。ただし現行設計の `sharedTasteProfiles/{uid}` は **uid キーなのでアカウント削除時に消す対象**であり、「分析用に残す」用途にはそのままでは使えない（uid と切り離した形が要る）。実装時に必要なのは 4 点セット: ①`users/{uid}` の外に出す ②収集時点で同意を取る（削除の瞬間に許諾を求めるのは同意の任意性として筋が悪い）③uid を外すだけでなく再識別性を評価する（テイスティング 5 軸 + カテゴリ 4 軸 + 高評価カフェ座標は母数が小さいうちは容易に特定できる。9-6 の「最小 K 未満は推薦を出さない」は**表示側**の対策であって保存側の話ではない）④プライバシーポリシーと App Store Connect のプライバシー申告の改訂。**この 4 点が揃うまでは全削除が唯一の正しい挙動**。
+
+**既存の孤児データはクライアントから消せない**（Rules 上、削除済み uid のパスには誰も到達できない）。検証で作った分と過去の削除分は Firebase Console から手動削除が必要。未リリースのため実ユーザー分は存在しない。

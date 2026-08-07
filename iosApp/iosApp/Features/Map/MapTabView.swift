@@ -49,9 +49,6 @@ struct MapTabView: View {
     /// `MapTabView+Location.swift` の extension から参照するため internal 化している（M-4）。
     @State var pendingRecenter = false
 
-    /// 好み一致ピンタップ時に推薦理由シートで表示する対象。nil = シート非表示。
-    @State private var selectedRecommendedCafe: RecommendedCafe? = nil
-
     // MARK: - 「好み一致」/「保存済み」一覧シート State（2026-07-24、操作モデル改修）
 
     /// マップ上に開いているカフェ一覧シートの種別。nil = どちらも非表示。
@@ -246,27 +243,6 @@ struct MapTabView: View {
                         .errorToast(message: activeToast(bridge: bridge)?.message) {
                             activeToast(bridge: bridge)?.dismiss()
                         }
-                        // 好み一致推薦理由シート
-                        .sheet(
-                            isPresented: Binding(
-                                get: { selectedRecommendedCafe != nil },
-                                set: { if !$0 { selectedRecommendedCafe = nil } }
-                            )
-                        ) {
-                            if let recommended = selectedRecommendedCafe {
-                                RecommendationMatchSheet(
-                                    recommendedCafe: recommended
-                                ) {
-                                    selectedRecommendedCafe = nil
-                                    navigationPath.append(
-                                        CafeDetailRoute(
-                                            placeId: recommended.cafe.placeId,
-                                            initialCafe: recommended.cafe
-                                        )
-                                    )
-                                }
-                            }
-                        }
                         .onChange(of: bridge.poiLookupResult) { _, result in
                             if let cafe = result {
                                 lastTappedApplePoi = nil
@@ -421,31 +397,21 @@ struct MapTabView: View {
                                     ? (isRecommended ? 1.0 : 0.4)
                                     : (savedEmphasisActive ? 0.4 : 1.0)
 
-                                Group {
-                                    if isRecommended,
-                                       let recommended = bridge.recommendedCafes.first(
-                                        where: { $0.cafe.placeId == visitedCafe.cafe.placeId }
-                                       ) {
-                                        // 好み一致ピン: タップで推薦理由シートを表示
-                                        Button {
-                                            selectedRecommendedCafe = recommended
-                                        } label: {
-                                            RecommendedCafePin(visitedCafe: visitedCafe)
-                                        }
-                                        .buttonStyle(.plain)
+                                // 好み一致 / 通常訪問済み、どちらもタップでカフェ詳細へ直行する
+                                // （他ピン種と統一。好み一致の推薦理由はカフェ詳細画面側に表示する。フェーズ 20）。
+                                NavigationLink(
+                                    value: CafeDetailRoute(
+                                        placeId: visitedCafe.cafe.placeId,
+                                        initialCafe: visitedCafe.cafe
+                                    )
+                                ) {
+                                    if isRecommended {
+                                        RecommendedCafePin(visitedCafe: visitedCafe)
                                     } else {
-                                        // 通常訪問済みピン: タップでカフェ詳細へ push
-                                        NavigationLink(
-                                            value: CafeDetailRoute(
-                                                placeId: visitedCafe.cafe.placeId,
-                                                initialCafe: visitedCafe.cafe
-                                            )
-                                        ) {
-                                            VisitedCafePin(visitedCafe: visitedCafe)
-                                        }
-                                        .buttonStyle(.plain)
+                                        VisitedCafePin(visitedCafe: visitedCafe)
                                     }
                                 }
+                                .buttonStyle(.plain)
                                 .opacity(pinOpacity)
                             }
                         }

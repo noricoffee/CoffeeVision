@@ -3,6 +3,8 @@ package com.noricoffee.feature.cafedetail
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.LocationBias
+import com.noricoffee.domain.model.CafeRecommendationProvider
+import com.noricoffee.domain.model.RecommendedCafe
 import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
@@ -67,6 +69,10 @@ class CafeDetailViewModelDetailsRefreshTest {
         ): String = "https://fake.example.com/photo"
     }
 
+    private class FakeCafeRecommendationProvider : CafeRecommendationProvider {
+        override fun observeRecommendedCafes(userId: String): Flow<List<RecommendedCafe>> = flowOf(emptyList())
+    }
+
     private class FakeSavedCafeRepository : SavedCafeRepository {
         override fun observeAll(userId: String): Flow<List<SavedCafe>> = flowOf(emptyList())
         override fun observeByPlaceId(userId: String, placeId: String): Flow<SavedCafe?> = flowOf(null)
@@ -127,6 +133,7 @@ class CafeDetailViewModelDetailsRefreshTest {
             coffeeRepository = FakeCoffeeRepository(),
             cafeRepository = fakeCafeRepo,
             savedCafeRepository = FakeSavedCafeRepository(),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
             placeId = PLACE_ID,
             initialCafe = staleCafe,
             userId = USER_ID,
@@ -149,6 +156,7 @@ class CafeDetailViewModelDetailsRefreshTest {
             coffeeRepository = FakeCoffeeRepository(),
             cafeRepository = fakeCafeRepo,
             savedCafeRepository = FakeSavedCafeRepository(),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
             placeId = PLACE_ID,
             initialCafe = null,
             userId = USER_ID,
@@ -177,6 +185,7 @@ class CafeDetailViewModelDetailsRefreshTest {
             coffeeRepository = fakeCoffeeRepo,
             cafeRepository = fakeCafeRepo,
             savedCafeRepository = FakeSavedCafeRepository(),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
             placeId = PLACE_ID,
             initialCafe = staleCafe,
             userId = USER_ID,
@@ -211,6 +220,7 @@ class CafeDetailViewModelDetailsRefreshTest {
             coffeeRepository = FakeCoffeeRepository(),
             cafeRepository = fakeCafeRepo,
             savedCafeRepository = FakeSavedCafeRepository(),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
             placeId = PLACE_ID,
             initialCafe = staleCafe,
             userId = USER_ID,
@@ -238,6 +248,7 @@ class CafeDetailViewModelDetailsRefreshTest {
             coffeeRepository = FakeCoffeeRepository(),
             cafeRepository = fakeCafeRepo,
             savedCafeRepository = FakeSavedCafeRepository(),
+            cafeRecommendationProvider = FakeCafeRecommendationProvider(),
             placeId = PLACE_ID,
             initialCafe = freshCafe,
             userId = USER_ID,

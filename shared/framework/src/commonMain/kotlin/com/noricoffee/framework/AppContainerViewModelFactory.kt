@@ -111,6 +111,8 @@ fun AppContainer.makeMapViewModel(userId: String): MapViewModel =
  *
  * [AppContainer] が保持する [com.noricoffee.repository.CoffeeRepository] と
  * CoroutineScope（内部の MainScope）を自動配線する。
+ * [ObserveTasteMatchedCafesUseCase] のインスタンスはファクトリ内で都度生成する（DI コンテナ化は YAGNI。
+ * [makeMapViewModel] と同じ都度生成パターン）。
  *
  * ## Bridge のライフサイクル
  * カフェ詳細画面は NavigationStack push ごとに新規生成・pop で破棄すること。
@@ -130,6 +132,10 @@ fun AppContainer.makeCafeDetailViewModel(
         coffeeRepository = coffeeRepository,
         cafeRepository = cafeRepository,
         savedCafeRepository = savedCafeRepository,
+        cafeRecommendationProvider = ObserveTasteMatchedCafesUseCase(
+            coffeeRepository = coffeeRepository,
+            buildCoffeeStatsUseCase = BuildCoffeeStatsUseCase(),
+        ),
         placeId = placeId,
         initialCafe = initialCafe,
         userId = userId,

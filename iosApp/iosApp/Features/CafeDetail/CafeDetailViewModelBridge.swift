@@ -22,6 +22,8 @@ final class CafeDetailViewModelBridge {
     private(set) var isLoading: Bool = true
     /// 「行きたい店」として保存済みか（フェーズ 15-A）。ブックマークボタンの ON/OFF 表示用。
     private(set) var isSaved: Bool = false
+    /// このカフェが好み一致である理由。一致なしは空リスト（マップから移設。フェーズ 20）。
+    private(set) var matches: [RecommendationReason] = []
     /// 保存 / 解除操作で発生したエラーメッセージ。`onErrorDismissed()` で nil に戻る。
     private(set) var error: String?
 
@@ -66,6 +68,7 @@ final class CafeDetailViewModelBridge {
         self.coffees = state.coffees
         self.isLoading = state.isLoading
         self.isSaved = state.isSaved
+        self.matches = state.matches
         self.error = state.error
     }
 }

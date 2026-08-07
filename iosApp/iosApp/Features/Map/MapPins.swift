@@ -170,9 +170,7 @@ struct RecommendedCafePin: View {
             }
         }
         .accessibilityLabel(
-            String(
-                localized: "好み一致のカフェ、\(visitedCafe.cafe.name)。タップして理由を確認"
-            )
+            String(localized: "\(visitedCafe.cafe.name)、好み一致のカフェ")
         )
     }
 }

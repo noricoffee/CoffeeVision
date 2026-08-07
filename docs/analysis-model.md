@@ -182,11 +182,17 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 - **`FavoriteSignals` が全 null（データ不足）** なら一致 0 件 → 空リスト（マップは強調なし）。
 - **並び順**: `matches` 件数降順 → 代表記録評価の最大降順 → placeId 昇順（決定論）。
 
-### マップ連携（`MapViewModel` / iOS）
+### UI 連携（`MapViewModel` / `CafeDetailViewModel` / iOS）
 
-- `MapViewModel` は `CafeRecommendationProvider.observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。公開 API 追加は加算的。
-- iOS `MapTabView`: 一致カフェを**区別ピン**（アクセント色＋ハート/星）で強調し、タップで理由（`matches`）を表示。理由文言（「好みのエチオピアを高評価で記録（〇〇 ★4.5）」）は iOS でローカライズ生成。
+**`CafeRecommendationProvider` は 2 つの ViewModel が購読する**。マップは「どの店が一致しているか」（一覧）、カフェ詳細は「この店がなぜ一致しているか」（理由）を担い、役割で分かれている。
+
+- `MapViewModel` は `observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。用途は**ピンの区別と一覧シート**。
+- `CafeDetailViewModel` も同じ provider を購読し、自 `placeId` に一致するエントリの理由を `UIState.matches: List<RecommendationReason>` として公開する（一致なし = 空リスト。nullable にしない）。2026-08-07 に追加。
+- iOS `MapTabView`: 一致カフェを**区別ピン**（pink + ハートバッジ）で示す。**タップは他の概念ピンと同じくカフェ詳細へ直行**する（2026-08-07 に変更。旧実装はピンタップで推薦理由のモーダルシートを挟んでいた）。
+- iOS `CafeDetailView`: `matches` が非空なら店名直下に「好み一致」セクションを出し、軸ごとの理由を並べる。理由文言（「好みの産地: Ethiopia」+ 代表記録 ★4.5）は iOS でローカライズ生成。**マップ以外の経路（コーヒー記録一覧など）で開いても表示される**のが移設の主目的。
 - **Foundation Models 連携は将来 9-6 で「推薦理由の自然言語化」一点に限定**（v1 は構造化 reason を iOS が定型文で表示。LLM は使わない）。
+
+> **再計算コストの注記**: `ObserveTasteMatchedCafesUseCase` は全記録を毎回集計する。provider は `AppContainer` のファクトリで**都度生成**するため、マップと詳細が同時にアクティブな間は集計が二重に走る。カフェ詳細は push / pop ごとの生成・破棄で常駐しないこと、個人アプリの記録件数規模から、現状は許容と判断（2026-08-07）。共有化するなら `AppContainer` 側で `shareIn` する設計変更になる。
 
 ### 9-6 協調フィルタリング（リモート実装 / 設計確定 2026-07-21・未実装）
 

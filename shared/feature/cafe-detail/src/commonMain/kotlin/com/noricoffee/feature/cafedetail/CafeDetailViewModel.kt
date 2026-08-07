@@ -2,6 +2,8 @@ package com.noricoffee.feature.cafedetail
 
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.model.CafeRecommendationProvider
+import com.noricoffee.domain.model.RecommendationReason
 import com.noricoffee.domain.model.SavedCafe
 import com.noricoffee.repository.CafeRepository
 import com.noricoffee.repository.CoffeeRepository
@@ -30,6 +32,8 @@ import kotlinx.datetime.Clock
  * - [initialCafe] が null、または DB スナップショット由来で `googleRating` が未取得（= 鮮度が低い）の場合は
  *   [cafeRepository] から Places Details を 1 回取得し、[latestDetails] として保持する。
  *   取得できたらそれ以降の cafe 採用は常に [latestDetails] を最優先にする（フェーズ 16）
+ * - [cafeRecommendationProvider] を購読し、対象 [placeId] に一致する好み一致理由を
+ *   [UIState.matches] として公開する（マップの好み一致ピンと同じ推薦ソースをカフェ詳細に移設）
  *
  * ## CoroutineScope の注意
  *
@@ -39,6 +43,7 @@ import kotlinx.datetime.Clock
  * @param coffeeRepository [CoffeeRecord] の観測に使うリポジトリ
  * @param cafeRepository カフェ詳細の条件付きリフレッシュ（Places Details 取得）に使うリポジトリ（フェーズ 16）
  * @param savedCafeRepository 「行きたい店」の保存状態観測 / トグルに使うリポジトリ（フェーズ 15-A）
+ * @param cafeRecommendationProvider 好み一致理由の購読に使うプロバイダ（v1 = [com.noricoffee.domain.usecase.ObserveTasteMatchedCafesUseCase]）
  * @param placeId 対象カフェの Google Places ID
  * @param initialCafe マップピン / 検索結果から渡される Cafe スナップショット（未訪問カフェ用）。
  *                    過去記録がある場合は最新記録の cafe で上書きされる
@@ -49,6 +54,7 @@ class CafeDetailViewModel(
     private val coffeeRepository: CoffeeRepository,
     private val cafeRepository: CafeRepository,
     private val savedCafeRepository: SavedCafeRepository,
+    private val cafeRecommendationProvider: CafeRecommendationProvider,
     private val placeId: String,
     private val initialCafe: Cafe?,
     private val userId: String,
@@ -77,6 +83,9 @@ class CafeDetailViewModel(
      * @property isLoading 最初の emit を受け取るまで true
      * @property isSaved 「行きたい店」として保存済みか（フェーズ 15-A）。
      *   [SavedCafeRepository.observeByPlaceId] の購読で自動更新される
+     * @property matches このカフェが好み一致である理由の一覧。[cafeRecommendationProvider] が返す
+     *   [com.noricoffee.domain.model.RecommendedCafe] のうち [placeId] に一致するものを反映する。
+     *   一致なしは空リストで表現する（nullable にしない）
      * @property error [onSaveToggled] の保存 / 解除操作で発生したエラーメッセージ。
      *   [onErrorDismissed] で null に戻す
      */
@@ -85,6 +94,7 @@ class CafeDetailViewModel(
         val coffees: List<CoffeeRecord> = emptyList(),
         val isLoading: Boolean = true,
         val isSaved: Boolean = false,
+        val matches: List<RecommendationReason> = emptyList(),
         val error: String? = null,
     )
 
@@ -115,6 +125,15 @@ class CafeDetailViewModel(
         viewModelScope.launch {
             savedCafeRepository.observeByPlaceId(userId, placeId).collect { savedCafe ->
                 _state.update { it.copy(isSaved = savedCafe != null) }
+            }
+        }
+
+        // 好み一致の推薦理由を購読する（マップの好み一致ピンと同じ推薦ソースをカフェ詳細に移設）。
+        // 対象 placeId に一致するエントリがなければ空リストのまま。
+        viewModelScope.launch {
+            cafeRecommendationProvider.observeRecommendedCafes(userId).collect { recommended ->
+                val matches = recommended.firstOrNull { it.cafe.placeId == placeId }?.matches ?: emptyList()
+                _state.update { it.copy(matches = matches) }
             }
         }
 

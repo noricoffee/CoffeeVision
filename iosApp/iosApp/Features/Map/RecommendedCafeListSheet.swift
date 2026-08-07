@@ -82,8 +82,9 @@ struct RecommendedCafeListSheet: View {
 
     /// 推薦理由のコンパクトなサマリ文（例「産地・焙煎度が好みに一致」）。
     ///
-    /// 軸表示ロジックは `RecommendationMatchSheet` の `preferenceMatchAxisLabel` を再利用し、
-    /// 一致した軸名を重複除去して列挙する（1 行の要約に留め、詳細は `RecommendationMatchSheet` に譲る）。
+    /// 軸表示ロジックは `Components/PreferenceMatchViews.swift` の `preferenceMatchAxisLabel` を
+    /// 再利用し、一致した軸名を重複除去して列挙する（1 行の要約に留め、詳細はカフェ詳細画面の
+    /// 「好み一致」セクションに譲る。フェーズ 20 でマップのシートから移設）。
     private func matchSummary(_ recommendedCafe: RecommendedCafe) -> String {
         var seenLabels = Set<String>()
         let axisLabels = recommendedCafe.matches.compactMap { reason -> String? in

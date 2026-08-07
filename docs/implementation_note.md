@@ -505,7 +505,7 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 
 - **`TagChip` に `tint` パラメータ追加**（既定 `.accentColor`）: 色セマンティクス表（ui-ux-guidelines）の「accentColor を『好み』の意味で使わない」を守るため、好み一致チップだけ `.pink` を渡す。塗り + 件数バッジの前景 / 背景を `tint` に連動
 - **「保存済み」強調と排他**: 片方 ON でもう片方を OFF（両立させると減光対象が曖昧になるため）。減光は 4 種ピン（訪問済み / 保存済み / 検索結果 / Apple 周辺）すべてに `recommendedEmphasisActive` 分岐を追加。`recommendedCafes` が 0 件化したら強調 / シートを `onChange` でリセット
-- **一覧行の推薦理由は 1 行サマリ**（例「産地・焙煎度が好みに一致」、軸名の重複除去列挙）に留め、詳細（一致ラベル・代表記録・評価）はピンタップの `RecommendationMatchSheet` に譲る。軸名ラベルはトップレベル関数 `preferenceMatchAxisLabel` に共通化
+- **一覧行の推薦理由は 1 行サマリ**（例「産地・焙煎度が好みに一致」、軸名の重複除去列挙）に留め、詳細（一致ラベル・代表記録・評価）はピンタップの `RecommendationMatchSheet` に譲る。軸名ラベルはトップレベル関数 `preferenceMatchAxisLabel` に共通化（**注: `RecommendationMatchSheet` は 2026-08-07 に廃止**。詳細の置き場はカフェ詳細の「好み一致」セクションへ移設し、`preferenceMatchAxisLabel` は `Components/PreferenceMatchViews.swift` へ移動した。1 行サマリに留める方針自体は不変）
 - **`TagLegendChip` は production 未使用化したが削除見送り**: 凡例という用途自体は汎用のため部品は残置（ui-ux-guidelines に未使用の旨と削除条件を記載済み）
 - 好み一致ピンは強調中もサイズ据え置き（保存済みピンの 34→38pt 拡大パターンには追随せず。要望が出たら検討）
 
@@ -714,7 +714,7 @@ MediaView 必須判明によるネイティブ → バナー再編（requirement
 **実装判断 / トレードオフ**:
 - **強調 State を独立に持たず、単一 item state に集約**。`recommendedEmphasisActive` / `savedEmphasisActive` / `isPresenting*Sheet` の 4 `@State` を廃し、`@State activeCafeListSheet: CafeListSheetKind?`（`.recommended` / `.saved`）1 本へ。強調は `activeCafeListSheet == .recommended/.saved` の **computed property** として同名で残し、多数の opacity / size 計算箇所を無改修に保った（Minimal Impact）。
 - **2 本の `.sheet(isPresented:)` を 1 本の `.sheet(item:)` に統合**したのが肝。(1) 排他性が構造的に保証され、medium detent でチップが見える状態からの相互切り替えでも二重表示バグが起きない。(2) スワイプ dismiss 時に item が自動で nil に戻る＝「シートを閉じる＝強調 OFF」を SwiftUI 標準機能でそのまま実現（追加ガード不要）。(3) 同一 item の再代入は再アニメーションなし＝「既に開いていれば no-op」も標準挙動で満たす。
-- 好み一致ピンタップの推薦理由シート（`selectedRecommendedCafe` / `RecommendationMatchSheet`）は対象外・無変更（別系統の独立 `.sheet`）。
+- 好み一致ピンタップの推薦理由シート（`selectedRecommendedCafe` / `RecommendationMatchSheet`）は対象外・無変更（別系統の独立 `.sheet`）。**注: この独立 `.sheet` は 2026-08-07 に State ごと廃止**（ピンタップはカフェ詳細へ直行に変更）。本項の「1 本の `.sheet(item:)` に統合」は一覧シート 2 種の話で、そちらは現存する。
 - **状態を KMP UIState に置かない方針は不変**（[implementation_note 2026-07-16 / フェーズ 15-A 参照]）。強調はドメインロジックゼロの純プレゼンテーションで、必要な placeId 集合は `recommendedCafes` / `savedCafes`（UIState）に既にある。旧 `@State savedEmphasisActive` の記述は本改修で computed property 化（Swift ローカルである点は不変）。
 
 **影響範囲**: `MapTabView.swift` のみ。ビルド成功確認済み（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 不使用）。UI 挙動（1 タップ再表示 / 下スワイプで強調 OFF / 両チップ排他 / medium detent 併存 / 選択 push 時のクローズ）はシミュレータ実地確認が必要。
@@ -1266,3 +1266,21 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 追記（2026-08-07、実装後）: サムネイルの縮小デコードは `PhotoFileStore.loadThumbnail(fileName:maxPixelSize:) async` に置き、`NSCache` でメモリキャッシュする。**この関数がメインスレッドを離れて走ることは言語モードに依存している** — `PhotoFileStore` に actor / `@MainActor` 注釈が無いため `nonisolated` で、SE-0338 により `nonisolated` な async 関数はグローバル実行キューで実行される。`project.pbxproj` が `SWIFT_VERSION = 5.0` かつ `SWIFT_UPCOMING_FEATURE` / `SWIFT_DEFAULT_ACTOR_ISOLATION` を指定していないことを実確認済み。**Swift 6.2 の `NonisolatedNonsendingByDefault` を有効にすると `nonisolated` async は呼び出し元アクター上で走るようになり、この関数はメインスレッドでデコードするようになる**（ビルドは通り、スクロールが重くなるだけなので気づきにくい）。言語モードを上げるときはここを `@concurrent` 等で明示すること。
 
 `maxPixelSize` は `56pt × @Environment(\.displayScale)`。`UIScreen.main` は iOS 26 で deprecated なので使っていない。
+
+### 2026-08-07: 好み一致の推薦理由をカフェ詳細へ移設（`RecommendationMatchSheet` 廃止）
+
+- 関連: `shared/feature/cafe-detail/.../CafeDetailViewModel.kt`, `shared/framework/.../AppContainerViewModelFactory.kt`, `iosApp/iosApp/Components/PreferenceMatchViews.swift`（新設）, `iosApp/iosApp/Features/CafeDetail/CafeDetailView.swift`, `iosApp/iosApp/Features/Map/MapTabView.swift`
+
+ユーザー報告「好み一致のピンタップで『好みのコーヒーがあった店』シートが出る。そのせいでカフェ詳細に辿り着けない / 直感的ではない」。
+
+**まず遷移バグを疑ったが、これは外れだった**。`onOpenDetail` が「シートを閉じる状態変更」と「同じ `NavigationStack` の `path` への `append`」を同一クロージャで同期実行しており、SwiftUI で push が握り潰される既知パターンに形が一致していたため原因と見立てたが、**ユーザー実機確認で「ピン経由・チップ経由とも遷移する」ことが判明**。同ファイルの `CafeSelectionCard`（`MapTabView.swift`）は `append` を先に呼ぶ逆順で書かれており、その非対称さも傍証に見えたが結論には結びつかなかった。**コードの「形」が既知バグに一致することは、そのバグが起きている証拠にはならない**。
+
+**実際の問題は構成**だった。①同じ見た目の丸いピンなのに好み一致だけ行き先が違う（他 4 種は `NavigationLink` で詳細直行）②詳細への導線がフッター状の帯で主アクションに見えない ③その帯だけ `Color(.secondarySystemBackground)` の不透明色を敷いており、半透明 material のシート上で 1 枚だけ白く浮いていた（ユーザーがスクリーンショットで指摘）。
+
+**採った解**: 推薦理由は「その店が好みに合う理由」= 店に属する情報なので、経由地のシートではなく**カフェ詳細のセクション**に置く。ピンタップは他ピンと同じく直行にする。
+
+- **副次的だがこちらが本質的な利得**: 旧構成では**好み一致ピンをタップしたときしか理由が見られなかった**。コーヒー記録一覧や検索から同じ店を開いても「この店は好みに合っている」と分からない。移設後はどの経路から開いても出る。
+- **不採用案**: (a) シートを残してボタンを `.borderedProminent` 化 — ③は直るが①②の「1 種だけ挙動が違う」が残る (b) 直行化 + 理由シート廃止 — 軸ごとの詳細（一致ラベル・代表記録・評価）が失われ、残るのは一覧行の 1 行サマリだけになり推薦機能の説明力が落ちる。
+- **KMP 側**: `CafeDetailViewModel` に `CafeRecommendationProvider` を注入し `UIState.matches` を追加。provider は `makeMapViewModel` と同じく `AppContainer` ファクトリ内で都度生成（DI コンテナ化は既存方針どおり YAGNI）。再計算が二重に走る件は analysis-model §2 の注記参照。
+- **`preferenceMatchAxisLabel` の置き場**: Map と CafeDetail の 2 feature から使うため `Features/Map/` から `Components/PreferenceMatchViews.swift` へ移した。軸ごとの行 View も `PreferenceMatchRow` として同居させ、シート本体だけを削除。
+- **`MapTabView.swift` は 804 → 771 行**。分割目安 800 行を下回った（M-1 以降の分割作業とは別に、機能削除で解消した形）。

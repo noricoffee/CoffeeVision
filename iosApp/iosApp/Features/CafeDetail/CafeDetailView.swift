@@ -77,6 +77,7 @@ struct CafeDetailView: View {
             if let cafe = bridge.cafe ?? initialCafe {
                 headerSection(cafe: cafe, bridge: bridge)
             }
+            matchesSection(bridge: bridge)
             cafeInfoSection(bridge: bridge)
             if let cafe = bridge.cafe ?? initialCafe {
                 cafeLinksSection(cafe: cafe)
@@ -212,6 +213,26 @@ struct CafeDetailView: View {
                 ? String(localized: "行きたい店から削除")
                 : String(localized: "行きたい店に追加")
         )
+    }
+
+    // MARK: - 好み一致セクション
+
+    /// このカフェが好み一致である理由（マップの `RecommendationMatchSheet` から移設。フェーズ 20）。
+    ///
+    /// `matches` が空のときは Section 自体を `List` の body に含めない。`List` の `Section` は
+    /// 中身が空でも行の余白・区切り線を描画しうるため（`adSection` と同じ理由）。
+    @ViewBuilder
+    private func matchesSection(bridge: CafeDetailViewModelBridge) -> some View {
+        if !bridge.matches.isEmpty {
+            Section {
+                ForEach(Array(bridge.matches.enumerated()), id: \.offset) { _, reason in
+                    PreferenceMatchRow(reason: reason)
+                }
+            } header: {
+                Label(String(localized: "好み一致"), systemImage: "heart.fill")
+                    .foregroundStyle(.pink)
+            }
+        }
     }
 
     // MARK: - カフェ情報セクション

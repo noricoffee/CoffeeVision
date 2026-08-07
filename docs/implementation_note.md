@@ -1265,6 +1265,8 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 
 追記（2026-08-07、実装後）: サムネイルの縮小デコードは `PhotoFileStore.loadThumbnail(fileName:maxPixelSize:) async` に置き、`NSCache` でメモリキャッシュする。**この関数がメインスレッドを離れて走ることは言語モードに依存している** — `PhotoFileStore` に actor / `@MainActor` 注釈が無いため `nonisolated` で、SE-0338 により `nonisolated` な async 関数はグローバル実行キューで実行される。`project.pbxproj` が `SWIFT_VERSION = 5.0` かつ `SWIFT_UPCOMING_FEATURE` / `SWIFT_DEFAULT_ACTOR_ISOLATION` を指定していないことを実確認済み。**Swift 6.2 の `NonisolatedNonsendingByDefault` を有効にすると `nonisolated` async は呼び出し元アクター上で走るようになり、この関数はメインスレッドでデコードするようになる**（ビルドは通り、スクロールが重くなるだけなので気づきにくい）。言語モードを上げるときはここを `@concurrent` 等で明示すること。
 
+**追記（2026-08-08、Swift 6 移行で決着）**: 上の予告どおりになったため `loadThumbnail` に **`@concurrent` を明示**した（SW6-3）。移行時に `iosApp` 全体の `async` 関数 23 本を洗い、同型（`nonisolated async` にバックグラウンド実行を暗黙に期待している）は**この 1 件のみ**だったことを確認済み。**この件はコンパイラの診断が一切出ない** — 移行の全診断 32 件を採取した中に `loadThumbnail` に関するものは 1 件も無く、上の予告を doc に残していなかったら気づけなかった。同種の落とし穴は `.claude/rules/swift-ios.md` に規約として昇格させた。
+
 `maxPixelSize` は `56pt × @Environment(\.displayScale)`。`UIScreen.main` は iOS 26 で deprecated なので使っていない。
 
 ### 2026-08-07: 好み一致の推薦理由をカフェ詳細へ移設（`RecommendationMatchSheet` 廃止）
@@ -1284,3 +1286,34 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 - **KMP 側**: `CafeDetailViewModel` に `CafeRecommendationProvider` を注入し `UIState.matches` を追加。provider は `makeMapViewModel` と同じく `AppContainer` ファクトリ内で都度生成（DI コンテナ化は既存方針どおり YAGNI）。再計算が二重に走る件は analysis-model §2 の注記参照。
 - **`preferenceMatchAxisLabel` の置き場**: Map と CafeDetail の 2 feature から使うため `Features/Map/` から `Components/PreferenceMatchViews.swift` へ移した。軸ごとの行 View も `PreferenceMatchRow` として同居させ、シート本体だけを削除。
 - **`MapTabView.swift` は 804 → 771 行**。分割目安 800 行を下回った（M-1 以降の分割作業とは別に、機能削除で解消した形）。
+
+### 2026-08-08: Swift 5 → Swift 6 移行（既定 MainActor 分離を選択）
+
+`iosApp` を `SWIFT_VERSION = 6.0` + `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` + `SWIFT_APPROACHABLE_CONCURRENCY = YES` へ移行（SW6-1〜7）。Debug / Release とも警告 0・エラー 0（残る 1 件は Swift 6 と無関係な `UIWindow()` の iOS 26 deprecation）。
+
+**なぜ既定 MainActor 分離か**: 素の Swift 6（nonisolated 既定）だと UI 側に `@MainActor` を書き足す量が増える一方、CoffeeVision の Swift コードはほぼ全部が UI か UI ブリッジで、実際に MainActor を離れるのは Kotlin interface の実装クラスだけ。**多数派を既定にして少数派を明示する**方が差分も小さく、意図も読める。
+
+**SKIE 側は移行の影響を受けない**（着手前の懸念だったが実測で否定された）。`SharedLogic.swiftmodule` の `.swiftinterface` は `-language-mode 5 -enable-library-evolution` でビルドされており、アプリを Swift 6 にしても Swift 5 セマンティクスで再構築される。**`shared/**` は 1 行も触っていない**。
+
+#### 使い分けの判定軸（正本は coding-conventions §2.5 / kmp-bridge「Swift 6 の並行性境界」）
+
+「既定から外す 3 手段」のうちどれを使うかは、**そのクラスが誰にどのスレッドで生成・破棄されるか**で決まる。同じ `deinit` の警告でも答えが逆になる:
+
+- **ViewModel ブリッジ 8 本** → `isolated deinit`。SwiftUI / `AppState` から MainActor 上でのみ保持・破棄されるため、ホップが実質ノーオペになる
+- **`CallbackFlow` / `CallbackFlowOptional`** → `nonisolated final class` + plain `deinit`。Kotlin ランタイムが任意スレッドで破棄するため、`isolated deinit` にすると **Firestore リスナの解放が MainActor へ非同期にホップして遅延し、同一クエリの即時再購読で旧リスナが生き残る競合窓ができる**（読み取り課金にも響く）。`paid-services.md` を更新しなかったのは、この判断が**コスト構造を現状維持するためのもの**だから
+
+検査を外す手段は**穴の広さで選んだ**。`@preconcurrency import SharedLogic` はファイル内の SharedLogic 型すべての検査を外すため、**`@Sendable` クロージャの引数型に Kotlin 型が直接現れる 3 ファイル**（`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl` — Kotlin interface の `completionHandler` が該当し、関数シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない）に限定した。プロパティ 1 個の問題は `nonisolated(unsafe)` で済ませている（`AppState.container` / `PlacePhotoLoader.repository`）。なお `@preconcurrency import` は**移行前から 4 ファイルに存在していた**（`SearchByTasteProfileTool` / `SearchCoffeeRecordsTool` / `TastePreferenceConversionView` / `TasteSearchSheet`）ので、今回増えたのは 3 ファイル。
+
+`nonisolated` にしたクラスの可変キャッシュは `OSAllocatedUnfairLock` + `@unchecked Sendable` に置き換えた。**`nonisolated` を付けた瞬間にそのクラスの可変状態は無保護の共有可変状態になる**ため、セットで考える必要がある。
+
+#### 副次的に直ったもの
+
+`CoffeeInsightProviderIosImpl` を `nonisolated` にしたことで、**オンデバイス LLM 推論（Foundation Models）がメインスレッドから外れた**。既定 MainActor 分離の下では、Obj-C プロトコル要件の `__summarize` 系は暗黙に nonisolated 化される一方で内部の private メソッドは MainActor に留まり、`Task { await self.generateInsight(...) }` が毎回メインへホップして推論していた。**警告は出ないし、移行前も同じ構造だった**（移行で悪化したのではなく、移行の副産物として直った）。実機での UI 挙動確認は verification-checklist に起票。
+
+#### 計測方法の落とし穴
+
+**`xcodebuild` のコマンドライン引数で `SWIFT_VERSION=6.0` 等を渡してはいけない。** SPM 依存パッケージ全体に波及し、`FirebaseCoreInternal` が 4 エラーで落ちて iosApp のソースに 1 ファイルも到達しない。設定は `Base.xcconfig`（アプリターゲット限定）に書いて計測する。
+
+**`SWIFT_VERSION` は `project.pbxproj` の `buildSettings` に直書きされていた**ため、xcconfig に足すだけでは無視される（同一キーは pbxproj > xcconfig）。pbxproj の Debug / Release 両ブロックから削除して `Base.xcconfig` に一本化した。
+
+計測は **2 段階（`SWIFT_STRICT_CONCURRENCY = complete` のみ → 既定 MainActor 分離を追加）に分ける**。既定 MainActor 分離は診断を減らす方向にも働くため（`PreviewSamples` 10 件 / `CoffeeInsightProviderIosImpl` 3 件 / `PhotoFileStore` 1 件が自然解消、`FirebaseRepositories` 系で 8 件が新規発生）、1 回で測るとどちらの設定がどの診断の原因か切り分けられない。

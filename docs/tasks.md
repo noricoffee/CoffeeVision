@@ -406,6 +406,28 @@
 
 ### 未完・バックログ
 
+#### Swift 5 → Swift 6 移行（2026-08-07 起票 / 2026-08-08 完了）
+
+> **2026-08-08 に SW6-1〜7 すべて完了。** `iosApp` を Swift 6 言語モード + **既定 MainActor 分離**（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` / `SWIFT_APPROACHABLE_CONCURRENCY = YES`）へ移行し、`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しの clean build で **Debug / Release とも警告 0・エラー 0**（残る 1 件は Swift 6 と無関係な `UIWindow()` の iOS 26 deprecation）。設定は `iosApp/Configuration/Base.xcconfig` に一本化した（`project.pbxproj` への `SWIFT_VERSION` 直書きは xcconfig より優先されるため削除）。
+>
+> **`shared/**` は 1 行も触っていない** — `SharedLogic.swiftmodule` の `.swiftinterface` が `-language-mode 5 -enable-library-evolution` でビルドされており、アプリを Swift 6 にしても SKIE 生成コードは Swift 5 セマンティクスで再構築されることを実読みで確認した。
+>
+> 変更は 24 ファイル。**ViewModel ブリッジ 8 本 = `isolated deinit`（SE-0371）/ Kotlin interface 実装 8 本 = `nonisolated`（可変キャッシュは `OSAllocatedUnfairLock` + `@unchecked Sendable`）/ `PhotoFileStore.loadThumbnail` = `@concurrent` / デリゲート 2 本 = `MainActor.assumeIsolated`**。`@preconcurrency import SharedLogic` の追加は 3 ファイルに限定（移行前から 4 ファイルに存在）。
+>
+> **判断の根拠・使い分けの軸・計測方法の落とし穴は [`implementation_note.md`](./implementation_note.md) 2026-08-08 が正本**。規約への昇格先は [`coding-conventions.md`](./coding-conventions.md) §2.5 / [`kmp-bridge.md`](./kmp-bridge.md)「Swift 6 の並行性境界」/ `.claude/rules/swift-ios.md`。
+>
+> **残務は実機目視のみ**（[`verification-checklist.md`](./tasks/verification-checklist.md) へ移送済み）。特に `CoffeeInsightProviderIosImpl` の `nonisolated` 化で**オンデバイス LLM 推論がメインスレッドから外れた**副次効果の確認が要る。
+
+#### Swift 6 移行で発見した別件（2026-08-08 起票）
+
+> SW6-3 の横断確認中に見つかった、**移行のスコープ外**の既存課題。どちらも移行で悪化したものではない。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [ ] | SW6-A | **メインスレッドでの同期フルデコード 2 箇所**。`CoffeeEditorView+Photos.handlePickerSelection` が `ImageDownsampler.downsampledJPEG`（同期・CPU バウンド）を `@MainActor` 文脈から直接呼び、写真選択のたびにメインスレッドをブロックする。`PhotoThumbnailCell` の `PhotoFileStore.loadImage`（同期フルデコード）も View body から直接呼ばれている。**どちらも `async` ではない**ため SW6-3（`nonisolated async` へ `@concurrent` を付ける）の対象条件に当たらず、移行では触っていない | iosApp 完結 |
+| [ ] | SW6-B | **`AppleSignInCoordinator.swift:175` の `UIWindow()` が iOS 26 で deprecated**。「到達しない最終フォールバック」分岐にあり、`UIWindow(windowScene:)` へ置き換えるには到達不能パスの制御フロー自体を変える必要がある。移行のコミットには混ぜなかった（ビルドで唯一残っている警告） | iosApp 完結 |
+| [ ] | SW6-C | **CI が `CURRENT_PROJECT_VERSION` を `xcodebuild` の引数で渡している**（`release-testflight.yml` の archive ステップ）。コマンドライン引数のビルド設定は**ターゲットを選ばず SPM 依存パッケージ全体に適用される**ため、埋め込みフレームワークの `CFBundleVersion` も同じ値で上書きされている。**現に TestFlight ビルドは通っており実害は未確認**だが、フレームワークのバージョン不整合は審査で問われうる。まず実害の有無を調べ、必要なら xcconfig 経由へ移す（lessons 2026-08-08 の sweep で検出） | 親（CI） |
+
 #### docs 棚卸し 第 2 巡（2026-07-27 / 未実施 doc への Phase 1 適用）
 
 > 2026-07-25 の第 1 巡（data-model / implementation_note / kmp-bridge / architecture）で**触れていない 8 本**にコード突き合わせ（curate-doc Phase 1）を通した。行数閾値の超過は `data-model.md` 708 行のみで、今回の主目的は縮約ではなく**実装との乖離の検出**。検出は陳腐化 10 件 / 欠落 4 件 / コード側 2 件。

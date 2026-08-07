@@ -397,8 +397,10 @@ Button("追加") {
 
 ## 2.5 並行処理
 
+**`iosApp` は Swift 6 言語モード + 既定 MainActor 分離**（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` / `SWIFT_APPROACHABLE_CONCURRENCY = YES`。設定は `iosApp/Configuration/Base.xcconfig` が正本。2026-08-07 移行）。**宣言に何も書かなければ `@MainActor`** になるのが既定であり、以下は「既定から外れる側」を明示するための規約。
+
 - Swift Concurrency（`async`/`await`）を使う
-- ViewModel ブリッジは `@MainActor` を付与し、UI 更新を Main で完結させる
+- ViewModel ブリッジは `@MainActor` を付与し、UI 更新を Main で完結させる（既定と同じだが、意図として明示する）
 - `Task { ... }` を View の `body` 内で生成するときは `.task` モディファイアを優先する
 
 ```swift
@@ -409,6 +411,18 @@ final class CoffeeListViewModelBridge { ... }
 CoffeeListView(...)
     .task { await viewModel.onAppear() }
 ```
+
+### 既定 MainActor 分離から外すべき 3 つのケース
+
+| ケース | 書くもの | 理由 |
+|--------|---------|------|
+| **Kotlin interface（Obj-C プロトコル）の実装クラス** | `nonisolated final class` | Kotlin ランタイムが任意スレッドから呼ぶ。MainActor 分離すると実態と食い違う（`FirebaseRepositories/` 配下、`FlowBridge` の `CallbackFlow`） |
+| **CPU バウンドな処理を含む `nonisolated async` 関数** | `@concurrent` | `NonisolatedNonsendingByDefault` 下では素の `nonisolated async` は**呼び出し元アクター上で実行される**。付けないとメインスレッドで重い処理が走る（`PhotoFileStore.loadThumbnail`） |
+| **MainActor 上でのみ生成・破棄されるクラスの `deinit`** | `isolated deinit` | `deinit` は既定で `nonisolated`。MainActor 分離されたプロパティ（非 Sendable）に触れない。`isolated deinit` なら MainActor 上で走る（ViewModel ブリッジ 8 本の `kotlin.clear()`） |
+
+**`isolated deinit` を選んでよいのは「破棄が MainActor 上で起きる」ことが構造的に保証される場合だけ**。`CallbackFlow` のように Kotlin ランタイム側が任意スレッドで破棄するクラスに使うと、解放処理が MainActor へ非同期にホップして遅延する（Firestore リスナの解放が遅れ、再購読時に競合窓ができる）。そこは `nonisolated` にして plain `deinit` のまま残す。
+
+**`@concurrent` の付け忘れは診断が一切出ない。** ビルドは通り、スクロールが重くなるだけなので、コードレビューでしか捕まえられない（lessons 2026-08-07）。
 
 ### `@Observable` / `@MainActor` の実装パターン
 

@@ -291,7 +291,7 @@ NavigationStack {
 ### モーダル
 
 - コーヒー記録の作成・編集のような一連の入力フローは `.sheet` で表示する
-- 写真の全画面表示は `.fullScreenCover` を使う
+- 写真の全画面表示を作るときは `.fullScreenCover` を使う（**2026-08-08 時点で未実装**。下記「写真表示」参照）
 
 ---
 
@@ -318,7 +318,7 @@ List { ... }
 
 - 一覧・検索結果行では 1 枚をサムネイル表示（読み込み方法は下表）
 - 詳細では `ScrollView(.horizontal)` + `LazyHStack` で複数枚を横スワイプ
-- 全画面表示は `.fullScreenCover` + `MagnificationGesture` でピンチズーム
+- **全画面表示（`.fullScreenCover` + ピンチズーム）は未実装**（2026-08-08 に SW6-A の調査で判明。`fullScreenCover` / `MagnificationGesture` とも実装が存在しない）。実装する場合の方針としてこの行を残すが、**現状の写真表示は一覧・詳細・カフェ詳細の 3 サイズのサムネイルのみ**。なお [`requirements.md`](./requirements.md) §未決事項の保存解像度 2048px は「全画面表示（6.7 インチ @3x = 1290px）にも余裕がある」ことを根拠の 1 つにしているため、**未実装でも解像度の前提としては生きている**
 
 **記録写真と Places 写真は読み込み方針が違う**。同じ横スクロール帯（`CafePhotoHeader`）に並べても、UI の作り方を揃えてはいけない。
 

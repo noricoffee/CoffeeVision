@@ -1330,3 +1330,29 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 **「無効な window を返す」は安全策になっていなかった**のが判断の決め手。`UIWindow()` を返してもサインインシートは出ず、ユーザーには無反応に見えるだけで、しかもエラーとして観測されない。クラッシュの方が検出可能な分ましだと判断した。加えて scene 探索は `AccountView.currentPresentationAnchor()` と**二重に書かれていた**ので、削除で重複も解消した（実行パス 18 行 → 2 行）。
 
 **これで iosApp のビルド警告が Debug / Release とも 0 件になった。** 到達不能の確認は静的なものなので、実機で**シートが実際に出ること**の確認は verification-checklist「Swift 6 移行 ③」に統合した（lessons 2026-08-07「コードの形が既知バグに一致しても、そのバグが起きている証拠にはならない」の裏返しで、**到達不能の証明も静的なままでは仮説**）。
+
+### 2026-08-08: 記録写真のサムネイルを共通コンポーネントへ統合（SW6-A）
+
+記録写真を `PhotoFileStore.loadImage`（長辺 2048px のフルデコード ≒ 16MB/枚）で表示していた 3 箇所を、縮小デコードする共通 View `Components/RecordPhotoThumbnail.swift` に統合した。
+
+| 箇所 | 表示サイズ | コンテナ |
+|---|---|---|
+| `PhotoThumbnailCell`（エディタ） | 100×100pt | LazyHStack 横スクロール |
+| `PhotoDetailCell`（記録詳細） | 120×120pt | LazyHStack 横スクロール |
+| `CafePhotoHeader.ownPhotoCell`（カフェ詳細） | 224×168pt | LazyHStack 横スクロール |
+
+**構図として重要なのは「1 箇所だけ直されて横展開されなかった」こと。** 2026-08-07 に一覧の `CoffeeRowThumbnail`（56×56pt）が `PhotoFileStore.loadThumbnail` へ移行された時点で、同じ「`LazyHStack` 内で記録写真をフルデコードしている」箇所が他に 3 つ残っていた。`requirements.md` の非機能要件「一覧表示は 60fps を維持する。画像はサムネイルキャッシュで遅延読み込み」を満たさない箇所が残っていたことになる。**起票時の見積もりも 2 箇所で、着手時の調査で 3 箇所に増えた。**
+
+**共通化したのは画像解決だけ**（`fileName` / `pendingData` → 縮小デコード済み `UIImage`）。サイズ・角丸・プレースホルダー・ラベル・アクセシビリティは呼び出し側に残した。4 箇所でプレースホルダーの見た目（`cup.and.saucer` / `photo.badge.exclamationmark` / `photo`）も角丸も違うため、そこまで共通化すると分岐だらけの View になる。**プレースホルダーを `@ViewBuilder` で外注する点が、内蔵する `PlacePhotoThumbnail` との設計差**（Places 写真は 1 用途しかないので内蔵で足りる）。
+
+`ImageDownsampler` には `downsampledImage(from:maxPixelSize:)`（Data → UIImage、JPEG 再エンコードなし）を新設し、既存の `downsampledJPEG` は `@concurrent async` 化した。後者は `handlePickerSelection`（`@MainActor`）から同期で呼ばれていて、**写真選択のたびにメインスレッドで 48MP 級のデコード + JPEG エンコードをしていた**。
+
+**対象外（意図的）**: `CoffeeShareCardView` の `loadImage` は共有カードが 1080×1350px 出力なのでフルデコードが正しい。
+
+#### ビルド警告の数え方について（親の計測ミス）
+
+SW6-B 完了時に「警告 0 件」と報告したが、正確には**Swift コンパイラ警告が 0 件**で、ビルドインフラ由来の警告は 3 件残っている（`grep ": warning:"` はファイル:行:列 形式にしかマッチせず、ビルドスクリプト警告は `warning:` だけで出るため数え漏れていた）。3 件とも実害は無いことを確認済み:
+
+- `appintentsmetadataprocessor: Metadata extraction skipped` — AppIntents 未使用なので無害
+- `DEBUG_INFORMATION_FORMAT should be set to dwarf-with-dsym` — **Debug ビルドのみ**。`-showBuildSettings` の実効値は Debug = `dwarf` / **Release = `dwarf-with-dsym`** で、Release ログにこの警告は出ない（Crashlytics の dSYM アップロードは正しく機能する）
+- `Run script build phase 'Upload dSYM to Crashlytics' will be run during every build` — Crashlytics 公式構成でこうなる。outputs を指定するとアップロードが漏れうるので触らない

@@ -69,9 +69,9 @@ struct CoffeeShareCardView: View {
             chips.append((origin, "globe.asia.australia"))
         }
         if let roastLevel = coffee.roastLevel {
-            chips.append((localizedRoastLevel(roastLevel.name), "flame"))
+            chips.append((roastLevel.localizedLabel, "flame"))
         }
-        chips.append((localizedBrewMethod(coffee.brewMethod), "drop"))
+        chips.append((coffee.brewMethod.localizedLabel, "drop"))
         return chips
     }
 
@@ -228,38 +228,6 @@ struct CoffeeShareCardView: View {
 
     private func formattedDate(_ date: Kotlinx_datetimeLocalDate) -> String {
         String(format: "%04d/%02d/%02d", Int(date.year), Int(date.monthNumber), Int(date.dayOfMonth))
-    }
-
-    // MARK: - BrewMethod ローカライズ（`CoffeeDetailView.localizedBrewMethod` と同一ロジック）
-
-    private func localizedBrewMethod(_ method: BrewMethod) -> String {
-        switch method {
-        case .handDrip: return String(localized: "ハンドドリップ")
-        case .espresso: return String(localized: "エスプレッソ")
-        case .nelDrip: return String(localized: "ネルドリップ")
-        case .frenchPress: return String(localized: "フレンチプレス")
-        case .aeroPress: return String(localized: "エアロプレス")
-        case .syphon: return String(localized: "サイフォン")
-        case .coldBrew: return String(localized: "コールドブリュー")
-        case .other: return String(localized: "その他")
-        @unknown default: return method.name
-        }
-    }
-
-    // MARK: - RoastLevel ローカライズ（`AnalysisView.localizedRoastLevel` と同一辞書を流用）
-
-    private func localizedRoastLevel(_ name: String) -> String {
-        switch name {
-        case "Light":     return String(localized: "ライト")
-        case "Cinnamon":  return String(localized: "シナモン")
-        case "Medium":    return String(localized: "ミディアム")
-        case "High":      return String(localized: "ハイ")
-        case "City":      return String(localized: "シティ")
-        case "FullCity":  return String(localized: "フルシティ")
-        case "French":    return String(localized: "フレンチ")
-        case "Italian":   return String(localized: "イタリアン")
-        default:          return name
-        }
     }
 }
 

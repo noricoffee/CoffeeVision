@@ -109,45 +109,19 @@ struct PreferredBeanTraitsCard: View {
                             .accessibilityLabel(String(localized: "産地の傾向: \(origin)"))
                     }
                     if let roast = traits.roastLevelHint {
-                        Label(localizedRoastLevel(roast), systemImage: "flame")
+                        Label(RoastLevel.localizedLabel(forName: roast), systemImage: "flame")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel(String(localized: "焙煎度の傾向: \(localizedRoastLevel(roast))"))
+                            .accessibilityLabel(String(localized: "焙煎度の傾向: \(RoastLevel.localizedLabel(forName: roast))"))
                     }
                     if let axis = traits.dominantTastingAxis {
-                        Label(localizedTastingAxis(axis), systemImage: "waveform.path")
+                        Label(axis.localizedLabel, systemImage: "waveform.path")
                             .font(.caption)
                             .foregroundStyle(.secondary)
-                            .accessibilityLabel(String(localized: "重視する軸: \(localizedTastingAxis(axis))"))
+                            .accessibilityLabel(String(localized: "重視する軸: \(axis.localizedLabel)"))
                     }
                 }
             }
-        }
-    }
-
-    // MARK: - ローカライズヘルパ（struct コンテキスト用）
-
-    private func localizedRoastLevel(_ name: String) -> String {
-        switch name {
-        case "Light":     return String(localized: "ライト")
-        case "Cinnamon":  return String(localized: "シナモン")
-        case "Medium":    return String(localized: "ミディアム")
-        case "High":      return String(localized: "ハイ")
-        case "City":      return String(localized: "シティ")
-        case "FullCity":  return String(localized: "フルシティ")
-        case "French":    return String(localized: "フレンチ")
-        case "Italian":   return String(localized: "イタリアン")
-        default:          return name
-        }
-    }
-
-    private func localizedTastingAxis(_ axis: TastingAxis) -> String {
-        switch axis {
-        case .sweetness:   return String(localized: "甘味")
-        case .body:        return String(localized: "ボディ")
-        case .acidity:     return String(localized: "酸味")
-        case .flavor:      return String(localized: "風味")
-        case .aftertaste:  return String(localized: "後味")
         }
     }
 }

@@ -144,10 +144,10 @@ struct SearchCoffeeRecordsTool: Tool {
             parts.append("セルフ抽出")
         }
 
-        parts.append(localizedBrewMethod(summary.brewMethod))
+        parts.append(BrewMethod.localizedLabel(forName: summary.brewMethod))
 
         if let roastLevel = summary.roastLevel {
-            parts.append(localizedRoastLevel(roastLevel))
+            parts.append(RoastLevel.localizedLabel(forName: roastLevel))
         }
 
         if summary.rating >= 0.5 {
@@ -159,35 +159,5 @@ struct SearchCoffeeRecordsTool: Tool {
         parts.append(summary.visitedOn)
 
         return parts.joined(separator: " / ")
-    }
-
-    // MARK: - ローカライズヘルパ
-
-    private func localizedBrewMethod(_ name: String) -> String {
-        switch name {
-        case "Espresso":    return "エスプレッソ"
-        case "HandDrip":    return "ハンドドリップ"
-        case "NelDrip":     return "ネルドリップ"
-        case "FrenchPress": return "フレンチプレス"
-        case "AeroPress":   return "エアロプレス"
-        case "Syphon":      return "サイフォン"
-        case "ColdBrew":    return "コールドブリュー"
-        case "Other":       return "その他"
-        default:            return name
-        }
-    }
-
-    private func localizedRoastLevel(_ name: String) -> String {
-        switch name {
-        case "Light":     return "ライト"
-        case "Cinnamon":  return "シナモン"
-        case "Medium":    return "ミディアム"
-        case "High":      return "ハイ"
-        case "City":      return "シティ"
-        case "FullCity":  return "フルシティ"
-        case "French":    return "フレンチ"
-        case "Italian":   return "イタリアン"
-        default:          return name
-        }
     }
 }

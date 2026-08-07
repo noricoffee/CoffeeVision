@@ -1376,3 +1376,19 @@ Swift コードレビュー（`iosApp/**` 全 90 ファイル）で挙げた 20 
 - 影響: `AccountViewModelBridge.onDisappear()` → `cancel()` にリネーム（View から呼ばなくなり、`MapViewModelBridge.cancel()` と同じ「`AppState` からの明示キャンセル」専用になったため）。`AppState.resetAndRebootstrap()` が追随。
 - 退出封じは「完了」ボタンの `.disabled(viewModel.isProcessing)` **のみ**にとどめた。`AccountView` は `.sheet` ではなく `SettingsView` から `NavigationLink` で **push** されるため `interactiveDismissDisabled` は効かない。戻るボタン / スワイプバックの封じには `AccountView` が自前で持つ**入れ子 `NavigationStack` の解消が前提**になり、SR-1 のスコープを超える（`CoffeeListView` は「親の NavigationStack 内に置くので自身では持たない」と明記していて、`AccountView` だけが逆）。**完了検知自体は画面を離れても成立する**ので、封じは UX 上の親切に過ぎない。
 - 検証: `AccountViewModelTest` に契約テストを 4 件追加（`runTest` の `StandardTestDispatcher` は `advanceUntilIdle` まで `launch` の中身を走らせないので、「呼び出し直後の観測」= 「コルーチンがディスパッチされる前」になる）。**`markProcessingStarted()` を `launch` の内側に戻すと新テスト 2 件が FAILED になることを実測**してから元に戻し、テストが契約を実際に検証していることを確認した。iOS 18 件 / Android 18 件 PASS、`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。
+
+### 2026-08-08: ドメイン enum の日本語ラベルを `DomainLabels.swift` に集約（SR-2）
+
+- 関連: `iosApp/iosApp/Utilities/DomainLabels.swift`（新設）/ `.claude/rules/swift-ios.md` / `docs/tasks/lessons.md` 2026-08-08 / `docs/tasks.md` SR-2
+
+Swift コードレビュー #4。同じ対応表が **18 箇所**に手写しされていた（roast 6 / brew 7 / tasting 4 / processing 1）。`BrewMethod` / `RoastLevel` / `ProcessingMethod` / `TastingAxis` の 4 型を `Utilities/DomainLabels.swift` の extension へ集約した。
+
+**着手して分かった本題**: 起票時の見立ては「値は全一致しているが `String(localized:)` の有無が既に割れており、将来ケースが増えたら 18 箇所直す必要がある」だった。実際に重かったのは**将来のリスクではなく現在の不具合**で、記録エディタと記録詳細の「精製方法」「焙煎度」が `.name` 直表示のまま英語（`Anaerobic` / `FullCity`）だった。しかもエディタは**同じ `Form` の 3 行隣に `localizedBrewMethod` があり、「抽出方法」だけがそれを使っていた**。構造の分析と横断点検の結果は lessons 2026-08-08 に記録。
+
+**API の形**: 2 つの入り口を用意した。`localizedLabel`（インスタンスプロパティ、`switch` に `default` なし = Kotlin 側のケース追加がコンパイルエラーになる）と `static localizedLabel(forName:)`（`CategoryStat.label` のように KMP の集計結果が `String` で降ってくる経路用。enum 版へ委譲するので対応表は 1 本）。旧実装の `default: return name` は、漏れると黙って英語名を返す作りだった。
+
+- 影響: 記録エディタの Picker 2 箇所（精製方法 / 焙煎度）と記録詳細の 2 箇所が英語 → 日本語に変わる。**UI の表示が変わる変更**なので、ユーザー確認のうえ同一コミットに含めた。詳細の 2 件は当初の対象に入っておらず、**横断点検で初めて出た**（ユーザーへの事前説明で「詳細・分析・共有カードは既に日本語」と述べたのは誤り）。
+- トレードオフ: **`TastePreferenceConversionView.localizedRoast` は意図的に集約対象外**。見た目はほぼ同じ対応表だが、入力が `RoastLevel.name` ではなく **Foundation Models の自由出力**で、`"unknown"` → 「不明」を持ち、プロンプトが `RoastLevel` に存在しない `"Dark"` も指示している。定義域が違うので統合しない旨を `DomainLabels.swift` の冒頭に明記した。
+- `nonisolated extension` にした理由: 既定 MainActor 分離下では extension も暗黙 `@MainActor` になり、`nonisolated` な呼び出し元（`CoffeeInsightProviderIosImpl` = Kotlin ランタイムが任意スレッドから呼ぶ / `SearchCoffeeRecordsTool` = Foundation Models のツール実行）から呼べない（実際 8 件のコンパイルエラーが出た）。引数だけから決まる純粋関数なので `PhotoFileStore` と同じ判断。
+- 作業上の失敗（記録）: 一括置換スクリプトに `re.sub(r"\{\n\n+", "{\n", s)` を入れたため、**`struct X: View {` 直後の空行というプロジェクト共通のスタイルまで消していた**（8 ファイル）。`git checkout` は許可されなかったので、HEAD 版と現在版を `difflib` で比較し「削除されたのが空行だけ」のハンクのみ復元した。**一括置換の後は必ず「意図した種類の差分しか無いこと」を diff で確認する**（今回は `git diff | grep "^-" | grep -v <想定パターン>` が空になることを確認してから再ビルドした）。
+- 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。差分は 8 ファイルで +29 / −287。**記録エディタ / 記録詳細の 4 箇所が日本語表示になることをシミュレータで目視確認済み**（2026-08-08、ユーザー確認）。

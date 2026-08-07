@@ -248,10 +248,10 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
             lines.append("・好みの産地傾向: \(origin)")
         }
         if let roast = traits.roastLevelHint {
-            lines.append("・好みの焙煎度傾向: \(localizedRoastLevel(roast))")
+            lines.append("・好みの焙煎度傾向: \(RoastLevel.localizedLabel(forName: roast))")
         }
         if let axis = traits.dominantTastingAxis {
-            lines.append("・重視するテイスティング軸: \(localizedTastingAxis(axis))")
+            lines.append("・重視するテイスティング軸: \(axis.localizedLabel)")
         }
 
         let prompt = lines.joined(separator: "\n")
@@ -349,13 +349,13 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
         // 焙煎度傾向
         let roastLevels = stats.byRoastLevel
         if let topRoast = roastLevels.max(by: { $0.count < $1.count }) {
-            lines.append("・最多焙煎度: \(localizedRoastLevel(topRoast.label))（\(topRoast.count) 杯）")
+            lines.append("・最多焙煎度: \(RoastLevel.localizedLabel(forName: topRoast.label))（\(topRoast.count) 杯）")
         }
 
         // 抽出方法傾向
         let brewMethods = stats.byBrewMethod
         if let topBrew = brewMethods.max(by: { $0.count < $1.count }) {
-            lines.append("・最多抽出方法: \(localizedBrewMethod(topBrew.label))（\(topBrew.count) 杯）")
+            lines.append("・最多抽出方法: \(BrewMethod.localizedLabel(forName: topBrew.label))（\(topBrew.count) 杯）")
         }
 
         // よく行く店
@@ -434,7 +434,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
         }
 
         if let roast = signals.bestRoastLevel {
-            var line = "・焙煎度: \(localizedRoastLevel(roast.label))（\(roast.count) 件"
+            var line = "・焙煎度: \(RoastLevel.localizedLabel(forName: roast.label))（\(roast.count) 件"
             if let avg = roast.averageRating {
                 line += String(format: "・平均 %.1f", avg.doubleValue)
             }
@@ -446,7 +446,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
         }
 
         if let brew = signals.bestBrewMethod {
-            var line = "・抽出方法: \(localizedBrewMethod(brew.label))（\(brew.count) 件"
+            var line = "・抽出方法: \(BrewMethod.localizedLabel(forName: brew.label))（\(brew.count) 件"
             if let avg = brew.averageRating {
                 line += String(format: "・平均 %.1f", avg.doubleValue)
             }
@@ -458,7 +458,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
         }
 
         if let axis = signals.dominantTastingAxis {
-            let axisName = localizedTastingAxis(axis.axis)
+            let axisName = axis.axis.localizedLabel
             let direction = axis.correlation > 0 ? "高いほど" : "低いほど"
             // correlation は native Double のため .doubleValue 不要
             let line = String(
@@ -472,50 +472,6 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
         }
 
         return lines
-    }
-
-    // MARK: - ローカライズヘルパ（AnalysisView と同等）
-
-    /// `TastingAxis`（SKIE `@frozen enum`）を日本語ラベルに変換する。
-    ///
-    /// Blue Bottle「Elements of Coffee Tasting」の 5 軸に対応。
-    /// SKIE EnumInterop により case 名は camelCase（`.sweetness` / `.body` 等）。
-    private func localizedTastingAxis(_ axis: TastingAxis) -> String {
-        switch axis {
-        case .sweetness:   return "甘味"
-        case .body:        return "ボディ"
-        case .acidity:     return "酸味"
-        case .flavor:      return "風味"
-        case .aftertaste:  return "後味"
-        }
-    }
-
-    private func localizedRoastLevel(_ name: String) -> String {
-        switch name {
-        case "Light":     return "ライト"
-        case "Cinnamon":  return "シナモン"
-        case "Medium":    return "ミディアム"
-        case "High":      return "ハイ"
-        case "City":      return "シティ"
-        case "FullCity":  return "フルシティ"
-        case "French":    return "フレンチ"
-        case "Italian":   return "イタリアン"
-        default:          return name
-        }
-    }
-
-    private func localizedBrewMethod(_ name: String) -> String {
-        switch name {
-        case "Espresso":    return "エスプレッソ"
-        case "HandDrip":    return "ハンドドリップ"
-        case "NelDrip":     return "ネルドリップ"
-        case "FrenchPress": return "フレンチプレス"
-        case "AeroPress":   return "エアロプレス"
-        case "Syphon":      return "サイフォン"
-        case "ColdBrew":    return "コールドブリュー"
-        case "Other":       return "その他"
-        default:            return name
-        }
     }
 }
 

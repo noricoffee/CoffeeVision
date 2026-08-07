@@ -89,7 +89,7 @@ extension CoffeeEditorView {
                 set: { viewModel.onBrewMethodChanged($0) }
             )) {
                 ForEach(BrewMethod.allCases, id: \.name) { method in
-                    Text(localizedBrewMethod(method))
+                    Text(method.localizedLabel)
                         .tag(method)
                 }
             }
@@ -150,7 +150,7 @@ extension CoffeeEditorView {
             )) {
                 Text(String(localized: "未設定")).tag(nil as ProcessingMethod?)
                 ForEach(ProcessingMethod.allCases, id: \.name) { method in
-                    Text(method.name).tag(method as ProcessingMethod?)
+                    Text(method.localizedLabel).tag(method as ProcessingMethod?)
                 }
             }
             .accessibilityLabel(String(localized: "精製方法"))
@@ -161,7 +161,7 @@ extension CoffeeEditorView {
             )) {
                 Text(String(localized: "未設定")).tag(nil as RoastLevel?)
                 ForEach(RoastLevel.allCases, id: \.name) { level in
-                    Text(level.name).tag(level as RoastLevel?)
+                    Text(level.localizedLabel).tag(level as RoastLevel?)
                 }
             }
             .accessibilityLabel(String(localized: "焙煎度"))
@@ -469,22 +469,6 @@ extension CoffeeEditorView {
             }
             .disabled(remainingCount <= 0)
             .accessibilityLabel(addLabel)
-        }
-    }
-
-    // MARK: - BrewMethod ローカライズ
-
-    func localizedBrewMethod(_ method: BrewMethod) -> String {
-        switch method {
-        case .handDrip: return String(localized: "ハンドドリップ")
-        case .espresso: return String(localized: "エスプレッソ")
-        case .nelDrip: return String(localized: "ネルドリップ")
-        case .frenchPress: return String(localized: "フレンチプレス")
-        case .aeroPress: return String(localized: "エアロプレス")
-        case .syphon: return String(localized: "サイフォン")
-        case .coldBrew: return String(localized: "コールドブリュー")
-        case .other: return String(localized: "その他")
-        @unknown default: return method.name
         }
     }
 }

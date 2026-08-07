@@ -43,7 +43,7 @@ struct FavoriteSignalsCard: View {
                     FavoriteSignalRow(
                         systemImage: "flame",
                         label: "焙煎度",
-                        value: localizedRoastLevelStatic(roast.label),
+                        value: RoastLevel.localizedLabel(forName: roast.label),
                         count: Int(roast.count),
                         averageRating: roast.averageRating?.doubleValue,
                         accessibilitySuffix: String(localized: "焙煎度")
@@ -53,7 +53,7 @@ struct FavoriteSignalsCard: View {
                     FavoriteSignalRow(
                         systemImage: "cup.and.saucer",
                         label: "抽出方法",
-                        value: localizedBrewMethodStatic(brew.label),
+                        value: BrewMethod.localizedLabel(forName: brew.label),
                         count: Int(brew.count),
                         averageRating: brew.averageRating?.doubleValue,
                         accessibilitySuffix: String(localized: "抽出方法")
@@ -63,7 +63,7 @@ struct FavoriteSignalsCard: View {
                     FavoriteSignalRow(
                         systemImage: "leaf.fill",
                         label: "精製方法",
-                        value: localizedProcessingStatic(processing.label),
+                        value: ProcessingMethod.localizedLabel(forName: processing.label),
                         count: Int(processing.count),
                         averageRating: processing.averageRating?.doubleValue,
                         accessibilitySuffix: String(localized: "精製方法")
@@ -85,47 +85,6 @@ struct FavoriteSignalsCard: View {
         .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
         .accessibilityElement(children: .contain)
         .accessibilityLabel(String(localized: "好みの傾向カード"))
-    }
-
-    // MARK: - 静的ローカライズヘルパ（struct のコンテキスト用）
-
-    private func localizedRoastLevelStatic(_ name: String) -> String {
-        switch name {
-        case "Light":     return String(localized: "ライト")
-        case "Cinnamon":  return String(localized: "シナモン")
-        case "Medium":    return String(localized: "ミディアム")
-        case "High":      return String(localized: "ハイ")
-        case "City":      return String(localized: "シティ")
-        case "FullCity":  return String(localized: "フルシティ")
-        case "French":    return String(localized: "フレンチ")
-        case "Italian":   return String(localized: "イタリアン")
-        default:          return name
-        }
-    }
-
-    private func localizedBrewMethodStatic(_ name: String) -> String {
-        switch name {
-        case "Espresso":    return String(localized: "エスプレッソ")
-        case "HandDrip":    return String(localized: "ハンドドリップ")
-        case "NelDrip":     return String(localized: "ネルドリップ")
-        case "FrenchPress": return String(localized: "フレンチプレス")
-        case "AeroPress":   return String(localized: "エアロプレス")
-        case "Syphon":      return String(localized: "サイフォン")
-        case "ColdBrew":    return String(localized: "コールドブリュー")
-        case "Other":       return String(localized: "その他")
-        default:            return name
-        }
-    }
-
-    private func localizedProcessingStatic(_ name: String) -> String {
-        switch name {
-        case "Natural":   return String(localized: "ナチュラル")
-        case "Washed":    return String(localized: "ウォッシュド")
-        case "Honey":     return String(localized: "ハニー")
-        case "Anaerobic": return String(localized: "アナエロビック")
-        case "Other":     return String(localized: "その他")
-        default:          return name
-        }
     }
 }
 
@@ -300,7 +259,7 @@ private struct TastingAxisSignalRow: View {
                     Text(String(localized: "テイスティング"))
                         .font(.caption)
                         .foregroundStyle(.secondary)
-                    Text(localizedTastingAxis(axis.axis))
+                    Text(axis.axis.localizedLabel)
                         .font(.body)
                         .foregroundStyle(.primary)
                         .fontWeight(.medium)
@@ -320,18 +279,8 @@ private struct TastingAxisSignalRow: View {
         .accessibilityLabel(buildAccessibilityLabel())
     }
 
-    private func localizedTastingAxis(_ a: TastingAxis) -> String {
-        switch a {
-        case .sweetness:   return String(localized: "甘味")
-        case .body:        return String(localized: "ボディ")
-        case .acidity:     return String(localized: "酸味")
-        case .flavor:      return String(localized: "風味")
-        case .aftertaste:  return String(localized: "後味")
-        }
-    }
-
     private func buildAccessibilityLabel() -> String {
-        let axisName = localizedTastingAxis(axis.axis)
+        let axisName = axis.axis.localizedLabel
         let direction = axis.correlation > 0 ? "高いほど" : "低いほど"
         return String(
             format: "テイスティング %@: %@高評価の傾向、相関 r=%.2f、%d 件（参考）",

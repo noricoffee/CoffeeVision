@@ -182,7 +182,7 @@ struct CoffeeDetailView: View {
                 .accessibilityLabel(String(localized: "コーヒー名 \(coffee.name)"))
 
                 LabeledContent(String(localized: "抽出方法")) {
-                    Text(localizedBrewMethod(coffee.brewMethod))
+                    Text(coffee.brewMethod.localizedLabel)
                 }
 
                 if let origin = coffee.originDisplayText {
@@ -199,13 +199,13 @@ struct CoffeeDetailView: View {
 
                 if let processing = coffee.processing {
                     LabeledContent(String(localized: "精製方法")) {
-                        Text(processing.name)
+                        Text(processing.localizedLabel)
                     }
                 }
 
                 if let roastLevel = coffee.roastLevel {
                     LabeledContent(String(localized: "焙煎度")) {
-                        Text(roastLevel.name)
+                        Text(roastLevel.localizedLabel)
                     }
                 }
 
@@ -285,22 +285,6 @@ struct CoffeeDetailView: View {
             Int(date.monthNumber),
             Int(date.dayOfMonth)
         )
-    }
-
-    // MARK: - BrewMethod ローカライズ
-
-    private func localizedBrewMethod(_ method: BrewMethod) -> String {
-        switch method {
-        case .handDrip: return String(localized: "ハンドドリップ")
-        case .espresso: return String(localized: "エスプレッソ")
-        case .nelDrip: return String(localized: "ネルドリップ")
-        case .frenchPress: return String(localized: "フレンチプレス")
-        case .aeroPress: return String(localized: "エアロプレス")
-        case .syphon: return String(localized: "サイフォン")
-        case .coldBrew: return String(localized: "コールドブリュー")
-        case .other: return String(localized: "その他")
-        @unknown default: return method.name
-        }
     }
 }
 

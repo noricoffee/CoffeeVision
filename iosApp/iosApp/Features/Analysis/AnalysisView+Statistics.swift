@@ -233,7 +233,7 @@ extension AnalysisView {
     }
 
     private func roastLevelAccessibilityLabel(_ item: RoastLevelBarItem) -> String {
-        let name = localizedRoastLevel(item.label)
+        let name = RoastLevel.localizedLabel(forName: item.label)
         guard item.count > 0 else {
             return String(localized: "\(name): 記録なし")
         }
@@ -253,12 +253,12 @@ extension AnalysisView {
                 Chart(items) { item in
                     BarMark(
                         x: .value(String(localized: "件数"), item.count),
-                        y: .value(String(localized: "焙煎度"), localizedRoastLevel(item.label))
+                        y: .value(String(localized: "焙煎度"), RoastLevel.localizedLabel(forName: item.label))
                     )
                     .foregroundStyle(roastLevelColor(at: item.position))
                     .accessibilityLabel(roastLevelAccessibilityLabel(item))
                 }
-                .chartYScale(domain: Self.roastLevelOrder.map { localizedRoastLevel($0) })
+                .chartYScale(domain: Self.roastLevelOrder.map { RoastLevel.localizedLabel(forName: $0) })
                 .frame(height: CGFloat(Self.roastLevelOrder.count) * 32)
                 .chartXAxis {
                     AxisMarks(values: .automatic) { _ in
@@ -286,11 +286,11 @@ extension AnalysisView {
                 Chart(stats.byBrewMethod, id: \.label) { item in
                     BarMark(
                         x: .value(String(localized: "件数"), item.count),
-                        y: .value(String(localized: "抽出方法"), localizedBrewMethod(item.label))
+                        y: .value(String(localized: "抽出方法"), BrewMethod.localizedLabel(forName: item.label))
                     )
                     .foregroundStyle(Color.accentColor)
                     .accessibilityLabel(
-                        "\(localizedBrewMethod(item.label)): \(item.count) 件"
+                        "\(BrewMethod.localizedLabel(forName: item.label)): \(item.count) 件"
                         + (item.averageRating.map { String(format: "（平均 %.1f 点）", $0.doubleValue) } ?? "")
                     )
                 }
@@ -380,49 +380,6 @@ extension AnalysisView {
         rating == Double(Int(rating)) ? String(format: "%.0f", rating) : String(format: "%.1f", rating)
     }
 
-    /// Kotlin の `RoastLevel.name` を日本語に変換する。
-    private func localizedRoastLevel(_ name: String) -> String {
-        switch name {
-        case "Light":     return "ライト"
-        case "Cinnamon":  return "シナモン"
-        case "Medium":    return "ミディアム"
-        case "High":      return "ハイ"
-        case "City":      return "シティ"
-        case "FullCity":  return "フルシティ"
-        case "French":    return "フレンチ"
-        case "Italian":   return "イタリアン"
-        default:          return name
-        }
-    }
-
-    /// `TastingAxis`（SKIE `@frozen enum`）を日本語ラベルに変換する。
-    ///
-    /// Blue Bottle「Elements of Coffee Tasting」の 5 軸に対応。
-    /// `@frozen enum` のため `default` は使わず全 case を網羅する。
-    private func localizedTastingAxis(_ axis: TastingAxis) -> String {
-        switch axis {
-        case .sweetness:   return "甘味"
-        case .body:        return "ボディ"
-        case .acidity:     return "酸味"
-        case .flavor:      return "風味"
-        case .aftertaste:  return "後味"
-        }
-    }
-
-    /// Kotlin の `BrewMethod.name` を日本語に変換する。
-    private func localizedBrewMethod(_ name: String) -> String {
-        switch name {
-        case "Espresso":    return "エスプレッソ"
-        case "HandDrip":    return "ハンドドリップ"
-        case "NelDrip":     return "ネルドリップ"
-        case "FrenchPress": return "フレンチプレス"
-        case "AeroPress":   return "エアロプレス"
-        case "Syphon":      return "サイフォン"
-        case "ColdBrew":    return "コールドブリュー"
-        case "Other":       return "その他"
-        default:            return name
-        }
-    }
 }
 
 // MARK: - CafeStatRow

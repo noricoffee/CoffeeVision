@@ -5,7 +5,10 @@ import SharedLogic
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - 観測タスクは `onAppear` で開始し `onDisappear` でキャンセルする
+/// - 観測タスクは `onAppear` で開始し、**破棄は `deinit` 起点**（`cancel()` は `AppState` が
+///   ブリッジを捨てるときの明示キャンセル用）。`AccountView` の `.onDisappear` からは
+///   キャンセルしない — サインアウト / 削除の完了待ち中に画面を離れると、`apply(_:)` が
+///   止まって `isProcessing` が凍結するため（SR-1）
 @MainActor
 @Observable
 final class AccountViewModelBridge {
@@ -27,6 +30,10 @@ final class AccountViewModelBridge {
     }
 
     /// KMP `AccountViewModel.UIState.isProcessing` の値を保持する。
+    ///
+    /// `apply(_:)` による反映のほか、アクション転送メソッド（`onSignOutTapped()` 等）が
+    /// 楽観的に `true` を立てる。KMP 側も同じタイミングで同期的に `true` にするため、
+    /// 先走りではなく「observation の 1 emit 分の遅れを埋める」だけの操作になる。
     private var isKmpProcessing: Bool = false
 
     /// Apple 再サインイン → reauthenticate → revokeToken の前段処理中かどうか（Swift 側）。
@@ -56,22 +63,35 @@ final class AccountViewModelBridge {
         }
     }
 
-    func onDisappear() {
+    /// 観測タスクを明示的にキャンセルする。`AppState` が破棄されるときに呼ぶ。
+    ///
+    /// **`AccountView` の `.onDisappear` からは呼ばない。** 呼ぶと `apply(_:)` が止まり、
+    /// `isKmpProcessing` が凍結して処理中オーバーレイと「完了」ボタンの活性が実態からずれる
+    /// （`CafeDetailView` と同じ判断。`MapViewModelBridge.cancel()` と同じ役割）。
+    func cancel() {
         observationTask?.cancel()
         observationTask = nil
     }
 
     // MARK: - ユーザーアクション
 
+    // 以下 3 つは KMP 側が呼び出し時点で**同期的に** `isProcessing = true` にする
+    // （`AccountViewModel.markProcessingStarted`）。ただし Swift 側の `isKmpProcessing` は
+    // observation の次の emit まで更新されないため、その 1 フレームだけ処理中オーバーレイが
+    // 消える。KMP の実態と矛盾しないので、ここで楽観的に立てて隙間を埋める。
+
     func onAppleCredentialReceived(idToken: String, rawNonce: String) {
+        isKmpProcessing = true
         kotlin.onAppleCredentialReceived(idToken: idToken, rawNonce: rawNonce)
     }
 
     func onSignOutTapped() {
+        isKmpProcessing = true
         kotlin.onSignOutTapped()
     }
 
     func onDeleteAccountTapped(userId: String) {
+        isKmpProcessing = true
         kotlin.onDeleteAccountTapped(userId: userId)
     }
 
@@ -84,31 +104,27 @@ final class AccountViewModelBridge {
 
     // MARK: - 処理完了待ち
 
-    /// `onSignOutTapped()` / `onDeleteAccountTapped(userId:)` 呼び出し直後の完了待ちを二相で行う。
+    /// `onSignOutTapped()` / `onDeleteAccountTapped(userId:)` 呼び出し直後の完了を待つ。
     ///
-    /// `@Observable` の変化検知は Task 内で遅れることがあるため、ポーリングで `isProcessing` を確認する。
-    /// 呼び出し直後は KMP 側の `isProcessing = true` emission がまだ届いていないことがあり、
-    /// これを待たずに `isProcessing == false` を「完了」と誤判定すると、処理中に
-    /// 呼び出し側（写真削除・reboot）が走ってしまう。そのため:
-    ///   1. まず `isProcessing == true` になるのを待つ（KMP 側が即時同期完了するケースを許容し、
-    ///      タイムアウトしても次相へ進む）
-    ///   2. 次に `isProcessing == false` になるのを待つ
+    /// KMP の `state` を **`observationTask` とは独立に**購読する。これにより、待っている間に
+    /// `AccountView` が pop されて `apply(_:)` が止まっても完了を取りこぼさない。
     ///
-    /// - Returns: `true` = エラーなく完了。`false` = タイムアウトまたはエラーあり
+    /// KMP 側は各アクションの呼び出し時点で**同期的に** `isProcessing = true` にする
+    /// （`AccountViewModel.markProcessingStarted`）ため、購読開始時には必ず true が観測できる。
+    /// よって「開始を待つ」相は不要で、**最初の `isProcessing == false` がそのまま完了**を意味する。
+    ///
+    /// タイムアウトは設けない。KMP 側は成功・失敗のどちらでも必ず `isProcessing = false` を
+    /// emit するため、待ち続けても取り残されない。むしろ旧実装の 30 秒上限は、記録が多い
+    /// ユーザーのアカウント削除（全 Visit の Firestore 削除）で超えうる実害があった。
+    ///
+    /// - Returns: `true` = エラーなく完了。`false` = エラーあり、または `kotlin.clear()` で
+    ///   スコープが破棄されて Flow が終了した
     func awaitProcessingCompletion() async -> Bool {
-        // 相 1: isProcessing == true になるのを待つ（最大 2 秒、タイムアウトは次相へ進む）
-        for _ in 0 ..< 40 {
-            if isProcessing { break }
-            try? await Task.sleep(for: .milliseconds(50))
+        for await state in kotlin.state {
+            guard !state.isProcessing else { continue }
+            return state.error == nil
         }
-
-        // 相 2: isProcessing == false になるのを待つ（最大 30 秒）
-        for _ in 0 ..< 300 {
-            if !isProcessing {
-                return error == nil
-            }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
+        // スコープ破棄で Flow が終了した（完了は確認できていない）
         return false
     }
 

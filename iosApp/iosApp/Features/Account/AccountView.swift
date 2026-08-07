@@ -54,6 +54,10 @@ struct AccountView: View {
                         dismiss()
                     }
                     .accessibilityLabel(String(localized: "アカウント画面を閉じる"))
+                    // サインアウト / 削除の実行中は閉じさせない。完了検知自体は画面を離れても
+                    // 取りこぼさない（`awaitProcessingCompletion()`）が、処理中に離脱できると
+                    // 「押した直後に画面が消えて何も起きない」ように見えるため。
+                    .disabled(viewModel.isProcessing)
                 }
             }
             .overlay {
@@ -102,9 +106,10 @@ struct AccountView: View {
         .task {
             viewModel.onAppear()
         }
-        .onDisappear {
-            viewModel.onDisappear()
-        }
+        // `.onDisappear` で observation を止めない。止めると `apply(_:)` が走らなくなり、
+        // サインアウト / 削除の完了待ち中に `isProcessing` が凍結する（SR-1）。
+        // ブリッジは `AppState` が保持しており、破棄は `deinit` 起点で行う
+        // （`CafeDetailView` と同じ判断）。
     }
 
     // MARK: - アカウントセクション

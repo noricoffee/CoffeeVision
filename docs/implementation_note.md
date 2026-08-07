@@ -1356,3 +1356,23 @@ SW6-B 完了時に「警告 0 件」と報告したが、正確には**Swift コ
 - `appintentsmetadataprocessor: Metadata extraction skipped` — AppIntents 未使用なので無害
 - `DEBUG_INFORMATION_FORMAT should be set to dwarf-with-dsym` — **Debug ビルドのみ**。`-showBuildSettings` の実効値は Debug = `dwarf` / **Release = `dwarf-with-dsym`** で、Release ログにこの警告は出ない（Crashlytics の dSYM アップロードは正しく機能する）
 - `Run script build phase 'Upload dSYM to Crashlytics' will be run during every build` — Crashlytics 公式構成でこうなる。outputs を指定するとアップロードが漏れうるので触らない
+
+### 2026-08-08: サインアウト / 削除の完了検知を、ポーリングから KMP 側の契約へ（SR-1）
+
+- 関連: `shared/feature/account/.../AccountViewModel.kt` / `iosApp/iosApp/Features/Account/AccountViewModelBridge.swift` / `AccountView.swift` / `docs/tasks.md` SR-1
+
+Swift コードレビュー（`iosApp/**` 全 90 ファイル）で挙げた 20 件のうち、ユーザーが 1 件だけ選んで着手したもの。
+
+**元の壊れ方**: `AccountViewModelBridge.awaitProcessingCompletion()` が `isProcessing` を 340 周ポーリング（50ms×40 → 100ms×300）する一方、`AccountView` が `.onDisappear` で observation を cancel していた。完了前に画面を離れると `apply(_:)` が止まって `isKmpProcessing` が凍結し、300 周スピンして `false` を返す → `onResetRequested()` が呼ばれず、**Firebase はサインアウト済みなのに `AppState` は古い uid とブリッジを保持したまま**になる。
+
+**採った形**: 完了検知の責任を KMP 側の契約として明文化した。`AccountViewModel` の 3 アクションは**戻る時点で `isProcessing = true` を反映済み**にする（`markProcessingStarted()` を `launch` の外へ）。これにより iOS 側は「呼んだ直後から `state` を購読し、最初の `isProcessing == false` を待つ」だけでよくなり、ポーリングも「開始を待つ」相も消えた。`kotlin.state` を `observationTask` とは別に購読するため、画面を離れても取りこぼさない。
+
+**同時に必要だった 2 つ**（どちらも単独では新しいバグを生む）:
+
+- `catch (CancellationException)` の `isProcessing = false` を外した。cancel は必ず「次のアクション開始」（= `markProcessingStarted()`）か `clear()` とセットで起きるため、残すと**直後に立てた `true` を非同期に打ち消すレース**になる。連打時に処理中オーバーレイが消える
+- Bridge のアクション転送で `isKmpProcessing = true` を楽観的に立てた。KMP は同期で立つのに Swift 側は observation の次の emit まで反映されず、**1 フレームだけオーバーレイが消える**（Apple 削除フローの `onDeletePreflightSucceeded()` → `onDeleteAccountTapped()` の継ぎ目で顕在化しうる）
+
+- トレードオフ: **タイムアウトを撤廃した**。KMP は成功・失敗どちらでも必ず `isProcessing = false` を emit するため待ち続けても取り残されないが、KMP がハングすれば `Task` は戻らない。旧実装の 30 秒上限は、記録が多いユーザーのアカウント削除（全 Visit の Firestore 削除）で**超えうる実害の方が大きい**と判断した。
+- 影響: `AccountViewModelBridge.onDisappear()` → `cancel()` にリネーム（View から呼ばなくなり、`MapViewModelBridge.cancel()` と同じ「`AppState` からの明示キャンセル」専用になったため）。`AppState.resetAndRebootstrap()` が追随。
+- 退出封じは「完了」ボタンの `.disabled(viewModel.isProcessing)` **のみ**にとどめた。`AccountView` は `.sheet` ではなく `SettingsView` から `NavigationLink` で **push** されるため `interactiveDismissDisabled` は効かない。戻るボタン / スワイプバックの封じには `AccountView` が自前で持つ**入れ子 `NavigationStack` の解消が前提**になり、SR-1 のスコープを超える（`CoffeeListView` は「親の NavigationStack 内に置くので自身では持たない」と明記していて、`AccountView` だけが逆）。**完了検知自体は画面を離れても成立する**ので、封じは UX 上の親切に過ぎない。
+- 検証: `AccountViewModelTest` に契約テストを 4 件追加（`runTest` の `StandardTestDispatcher` は `advanceUntilIdle` まで `launch` の中身を走らせないので、「呼び出し直後の観測」= 「コルーチンがディスパッチされる前」になる）。**`markProcessingStarted()` を `launch` の内側に戻すと新テスト 2 件が FAILED になることを実測**してから元に戻し、テストが契約を実際に検証していることを確認した。iOS 18 件 / Android 18 件 PASS、`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。

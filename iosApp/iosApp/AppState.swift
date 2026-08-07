@@ -323,7 +323,7 @@ final class AppState {
     func resetAndRebootstrap() {
         coffeeListBridge?.onDisappear()
         mapBridge?.cancel()
-        accountBridge?.onDisappear()
+        accountBridge?.cancel()
         analysisBridge?.cancel()
 
         coffeeListBridge = nil

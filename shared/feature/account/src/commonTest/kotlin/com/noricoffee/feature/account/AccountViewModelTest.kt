@@ -28,6 +28,12 @@ import kotlin.test.assertTrue
  * - `onDeleteAccountTapped` — 成功 → isProcessing が false に戻る
  * - `onDeleteAccountTapped` — 失敗 → error がセットされる
  * - `onErrorDismissed` → error が null に戻る
+ *
+ * ## 完了検知の契約（SR-1、2026-08-08 追加）
+ * - 3 アクションとも**呼び出しから戻る時点で** `isProcessing = true` を反映済み
+ * - アクション開始時に前回の `error` を同期的にクリアする
+ *
+ * iOS 側がこれに依存して完了を待つ（[AccountViewModel] の KDoc「完了検知の契約」）。
  */
 class AccountViewModelTest {
 
@@ -279,6 +285,100 @@ class AccountViewModelTest {
         assertFalse(state.isProcessing)
         assertEquals("Delete failed", state.error)
 
+        vm.clear()
+        testScheduler.advanceUntilIdle()
+    }
+
+    // ─────────────────────────────────────────────────
+    // 完了検知の契約（AccountViewModel の KDoc「完了検知の契約」）
+    //
+    // 各アクションは **戻る時点で** isProcessing = true を反映済みであること。
+    // iOS 側（AccountViewModelBridge.awaitProcessingCompletion）は呼び出し直後から
+    // state を購読して「最初の isProcessing == false」を完了とみなすため、ここが
+    // launch の内側だと開始前の false を完了と誤読する。
+    //
+    // runTest は StandardTestDispatcher なので、advanceUntilIdle を呼ぶまで launch の
+    // 中身は走らない。つまり以下は「コルーチンがディスパッチされる前」の観測になる。
+    // ─────────────────────────────────────────────────
+
+    @Test
+    fun onSignOutTapped_setsProcessingSynchronously_beforeCoroutineRuns() = runTest {
+        val fakeAuth = FakeAuthRepository(initialAccount = anonymousAccount)
+        val vm = AccountViewModel(
+            authRepository = fakeAuth,
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
+            scope = this,
+        )
+
+        vm.onSignOutTapped()
+
+        assertTrue(vm.state.value.isProcessing)
+
+        testScheduler.advanceUntilIdle()
+        vm.clear()
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun onDeleteAccountTapped_setsProcessingSynchronously_beforeCoroutineRuns() = runTest {
+        val fakeAuth = FakeAuthRepository(initialAccount = anonymousAccount)
+        val vm = AccountViewModel(
+            authRepository = fakeAuth,
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
+            scope = this,
+        )
+
+        vm.onDeleteAccountTapped(userId = "anon-uid")
+
+        assertTrue(vm.state.value.isProcessing)
+
+        testScheduler.advanceUntilIdle()
+        vm.clear()
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun onAppleCredentialReceived_setsProcessingSynchronously_beforeCoroutineRuns() = runTest {
+        val fakeAuth = FakeAuthRepository(initialAccount = anonymousAccount)
+        fakeAuth.linkWithAppleResult = appleAccount
+        val vm = AccountViewModel(
+            authRepository = fakeAuth,
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
+            scope = this,
+        )
+
+        vm.onAppleCredentialReceived(idToken = "test-token", rawNonce = "test-nonce")
+
+        assertTrue(vm.state.value.isProcessing)
+
+        testScheduler.advanceUntilIdle()
+        vm.clear()
+        testScheduler.advanceUntilIdle()
+    }
+
+    @Test
+    fun actionStart_clearsPreviousError_synchronously() = runTest {
+        val fakeAuth = FakeAuthRepository(initialAccount = anonymousAccount)
+        fakeAuth.signOutError = Exception("Sign out failed")
+        val vm = AccountViewModel(
+            authRepository = fakeAuth,
+            deleteAccountUseCase = DeleteAccountUseCase(FakeCoffeeRepository(), FakeSavedCafeRepository(), fakeAuth),
+            scope = this,
+        )
+
+        // 1 回目: 失敗させて error を残す
+        vm.onSignOutTapped()
+        testScheduler.advanceUntilIdle()
+        assertNotNull(vm.state.value.error)
+
+        // 2 回目の開始時点で error はクリアされている（前回の失敗を完了と誤読させない）
+        fakeAuth.signOutError = null
+        vm.onSignOutTapped()
+
+        assertTrue(vm.state.value.isProcessing)
+        assertNull(vm.state.value.error)
+
+        testScheduler.advanceUntilIdle()
         vm.clear()
         testScheduler.advanceUntilIdle()
     }

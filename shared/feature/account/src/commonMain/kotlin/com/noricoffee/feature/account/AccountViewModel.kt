@@ -28,6 +28,14 @@ import kotlinx.coroutines.launch
  * [com.noricoffee.AppContainer.startInitialSync] を再度呼んで新規匿名 uid を確定する必要がある。
  * 本 ViewModel からは直接再起動しない（AppContainer への参照を持たない設計）。
  *
+ * ## 完了検知の契約（プラットフォーム層向け）
+ * 各アクションの完了は **[UIState.isProcessing] の true → false 遷移**で判定する。
+ * [onSignOutTapped] / [onDeleteAccountTapped] / [onAppleCredentialReceived] は
+ * **戻る時点で必ず `isProcessing = true` を反映済み**にする（[markProcessingStarted] 参照）。
+ * したがって呼び出し側は「呼んだ直後から [state] を購読し、最初の `isProcessing == false`
+ * を待つ」だけでよく、開始を待つためのポーリングや猶予時間は不要。
+ * 完了時の成否は同じ emit の [UIState.error] が null かどうかで判断する。
+ *
  * ## CoroutineScope の注意
  * [scope] は外部（[com.noricoffee.AppContainer] のファクトリメソッド）から注入する。
  * スコープは呼び出し元が管理し、画面破棄時にキャンセルすること。
@@ -86,13 +94,12 @@ class AccountViewModel(
      */
     fun onAppleCredentialReceived(idToken: String, rawNonce: String) {
         actionJob?.cancel()
+        markProcessingStarted()
         actionJob = viewModelScope.launch {
-            _state.update { it.copy(isProcessing = true, error = null) }
             try {
                 val account = authRepository.linkWithApple(idToken, rawNonce)
                 _state.update { it.copy(account = account, isProcessing = false) }
             } catch (e: CancellationException) {
-                _state.update { it.copy(isProcessing = false) }
                 throw e
             } catch (e: Exception) {
                 _state.update {
@@ -113,13 +120,12 @@ class AccountViewModel(
      */
     fun onSignOutTapped() {
         actionJob?.cancel()
+        markProcessingStarted()
         actionJob = viewModelScope.launch {
-            _state.update { it.copy(isProcessing = true, error = null) }
             try {
                 authRepository.signOut()
                 _state.update { it.copy(isProcessing = false) }
             } catch (e: CancellationException) {
-                _state.update { it.copy(isProcessing = false) }
                 throw e
             } catch (e: Exception) {
                 _state.update {
@@ -147,13 +153,12 @@ class AccountViewModel(
      */
     fun onDeleteAccountTapped(userId: String) {
         actionJob?.cancel()
+        markProcessingStarted()
         actionJob = viewModelScope.launch {
-            _state.update { it.copy(isProcessing = true, error = null) }
             try {
                 deleteAccountUseCase(userId)
                 _state.update { it.copy(isProcessing = false) }
             } catch (e: CancellationException) {
-                _state.update { it.copy(isProcessing = false) }
                 throw e
             } catch (e: Exception) {
                 _state.update {
@@ -164,6 +169,29 @@ class AccountViewModel(
                 }
             }
         }
+    }
+
+    /**
+     * 各アクションの開始を [UIState.isProcessing] に**同期的に**反映する。
+     *
+     * ## なぜ [viewModelScope] の launch の外で立てるのか
+     *
+     * iOS 側（`AccountViewModelBridge.awaitProcessingCompletion()`）は、サインアウト /
+     * 削除の完了を [state] の購読で待つ。launch の内側で立てると、コルーチンがディスパッチ
+     * されるまで [UIState.isProcessing] が false のままで、購読を開始した iOS 側が
+     * **開始前の false を「完了」と誤読する**。呼び出し直後に必ず true が観測できるよう、
+     * ここだけは同期で更新する。
+     *
+     * ## 呼び出し側の前提
+     *
+     * 直前に `actionJob?.cancel()` を実行していること。順序を逆にすると、キャンセルされた
+     * 前 Job の後始末が本メソッドの後に走りうる。なお前 Job の
+     * `catch (CancellationException)` は [UIState.isProcessing] を戻さない —
+     * cancel は必ず「次のアクション開始」（= 本メソッド）か [clear] とセットで起きるため、
+     * そこで false に戻すと直後に立てた true を非同期に打ち消してしまう。
+     */
+    private fun markProcessingStarted() {
+        _state.update { it.copy(isProcessing = true, error = null) }
     }
 
     /**

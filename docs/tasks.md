@@ -26,6 +26,18 @@
 
 ### 未完・バックログ
 
+#### Swift コードレビューの是正（2026-08-08 起票）
+
+> `iosApp/**` 全体（90 ファイル / 16,504 行）のレビューで 20 件を指摘。**うちユーザーが選んだ 1 件のみを起票する**（残りは着手が決まった時点で起票する。UI/UX 敵対的レビューと同じ運用）。
+>
+> 選ばれたのは「サインアウト / アカウント削除の完了検知が取りこぼされうる」。`AccountViewModelBridge.awaitProcessingCompletion()` が `isProcessing` を **ポーリング**して完了を待つ一方、`AccountView` が `.onDisappear` で observation を cancel するため、**完了前に画面を離れると `isKmpProcessing` が凍結し、300 周スピンして `false` を返す** → `onResetRequested()` が呼ばれず、**Firebase はサインアウト済みなのに `AppState` は古い uid とブリッジを保持したまま**になる。
+>
+> **修正範囲はユーザーが「KMP 1 行 + Swift 全面」を選択**（2026-08-08）。Swift 側だけの緩和（退出封じ + observation 維持）では 30 秒タイムアウト経路が残り、記録が多いユーザーのアカウント削除（全 Visit の Firestore 削除）はこれを超えうるため。
+
+| 状態 | ID | タスク | 備考 |
+|------|----|------|------|
+| [x] | SR-1 | **サインアウト / 削除の完了検知をポーリングから StateFlow 直接 await へ** → **2026-08-08 完了**（テスト 4 件追加 / iOS・Android 18 件 PASS / フラグ無し `** BUILD SUCCEEDED **`。経緯は implementation_note 2026-08-08）。①KMP: `AccountViewModel` の 3 メソッド（`onAppleCredentialReceived` / `onSignOutTapped` / `onDeleteAccountTapped`）で `isProcessing = true` を `launch` の**外**（同期）へ出す ②Swift: `awaitProcessingCompletion()` の 340 周ポーリングを `kotlin.state` の直接 collect に置換（observation task から独立するため `onDisappear` の影響を受けない）③Swift: `AccountView` の `.onDisappear` を削除し bridge の `deinit` に委ねる（`CafeDetailView` と同じ判断）④「完了」ボタンを処理中は無効化 | `shared/feature/account` + `iosApp`。**①では `catch (CancellationException)` の `isProcessing = false` も外す必要があった** — cancel は必ず「次のアクション開始」とセットなので、残すと直後に立てた `true` を非同期に打ち消すレースになる。**④は「完了」ボタンの無効化のみ**（`AccountView` は sheet ではなく **push** なので `interactiveDismissDisabled` が効かない。戻るボタンの封じは入れ子 `NavigationStack` の解消が前提でスコープ外 = **残務**）|
+
 #### UI/UX 敵対的レビューの是正（2026-08-07 起票）
 
 > `screenshots/6.9/` の主要 6 画面（マップ / 分析サマリ / 分析サジェスト / 記録リスト / 記録エディタ / カフェ詳細）をレビューし、ユーザーが対処対象と順序を確定させたもの。**指摘の全件ではなく、ユーザーが選んだ 8 件のみ**を以下に起こす（採用しなかった指摘は起票しない）。コミットは 1 項目 = 1 コミットで分ける。

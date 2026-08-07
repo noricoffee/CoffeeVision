@@ -6,32 +6,27 @@ import SharedLogic
 /// コーヒー記録一覧画面。
 ///
 /// - RootTabView の NavigationStack 内に配置されるため、自身では NavigationStack を持たない
-/// - bottom-trailing 固定の FAB（`addCoffeeFAB`）から `CoffeeEditorView(mode: .Create)` を sheet 表示する
+/// - ナビバー右上の `+`（`toolbarContent`）から `CoffeeEditorView(mode: .Create)` を sheet 表示する
 /// - 既存記録の詳細は NavigationLink で CoffeeDetailView に push する
 struct CoffeeListView: View {
 
     @State var viewModel: CoffeeListViewModelBridge
     var appState: AppState
 
-    /// FAB タップで開くエディタの表示状態。
+    /// ツールバーの `+` タップで開くエディタの表示状態。
     @State private var isPresentingEditor = false
 
-    /// 長押しコンテキストメニューから編集対象に選ばれたコーヒー記録（sheet アンカー、FAB 用とは別）。
+    /// 長押しコンテキストメニューから編集対象に選ばれたコーヒー記録（sheet アンカー、ツールバー用とは別）。
     @State private var editingCoffee: CoffeeRecord?
 
     /// 長押しコンテキストメニューから削除確認ダイアログの対象に選ばれたコーヒー記録。
     @State private var deletionTarget: CoffeeRecord?
 
     var body: some View {
-        // 追加 FAB: bottom-trailing 固定配置。検索中も表示したままにする（新規記録は検索状態と無関係）。
         content
-        .overlay(alignment: .bottomTrailing) {
-            addCoffeeFAB
-                .padding(.trailing, 16)
-                .padding(.bottom, 16)
-        }
         .navigationTitle(String(localized: "コーヒー記録"))
         .navigationBarTitleDisplayMode(.large)
+        .toolbar { toolbarContent }
         .searchable(
             text: Binding(
                 get: { viewModel.searchQuery },
@@ -65,21 +60,22 @@ struct CoffeeListView: View {
         }
     }
 
-    // MARK: - 追加 FAB
+    // MARK: - ツールバー
 
-    /// bottom-trailing 固定の「コーヒーを記録」FAB。
-    private var addCoffeeFAB: some View {
-        Button {
-            isPresentingEditor = true
-        } label: {
-            Image(systemName: "plus")
-                .font(.title3.weight(.semibold))
-                .foregroundStyle(.white)
-                .frame(width: 56, height: 56)
-                .background(Circle().fill(Color.accentColor))
-                .shadow(color: Color.accentColor.opacity(0.4), radius: 12, x: 0, y: 6)
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                isPresentingEditor = true
+            } label: {
+                Label(
+                    String(localized: "コーヒーを記録"),
+                    systemImage: "plus"
+                )
+            }
+            .accessibilityLabel(String(localized: "コーヒーを記録"))
+            .disabled(appState.uid == nil)
         }
-        .accessibilityLabel(String(localized: "コーヒーを記録"))
     }
 
     // MARK: - コンテンツ
@@ -103,7 +99,7 @@ struct CoffeeListView: View {
             String(localized: "まだコーヒー記録がありません"),
             systemImage: "cup.and.saucer",
             description: Text(
-                String(localized: "右下の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
+                String(localized: "右上の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
             )
         )
     }
@@ -262,7 +258,7 @@ struct CoffeeRow: View {
             String(localized: "まだコーヒー記録がありません"),
             systemImage: "cup.and.saucer",
             description: Text(
-                String(localized: "右下の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
+                String(localized: "右上の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
             )
         )
         .navigationTitle(String(localized: "コーヒー記録"))

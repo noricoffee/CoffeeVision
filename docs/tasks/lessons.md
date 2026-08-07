@@ -1065,3 +1065,13 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **発生源**: 2026-08-08、Swift コードレビュー #4（SR-2）。`DomainLabels.swift` へ集約し 18 定義を削除
 - **昇格**: `.claude/rules/swift-ios.md` に「ドメイン enum の表示ラベル」として昇格済み
 - **横展開点検（2026-08-08）**: `grep -rnE "Text\([^)]*\.name" iosApp/iosApp --include="*.swift"` と `grep -rnE "Label\([a-zA-Z.]*\.name"`（`head` 不使用）で全件確認。**ドメイン enum の raw name を表示していたのは `CoffeeDetailView` の 2 件のみ**（精製方法 202 行 / 焙煎度 208 行。同一コミットで修正済み）。**この 2 件は当初の修正対象（エディタの Picker 2 件）に入っておらず、点検で初めて出た** — ユーザーへの説明時に「詳細画面は既に日本語」と述べたのは誤りだった。他の `.name` は `cafe.name` / `coffee.name` / `profile.name` / `cafeStat.name` / `summary.name` 等の「名前フィールド」と、`ForEach(..., id: \.name)` の ID 用途（表示ではない）で、いずれも正当
+
+### 「どの解像度でデコードするか」を決めたときに「**何回**デコードするか」は見ていなかった
+
+- **症状**: `CoffeeShareCardView.loadedPhoto` が computed property で、**body 1 回の評価につき 3 回以上**、長辺 2048px の JPEG をフルデコードしていた（`bandHeight` → `infoAreaHeight` → `radarHeight` → `radarScale` の連鎖 + `headerOrPhotoBand` からの参照。`ImageRenderer` はレイアウト確定のため body を複数回評価するので実際はさらに増える）。すべてメインスレッド・キャッシュなし
+- **原因の構造**: 前日（SW6-A）に「記録写真のデコード」を横断で見直したとき、この箇所は**明示的に「対象外（意図的）」と判断して implementation_note に記録していた**。その判断は「共有カードは 1080×1350px 出力だからフルデコードが正しい」で、**解像度の観点では完全に正しい**。抜けていたのは回数の観点だけ。**一度「検討して対象外にした」箇所は、以後「見た箇所」として扱われ再検討されない** — 未検討の箇所より発見が遅れる。加えて computed property は「参照するたびに実行される」ことがコード上どこにも現れず、`bandHeight` の 1 行を読んでもデコードが走るとは分からない（**呼び出しの深さがコストを隠す**）
+- **修正パターン**: `init` で 1 度だけ解決する **stored property** にする。`private let loadedPhoto: UIImage?` + 明示 `init`。computed property が重い処理を含み、かつ複数の派生プロパティから参照されるなら stored にする。**判定値（`loadedPhoto != nil`）は変わらないのでレイアウトは 1px も変わらない**、純粋な回数削減
+- **教訓**: **「対象外」と判断した記録には、何を根拠に対象外としたかを書く。** 今回 implementation_note に「1080×1350px 出力なのでフルデコードが正しい」と**根拠まで書いてあったから**、レビューで「それは解像度の話であって回数の話ではない」と切り分けられた。根拠なしに「対象外」とだけ書いてあったら、次に見た人も対象外として素通りしていた。**除外の記録は、除外した理由の適用範囲まで書いて初めて再検討可能になる**
+- **発生源**: 2026-08-08、Swift コードレビュー #5（SR-3）。前日の SW6-A で「対象外（意図的）」とした同じ箇所。implementation_note 1350 行付近に追記で是正
+- **関連**: 同日の「パフォーマンス改善は『気づいた 1 箇所』で終わりやすい」と同根（症状が出ないので観点が漏れる）。あちらが**同一レイヤーの並列箇所**の取りこぼしなのに対し、こちらは**同じ 1 箇所の別の観点**の取りこぼし
+- **横展開点検（2026-08-08）**: SwiftUI View の computed property 内でファイル I/O / 画像デコードを行っている箇所を全 `.swift` から機械抽出（`var 宣言 { ... }` のブロックを波括弧で切り出し、`PhotoFileStore.` / `UIImage(contentsOfFile` / `Data(contentsOf` / `CGImageSource` / `FileManager.default.(contents|urls|fileExists)` / `.jpegData(` / `.pngData(` を検索。`head` 不使用）。ヒット 3 件はいずれも**正当**: `RecordPhotoThumbnail.body`（`.task(id:)` 内の `await` = 表示時 1 回・`@concurrent` で off-main）/ `CoffeeEditorView.body`（`.onChange` のクロージャ内 = イベント発火時のみ）/ `PhotoFileStore.photosDirectoryURL`（ディスク I/O ではなくパス導出。意図は KDoc に明記済み）。**真の該当は `CoffeeShareCardView.loadedPhoto` の 1 件のみ**で修正済み

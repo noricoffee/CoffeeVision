@@ -36,9 +36,31 @@ struct CoffeeShareCardView: View {
 
     // MARK: - 派生データ
 
-    /// 先頭の有効写真（読み込みに成功したもの）。`Photo.fileName` は nullable のため
-    /// nil をスキップし、最初にロード成功したものを採用する。
-    private var loadedPhoto: UIImage? {
+    /// 先頭の有効写真（読み込みに成功したもの）。**`init` で 1 度だけ解決する。**
+    ///
+    /// computed property にしてはいけない。`bandHeight` → `infoAreaHeight` →
+    /// `radarHeight` → `radarScale` の連鎖と `headerOrPhotoBand` から参照されるため、
+    /// **body 1 回の評価につき 3 回以上**（写真あり + テイスティングありのとき）
+    /// 呼ばれる。しかも `ImageRenderer` はレイアウト確定のため body を複数回
+    /// 評価するので、実際の回数はさらに増える。中身は長辺 2048px の JPEG の
+    /// フルデコードで、すべてメインスレッド上・キャッシュなしだった。
+    private let loadedPhoto: UIImage?
+
+    // MARK: - Init
+
+    init(coffee: CoffeeRecord) {
+        self.coffee = coffee
+        self.loadedPhoto = Self.resolveFirstPhoto(of: coffee)
+    }
+
+    /// 先頭の有効写真を解決する。`Photo.fileName` は nullable のため nil をスキップし、
+    /// 最初にロード成功したものを採用する。
+    ///
+    /// **フルデコード（`PhotoFileStore.loadImage`）を使うのは意図的。** 共有カードは
+    /// 1080×1350px 出力で、写真帯は 360×128pt × `scale = 3` = 1080×384px を占めるため、
+    /// サムネイル縮小デコードでは足りない（implementation_note 2026-08-08「対象外（意図的）」）。
+    /// ここで問題だったのは解像度ではなく**回数**。
+    private static func resolveFirstPhoto(of coffee: CoffeeRecord) -> UIImage? {
         for photo in coffee.photos {
             guard let fileName = photo.fileName,
                   let image = PhotoFileStore.loadImage(fileName: fileName) else { continue }

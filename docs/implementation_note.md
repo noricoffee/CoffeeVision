@@ -1349,6 +1349,8 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 
 **対象外（意図的）**: `CoffeeShareCardView` の `loadImage` は共有カードが 1080×1350px 出力なのでフルデコードが正しい。
 
+> **2026-08-08 追記（SR-3）**: この「対象外」判断は**解像度については正しいが、観点が 1 つ抜けていた**。`loadedPhoto` が computed property だったため、**同じフルデコードが body 1 回につき 3 回以上**走っていた（`bandHeight` → `infoAreaHeight` → `radarHeight` → `radarScale` の連鎖 + `headerOrPhotoBand`。`ImageRenderer` は body を複数回評価するのでさらに増える）。**「どの解像度でデコードするか」を検討したときに「何回デコードするか」は見ていなかった。** SR-3 で `init` 解決の stored property に変更（解像度はフルデコードのまま維持）。
+
 #### ビルド警告の数え方について（親の計測ミス）
 
 SW6-B 完了時に「警告 0 件」と報告したが、正確には**Swift コンパイラ警告が 0 件**で、ビルドインフラ由来の警告は 3 件残っている（`grep ": warning:"` はファイル:行:列 形式にしかマッチせず、ビルドスクリプト警告は `warning:` だけで出るため数え漏れていた）。3 件とも実害は無いことを確認済み:
@@ -1392,3 +1394,14 @@ Swift コードレビュー #4。同じ対応表が **18 箇所**に手写しさ
 - `nonisolated extension` にした理由: 既定 MainActor 分離下では extension も暗黙 `@MainActor` になり、`nonisolated` な呼び出し元（`CoffeeInsightProviderIosImpl` = Kotlin ランタイムが任意スレッドから呼ぶ / `SearchCoffeeRecordsTool` = Foundation Models のツール実行）から呼べない（実際 8 件のコンパイルエラーが出た）。引数だけから決まる純粋関数なので `PhotoFileStore` と同じ判断。
 - 作業上の失敗（記録）: 一括置換スクリプトに `re.sub(r"\{\n\n+", "{\n", s)` を入れたため、**`struct X: View {` 直後の空行というプロジェクト共通のスタイルまで消していた**（8 ファイル）。`git checkout` は許可されなかったので、HEAD 版と現在版を `difflib` で比較し「削除されたのが空行だけ」のハンクのみ復元した。**一括置換の後は必ず「意図した種類の差分しか無いこと」を diff で確認する**（今回は `git diff | grep "^-" | grep -v <想定パターン>` が空になることを確認してから再ビルドした）。
 - 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。差分は 8 ファイルで +29 / −287。**記録エディタ / 記録詳細の 4 箇所が日本語表示になることをシミュレータで目視確認済み**（2026-08-08、ユーザー確認）。
+
+### 2026-08-08: 共有カードの写真デコードを body 評価ごとから init 1 回へ（SR-3）
+
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/CoffeeShareCardView.swift` / 本ファイル 1350 行付近の追記 / `docs/tasks/lessons.md` 2026-08-08
+
+Swift コードレビュー #5。`loadedPhoto` を computed property から `init` 解決の stored property へ変更した。**解像度（フルデコード）は維持**し、回数だけを減らしている。前日 SW6-A で「対象外（意図的）」とした判断は解像度については正しく、抜けていたのは回数の観点だけだった（詳細と教訓は lessons 2026-08-08）。
+
+- 影響: **レイアウトは変わらない**。`bandHeight` の判定は `loadedPhoto != nil` で、写真の有無という結果は同じ。純粋な性能改善で、出力される PNG は同一のはず。
+- 採らなかった案: `ShareCardRenderer.render` を `async` にして写真解決を `@concurrent` で off-main してから注入する形。呼び出し側（`ShareCardSheet.generate()`）は既に `async` なので実現は容易だが、**それはレビュー #6（`render` の `pngData()` / ファイル書き込みがメインスレッド）の範囲**で、#5 の「回数」とは別問題。`CoffeeShareCardView(coffee:)` のシグネチャを変えずに済む init 解決を採り、Preview 4 件も無変更に保った。#6 に着手するときはこの注入形式へ移すのが自然。
+- 残る性質: 修正後も **1 回のフルデコードはメインスレッドで走る**（`ShareCardRenderer.render` が `@MainActor` の同期関数のため）。#6 未着手。
+- 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。**デコード回数の実測はしていない**（共有カード生成は UI 操作起点で、テストターゲットも無いため）。回数が 1 になることは Swift の言語仕様（stored property は init で 1 回評価）で構造的に保証される。修正前の「3 回以上」は参照連鎖の静的解析による。

@@ -35,11 +35,14 @@
 > **修正範囲はユーザーが「KMP 1 行 + Swift 全面」を選択**（2026-08-08）。Swift 側だけの緩和（退出封じ + observation 維持）では 30 秒タイムアウト経路が残り、記録が多いユーザーのアカウント削除（全 Visit の Firestore 削除）はこれを超えうるため。
 >
 > **SR-2**（レビュー #4）は「ローカライズ変換ヘルパが 18 箇所に手写しされている」。着手して分かった要点は**直し漏れのリスクより先に「ヘルパがあるのに使われていない」形で既に発現していた**こと（記録エディタ / 記録詳細の精製方法・焙煎度が英語のまま）。教訓は lessons 2026-08-08 に記録し `.claude/rules/swift-ios.md` へ昇格済み。
+>
+> **SR-3**（レビュー #5）は「共有カードの写真が body 評価ごとにフルデコードされる」。**前日 SW6-A で「対象外（意図的）」と判断済みの箇所**で、その判断は解像度については正しく、回数の観点だけが抜けていた。「除外の記録は、除外した理由の適用範囲まで書いて初めて再検討可能になる」が教訓（lessons 2026-08-08）。
 
 | 状態 | ID | タスク | 備考 |
 |------|----|------|------|
 | [x] | SR-1 | **サインアウト / 削除の完了検知をポーリングから StateFlow 直接 await へ** → **2026-08-08 完了**（テスト 4 件追加 / iOS・Android 18 件 PASS / フラグ無し `** BUILD SUCCEEDED **`。経緯は implementation_note 2026-08-08）。①KMP: `AccountViewModel` の 3 メソッド（`onAppleCredentialReceived` / `onSignOutTapped` / `onDeleteAccountTapped`）で `isProcessing = true` を `launch` の**外**（同期）へ出す ②Swift: `awaitProcessingCompletion()` の 340 周ポーリングを `kotlin.state` の直接 collect に置換（observation task から独立するため `onDisappear` の影響を受けない）③Swift: `AccountView` の `.onDisappear` を削除し bridge の `deinit` に委ねる（`CafeDetailView` と同じ判断）④「完了」ボタンを処理中は無効化 `shared/feature/account` + `iosApp`。**①では `catch (CancellationException)` の `isProcessing = false` も外す必要があった** — cancel は必ず「次のアクション開始」とセットなので、残すと直後に立てた `true` を非同期に打ち消すレースになる。**④は「完了」ボタンの無効化のみ**（`AccountView` は sheet ではなく **push** なので `interactiveDismissDisabled` が効かない。戻るボタンの封じは入れ子 `NavigationStack` の解消が前提でスコープ外 = **残務**）|
 | [x] | SR-2 | **ドメイン enum の日本語ラベルを `Utilities/DomainLabels.swift` へ集約**（レビュー #4）。18 定義（roast 6 / brew 7 / tasting 4 / processing 1）を削除し、型の extension（`localizedLabel` / `static localizedLabel(forName:)`）へ統一。`switch` から `default` を外し、Kotlin の enum ケース追加がコンパイルエラーになるようにした → **2026-08-08 完了**（`** BUILD SUCCEEDED **` + シミュレータ目視確認済み。経緯は implementation_note 2026-08-08）| iosApp 完結。**重複が「使われていなかった」ことが本体**: 記録エディタ / 記録詳細の「精製方法」「焙煎度」が `.name` 直表示で英語（`Anaerobic` / `FullCity`）だった。**うち詳細 2 件は横断点検で初めて出た**（当初対象はエディタ 2 件のみ）。`TastePreferenceConversionView.localizedRoast` は LLM 出力の変換で定義域が違うため**意図的に集約対象外**。教訓は lessons 2026-08-08 → `.claude/rules/swift-ios.md` へ昇格済み |
+| [x] | SR-3 | **共有カードの写真デコードを body 評価ごとから `init` 1 回へ**（レビュー #5）。`CoffeeShareCardView.loadedPhoto` を computed property → `init` 解決の stored property に。**解像度（フルデコード）は維持し回数だけ削減** → **2026-08-08 完了**（`** BUILD SUCCEEDED **`。経緯は implementation_note 2026-08-08）| iosApp 完結。前日 SW6-A で「対象外（意図的）」とした同じ箇所で、**その判断は解像度については正しく回数の観点だけが抜けていた**（implementation_note 1350 行付近に追記で是正）。**レイアウトは変わらない**（`bandHeight` の判定は同値）。**#6（`render` の `pngData()` / 書き込みがメインスレッド）は未着手**で、修正後も 1 回のフルデコードはメイン上に残る。教訓は lessons 2026-08-08 |
 
 #### UI/UX 敵対的レビューの是正（2026-08-07 起票）
 

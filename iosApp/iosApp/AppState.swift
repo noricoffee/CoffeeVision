@@ -2,7 +2,11 @@ import Foundation
 import Observation
 import FirebaseAnalytics
 import FirebaseFirestore
-import SharedLogic
+// `@preconcurrency`: Kotlin の suspend 関数は ObjC の completion-handler メソッドとして export され、
+// Swift 側では `@concurrent` な async として import される。MainActor 上から非 Sendable な
+// `container.authRepository`（`any AuthRepository`）を受け手にして await すると、受け手を別の
+// 分離ドメインへ「送る」ことになり data race エラーになる（リリース CI run 31203044578）。
+@preconcurrency import SharedLogic
 
 /// マップタブのカメラ中心を検索タブへ共有するための値型。
 ///
@@ -27,9 +31,13 @@ struct MapSearchCenter {
 final class AppState {
 
     // `AppContainer`（Kotlin）は Sendable 非準拠。`init` で 1 度だけ代入されて以降不変のため
-    // `nonisolated(unsafe)` で個別に対処する（ファイル全体を `@preconcurrency import` に
-    // する必要はない。SW6-5）。`let` なので `@Observable` マクロは介入せず、
+    // `nonisolated(unsafe)` を付ける。`let` なので `@Observable` マクロは介入せず、
     // 並行アクセスも不変値への読み取りに限られる。
+    //
+    // SW6-5 では「これで足りる（ファイル全体を `@preconcurrency import` にする必要はない）」と
+    // 結論したが、それは Xcode 27 beta 上での検証だった。リリース用の Xcode 26.6 では
+    // `container` 直下の呼び出し（`startInitialSync()` 等）は通る一方、プロパティを 1 段挟む
+    // `container.authRepository.updateAnalyticsConsent(...)` が通らないため `@preconcurrency import` を併用する。
     nonisolated(unsafe) let container: AppContainer
     private(set) var uid: String?
     private(set) var status: Status = .idle

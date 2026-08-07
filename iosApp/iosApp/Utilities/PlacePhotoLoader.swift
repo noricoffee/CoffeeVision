@@ -1,5 +1,9 @@
 import Foundation
-import SharedLogic
+// `@preconcurrency`: Kotlin の suspend 関数は ObjC の completion-handler メソッドとして export され、
+// Swift 側では `@concurrent` な async として import される。MainActor 上から非 Sendable な
+// `any CafeRepository` を受け手にして await すると、受け手を別の分離ドメインへ「送る」ことになり
+// data race エラーになる（リリース CI run 31203044578）。
+@preconcurrency import SharedLogic
 
 /// Google Places Photo Media API から写真 URL を取得する薄いローダー。
 ///
@@ -15,8 +19,11 @@ import SharedLogic
 final class PlacePhotoLoader {
 
     // `CafeRepository`（Kotlin interface）は Sendable 非準拠。`fetchUrl` から呼ぶだけの
-    // 参照であり再代入もされないため `nonisolated(unsafe)` で個別に対処する
-    // （ファイル全体を `@preconcurrency import` にする必要はない。SW6-5）。
+    // 参照であり再代入もされないため `nonisolated(unsafe)` を付ける。
+    //
+    // SW6-5 では「これで足りる（ファイル全体を `@preconcurrency import` にする必要はない）」と
+    // 結論したが、それは Xcode 27 beta 上での検証だった。リリース用の Xcode 26.6 では
+    // `nonisolated(unsafe)` だけでは 34 行目の await が通らないため `@preconcurrency import` を併用する。
     private nonisolated(unsafe) let repository: any CafeRepository
 
     init(repository: any CafeRepository) {

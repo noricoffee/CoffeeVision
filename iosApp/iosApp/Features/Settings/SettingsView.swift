@@ -1,4 +1,10 @@
 import SwiftUI
+// `@preconcurrency`: `startExport()` が `appState.container.exportCoffeeRecordsUseCase`（Kotlin、
+// Sendable 非準拠）を受け手にして await するため。Kotlin の suspend 関数は ObjC の
+// completion-handler メソッドとして export され、Swift 側では `@concurrent` な async として
+// import されるので、MainActor 上からの await は受け手を別の分離ドメインへ「送る」ことになり
+// data race エラーになる（リリース CI run 31203044578）。
+@preconcurrency import SharedLogic
 #if DEBUG
 import GoogleMobileAds
 #endif

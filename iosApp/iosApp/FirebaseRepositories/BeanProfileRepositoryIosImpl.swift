@@ -1,6 +1,10 @@
 import Foundation
 import FirebaseFirestore
-import SharedLogic
+// `@preconcurrency`: `BeanProfile` は Kotlin data class（SharedLogic）で Sendable 非準拠。
+// `__getAll` の `completionHandler` 引数型（`@Sendable` closure）にそのまま登場するため、
+// 個別の Sendable 拡張では塞げない（Kotlin 側の型自体を変更できない）。SW6-2。
+@preconcurrency import SharedLogic
+import os
 
 /// `com.noricoffee.repository.BeanProfileRepository` の iOS 実装。
 ///
@@ -14,11 +18,24 @@ import SharedLogic
 /// - `getAll()` → `func __getAll(completionHandler:)`
 ///
 /// 詳細は `docs/kmp-bridge.md` §SKIE の利用 を参照。
-final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository {
+///
+/// ## `nonisolated` である理由（Swift 6 移行 SW6-2）
+///
+/// `BeanProfileRepository`（Kotlin interface）実装は Kotlin ランタイムが Obj-C ブリッジ経由で
+/// 呼び出すため、呼び出し元スレッドは Kotlin コルーチンのディスパッチャ次第で MainActor とは限らない
+/// （`docs/kmp-bridge.md` の呼び出し方向の議論参照）。既定 MainActor 分離を無効化し、実態を明示する。
+///
+/// ## `cache` のスレッド安全性
+///
+/// `__getAll` の呼び出し元スレッドは上記の通り不定な一方、Firestore の `getDocuments` completion は
+/// 既定で main queue から呼ばれる（`FirestoreSettings.dispatchQueue` 未設定時）。つまり `cache` は
+/// 異なるスレッドから読み書きされうるため、`OSAllocatedUnfairLock` で保護し、クラス全体を
+/// `@unchecked Sendable` にする（ロックが唯一のアクセス経路であることを手動で保証する）。
+nonisolated final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository, @unchecked Sendable {
 
     private let db = Firestore.firestore()
     // メモリキャッシュ: 初回取得後に保持し、以降は Firestore を叩かない
-    private var cache: [BeanProfile]? = nil
+    private let cache = OSAllocatedUnfairLock<[BeanProfile]?>(initialState: nil)
 
     // MARK: - __getAll
 
@@ -28,8 +45,8 @@ final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository {
     func __getAll(
         completionHandler: @escaping @Sendable ([BeanProfile]?, (any Error)?) -> Void
     ) {
-        if let cache = cache {
-            completionHandler(cache, nil)
+        if let cached = cache.withLock({ $0 }) {
+            completionHandler(cached, nil)
             return
         }
         db.collection("beanProfiles").getDocuments { [weak self] snapshot, error in
@@ -40,7 +57,7 @@ final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository {
             let profiles = snapshot?.documents.compactMap { doc in
                 BeanProfileIosMapper.fromDocument(data: doc.data(), beanId: doc.documentID)
             } ?? []
-            self?.cache = profiles
+            self?.cache.withLock { $0 = profiles }
             completionHandler(profiles, nil)
         }
     }
@@ -53,7 +70,7 @@ final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository {
 /// Kotlin 側の `BeanProfileFirestoreMapper` と同様のフィールドキー / 変換規則を使う。
 /// `processings` は enum name（例: `"Washed"`）で逆引きし、SKIE CaseIterable `.allCases` を使う
 /// （Obj-C ヘッダの `.entries` は Swift からは使わない。`docs/kmp-bridge.md` 参照）。
-private enum BeanProfileIosMapper {
+private nonisolated enum BeanProfileIosMapper {
 
     static func fromDocument(data: [String: Any], beanId: String) -> BeanProfile? {
         guard

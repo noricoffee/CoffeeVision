@@ -1006,3 +1006,52 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: 診断の確信度は**証拠の種類**で決まり、傍証を積んでも種類は変わらない。コードを何行読んでも「静的な仮説」のままで、**実行の観測 1 回に負ける**。`docs` に書く前にソースを開いて確かめる（2026-07-25）の実行版で、**「挙動について書く前に、挙動を観測する」**。観測できないなら観測できないと書く
 - **発生源**: 2026-08-07、好み一致ピンの UX 改善（UX-10）の初動調査
 - **横展開点検（2026-08-07）**: 「dismiss と同期 `append`」の残存箇所を洗った（`grep -n "= nil" -A 3 iosApp/iosApp/Features/Map/MapTabView.swift` 相当を全件目視、`head` 不使用）。`activeCafeListSheet = nil` → `navigationPath.append` が**好み一致一覧・保存済み一覧の 2 箇所**に残っているが、**どちらもユーザー実機確認で遷移することを確認済み**のため**修正しない**。この 2 箇所を将来「アンチパターンだから」と直したくなったら本エントリを読むこと（動いているものを形だけで直すのは Minimal Impact 違反）。好み一致ピン経由の 1 箇所は UX-10 で機能ごと削除された
+
+---
+
+## 2026-08-08
+
+### `project.pbxproj` の `buildSettings` に書かれたキーは、同名の xcconfig 設定を**無言で無効化する**
+
+- **症状**: Swift 6 移行で `SWIFT_VERSION = 6.0` を `iosApp/Configuration/Base.xcconfig` に追加したが、ビルドは Swift 5 のままだった。エラーも警告も出ず、`Base.xcconfig` は正しくターゲットに紐づいている（`baseConfigurationReferenceRelativePath = Base.xcconfig`）。原因は `project.pbxproj` のターゲット `buildSettings` に `SWIFT_VERSION = 5.0;` が直書きされていたこと
+- **原因の構造**: xcconfig は**ベース**設定で、ターゲットの `buildSettings` はその**上書き**。優先順位は `buildSettings` > xcconfig で、これは仕様どおりの挙動だが、**xcconfig 側を見ているだけでは「上書きされている」ことが分からない**。Xcode の GUI でビルド設定を触ると自動的に `buildSettings` に書き込まれるため、**xcconfig で管理しているつもりのキーが GUI 操作で静かに奪われる**経路がある。しかも「設定を足したのに効かない」は「設定が足りない」と区別がつかず、値を変えて試行錯誤する方向へ誘導される
+- **修正パターン**: xcconfig に集約したいキーは、**pbxproj の該当 `buildSettings` から削除する**のがセット。効いているかの確認は xcconfig / pbxproj のどちらを読むかではなく **`xcodebuild -showBuildSettings` の実効値**を見る（`EFFECTIVE_SWIFT_VERSION = 6` のように、派生した実効キーまで出る）
+- **教訓**: **ビルド設定は「書いた場所」ではなく「解決後の値」で確認する。** 同系統は 2026-08-06 の「バンドルの実効言語は成果物の `Info.plist` を実読みする」/ 2026-07-25 の「doc に書く事実はソースを開いて確かめる」— いずれも**宣言と実効が別レイヤーで決まる**もので、宣言側だけ見ても嘘をつかれる
+- **発生源**: 2026-08-08、Swift 6 移行（SW6-1）。`project.pbxproj` の Debug / Release 2 ブロックから `SWIFT_VERSION` を削除して `Base.xcconfig` へ一本化した
+- **横展開点検（2026-08-08）**: pbxproj の全 `buildSettings` キーと `iosApp/Configuration/*.xcconfig` の全キーを突き合わせた（Python で集合演算、`head` 不使用）。xcconfig 側の 13 キー（`ADMOB_*` 3 / `CURRENT_PROJECT_VERSION` / `MARKETING_VERSION` / `OTHER_LDFLAGS` / `PLACES_API_KEY` / `PRODUCT_BUNDLE_IDENTIFIER` / `PRODUCT_NAME` / `SWIFT_*` 3 / `TEAM_ID`）に対し、**重複は 0 件**（`SWIFT_VERSION` の解消後）。今後 xcconfig にキーを足すときは同じ突き合わせを回す
+
+### `xcodebuild` にコマンドライン引数で渡したビルド設定は、**SPM 依存パッケージ全体にも適用される**
+
+- **症状**: Swift 6 化の影響を測るため、ファイルを変更せずに `xcodebuild ... SWIFT_VERSION=6.0 SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor SWIFT_APPROACHABLE_CONCURRENCY=YES build` を実行。結果は 4 エラーで失敗したが、**エラーはすべて Firebase SDK（`FirebaseCoreInternal` の `UnfairLock.swift` / `HeartbeatStorage.swift`）で、iosApp のソースは 1 ファイルもコンパイルされていなかった**。ビルドログの `swiftc` 引数を見ると、`Promises` や `GoogleMobileAdsTarget` にまで `-swift-version 6 -default-isolation=MainActor` が渡っていた
+- **原因の構造**: コマンドライン引数のビルド設定は**ビルド全体のグローバル上書き**で、ターゲットを選べない。自分のターゲットだけに効くと錯覚しやすいのは、普段渡す設定（`CURRENT_PROJECT_VERSION` 等）が他ターゲットに影響しても実害が出ないため。**言語モードのように「依存先が対応していないと壊れる」設定で初めて牙を剥く**。しかも失敗の見え方が「サードパーティのバグ」なので、自分の計測方法が原因だと気づきにくい
+- **修正パターン**: **ターゲット限定で効かせたい設定は xcconfig に書く**（`Base.xcconfig` はアプリターゲットの `baseConfigurationReference` なので、SPM パッケージには波及しない）。「ファイルを汚さずに試したい」という動機で引数を選びがちだが、xcconfig に書いて測って戻す方が結果として速い
+- **教訓**: **計測のための細工が計測対象を変えていないかを疑う。** 今回は「iosApp の Swift 6 対応度」を測るつもりで「依存パッケージ全部の Swift 6 対応度」を測っていた。同系統は 2026-06-19 の `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES`（Gradle をスキップして偽の BUILD SUCCEEDED を出す）で、**どちらもビルドコマンドに足したフラグが検証の意味を変えている**
+- **発生源**: 2026-08-08、Swift 6 移行（SW6-1）の診断採取
+- **横展開点検（2026-08-08）**: `xcodebuild` にビルド設定を引数で渡している箇所を CI・スクリプトで全件確認（`grep -rn "xcodebuild" .github/ scripts/ iosApp/scripts/`、`head` 不使用）。**該当 1 件、ただし対処不要**: `release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、SPM 依存パッケージにも波及している。**CI の run_number をビルド番号に採用するのは意図した設計**で、TestFlight ビルドも通っているためユーザー判断で取り下げた（SW6-C）。**この差が本エントリの要点**でもある — 波及すること自体は同じでも、`CURRENT_PROJECT_VERSION` は数値が渡るだけなのに対し、`SWIFT_VERSION` のような**言語モード系は依存先が対応していないと壊れる**。引数渡しを一律に禁止するのではなく、**その設定が依存先に渡って意味を持つかどうか**で判断する
+
+### `@concurrent` の付け忘れは**コンパイラが何も言わない**（Swift 6 の既定 MainActor 分離下）
+
+- **症状**: 症状が出ない。ビルドは通り、警告も出ず、動作も正しい。**メインスレッドで JPEG デコードが走ってスクロールが重くなるだけ**
+- **原因の構造**: Swift 6.2 の `NonisolatedNonsendingByDefault`（`SWIFT_APPROACHABLE_CONCURRENCY = YES` に含まれる）を有効にすると、**素の `nonisolated async` 関数は呼び出し元アクター上で実行される**ようになる。それ以前（SE-0338）はグローバル実行キューへ逃げていたので、`@MainActor` の呼び出し元から `await` するだけでバックグラウンド実行になっていた。**同じコードの意味が言語モードで変わる**タイプで、差分にも型にも現れない
+- **修正パターン**: CPU バウンドな処理を含む `nonisolated async` 関数には **`@concurrent` を明示**する。逆に「呼び出し元のアクターで動いてほしい」関数は何も付けない（それが既定になった）
+- **教訓**: **「言語モードに依存している」と分かった時点で doc に予告を書いておくと、移行時に唯一の検出手段になる。** 本件は 2026-08-01 に `PhotoFileStore.loadThumbnail` を実装した際、`implementation_note.md` に「言語モードを上げるときはここを `@concurrent` 等で明示すること」と書き残していたため移行時に拾えた。**移行の全診断 32 件の中にこの件は 1 件も無く**、予告が無ければ気づけなかった。型もテストもコンパイラも助けない領域では、**将来の自分への申し送りが唯一の防御**になる
+- **発生源**: 2026-08-08、Swift 6 移行（SW6-3）。予告は implementation_note 2026-08-07 の追記
+- **昇格**: `.claude/rules/swift-ios.md` に「既定 MainActor 分離から外す 3 手段」の 1 つとして昇格済み（正本は `docs/coding-conventions.md` §2.5）
+- **横展開点検（2026-08-08）**: `iosApp` 全体の `async` 関数 23 本を列挙して目視点検（grep でパターン化できないため全件確認）。同型（`nonisolated async` に重い同期処理をインラインし、暗黙のバックグラウンド実行を期待）は **`PhotoFileStore.loadThumbnail` の 1 件のみ**。他は明示 `@MainActor`（`AdConsentCoordinator.run` / `ReviewPrompt.requestIfFirstSignalReached` / `ShareCardRenderer.render`）か、待ち時間が I/O 側にある（`PlacePhotoLoader.fetchUrl` / `RemoteConfigBootstrap.fetchAndActivate` / Foundation Models 系）。**`async` ではない同期フルデコード 2 箇所**（`ImageDownsampler.downsampledJPEG` / `PhotoFileStore.loadImage`）は条件に当たらないが同種の懸念があるため SW6-A として起票
+
+### パフォーマンス改善は「気づいた 1 箇所」で終わりやすい — 直す前に**同じ API を同じ用途で使う全箇所**を数える
+
+- **症状**: 2026-08-07 に一覧のサムネイル（`CoffeeRowThumbnail` 56×56pt）を `PhotoFileStore.loadImage`（長辺 2048px フルデコード）から `loadThumbnail`（縮小デコード + `NSCache`）へ移行した。その時点で**同じ「`LazyHStack` 内で記録写真をフルデコードしている」箇所が他に 3 つ**（エディタ 100pt / 記録詳細 120pt / カフェ詳細 224pt）残っていたが、翌日 SW6-A に着手するまで誰も気づかなかった。しかも**起票時の見積もりは 2 箇所**で、着手時の調査で 3 箇所に増えた
+- **原因の構造**: バグと違い**症状が出ない**。動作は正しく、ビルドも通り、警告も出ず、テストも緑。**遅いだけ**なので、ユーザーが「この画面が重い」と言った画面しか直らない。しかも「重い」と言われるのは**最もスクロールする画面**（＝一覧）に偏るので、**一番目立つ 1 箇所だけが直って残りが取り残される**という偏りが構造的に生じる。バグの横展開漏れ（2026-07-03 の `onDisappear` が `CafeDetailView` で再発）は**再発時に症状が出るので気づけた**が、パフォーマンスは再発しても誰も報告しない
+- **修正パターン**: 同じ API を同じ用途で使う箇所が 3 つを超えたら、**共通コンポーネントに切り出して型で 1 つにまとめる**。今回は `Components/RecordPhotoThumbnail.swift` を作り 4 箇所を統合した。次に読み込み方法を変えるときは 1 箇所直せば全部に効く。**共通化するのは「解決ロジック」だけ**にして、装飾（サイズ・角丸・プレースホルダー・ラベル）は呼び出し側に残す — そこまで共通化すると分岐だらけの View になり、かえって触りにくくなる
+- **教訓**: **最適化に着手する前に「この API を同じ用途で使っている箇所」を grep で数える。** 数えずに 1 箇所直すと、残りは「直っていること」を前提に読まれるようになり、次に気づく機会が失われる（今回は `requirements.md` の非機能要件「一覧表示は 60fps を維持する。画像はサムネイルキャッシュで遅延読み込み」が**一覧だけ**満たされている状態が 1 日続いた）。「片側変更 → 対向未追随」ファミリー（2026-07-06 / 07-07 / 07-08 / 07-25）が**レイヤー間**の追随漏れなのに対し、これは**同一レイヤー内の並列箇所**の取りこぼしで、芋づる grep が効きにくい点が違う（呼び出し側は全部正しく動いているので、キーワードで探しても「間違っている箇所」が浮かび上がらない）
+- **発生源**: 2026-08-08、SW6-A。発端は Swift 6 移行（SW6-3）の横断確認で `@concurrent` の付け先を洗ったこと。**移行のついでに数えたから見つかった**のであって、単独では気づけていない
+- **横展開点検（2026-08-08）**: `grep -rn "PhotoFileStore.loadImage\|UIImage(contentsOfFile:\|UIImage(data:" iosApp/iosApp --include="*.swift"`（`head` 不使用）→ 実呼び出しは **`CoffeeShareCardView` の 1 件のみ**で、これは共有カードが 1080×1350px 出力なのでフルデコードが正しい（対象外）。`UIImage(contentsOfFile:)` は `PhotoFileStore.loadImage` の実装自体、`UIImage(data:)` の直呼びは **0 件**。記録写真をフルデコードで表示している箇所は残っていない。あわせて `ImageDownsampler.downsampledJPEG` の呼び出しも `await` 付き 1 箇所のみを確認
+
+### 実装が無い機能の目視項目は、**QA 手順に混ざったまま実行不可能になる**
+
+- **症状**: SW6-A の調査で「写真の全画面表示（`.fullScreenCover` + `MagnificationGesture`）」が**実装されていない**ことが判明した（`grep -rn "fullScreenCover\|MagnificationGesture" iosApp` が 0 件、写真セルにタップハンドラも無し）。ところが `docs/ui-ux-guidelines.md` は 2 箇所で現在形で書いており、さらに **`verification-checklist.md` の目視項目にも「全画面」の確認が 2 箇所**（「サムネ・詳細・**全画面**・共有カードのすべてで横倒しにならない」「添付した写真を**全画面で拡大**して画質が許容できること」）含まれていた
+- **原因の構造**: 未実装の方針を doc に書くこと自体は正しい（設計方針の doc なので）。問題は**それが QA 手順へコピーされた**とき。方針 doc は「そのうち作る」で読めるが、**チェックリストの行は「今できるはず」として読まれる**。実行しようとして初めて「できない」と分かるが、QA 中は「自分の操作が悪いのか」と迷う時間が生まれ、最悪 `[x]` を付けてしまう
+- **修正パターン**: 方針 doc に未実装のものを残すときは**現在形で書かない**（「〜を使う」→「〜を作るときは〜を使う（未実装）」）。そして**その記述を参照している QA 項目が無いかを同時に確認する**。今回は ui-ux-guidelines を直した流れで verification-checklist も見に行って気づいた
+- **教訓**: **doc の陳腐化を直すときは「その doc を読んで書かれた別の doc」まで辿る。** 特に `verification-checklist.md` は仕様 doc からの派生物で、**元の仕様が実装されなかった場合に嘘の手順が残る**構造になっている。2026-07-27 の棚卸しで「別の doc だけが追随して残りが取り残される」形が全件だったのと同じ流れが、仕様 → QA 手順の方向でも起きる
+- **発生源**: 2026-08-08、SW6-A の調査（`ui-ux-guidelines.md` §写真表示 / §モーダル、`verification-checklist.md` パス 2 の写真リサイズ項目）。3 箇所とも是正済み。全画面表示を機能として作るかどうかは未決（`requirements.md` の機能一覧に項目が無い）

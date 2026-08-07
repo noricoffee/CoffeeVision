@@ -79,11 +79,18 @@ final class AppleSignInCoordinator: NSObject {
 
 extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
 
+    // `ASAuthorizationControllerDelegate` のコールバックは `nonisolated` として宣言する必要がある
+    // （素の Obj-C プロトコルで MainActor を認識しないため）が、Apple 公式ドキュメント上
+    // 実際の呼び出しは常にメインスレッド（UI 提示と対になるフローのため）。
+    // `presentationAnchor` と同じ方針で `MainActor.assumeIsolated` を使う
+    // （`Task { @MainActor in }` は `authorization`（非 Sendable な `ASAuthorization`）を
+    // closure でキャプチャするため Swift 6 で警告になりうる）。
+
     nonisolated func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             guard
                 let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
                 let appleIDTokenData = appleIDCredential.identityToken,
@@ -125,7 +132,7 @@ extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             // ユーザーキャンセル（ASAuthorizationError.canceled）もここに来る
             self.continuation?.resume(throwing: error)
             self.continuation = nil
@@ -140,32 +147,22 @@ extension AppleSignInCoordinator: ASAuthorizationControllerPresentationContextPr
     nonisolated func presentationAnchor(
         for controller: ASAuthorizationController
     ) -> ASPresentationAnchor {
-        // @MainActor 上で設定した anchor を返す。
-        // nonisolated であっても presentationAnchor は UI スレッドから呼ばれるため安全。
-        // Xcode が「nonisolated から MainActor プロパティへのアクセス」を警告する場合は
-        // MainActor.assumeIsolated を用いる。
+        // `signIn(anchor:)` が `@MainActor` 上で設定した anchor をそのまま返す。
+        // `nonisolated` であっても本メソッドは UI スレッドから呼ばれるため
+        // `MainActor.assumeIsolated`（同期）で分離を仮定してよい。
         MainActor.assumeIsolated {
-            if let anchor = self.presentationAnchor {
-                return anchor
+            guard let anchor = self.presentationAnchor else {
+                // 到達不能: `signIn(anchor:)` が `controller.performRequests()` より前に
+                // 必ず設定し、呼び出し元（`AccountView.startAppleSignIn`）も
+                // `currentPresentationAnchor()` の nil を guard で弾いている。
+                //
+                // ここで window を捏造しない理由: 以前は scene を探索して最後は
+                // `UIWindow()`（iOS 26 で deprecated）を返していたが、**無効な window を
+                // 返してもサインインシートは出ず、ユーザーには無反応に見えるだけ**だった。
+                // 探索ロジックも `AccountView.currentPresentationAnchor()` と二重になっていた。
+                preconditionFailure("presentationAnchor が未設定のまま提示された（signIn(anchor:) を経ていない）")
             }
-            // フォールバック: foregroundActive な WindowScene の key window を使う。
-            // UIWindow() のゼロ引数 init は iOS 26 以降で deprecated のため使わない。
-            // presentationAnchor は signIn(anchor:) の呼び出し元が必ず設定するため、
-            // このフォールバックパスに到達することは通常ない。
-            let scenes = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-            let activeScene = scenes.first { $0.activationState == .foregroundActive }
-                ?? scenes.first
-            if let scene = activeScene,
-               let keyWindow = scene.windows.first(where: { $0.isKeyWindow }) {
-                return keyWindow
-            }
-            // 最終フォールバック: windowScene を持つ UIWindow を生成する
-            if let scene = activeScene {
-                return UIWindow(windowScene: scene)
-            }
-            // ここには到達しない（サインインフロー中は必ず foregroundActive scene が存在する）
-            return UIWindow()
+            return anchor
         }
     }
 }

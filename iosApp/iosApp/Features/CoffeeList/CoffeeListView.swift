@@ -1,6 +1,5 @@
 import SwiftUI
 import SharedLogic
-import UIKit
 
 // MARK: - CoffeeListView
 
@@ -193,7 +192,22 @@ struct CoffeeRow: View {
 
     var body: some View {
         HStack(alignment: .top, spacing: 12) {
-            CoffeeRowThumbnail(fileName: coffee.photos.first?.fileName)
+            RecordPhotoThumbnail(
+                fileName: coffee.photos.first?.fileName,
+                pendingData: nil,
+                targetPointSize: 56
+            ) {
+                Rectangle()
+                    .fill(Color(.secondarySystemFill))
+                    .overlay {
+                        Image(systemName: "cup.and.saucer")
+                            .foregroundStyle(.tertiary)
+                    }
+            }
+            .frame(width: 56, height: 56)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityHidden(true)
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(coffee.cafe?.name ?? String(localized: "セルフ抽出"))
@@ -243,52 +257,6 @@ struct CoffeeRow: View {
             ratingStr = String(localized: "未評価")
         }
         return "\(cafeName), \(coffee.name), \(formattedDate), \(ratingStr)"
-    }
-}
-
-// MARK: - CoffeeRowThumbnail
-
-/// `CoffeeRow` の左端に置く 56×56pt のサムネイル。
-///
-/// - 写真が無い記録でも枠は常に確保する（`if` で枠ごと消すと兄弟がシフトしてテキストの
-///   開始位置がズレるため。`.claude/rules/swift-ios.md` の既存規則）
-/// - 縮小デコードは `PhotoFileStore.loadThumbnail(fileName:maxPixelSize:)` に委譲し、
-///   `.task(id:)` で非同期に取得する（メインスレッドを塞がない）
-/// - 装飾用途のため `accessibilityHidden(true)`
-private struct CoffeeRowThumbnail: View {
-
-    static let size: CGFloat = 56
-
-    let fileName: String?
-
-    @Environment(\.displayScale) private var displayScale
-    @State private var image: UIImage?
-
-    var body: some View {
-        Group {
-            if let image {
-                Image(uiImage: image)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Rectangle()
-                    .fill(Color(.secondarySystemFill))
-                    .overlay {
-                        Image(systemName: "cup.and.saucer")
-                            .foregroundStyle(.tertiary)
-                    }
-            }
-        }
-        .frame(width: Self.size, height: Self.size)
-        .clipped()
-        .clipShape(RoundedRectangle(cornerRadius: 8))
-        .accessibilityHidden(true)
-        .task(id: fileName) {
-            image = nil
-            guard let fileName else { return }
-            let maxPixelSize = Int(Self.size * displayScale)
-            image = await PhotoFileStore.loadThumbnail(fileName: fileName, maxPixelSize: maxPixelSize)
-        }
     }
 }
 

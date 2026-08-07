@@ -25,7 +25,10 @@ import SharedLogic
 /// - `Photo` ドメイン → Swift 側で `Photo_`（SQLDelight 生成 `Photo` 行型との衝突回避）
 /// - `LocalDate` → `Kotlinx_datetimeLocalDate`
 /// - `Instant` → `Kotlinx_datetimeInstant`
-enum CoffeeFirestoreMapper {
+///
+/// `nonisolated`: `RemoteCoffeeDataSourceIosImpl`（Kotlin ランタイムが任意スレッドから呼ぶ）から
+/// 直接呼ばれるため。ステートレスな純粋変換関数のみで構成されるため安全（SW6-2）。
+nonisolated enum CoffeeFirestoreMapper {
 
     // MARK: - CoffeeRecord
 

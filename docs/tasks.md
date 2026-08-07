@@ -406,6 +406,28 @@
 
 ### 未完・バックログ
 
+#### Swift 5 → Swift 6 移行（2026-08-07 起票 / 2026-08-08 完了）
+
+> **2026-08-08 に SW6-1〜7 すべて完了。** `iosApp` を Swift 6 言語モード + **既定 MainActor 分離**（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` / `SWIFT_APPROACHABLE_CONCURRENCY = YES`）へ移行し、`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しの clean build で **Debug / Release とも警告 0・エラー 0**（残る 1 件は Swift 6 と無関係な `UIWindow()` の iOS 26 deprecation）。設定は `iosApp/Configuration/Base.xcconfig` に一本化した（`project.pbxproj` への `SWIFT_VERSION` 直書きは xcconfig より優先されるため削除）。
+>
+> **`shared/**` は 1 行も触っていない** — `SharedLogic.swiftmodule` の `.swiftinterface` が `-language-mode 5 -enable-library-evolution` でビルドされており、アプリを Swift 6 にしても SKIE 生成コードは Swift 5 セマンティクスで再構築されることを実読みで確認した。
+>
+> 変更は 24 ファイル。**ViewModel ブリッジ 8 本 = `isolated deinit`（SE-0371）/ Kotlin interface 実装 8 本 = `nonisolated`（可変キャッシュは `OSAllocatedUnfairLock` + `@unchecked Sendable`）/ `PhotoFileStore.loadThumbnail` = `@concurrent` / デリゲート 2 本 = `MainActor.assumeIsolated`**。`@preconcurrency import SharedLogic` の追加は 3 ファイルに限定（移行前から 4 ファイルに存在）。
+>
+> **判断の根拠・使い分けの軸・計測方法の落とし穴は [`implementation_note.md`](./implementation_note.md) 2026-08-08 が正本**。規約への昇格先は [`coding-conventions.md`](./coding-conventions.md) §2.5 / [`kmp-bridge.md`](./kmp-bridge.md)「Swift 6 の並行性境界」/ `.claude/rules/swift-ios.md`。
+>
+> **残務は実機目視のみ**（[`verification-checklist.md`](./tasks/verification-checklist.md) へ移送済み）。特に `CoffeeInsightProviderIosImpl` の `nonisolated` 化で**オンデバイス LLM 推論がメインスレッドから外れた**副次効果の確認が要る。
+
+#### Swift 6 移行で発見した別件（2026-08-08 起票）
+
+> SW6-3 の横断確認中に見つかった、**移行のスコープ外**の既存課題。どちらも移行で悪化したものではない。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [x] | SW6-A | ~~**メインスレッドでの同期フルデコード 2 箇所**~~ → **2026-08-08 完了**。着手時の調査で**起票時の想定 2 箇所 → 実際 3 箇所**と判明した（記録写真をフルデコード表示しているのは `PhotoThumbnailCell` 100pt / `PhotoDetailCell` 120pt / `CafePhotoHeader.ownPhotoCell` 224pt の 3 つで、**いずれも `LazyHStack` 横スクロール内**。長辺 2048px = 約 16MB/枚を `body` から同期デコードしており、再描画のたびに走ってキャッシュも効いていなかった）。**2026-08-07 に一覧の `CoffeeRowThumbnail` だけが直され、横展開されていなかった**のが構図。共通 View `Components/RecordPhotoThumbnail.swift` に切り出して 4 箇所を統合（ユーザー選択）。`ImageDownsampler` は `downsampledJPEG` を `@concurrent async` 化 + `downsampledImage`（Data → UIImage、JPEG 再エンコードなし）を新設。**対象外**: `CoffeeShareCardView` は 1080×1350px 出力なのでフルデコードが正しい | iosApp 完結 |
+| [x] | SW6-B | ~~**`AppleSignInCoordinator` の `UIWindow()` が iOS 26 で deprecated**~~ → **2026-08-08 完了**。`presentationAnchor(for:)` のフォールバック（scene 探索 → `UIWindow(windowScene:)` → `UIWindow()`）を**丸ごと削除**し、`presentationAnchor` が nil なら `preconditionFailure` に変更（ユーザー選択）。呼び出し経路を追うと全パスが到達不能で、探索ロジックは `AccountView.currentPresentationAnchor()` と二重だった。実行パス 18 行 → 2 行。**これで iosApp のビルド警告が 0 件になった**（Debug / Release 両方） | iosApp 完結 |
+| [-] | SW6-C | ~~**CI が `CURRENT_PROJECT_VERSION` を `xcodebuild` の引数で渡している**~~ → **2026-08-08 取り下げ（ユーザー判断）**。`release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、コマンドライン引数のビルド設定は**ターゲットを選ばず SPM 依存パッケージにも適用される**（lessons 2026-08-08 の sweep で検出）。ただし **CI の run_number をビルド番号に採用するのは意図した設計**で、TestFlight ビルドも通っているため対処しない。`SWIFT_VERSION` のような「依存先が対応していないと壊れる」設定とは性質が違う（`CURRENT_PROJECT_VERSION` は数値が渡るだけ） | — |
+
 #### docs 棚卸し 第 2 巡（2026-07-27 / 未実施 doc への Phase 1 適用）
 
 > 2026-07-25 の第 1 巡（data-model / implementation_note / kmp-bridge / architecture）で**触れていない 8 本**にコード突き合わせ（curate-doc Phase 1）を通した。行数閾値の超過は `data-model.md` 708 行のみで、今回の主目的は縮約ではなく**実装との乖離の検出**。検出は陳腐化 10 件 / 欠落 4 件 / コード側 2 件。

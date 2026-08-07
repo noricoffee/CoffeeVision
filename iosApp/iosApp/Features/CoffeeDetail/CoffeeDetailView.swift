@@ -1,6 +1,5 @@
 import SwiftUI
 import SharedLogic
-import UIKit
 
 // MARK: - Identifiable 拡張
 
@@ -315,25 +314,21 @@ private struct PhotoDetailCell: View {
     let total: Int
 
     var body: some View {
-        Group {
-            if let fileName = photo.fileName,
-               let uiImage = PhotoFileStore.loadImage(fileName: fileName) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-                    .frame(width: 120, height: 120)
-                    .clipped()
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(.secondarySystemBackground))
-                    .frame(width: 120, height: 120)
-                    .overlay {
-                        Image(systemName: "photo.badge.exclamationmark")
-                            .foregroundStyle(.secondary)
-                    }
-            }
+        RecordPhotoThumbnail(
+            fileName: photo.fileName,
+            pendingData: nil,
+            targetPointSize: 120
+        ) {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color(.secondarySystemBackground))
+                .overlay {
+                    Image(systemName: "photo.badge.exclamationmark")
+                        .foregroundStyle(.secondary)
+                }
         }
+        .frame(width: 120, height: 120)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 8))
         .accessibilityLabel(
             String(format: String(localized: "写真 %d/%d 枚目"), index, total)
         )

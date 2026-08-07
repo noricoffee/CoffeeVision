@@ -26,7 +26,11 @@ struct MapSearchCenter {
 @Observable
 final class AppState {
 
-    private(set) var container: AppContainer
+    // `AppContainer`（Kotlin）は Sendable 非準拠。`init` で 1 度だけ代入されて以降不変のため
+    // `nonisolated(unsafe)` で個別に対処する（ファイル全体を `@preconcurrency import` に
+    // する必要はない。SW6-5）。`let` なので `@Observable` マクロは介入せず、
+    // 並行アクセスも不変値への読み取りに限られる。
+    nonisolated(unsafe) let container: AppContainer
     private(set) var uid: String?
     private(set) var status: Status = .idle
     private(set) var lastError: String?

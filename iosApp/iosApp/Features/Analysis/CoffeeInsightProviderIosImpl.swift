@@ -1,6 +1,10 @@
 import Foundation
 import FoundationModels
-import SharedLogic
+// `@preconcurrency`: `CoffeeRecordQuery` / `CoffeeStats` / `CoffeeInsight` / `PreferredBeanTraits` は
+// Kotlin 由来の型（SharedLogic）で Sendable 非準拠。completionHandler の `@Sendable` closure 型や
+// `Task { }` の capture にそのまま登場するため、個別の Sendable 拡張では塞げない（SW6-2）。
+@preconcurrency import SharedLogic
+import os
 
 // MARK: - CoffeeInsightProviderIosImpl
 
@@ -24,7 +28,20 @@ import SharedLogic
 /// - Foundation Models は iOS 26.0 以降が必要。`@available` ガードで全メソッドを保護する
 /// - `summarize` は呼ばれるたびに新しい `LanguageModelSession` を作る（ステートレス）
 ///
-final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
+/// ## `nonisolated` である理由（Swift 6 移行 SW6-2）
+///
+/// `CoffeeInsightProvider`（Kotlin interface）実装は Kotlin ランタイムが任意スレッドから呼び出す。
+/// 既定 MainActor 分離のままだと Obj-C プロトコル要件を満たす `__summarize` 系メソッドは
+/// 暗黙に nonisolated 化される一方、内部で呼ぶ `generateInsight` 等の private メソッドは
+/// MainActor に留まり、`Task { await self.generateInsight(...) }` が毎回メインスレッドへホップして
+/// オンデバイス LLM 推論を実行していた（誰も気づけない偶発的な挙動）。明示的に `nonisolated` にし、
+/// LLM 推論をバックグラウンドで実行させる（`PhotoFileStore.loadThumbnail` と同じ問題意識。SW6-3 参照）。
+///
+/// `recordQuery` は `attachRecordQuery(_:)` により構築後に再代入されるため
+/// `OSAllocatedUnfairLock` で保護し `@unchecked Sendable` にする。
+/// `tasteExtractor` は `makeIfAvailable()` 内でインスタンスが外部に公開される前に 1 度だけ
+/// 設定され、以降は再代入されないため、ロック不要（`TastePreferenceExtractor` 自体も `Sendable`）。
+nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider, @unchecked Sendable {
 
     // MARK: - State
 
@@ -32,7 +49,8 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
     ///
     /// `AppContainer` 構築後に `attachRecordQuery(_:)` で後付けする（依存サイクル解消）。
     /// `nil` のまま `answer` が呼ばれた場合は digest-only セッションにフォールバックする。
-    private var recordQuery: CoffeeRecordQuery?
+    /// インスタンス公開後に再代入されるため `OSAllocatedUnfairLock` で保護する。
+    private let recordQueryLock = OSAllocatedUnfairLock<CoffeeRecordQuery?>(initialState: nil)
 
     /// テイスティングスコア範囲検索 Tool 用の `TastePreferenceExtractor`。
     ///
@@ -68,9 +86,10 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
     /// `CoffeeInsightProviderIosImpl` は `AppContainer` の constructor argument になるため、
     /// container 構築時には `coffeeRecordQuery` がまだ存在しない。
     /// そのため `bootstrap()` で container 構築後にこのメソッドで後付けする。
-    /// `answer(question:stats:)` が呼ばれるのは初期化完了後のため、競合リスクはない。
+    /// `answer(question:stats:)` が呼ばれるのは初期化完了後のため、競合リスクはない
+    /// （加えて `recordQueryLock` により読み書き自体もスレッド安全）。
     func attachRecordQuery(_ query: CoffeeRecordQuery) {
-        self.recordQuery = query
+        recordQueryLock.withLock { $0 = query }
     }
 
     // MARK: - CoffeeInsightProvider protocol witness（SKIE completion handler 形式）
@@ -190,7 +209,7 @@ final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider {
         \(question)
         """
 
-        if let rq = recordQuery {
+        if let rq = recordQueryLock.withLock({ $0 }) {
             // tool-calling セッション（v2）
             var tools: [any Tool] = [SearchCoffeeRecordsTool(recordQuery: rq)]
             if let extractor = tasteExtractor {

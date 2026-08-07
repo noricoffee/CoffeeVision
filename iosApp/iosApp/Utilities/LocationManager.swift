@@ -68,15 +68,26 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     }
 
     // MARK: - CLLocationManagerDelegate
-    // CoreLocation のコールバックは MainActor 外から呼ばれるため nonisolated 必須
+    //
+    // CoreLocation のコールバックは `nonisolated` として宣言する必要がある
+    // （`CLLocationManagerDelegate` は素の Obj-C プロトコルで MainActor を認識しないため）。
+    // 実際の呼び出しスレッドは、`manager`（`CLLocationManager`）が MainActor 上（`init` 内）で
+    // 生成されているため常にメインスレッドになる（Apple 公式ドキュメント: delegate コールバックは
+    // `CLLocationManager` を生成したスレッドの RunLoop 上で呼ばれる）。
+    // `Task { @MainActor in }` は「非同期にホップする可能性がある」ため、`CLLocationManager`
+    // （非 Sendable）を closure でキャプチャすると Swift 6 で警告になる。実態が
+    // 常にメインスレッドである以上、同期的に MainActor 分離を仮定する
+    // `MainActor.assumeIsolated` の方が正確（`AppleSignInCoordinator.presentationAnchor` と同じ方針）。
 
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        // `manager`（非 Sendable）自体は `assumeIsolated` の closure に渡さない。
+        // `CLAuthorizationStatus`（Sendable な値型）だけを取り出して境界を越える。
         let newStatus = manager.authorizationStatus
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             self.authorizationStatus = newStatus
-            if newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways {
-                manager.requestLocation()
-            }
+        }
+        if newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways {
+            manager.requestLocation()
         }
     }
 
@@ -85,7 +96,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         didUpdateLocations locations: [CLLocation]
     ) {
         guard let coord = locations.first?.coordinate else { return }
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             self.lastLocation = coord
         }
     }
@@ -94,7 +105,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             self.error = error
         }
     }

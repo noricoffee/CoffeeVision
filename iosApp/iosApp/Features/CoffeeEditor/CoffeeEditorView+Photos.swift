@@ -16,7 +16,7 @@ extension CoffeeEditorView {
             guard viewModel.draft.photos.count < CoffeeEditorView.maxPhotoCount else { break }
 
             guard let data = try? await item.loadTransferable(type: Data.self),
-                  let downsampled = ImageDownsampler.downsampledJPEG(
+                  let downsampled = await ImageDownsampler.downsampledJPEG(
                       from: data,
                       maxPixelSize: ImageDownsampler.maxPixelSize,
                       quality: ImageDownsampler.jpegQuality

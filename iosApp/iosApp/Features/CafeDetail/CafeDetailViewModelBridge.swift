@@ -34,7 +34,7 @@ final class CafeDetailViewModelBridge {
         startObservation()
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

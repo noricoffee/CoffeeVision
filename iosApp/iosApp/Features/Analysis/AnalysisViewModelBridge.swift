@@ -73,7 +73,7 @@ final class AnalysisViewModelBridge {
         self.kotlin = viewModel
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

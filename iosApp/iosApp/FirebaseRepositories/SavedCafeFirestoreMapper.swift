@@ -12,7 +12,9 @@ import SharedLogic
 /// - ドキュメント ID = `cafe.placeId`（`userId` はドキュメント自体には保存しない。
 ///   親コレクションパス `users/{uid}/savedCafes/{placeId}` から復元する）
 /// - `savedAt` は Firestore `Timestamp`（`docs/data-model.md` §6 準拠）
-enum SavedCafeFirestoreMapper {
+///
+/// `nonisolated` である理由は `CoffeeFirestoreMapper` と同じ（SW6-2）。
+nonisolated enum SavedCafeFirestoreMapper {
 
     // MARK: - SavedCafe
 

@@ -119,6 +119,32 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 ---
 
+## Swift 6 の並行性境界（2026-08-07 移行）
+
+`iosApp` は **Swift 6 言語モード + 既定 MainActor 分離**（設定は `iosApp/Configuration/Base.xcconfig`）。一方 **`SharedLogic.framework` は `-language-mode 5` でビルドされる**（SKIE が生成する Swift ソースを Kotlin/Native がコンパイルするため。`.swiftinterface` の `swift-module-flags` で確認できる）。この非対称性が境界の性質を決める。
+
+- **アプリを Swift 6 にしても SKIE 生成コードは壊れない。** `-enable-library-evolution` 付きの `.swiftinterface` が Swift 5 セマンティクスで再構築されるため。影響を受けるのは**アプリ側から Kotlin 型を使う箇所**だけ
+- **Kotlin 由来の型はすべて Sendable 非適合。** `SkieSwiftFlow` / `SkieSwiftFlowIterator` を含む（SKIE 本体に Sendable 適合を追加する予定はない → [touchlab/SKIE Discussion #48](https://github.com/touchlab/SKIE/discussions/48)）。ドメイン型で Sendable なのは Kotlin `enum` に対応する型のみ
+
+### Kotlin interface の実装クラスは `nonisolated` にする
+
+既定 MainActor 分離では宣言に何も書かないと `@MainActor` になるが、**Kotlin ランタイムはこれらを任意スレッドから呼ぶ**ため実態と食い違う。`FirebaseRepositories/` 配下と `CoffeeInsightProviderIosImpl`、`FlowBridge` の `CallbackFlow` / `CallbackFlowOptional` は `nonisolated final class` を明示する。
+
+**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** メモリキャッシュを持つ実装（`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl`）は `OSAllocatedUnfairLock` で包み、クラスに `@unchecked Sendable` を付けて「ロックが唯一のアクセス経路である」ことを手動で保証する。
+
+```swift
+nonisolated final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository, @unchecked Sendable {
+    private let cache = OSAllocatedUnfairLock<[BeanProfile]?>(initialState: nil)
+```
+
+### `@preconcurrency import SharedLogic` を使ってよい条件
+
+**`@Sendable` クロージャの引数型に Kotlin 型が直接現れる場合だけ。** Kotlin interface の `completionHandler` がこれに当たり、関数シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない。
+
+プロパティ 1 個が非 Sendable なだけなら **`nonisolated(unsafe)` を優先する**（`AppState.container` / `PlacePhotoLoader.repository`）。`@preconcurrency import` はファイル内の SharedLogic 由来の型すべてについて検査を外すため、そのファイルはその後の変更でデータ競合を持ち込んでもコンパイラが黙る。
+
+---
+
 ## ViewModel ブリッジパターン
 
 Kotlin の ViewModel（`StateFlow` を公開）を SwiftUI から扱うには、`@Observable` でラップした **ブリッジクラス** を作ります。
@@ -145,9 +171,14 @@ final class CoffeeListViewModelBridge {
         self.kotlin = kotlin
     }
 
-    deinit {
+    isolated deinit {
         // Kotlin 側の所有 viewModelScope を畳む（スレッドセーフ。
         // 遷移アニメ中にも発火する onDisappear ではなく必ず deinit で呼ぶ）
+        //
+        // `isolated`（SE-0371）: 既定 MainActor 分離下でも deinit だけは nonisolated に
+        // なるため、MainActor 分離された非 Sendable プロパティ（kotlin）に触れない。
+        // ブリッジは SwiftUI / AppState から MainActor 上でのみ保持・破棄されるので、
+        // deinit を MainActor へホップさせても実害がない（2026-08-07 の Swift 6 移行）。
         kotlin.clear()
     }
 

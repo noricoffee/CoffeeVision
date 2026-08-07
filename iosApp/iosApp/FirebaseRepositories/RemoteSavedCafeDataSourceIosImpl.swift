@@ -16,7 +16,10 @@ import SharedLogic
 /// - `upload` / `remove` は Swift concurrency interop により `__upload` / `__remove` という
 ///   Obj-C プレフィックス付きシグネチャで実装する（`upload`/`remove` という素の名前は
 ///   SKIE が生成する `async throws` 版と衝突するため）
-final class RemoteSavedCafeDataSourceIosImpl: NSObject, RemoteSavedCafeDataSource {
+///
+/// `nonisolated` である理由は `RemoteCoffeeDataSourceIosImpl` と同じ
+/// （Kotlin ランタイムが任意スレッドから呼び出す Kotlin interface 実装。可変状態を保持しない。SW6-2）。
+nonisolated final class RemoteSavedCafeDataSourceIosImpl: NSObject, RemoteSavedCafeDataSource {
 
     private let firestore: Firestore
 

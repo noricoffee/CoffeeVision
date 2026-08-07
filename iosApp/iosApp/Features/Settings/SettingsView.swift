@@ -117,6 +117,30 @@ struct SettingsView: View {
             }
             .accessibilityLabel(String(localized: "アプリ改善のためのデータ共有"))
             .accessibilityHint(String(localized: "オンにすると匿名の統計情報を送信します"))
+
+            Link(destination: LegalLinks.privacyPolicy) {
+                HStack {
+                    Label(String(localized: "プライバシーポリシー"), systemImage: "hand.raised")
+                        .foregroundStyle(Color.accentColor)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel(String(localized: "プライバシーポリシーを開く"))
+
+            Link(destination: LegalLinks.support) {
+                HStack {
+                    Label(String(localized: "サポート"), systemImage: "questionmark.circle")
+                        .foregroundStyle(Color.accentColor)
+                    Spacer()
+                    Image(systemName: "arrow.up.right.square")
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .frame(minHeight: 44)
+            .accessibilityLabel(String(localized: "サポートページを開く"))
         } header: {
             Text("データとプライバシー")
         }

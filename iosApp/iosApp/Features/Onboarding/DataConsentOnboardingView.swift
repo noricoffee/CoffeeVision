@@ -83,7 +83,7 @@ struct DataConsentOnboardingView: View {
     }
 
     private var privacyLinkSection: some View {
-        Link(destination: URL(string: "https://noricoffee.github.io/CoffeeVision/privacy-policy.html")!) {
+        Link(destination: LegalLinks.privacyPolicy) {
             HStack(spacing: 4) {
                 Text("プライバシーポリシーを読む")
                     .font(.footnote)

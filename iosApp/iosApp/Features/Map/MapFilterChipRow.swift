@@ -50,7 +50,8 @@ struct MapFilterChipRow: View {
                         label: String(localized: "保存済み"),
                         systemImage: "bookmark.fill",
                         isOn: savedEmphasisActive,
-                        count: bridge.savedCafes.count
+                        count: bridge.savedCafes.count,
+                        tint: .indigo
                     ) {
                         onOpenSaved()
                     }

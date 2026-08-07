@@ -54,7 +54,7 @@ final class MapViewModelBridge {
         startObservation()
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

@@ -8,7 +8,11 @@ import SharedLogic
 /// SKIE は protocol 実装側に「Obj-C 互換シグネチャ（`__` プレフィックスの completion handler 形式）」
 /// と「Swift エルゴノミクス形式（`async throws` / `SkieSwiftFlow`）」のどちらかを要求する。
 /// 詳細は `docs/kmp-bridge.md` §SKIE の利用 を参照。
-final class AuthRepositoryIosImpl: NSObject, AuthRepository {
+///
+/// `nonisolated` である理由は他の Kotlin interface 実装と同じ（Kotlin ランタイムが任意スレッドから
+/// 呼び出す）。加えて `Features/Account/AccountView.swift` が Swift 側の素のヘルパとしても直接
+/// 生成・使用するが、可変状態を保持しないためどちらの呼び出し経路でも安全（SW6-2）。
+nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
 
     // MARK: - signInAnonymouslyIfNeeded
 

@@ -12,6 +12,7 @@
 - [SwiftUI View 分割の落とし穴](swiftui-view-splitting.md) — 別ファイル extension への private 移動でアクセス不能になる問題、複数消費者が要る算出値は親に残し子へ down-flow で渡す設計判断、fetch ロジックを `@Observable` サービスへ隔離（クラス全体 `@MainActor`・共有 static しきい値・dedup は引数渡し）、`@State` 保持クラスのコールバックが兄弟 `@State`/`@FocusState` を要る場合は `.task` で事後配線、`@Bindable` ローカル宣言でメンバー単位 Binding、行番号一括削除は範囲内の無関係ヘルパー混入を grep で事前チェック、呼び出し元が同一新ファイルに収まるかで private 温存/internal 化を仕分ける（AnalysisView 分割）、extension 途中への Edit 挿入で後続メンバーが誤ネストする brace 崩壊（新規宣言はブロック外側に置く/開閉括弧数を機械チェック）
 - [AppKit アイコン生成 script パターン](appkit-icon-generation.md) — `generate_app_icon.swift`（NSBezierPath 自前描画、SF Symbols 禁止）、透過 PNG の穴あけは `.copy` 合成、`eyeOutline` は正方形前提なのでオフスクリーン `NSImage` 合成で回避、App Store アイコンはアルファ禁止なので `CGContext(.noneSkipLast)` で描く、検証は Release/Archive の成果物で行う（actool は Debug では alpha を残す）
 - [Xcode developmentRegion と実効ロケール](xcode-development-region.md) — `.lproj` 無しでも `developmentRegion`/`CFBundleLocalizations` が DatePicker 等の OS 書式言語を左右する、`plutil -extract` での検証コマンド、`.app` 名は `PRODUCT_NAME` 由来
+- [Swift 6 移行の診断採取・実装](swift6-migration-diagnostics.md) — pbxproj buildSettings が xcconfig より優先される罠、`SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor` が消す警告/増やす警告、`@preconcurrency import SharedLogic` vs `nonisolated(unsafe)`（ストアドプロパティ限定なら後者が筋良い）の使い分け、`isolated deinit` vs `nonisolated final class` の判定軸、Kotlin interface 実装の `nonisolated` 化に伴うヘルパ型の連鎖対応・`OSAllocatedUnfairLock`+`@unchecked Sendable`でのキャッシュ保護、`@concurrent` と `NonisolatedNonsendingByDefault`
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 

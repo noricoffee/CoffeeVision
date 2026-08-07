@@ -59,7 +59,7 @@ final class CoffeeListViewModelBridge {
         self.kotlin = kotlin
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

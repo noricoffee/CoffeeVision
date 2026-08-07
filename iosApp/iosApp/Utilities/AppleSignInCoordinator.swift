@@ -79,11 +79,18 @@ final class AppleSignInCoordinator: NSObject {
 
 extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
 
+    // `ASAuthorizationControllerDelegate` のコールバックは `nonisolated` として宣言する必要がある
+    // （素の Obj-C プロトコルで MainActor を認識しないため）が、Apple 公式ドキュメント上
+    // 実際の呼び出しは常にメインスレッド（UI 提示と対になるフローのため）。
+    // `presentationAnchor` と同じ方針で `MainActor.assumeIsolated` を使う
+    // （`Task { @MainActor in }` は `authorization`（非 Sendable な `ASAuthorization`）を
+    // closure でキャプチャするため Swift 6 で警告になりうる）。
+
     nonisolated func authorizationController(
         controller: ASAuthorizationController,
         didCompleteWithAuthorization authorization: ASAuthorization
     ) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             guard
                 let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
                 let appleIDTokenData = appleIDCredential.identityToken,
@@ -125,7 +132,7 @@ extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
         controller: ASAuthorizationController,
         didCompleteWithError error: Error
     ) {
-        Task { @MainActor in
+        MainActor.assumeIsolated {
             // ユーザーキャンセル（ASAuthorizationError.canceled）もここに来る
             self.continuation?.resume(throwing: error)
             self.continuation = nil

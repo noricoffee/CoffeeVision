@@ -11,7 +11,12 @@ import UIKit
 /// - iOS の Documents URL は起動ごとに変わるため、DBには相対パスのみ保存し、
 ///   ファイルアクセス時は毎回 `photosDirectoryURL` から解決する
 /// - 全関数 `static`。インスタンス不要
-enum PhotoFileStore {
+///
+/// `nonisolated`: ステートレスなファイル I/O ユーティリティで、MainActor / バックグラウンドの
+/// どちらからも呼ばれる（`loadThumbnail` は `@concurrent` でバックグラウンド実行を強制する）。
+/// `thumbnailCache`（`NSCache`）はそれ自体スレッドセーフ、`photosDirectoryURL` は毎回
+/// `FileManager` から導出する計算プロパティで共有可変状態を持たないため、既定 MainActor 分離は不要（SW6-3）。
+nonisolated enum PhotoFileStore {
 
     // MARK: - Directory
 
@@ -55,7 +60,9 @@ enum PhotoFileStore {
     /// 縮小デコード結果のメモリキャッシュ（キー: `"\(fileName)#\(maxPixelSize)"`）。
     ///
     /// `NSCache` はスレッドセーフなため、`loadThumbnail` から並行アクセスしても安全。
-    private static let thumbnailCache = NSCache<NSString, UIImage>()
+    /// Swift の `Sendable` チェックは `NSCache` の内部スレッド安全性を検証できないため
+    /// `nonisolated(unsafe)` を明示する（Apple 公式ドキュメントに基づく判断。SW6-3）。
+    private nonisolated(unsafe) static let thumbnailCache = NSCache<NSString, UIImage>()
 
     /// `fileName` で指定したファイルを、`maxPixelSize`（長辺 px）へ縮小デコードして読み込む。
     ///
@@ -64,11 +71,17 @@ enum PhotoFileStore {
     /// でデコード時点から縮小するため、スクロール中に長辺 2048px の JPEG を毎行フルデコードする
     /// コストを避けられる（`ImageDownsampler` と同じ API・考え方。詳細は同ファイルのコメント）。
     ///
-    /// - この関数は（`PhotoFileStore` 自体に actor / `@MainActor` 注釈が無いため）`nonisolated`。
-    ///   `@MainActor` の呼び出し元から `await` すると、本体はメインスレッドを離れて実行される
-    ///   （`Task.detached` 等を呼び出し側で明示する必要はない）
+    /// - この関数は `nonisolated`（`PhotoFileStore` 自体に actor / `@MainActor` 注釈が無いため）
+    ///   だが、`@concurrent` を明示している。Swift 6 の `NonisolatedNonsendingByDefault`
+    ///   （SW6-6 で有効化）下では、`@concurrent` を付けない素の `nonisolated async` 関数は
+    ///   **呼び出し元のアクター上で**実行される（呼び出し元が `@MainActor` なら本体もメインスレッドで
+    ///   実行され続ける）。この関数は JPEG の縮小デコード（`CGImageSourceCreateThumbnailAtIndex`）を
+    ///   行うため、`@concurrent` を明示してグローバル並行実行コンテキストへ確実に逃がす
+    ///   （さもないと一覧スクロール中にメインスレッドでデコードが走り、コンパイルは通ったまま
+    ///   スクロールが重くなる。SW6-3）
     /// - キャッシュヒット時は同期的に即返る
     /// - ファイルが存在しない・デコード失敗時は `nil`
+    @concurrent
     static func loadThumbnail(fileName: String, maxPixelSize: Int) async -> UIImage? {
         let cacheKey = "\(fileName)#\(maxPixelSize)" as NSString
         if let cached = thumbnailCache.object(forKey: cacheKey) {

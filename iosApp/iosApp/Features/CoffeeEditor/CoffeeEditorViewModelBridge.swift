@@ -32,7 +32,7 @@ final class CoffeeEditorViewModelBridge {
         self.kotlin = kotlin
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

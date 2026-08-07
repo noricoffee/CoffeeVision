@@ -19,7 +19,17 @@ import SharedLogic
 ///   `deinit` 内の `onCancel` で上流リソース（listener.remove() 等）を解放する
 ///
 /// バックプレッシャは考慮していない（Phase 2 想定では十分）。
-final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
+///
+/// ## `nonisolated` である理由（Swift 6 移行 SW6-2）
+///
+/// `__collect` は Kotlin ランタイムが Obj-C ブリッジ経由で呼び出し、`deinit` も
+/// Kotlin コルーチン側の参照カウントが 0 になったタイミングで走る。**どちらも
+/// 呼び出し元スレッドは Kotlin/Native 側の任意スレッドで、MainActor とは限らない**。
+/// クラスを MainActor 分離すると `deinit` の実体（`onCancel()` によるリスナ解放）が
+/// MainActor へ非同期にホップするため、解放が実際のタイミングより遅延し、
+/// 同一クエリの即時再購読時にリスナが二重に生き残る競合窓が生まれうる。
+/// そのため既定 MainActor 分離を明示的に無効化している。
+nonisolated final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
 
     private let onStart: (@escaping (T) -> Void) -> Void
     private let onCancel: () -> Void
@@ -61,7 +71,10 @@ final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
 ///
 /// `emitSome(value)` で非 nil を、`emitNone()` で nil を emit する。
 /// Obj-C ブリッジでは nil を `NSNull` として渡すことで Kotlin 側が null として受け取る。
-final class CallbackFlowOptional<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
+///
+/// `nonisolated` である理由は `CallbackFlow` と同じ（Kotlin ランタイムが任意スレッドから
+/// `__collect` / `deinit` を駆動するため。上記 KDoc 参照）。
+nonisolated final class CallbackFlowOptional<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow {
 
     private let onStart: (@escaping (T) -> Void, @escaping () -> Void) -> Void
     private let onCancel: () -> Void

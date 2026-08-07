@@ -1,6 +1,10 @@
 import Foundation
 import FirebaseFirestore
-import SharedLogic
+// `@preconcurrency` の理由は `BeanProfileRepositoryIosImpl` と同じ
+// （`CuratedCafe` が Sendable 非準拠の Kotlin data class で、`completionHandler` の
+// `@Sendable` closure 型に登場するため個別対処できない。SW6-2）。
+@preconcurrency import SharedLogic
+import os
 
 /// `com.noricoffee.repository.CuratedCafeRepository` の iOS 実装。
 ///
@@ -15,11 +19,18 @@ import SharedLogic
 /// - `getAll()` → `func __getAll(completionHandler:)`
 ///
 /// `BeanProfileRepositoryIosImpl` と同型のパターン。詳細は `docs/kmp-bridge.md` §SKIE の利用 を参照。
-final class CuratedCafeRepositoryIosImpl: NSObject, CuratedCafeRepository {
+///
+/// `nonisolated` である理由も `BeanProfileRepositoryIosImpl` と同じ（Kotlin ランタイムが
+/// 任意スレッドから呼び出す Kotlin interface 実装のため。SW6-2）。
+///
+/// `cache` のスレッド安全性の考え方も `BeanProfileRepositoryIosImpl` と同じ
+/// （`__getAll` の呼び出し元スレッドは不定、Firestore completion は既定で main queue のため、
+/// `OSAllocatedUnfairLock` で保護し `@unchecked Sendable` にする）。
+nonisolated final class CuratedCafeRepositoryIosImpl: NSObject, CuratedCafeRepository, @unchecked Sendable {
 
     private let db = Firestore.firestore()
     // メモリキャッシュ: 初回取得後に保持し、以降は Firestore を叩かない
-    private var cache: [CuratedCafe]? = nil
+    private let cache = OSAllocatedUnfairLock<[CuratedCafe]?>(initialState: nil)
 
     /// 全都道府県のおすすめカフェを返す（初回のみ Firestore one-shot get）。
     ///
@@ -27,8 +38,8 @@ final class CuratedCafeRepositoryIosImpl: NSObject, CuratedCafeRepository {
     func __getAll(
         completionHandler: @escaping @Sendable ([CuratedCafe]?, (any Error)?) -> Void
     ) {
-        if let cache = cache {
-            completionHandler(cache, nil)
+        if let cached = cache.withLock({ $0 }) {
+            completionHandler(cached, nil)
             return
         }
         db.collection("curatedCafes").getDocuments { [weak self] snapshot, error in
@@ -39,7 +50,7 @@ final class CuratedCafeRepositoryIosImpl: NSObject, CuratedCafeRepository {
             let cafes = snapshot?.documents.flatMap { doc in
                 CuratedCafeIosMapper.fromDocument(data: doc.data())
             } ?? []
-            self?.cache = cafes
+            self?.cache.withLock { $0 = cafes }
             completionHandler(cafes, nil)
         }
     }
@@ -56,7 +67,7 @@ final class CuratedCafeRepositoryIosImpl: NSObject, CuratedCafeRepository {
 ///   いずれか欠如 / 型不一致の要素は skip する（ドキュメント全体は無効にしない）
 /// - `latitude` / `longitude` は Firestore 上 `NSNumber`（Int / Double どちらの可能性もある）として
 ///   受けて `doubleValue` で変換する
-private enum CuratedCafeIosMapper {
+private nonisolated enum CuratedCafeIosMapper {
 
     static func fromDocument(data: [String: Any]) -> [CuratedCafe] {
         guard let prefectureCode = data["prefectureCode"] as? String else { return [] }

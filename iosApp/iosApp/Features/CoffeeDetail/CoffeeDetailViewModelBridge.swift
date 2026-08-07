@@ -34,7 +34,7 @@ final class CoffeeDetailViewModelBridge {
         self.kotlin = kotlin
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

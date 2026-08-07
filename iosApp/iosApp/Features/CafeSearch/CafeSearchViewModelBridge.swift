@@ -32,7 +32,7 @@ final class CafeSearchViewModelBridge {
         startObservation()
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

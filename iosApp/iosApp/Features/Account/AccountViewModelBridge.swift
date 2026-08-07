@@ -38,7 +38,7 @@ final class AccountViewModelBridge {
         self.kotlin = viewModel
     }
 
-    deinit {
+    isolated deinit {
         kotlin.clear()
     }
 

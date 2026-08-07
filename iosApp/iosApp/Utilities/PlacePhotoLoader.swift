@@ -14,7 +14,10 @@ import SharedLogic
 @MainActor
 final class PlacePhotoLoader {
 
-    private let repository: any CafeRepository
+    // `CafeRepository`（Kotlin interface）は Sendable 非準拠。`fetchUrl` から呼ぶだけの
+    // 参照であり再代入もされないため `nonisolated(unsafe)` で個別に対処する
+    // （ファイル全体を `@preconcurrency import` にする必要はない。SW6-5）。
+    private nonisolated(unsafe) let repository: any CafeRepository
 
     init(repository: any CafeRepository) {
         self.repository = repository

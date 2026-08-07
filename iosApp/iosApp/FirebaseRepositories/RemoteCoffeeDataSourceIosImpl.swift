@@ -16,7 +16,11 @@ import SharedLogic
 /// - `observeChanges(userId:)` は `SkieSwiftFlow<[CoffeeRecord]>` を返す必要がある
 /// - `upload` / `remove` は `__upload` / `__remove` という Obj-C プレフィックス付きシグネチャ
 /// `SkieSwiftFlow` は `_ObjectiveCBridgeable` 経由で `SkieKotlinFlow` から暗黙ブリッジする。
-final class RemoteCoffeeDataSourceIosImpl: NSObject, RemoteCoffeeDataSource {
+///
+/// `nonisolated` である理由: `RemoteCoffeeDataSource`（Kotlin interface）実装は Kotlin ランタイムが
+/// 任意スレッドから呼び出す。可変状態は保持しない（`firestore` は `let`、`observeChanges` 内の
+/// `listener` はメソッドローカルでクロージャに直接キャプチャされるため、クラスの isolation とは無関係）（SW6-2）。
+nonisolated final class RemoteCoffeeDataSourceIosImpl: NSObject, RemoteCoffeeDataSource {
 
     private let firestore: Firestore
 

@@ -5,6 +5,17 @@
 // 継承する必要があるため、必ず先頭で取り込む。
 #include "Config.xcconfig"
 
+// Swift 言語バージョン。project.pbxproj の buildSettings に直接書くと xcconfig の値より
+// 優先されてしまうため（同一キーは pbxproj > xcconfig）、ここに一本化する。
+// pbxproj 側の Base.xcconfig 参照ブロック（Debug / Release）からは SWIFT_VERSION を削除済み。
+//
+// SW6-1〜SW6-6（2026-08-07）で Swift 6 言語モードへ移行済み。
+// `SWIFT_STRICT_CONCURRENCY` は Swift 6 モードでは `complete` が既定になるため明示不要
+// （SW6-1 時点の診断採取用に一時的に立てていたが、SW6-6 で削除）。
+SWIFT_VERSION = 6.0
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+
 // PLACES_API_KEY のフォールバック宣言（Secrets.xcconfig 不在時は空文字）。
 // 【重要】この宣言は必ず Secrets.xcconfig の include より「前」に置くこと。
 // xcconfig は同一キーの最後の代入が勝つため、include の後ろに置くと Secrets の

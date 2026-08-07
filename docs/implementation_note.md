@@ -1317,3 +1317,16 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 **`SWIFT_VERSION` は `project.pbxproj` の `buildSettings` に直書きされていた**ため、xcconfig に足すだけでは無視される（同一キーは pbxproj > xcconfig）。pbxproj の Debug / Release 両ブロックから削除して `Base.xcconfig` に一本化した。
 
 計測は **2 段階（`SWIFT_STRICT_CONCURRENCY = complete` のみ → 既定 MainActor 分離を追加）に分ける**。既定 MainActor 分離は診断を減らす方向にも働くため（`PreviewSamples` 10 件 / `CoffeeInsightProviderIosImpl` 3 件 / `PhotoFileStore` 1 件が自然解消、`FirebaseRepositories` 系で 8 件が新規発生）、1 回で測るとどちらの設定がどの診断の原因か切り分けられない。
+
+### 2026-08-08: `presentationAnchor` の到達不能フォールバックを削除（SW6-B）
+
+`AppleSignInCoordinator.presentationAnchor(for:)` は、保持した anchor が nil のときに「foregroundActive な scene の key window → `UIWindow(windowScene:)` → `UIWindow()`」と 3 段でフォールバックしていた。最後の `UIWindow()` が iOS 26 で deprecated になり、Swift 6 移行後に**唯一残った警告**だった。
+
+**フォールバック全体を削除して `preconditionFailure` にした**（ユーザー選択）。呼び出し経路を追うと全パスが到達不能:
+
+- `AccountView.startAppleSignIn()` が `guard let anchor = currentPresentationAnchor() else { return }` で nil を弾く
+- `signIn(anchor:)` は `controller.performRequests()` の**前に** `self.presentationAnchor = anchor` を設定する
+
+**「無効な window を返す」は安全策になっていなかった**のが判断の決め手。`UIWindow()` を返してもサインインシートは出ず、ユーザーには無反応に見えるだけで、しかもエラーとして観測されない。クラッシュの方が検出可能な分ましだと判断した。加えて scene 探索は `AccountView.currentPresentationAnchor()` と**二重に書かれていた**ので、削除で重複も解消した（実行パス 18 行 → 2 行）。
+
+**これで iosApp のビルド警告が Debug / Release とも 0 件になった。** 到達不能の確認は静的なものなので、実機で**シートが実際に出ること**の確認は verification-checklist「Swift 6 移行 ③」に統合した（lessons 2026-08-07「コードの形が既知バグに一致しても、そのバグが起きている証拠にはならない」の裏返しで、**到達不能の証明も静的なままでは仮説**）。

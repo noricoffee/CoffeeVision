@@ -425,7 +425,7 @@
 | 状態 | タスク | 備考 |
 |------|--------|------|
 | [ ] | SW6-A | **メインスレッドでの同期フルデコード 2 箇所**。`CoffeeEditorView+Photos.handlePickerSelection` が `ImageDownsampler.downsampledJPEG`（同期・CPU バウンド）を `@MainActor` 文脈から直接呼び、写真選択のたびにメインスレッドをブロックする。`PhotoThumbnailCell` の `PhotoFileStore.loadImage`（同期フルデコード）も View body から直接呼ばれている。**どちらも `async` ではない**ため SW6-3（`nonisolated async` へ `@concurrent` を付ける）の対象条件に当たらず、移行では触っていない | iosApp 完結 |
-| [ ] | SW6-B | **`AppleSignInCoordinator.swift:175` の `UIWindow()` が iOS 26 で deprecated**。「到達しない最終フォールバック」分岐にあり、`UIWindow(windowScene:)` へ置き換えるには到達不能パスの制御フロー自体を変える必要がある。移行のコミットには混ぜなかった（ビルドで唯一残っている警告） | iosApp 完結 |
+| [x] | SW6-B | ~~**`AppleSignInCoordinator` の `UIWindow()` が iOS 26 で deprecated**~~ → **2026-08-08 完了**。`presentationAnchor(for:)` のフォールバック（scene 探索 → `UIWindow(windowScene:)` → `UIWindow()`）を**丸ごと削除**し、`presentationAnchor` が nil なら `preconditionFailure` に変更（ユーザー選択）。呼び出し経路を追うと全パスが到達不能で、探索ロジックは `AccountView.currentPresentationAnchor()` と二重だった。実行パス 18 行 → 2 行。**これで iosApp のビルド警告が 0 件になった**（Debug / Release 両方） | iosApp 完結 |
 | [-] | SW6-C | ~~**CI が `CURRENT_PROJECT_VERSION` を `xcodebuild` の引数で渡している**~~ → **2026-08-08 取り下げ（ユーザー判断）**。`release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、コマンドライン引数のビルド設定は**ターゲットを選ばず SPM 依存パッケージにも適用される**（lessons 2026-08-08 の sweep で検出）。ただし **CI の run_number をビルド番号に採用するのは意図した設計**で、TestFlight ビルドも通っているため対処しない。`SWIFT_VERSION` のような「依存先が対応していないと壊れる」設定とは性質が違う（`CURRENT_PROJECT_VERSION` は数値が渡るだけ） | — |
 
 #### docs 棚卸し 第 2 巡（2026-07-27 / 未実施 doc への Phase 1 適用）

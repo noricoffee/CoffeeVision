@@ -175,8 +175,10 @@ struct CafeDetailView: View {
         return ratingStr
     }
 
-    /// 写真帯直下の全幅保存ボタン。未保存 = 「保存する」（bordered）、保存済み = 「保存済み」
-    /// （borderedProminent + indigo）。旧ツールバーの bookmark トグルから移設（フェーズ 16）。
+    /// 写真帯直下の全幅保存ボタン。未保存 = 「保存する」（bordered + indigo）、保存済み = 「保存済み」
+    /// （borderedProminent + indigo）。両状態とも tint は indigo で固定し、状態の違いは塗りの有無
+    /// （bordered / borderedProminent）で表す。色セマンティクスの詳細は `docs/ui-ux-guidelines.md`
+    /// のマップ概念の色セマンティクス表を参照。旧ツールバーの bookmark トグルから移設（フェーズ 16）。
     @ViewBuilder
     private func saveButton(bridge: CafeDetailViewModelBridge) -> some View {
         let label = Label(
@@ -193,6 +195,7 @@ struct CafeDetailView: View {
             } else {
                 Button(action: bridge.onSaveToggled) { label }
                     .buttonStyle(.bordered)
+                    .tint(.indigo)
             }
         }
         .controlSize(.large)

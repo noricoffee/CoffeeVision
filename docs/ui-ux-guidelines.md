@@ -40,7 +40,7 @@ CoffeeVision のアクセントカラーは **コーヒー由来のブラウン�
 | 概念 | 色 | 使用箇所 |
 |------|----|---------|
 | ブランド / 訪問済み | `Color.accentColor`（#8B5A2B） | visitedCafePin、`TagChip` 選択フィル（既定 `tint`）、tint 全般 |
-| 保存済み（行きたい） | `Color.indigo` | savedCafePin、保存ボタン / バッジ |
+| 保存済み（行きたい） | `Color.indigo` | savedCafePin、保存ボタン / バッジ。**保存ボタンは未保存・保存済みの両状態とも indigo**（tint 未指定で `accentColor` を継承させない）。状態は色ではなく**塗りの有無**で表す — 保存済み = `.borderedProminent`（塗り）/ 未保存 = `.bordered`（淡色）。アイコンの `bookmark` / `bookmark.fill` と同じ「塗り = ON」の対応に揃える（2026-08-07、UX-4） |
 | 好み一致 | `Color.pink` | recommendedCafePin、「好み一致」チップ（`TagChip` の `tint: .pink`）、`RecommendedCafeListSheet`（**`accentColor` を「好み」の意味で使わない**） |
 | 検索結果 | `Color.blue` | searchResultPin、検索 UI |
 | おすすめ（キュレーション、フェーズ 19） | `Color.orange`（システムカラー） | curatedCafePin。カテゴリアイコン `cup.and.saucer.fill` は訪問済み / Apple 周辺と共有し、**右上の星バッジ**で「推されている」ことを示す（2026-08-07 改訂。下記「おすすめピンを色で区別しない理由」）。表示は Apple 周辺ピンと同じズームゲート（可視半径 3000m 以内）でズームイン時のみ。当初の burnt orange（黒 25% mix）は訪問済みの茶と誤認されたため素の orange に改訂（implementation_note 2026-07-18） |

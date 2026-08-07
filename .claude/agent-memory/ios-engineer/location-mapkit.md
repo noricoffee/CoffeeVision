@@ -34,6 +34,10 @@ metadata:
 
 Places API の Text Search に `LocationBias` を渡しても「近くを優先するヒント」でしかなく、範囲外の同名店（遠方の同一チェーン店等）が結果に混ざりうる。サーバー側の厳密な範囲制限（`locationRestriction`）は shared 側の大改修になるため、**iOS 側で表示用に矩形フィルタする**のが軽量な対処。パターン: 検索実行ボタン押下時点の `MKCoordinateRegion`（`.onMapCameraChange` で得た最新値を `@State` に保持しておき、ボタンコールバックに渡す）を「検索実行時にスナップ」して保持し、完了時に `region.center ± region.span/2` の緯度経度レンジで `results.filter` する。検索完了時の最新 region ではなく実行時にスナップするのは、検索中にユーザーが地図を動かしても「押した瞬間の範囲」で絞るのがユーザー期待に合うため。座標欠損の結果は範囲外扱いで除外。副作用として Places 1 回 20 件上限のうち範囲外分をクライアントで捨てるため表示件数が減りうる（locationBias で近傍が上位に来るため実用上は小さい）。
 
+## マップピンの実データ目視確認は「iosApp (Dummy Data)」scheme + `simctl install/launch` + Python(Pillow) crop で完結する（2026-08-07、概念ピン意匠統一 UX-9 で確認）
+
+`docs/ui-ux-guidelines.md` のピン意匠変更（バッジのクリップ有無等）は自分でログインして記録を作らなくても検証できる。手順: ①対象 scheme を `-scheme "iosApp (Dummy Data)"` でビルド（`AppState.swift` が起動時に固定 ID `dummy-0001`〜`dummy-0030` を自動 seed/clear する。専用 scheme のときだけ発火）②`xcrun simctl install <UDID> <built .app>` → `xcrun simctl launch <UDID> com.noricoffee.coffeevision` ③`xcrun simctl io <UDID> screenshot out.png` で撮影 ④密集ピンの拡大確認は `sips` に矩形オフセット crop が無い（`-c` は中心クロップのみ）ため `pip3 install --user Pillow` して `Image.crop((x0,y0,x1,y1))` で切り出す。**シミュレータへのタップ送信（osascript 経由の System Events クリック）はアクセシビリティ権限プロンプトでブロックされ実質使えない**（120s タイムアウトで背後に回り失敗した）。表示直後の初期カメラ位置だけで確認が足りない場合、UI 操作が要る検証（フィルタチップ切替等）は素直に「未検証、ユーザー確認依頼」に倒す。
+
 ## `MKError` の Swift ブリッジは struct（NSError bridge）で、静的メンバは `MKError.Code` を返す（2026-07-18、スロットリング耐性対応で確認）
 
 `MKTypes.h` の `MKErrorCode`（`NS_ENUM` + apinotes の `NSErrorDomain: MKErrorDomain` 注釈）は Swift 側で `MKError`（struct, `Error` 準拠, NSError ブリッジ）としてインポートされる。**`MKError.loadingThrottled` は `MKError` ではなく `MKError.Code` を返す**ため、`catch` 節で特定エラーを判別するときは `if let mkError = error as? MKError, mkError == .loadingThrottled` ではコンパイルエラーになる（"produces result of type 'MKError.Code', but context expects 'MKError'"）。正しくは `mkError.code == .loadingThrottled`（`.code` プロパティ経由で `Code` 同士を比較）。この `.h` ヘッダに `MKError` という型は存在せず（`MKErrorCode`/`MKErrorDomain` のみ）、Swift 側の型形状は apinotes のブリッジ規則からの類推が必要 — 実際にコンパイルしてエラーメッセージで裏取りするのが確実（`.swiftinterface` にも `MKError` の記載はない。Swift の自動 NSError ブリッジ規則で生成される暗黙の型のため）。

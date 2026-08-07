@@ -2,8 +2,8 @@
 
 - [Swift Charts / カスタム Path チャート](swiftui-charts.md) — レーダーチャート自前描画、enum 固定順マージ + 色ランプ（分析タブ）
 - [SKIE ブリッジ実地パターン](skie-bridge-interop.md) — Equatable、nullable Double、data class 破壊的変更、sealed class 新 case、Firestore Repo 2 段構成、object カタログ + legacy フォールバック Picker
-- [UI コンポーネント / ローカルキャッシュパターン](ui-components-patterns.md) — TagChip、AccentColor 形式、buttonStyle 分岐バグ、StarRatingView nullable、UserDefaults キャッシュ、段階読み込み、ShareLink、単一レコード削除(isDeleted+pending写真)、下部ドラッグシート(Button+simultaneousGesture)、排他的複数シート+連動強調は enum item + .sheet(item:)、tap-to-seek スライダー(標準Slider描画専用化+透明DragGesture+simultaneousGesture)
-- [位置情報 / MapKit 実装パターン](location-mapkit.md) — LocationManager 無音取得、MKLocalPointsOfInterestRequest 常時ピン、MKMapItem.location、Places locationBias は範囲制限でないためクライアント側 MKCoordinateRegion 矩形フィルタが要る
+- [UI コンポーネント / ローカルキャッシュパターン](ui-components-patterns.md) — TagChip、AccentColor 形式、buttonStyle 分岐バグ、StarRatingView nullable、UserDefaults キャッシュ、段階読み込み、ShareLink、単一レコード削除(isDeleted+pending写真)、下部ドラッグシート(Button+simultaneousGesture)、排他的複数シート+連動強調は enum item + .sheet(item:)、tap-to-seek スライダー(標準Slider描画専用化+透明DragGesture+simultaneousGesture)、一覧サムネイルは nonisolated static async + NSCache + .task(id:)
+- [位置情報 / MapKit 実装パターン](location-mapkit.md) — LocationManager 無音取得、MKLocalPointsOfInterestRequest 常時ピン、MKMapItem.location、Places locationBias は範囲制限でないためクライアント側 MKCoordinateRegion 矩形フィルタが要る、ピン目視確認は Dummy Data scheme + simctl + Pillow crop
 - [xcodebuild 検証の落とし穴](xcodebuild-verification.md) — tail で Gradle ログが消える、destination 名確認、-list の Schemes 位置
 - [Firebase SPM pbxproj 手動追加](firebase-spm-pbxproj.md) — 一般手順 + FirebaseAnalyticsWithoutAdIdSupport 廃止
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意 + Bool キー「未設定→true」は `.source == .static` で判定（DerivedData checkout の `.m` まで裏取り）

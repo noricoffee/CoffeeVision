@@ -452,7 +452,8 @@ struct MapTabView: View {
                     }
                 }
 
-                // 保存済みピン（indigo / bookmark.fill。フェーズ 15-A / 16 で常時表示に変更）
+                // 保存済みピン（indigo / カップ + bookmark.fill バッジ。フェーズ 15-A / 16 で常時表示に変更、
+                // 2026-08-07 に本体をカップへ統一しバッジ化）
                 // 同一 placeId が訪問済みピンと競合する場合は訪問済みを優先するため、
                 // visitedPlaceIds(bridge) に含まれるものは除外する（優先順位: 訪問済み > 保存済み > 検索結果）。
                 ForEach(displayedSavedCafes(bridge), id: \.cafe.placeId) { savedCafe in

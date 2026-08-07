@@ -140,15 +140,14 @@ struct RecommendedCafePin: View {
     }
 }
 
-/// おすすめカフェ（curated）ピン（system orange + cup.and.saucer.fill。フェーズ 19 意匠変更）。
+/// おすすめカフェ（curated）ピン（system orange + cup.and.saucer.fill + 星バッジ。フェーズ 19 意匠変更、
+/// 2026-08-07 に星バッジを追加）。
 ///
 /// Google Maps の「人気 POI 強調」表現に寄せ、Apple 周辺ピン（`AppleNearbyCafePin`）と
-/// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、サイズと色の彩度だけで
-/// 「同じカフェだが特に推されている」ことを表現する（サイズ・強弱ルールの詳細は
-/// `docs/ui-ux-guidelines.md`「ピンの意匠ルール」参照）。色は他ピンと被らないシステムカラー
-/// `Color.orange` をそのまま使う（黒ミックスなし）。訪問済みピン（茶系の `accentColor`）と
-/// 一目で区別できるよう明るいオレンジを維持する判断（シミュレータ確認フィードバックで
-/// 黒ミックス濃色は茶に寄って見分けにくいと判定されたため）。
+/// **同じカフェアイコン**（`cup.and.saucer.fill`）を使ったうえで、右上の星バッジで
+/// 「同じカフェだが特に推されている」ことを表現する。色相を訪問済みピンと離さない理由・
+/// 凡例を追加しない理由は `docs/ui-ux-guidelines.md`「おすすめピンを色で区別しない理由」参照。
+/// 色は他ピンと被らないシステムカラー `Color.orange` をそのまま使う（黒ミックスなし）。
 /// トグルなし。ズームゲート（`AppleNearbyCafeLoader.zoomGateRadiusMeters`）を Apple 周辺ピンと共用し、
 /// 可視領域が一定以上広い（ズームアウトした）ときは非表示にする（`displayedCuratedCafes` 参照）。
 struct CuratedCafePin: View {
@@ -158,12 +157,24 @@ struct CuratedCafePin: View {
         ZStack {
             Circle()
                 .fill(Color.orange)
-                .frame(width: 34, height: 34)
+                .frame(width: 32, height: 32)
                 .overlay(Circle().stroke(Color(.systemBackground), lineWidth: 1.5))
                 .shadow(color: Color.orange.opacity(0.4), radius: 4, x: 0, y: 2)
             Image(systemName: "cup.and.saucer.fill")
                 .font(.caption2)
                 .foregroundStyle(.white)
+        }
+        .overlay(alignment: .topTrailing) {
+            ZStack {
+                Circle()
+                    .fill(Color.white)
+                    .frame(width: 18, height: 18)
+                Image(systemName: "star.fill")
+                    .font(.caption2.bold())
+                    .foregroundStyle(Color.orange)
+            }
+            .offset(x: 4, y: -4)
+            .accessibilityHidden(true)
         }
         .accessibilityLabel(String(localized: "\(cafe.name)、おすすめのカフェ"))
     }

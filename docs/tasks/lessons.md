@@ -1027,7 +1027,7 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **修正パターン**: **ターゲット限定で効かせたい設定は xcconfig に書く**（`Base.xcconfig` はアプリターゲットの `baseConfigurationReference` なので、SPM パッケージには波及しない）。「ファイルを汚さずに試したい」という動機で引数を選びがちだが、xcconfig に書いて測って戻す方が結果として速い
 - **教訓**: **計測のための細工が計測対象を変えていないかを疑う。** 今回は「iosApp の Swift 6 対応度」を測るつもりで「依存パッケージ全部の Swift 6 対応度」を測っていた。同系統は 2026-06-19 の `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES`（Gradle をスキップして偽の BUILD SUCCEEDED を出す）で、**どちらもビルドコマンドに足したフラグが検証の意味を変えている**
 - **発生源**: 2026-08-08、Swift 6 移行（SW6-1）の診断採取
-- **横展開点検（2026-08-08）**: `xcodebuild` にビルド設定を引数で渡している箇所を CI・スクリプトで全件確認（`grep -rn "xcodebuild" .github/ scripts/ iosApp/scripts/`、`head` 不使用）。**該当 1 件**: `release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、**SPM 依存パッケージの `CFBundleVersion` も同じ値で上書きされている**。現に TestFlight ビルドは通っているため実害は未確認だが、埋め込みフレームワークのバージョン不整合は審査で問われうる → `docs/tasks.md` SW6-C として起票（本移行のスコープ外）
+- **横展開点検（2026-08-08）**: `xcodebuild` にビルド設定を引数で渡している箇所を CI・スクリプトで全件確認（`grep -rn "xcodebuild" .github/ scripts/ iosApp/scripts/`、`head` 不使用）。**該当 1 件、ただし対処不要**: `release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、SPM 依存パッケージにも波及している。**CI の run_number をビルド番号に採用するのは意図した設計**で、TestFlight ビルドも通っているためユーザー判断で取り下げた（SW6-C）。**この差が本エントリの要点**でもある — 波及すること自体は同じでも、`CURRENT_PROJECT_VERSION` は数値が渡るだけなのに対し、`SWIFT_VERSION` のような**言語モード系は依存先が対応していないと壊れる**。引数渡しを一律に禁止するのではなく、**その設定が依存先に渡って意味を持つかどうか**で判断する
 
 ### `@concurrent` の付け忘れは**コンパイラが何も言わない**（Swift 6 の既定 MainActor 分離下）
 

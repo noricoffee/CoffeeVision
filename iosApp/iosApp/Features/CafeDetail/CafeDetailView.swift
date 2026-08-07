@@ -179,23 +179,30 @@ struct CafeDetailView: View {
     /// （borderedProminent + indigo）。両状態とも tint は indigo で固定し、状態の違いは塗りの有無
     /// （bordered / borderedProminent）で表す。色セマンティクスの詳細は `docs/ui-ux-guidelines.md`
     /// のマップ概念の色セマンティクス表を参照。旧ツールバーの bookmark トグルから移設（フェーズ 16）。
+    ///
+    /// `List` 内の `Label` はアイコンだけ `tint`/`buttonStyle` を無視して `accentColor`
+    /// （ブランドの茶）で描かれる（実機シミュレータで再現確認済み）。`.tint(.indigo)` は塗り・枠線
+    /// には効くがアイコン色には効かないため、ラベルの前景色を `.foregroundStyle` で明示して文字と
+    /// アイコンを強制的に揃えている。
     @ViewBuilder
     private func saveButton(bridge: CafeDetailViewModelBridge) -> some View {
-        let label = Label(
-            bridge.isSaved ? String(localized: "保存済み") : String(localized: "保存する"),
-            systemImage: bridge.isSaved ? "bookmark.fill" : "bookmark"
-        )
-        .frame(maxWidth: .infinity)
-
         Group {
             if bridge.isSaved {
-                Button(action: bridge.onSaveToggled) { label }
-                    .buttonStyle(.borderedProminent)
-                    .tint(.indigo)
+                Button(action: bridge.onSaveToggled) {
+                    Label(String(localized: "保存済み"), systemImage: "bookmark.fill")
+                        .foregroundStyle(.white)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(.indigo)
             } else {
-                Button(action: bridge.onSaveToggled) { label }
-                    .buttonStyle(.bordered)
-                    .tint(.indigo)
+                Button(action: bridge.onSaveToggled) {
+                    Label(String(localized: "保存する"), systemImage: "bookmark")
+                        .foregroundStyle(Color.indigo)
+                        .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(.bordered)
+                .tint(.indigo)
             }
         }
         .controlSize(.large)

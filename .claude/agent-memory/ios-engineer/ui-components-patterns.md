@@ -15,6 +15,12 @@ metadata:
 
 - `Assets.xcassets/*.colorset/Contents.json` の `components` は 10 進小数（`"1.000"`）ではなく `red`/`green`/`blue` それぞれ `"0xRR"` 形式の 8bit hex 文字列で書く（`alpha` のみ `"1.000"` 形式）。ダーク対応は `colors` 配列に `"appearances": [{"appearance": "luminosity", "value": "dark"}]` を付けた 2 つ目のエントリを追加する（`idiom: universal` のまま）。手書きで問題なくビルドに反映される。
 
+## `List` 内の `Button`+`Label` はアイコンだけ `tint`/`buttonStyle` を無視して `accentColor` になる（2026-08-07、`CafeDetailView.saveButton` UX-4 修正で実機シミュレータ再現確認）
+
+- `List { Section { Button(action:) { Label("保存する", systemImage: "bookmark") }.buttonStyle(.bordered).tint(.indigo) } }` は、**文字は tint（indigo）で描かれるがアイコンだけ accentColor（ブランド茶）のまま**になる。`.buttonStyle(.borderedProminent)`（塗り潰し背景）でも同様にアイコンだけ茶色になり、文字（白）と食い違う。`List` の外（`.safeAreaInset` オーバーレイ等）に同じコードを置くと発生しない — `List`/`Form` 特有の挙動。
+- **対策は `.tint()` に頼らず `Label` に `.foregroundStyle(色)` を明示すること**（`Label` 全体に付ければ Text/Image 両方に伝播し、tint 経由の暗黙色付けをバイパスできる）。`.tint()` は塗り・枠線の色には引き続き必要（`.buttonStyle` の背景/枠線が参照するため、`foregroundStyle` だけでは代替できない）。
+- 検証手法: `iosApp/iosApp/iOSApp.swift` の `WindowGroup` の中身を一時的に再現用 View に差し替え、`xcodebuild build` → `xcrun simctl install/launch` → `xcrun simctl io <udid> screenshot` で実機同然の描画を確認できる（Xcode Preview の CLI 手段が無い環境での代替）。確認後は必ず `git checkout -- iosApp/iosApp/iOSApp.swift` で revert し、スクラッチ用 `.swift` ファイルも削除すること（差分に残さない）。
+
 ## `.buttonStyle(condition ? .borderedProminent : .bordered)` は型不一致でビルドエラー（2026-07-07、フェーズ 16 保存ボタン切替で確認）
 
 - `BorderedProminentButtonStyle` と `BorderedButtonStyle` は別の具象型のため、三項演算子で `some ButtonStyle` に代入しようとすると `type 'ButtonStyle' has no member 'borderedProminent'/'bordered'` になる。見た目だけ変える（tint 切替）なら 1 つの style + `.tint(condition ? .indigo : nil)` で済ませるのが簡単。**style 自体を切り替える必要がある場合**は `@ViewBuilder` 関数にして `if condition { Button(...).buttonStyle(.borderedProminent) } else { Button(...).buttonStyle(.bordered) }` と分岐ごと丸ごと書き分ける（`CafeDetailView.saveButton` 参照。ラベル View は `let label = Label(...)` で 1 箇所に共通化できる）。

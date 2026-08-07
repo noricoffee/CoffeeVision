@@ -34,11 +34,17 @@ enum ImageDownsampler {
     ///   これが無いと縦向き写真が横倒しで保存される
     /// - 戻り値の `widthPx` / `heightPx` は**ダウンサンプリング後の実ピクセル数**。
     ///   これをそのまま `Photo.width` / `height` に使うことで二重デコードを避けられる
+    ///
+    /// `@concurrent`: JPEG エンコードを含む CPU バウンドな処理。呼び出し元（`handlePickerSelection`、
+    /// `@MainActor`）で実行させないために明示している。付け忘れても診断は出ず、
+    /// `NonisolatedNonsendingByDefault` 下では呼び出し元アクター上で実行されるだけなので注意
+    /// （`.claude/rules/swift-ios.md` SW6-3 参照）。
+    @concurrent
     static func downsampledJPEG(
         from data: Data,
         maxPixelSize: Int,
         quality: CGFloat
-    ) -> (jpegData: Data, widthPx: Int32, heightPx: Int32)? {
+    ) async -> (jpegData: Data, widthPx: Int32, heightPx: Int32)? {
         guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
 
         let options: [CFString: Any] = [
@@ -56,5 +62,30 @@ enum ImageDownsampler {
         }
 
         return (jpegData: jpegData, widthPx: Int32(cgImage.width), heightPx: Int32(cgImage.height))
+    }
+
+    /// `data`（元画像 or 既にダウンサンプリング済みの JPEG）を `maxPixelSize` へ縮小デコードし、
+    /// `UIImage` として返す（JPEG 再エンコードはしない）。
+    ///
+    /// 記録写真エディタの「保存前サムネイル」用途。`downsampledJPEG` と異なり保存はしないため
+    /// JPEG エンコードのコストを払わない。デコード方針は `PhotoFileStore.loadThumbnail` と同じ。
+    ///
+    /// `@concurrent`: `downsampledJPEG` と同じ理由（CPU バウンドなデコードをメインスレッドで
+    /// 走らせない）。
+    @concurrent
+    static func downsampledImage(from data: Data, maxPixelSize: Int) async -> UIImage? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil) else { return nil }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+
+        return UIImage(cgImage: cgImage)
     }
 }

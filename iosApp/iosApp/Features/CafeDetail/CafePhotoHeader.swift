@@ -131,20 +131,17 @@ struct CafePhotoHeader: View {
 
     @ViewBuilder
     private func ownPhotoCell(_ photo: Photo_) -> some View {
-        Group {
-            if let fileName = photo.fileName,
-               let uiImage = PhotoFileStore.loadImage(fileName: fileName) {
-                Image(uiImage: uiImage)
-                    .resizable()
-                    .scaledToFill()
-            } else {
-                Rectangle()
-                    .fill(Color(.secondarySystemBackground))
-                    .overlay {
-                        Image(systemName: "photo")
-                            .foregroundStyle(.secondary)
-                    }
-            }
+        RecordPhotoThumbnail(
+            fileName: photo.fileName,
+            pendingData: nil,
+            targetPointSize: 224
+        ) {
+            Rectangle()
+                .fill(Color(.secondarySystemBackground))
+                .overlay {
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                }
         }
         .frame(width: 224, height: 168)
         .clipped()

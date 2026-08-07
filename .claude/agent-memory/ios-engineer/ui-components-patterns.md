@@ -82,6 +82,12 @@ metadata:
 - 呼び出し側は `@State private var image: UIImage?` + `.task(id: fileName) { image = nil; ...; image = await Store.loadThumbnail(...) }` の 1 パターンで、①初期表示 ②`fileName` 変化時の再取得+旧画像の即時クリア（セル再利用対策）③View 消滅時キャンセル、を全部満たす。`maxPixelSize` は `@Environment(\.displayScale)`（`UIScreen.main` は iOS 26 で deprecated）× pt サイズで求める。
 - `PhotoFileStore` の「絶対パスを呼び出し側に露出しない」方針は、サムネイル API 自体を `PhotoFileStore` に生やす（`photosDirectoryURL` の解決を内部に閉じる）ことで自然に守れる。別ユーティリティに分離すると `photosDirectoryURL`（`private` ではなく既存 `static var`）を外から叩く形になり、方針をなぞるための追加の気遣いが要る。
 
+## 一覧行専用だったサムネイル `@State` パターンは `<Placeholder: View>` ジェネリックにして汎用コンポーネント化できる（2026-08-08、SW6-A 記録写真サムネイル横展開で確認）
+
+- `CoffeeListView.CoffeeRowThumbnail`（`.task(id: fileName)` + `PhotoFileStore.loadThumbnail`）は 1 箇所専用の `private struct` だったが、同型のフルデコード同期呼び出し（`PhotoFileStore.loadImage`）が別 3 箇所（エディタのサムネ / 記録詳細 / カフェ詳細）に個別実装されていた。共通コンポーネント化する際は、プレースホルダの見た目（枠色・アイコン）が呼び出し側ごとに違う（`cup.and.saucer` / `photo.badge.exclamationmark` / `photo`）ので `@ViewBuilder let placeholder: () -> Placeholder` で外注するのが素直（`PlacePhotoThumbnail` は逆に内蔵しているが、こちらは装飾差が大きいため外注が合う）。`.frame`/`clipShape` 等の装飾も呼び出し側に残す（コンポーネントは画像解決のみ担当）。
+- 保存前の新規写真（`pendingData: Data?`）は既に `ImageDownsampler.downsampledJPEG` で長辺 2048px まで縮小済みの JPEG なので、表示用にさらに小さい `maxPixelSize` へ `ImageDownsampler.downsampledImage`（新設、JPEG 再エンコードなしの `Data → UIImage` 版）で縮小デコードしても二重コストは小さい。`.task(id:)` の `id` は `fileName` 1 本で足りる（新規写真も選択時点で `"\(photoId).jpg"` を採番済みなので保存前から一意）。
+- `downsampledJPEG` を同期 → `async` + `@concurrent` 化したら、呼び出し元が既に `async` 関数（`handlePickerSelection`）でも `await` を書き忘れるとコンパイルエラーになるので機械的に検出できる（`@concurrent` 単体の付け忘れとは違い、シグネチャ変更に伴う呼び出し側の型エラーは通常通りコンパイラが守ってくれる）。危険なのは「関数を新設するときに `@concurrent` を付け忘れる」方（規約どおり診断が出ない）。
+
 ## 排他的な複数種シート + 「表示中だけ連動する強調状態」は `enum: Identifiable` の単一 `@State item` + `.sheet(item:)` に一本化する（2026-07-24、MapTabView 好み一致/保存済みチップ操作モデル改修で確認）
 
 - 「チップ A/B どちらか一方だけ開ける一覧シート」+「シート表示中だけマップ側の強調（他ピン減光）を ON にする」要件は、`isPresentingA`/`isPresentingB`/`emphasisA`/`emphasisB` の 4 `@State` bool で個別管理すると、閉じ忘れ（下スワイプ dismiss 時に強調 bool だけ残る）や排他性の手動維持（相手を false にし忘れる）が起きやすい。`enum Kind: Identifiable { case a, case b; var id: Self { self } }` + `@State var activeSheet: Kind?` + `.sheet(item: $activeSheet) { kind in switch kind { ... } }` に一本化すると、①排他性（同時に 2 種は開けない）と②下スワイプ dismiss 時の自動リセット（`activeSheet` が自動的に `nil` に戻る）の両方が構造的に保証される。

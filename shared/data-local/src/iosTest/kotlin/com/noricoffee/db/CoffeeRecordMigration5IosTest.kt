@@ -25,12 +25,13 @@ import kotlin.test.assertTrue
  * 直接構築されてしまい、v4 相当（migration 5 適用前）の状態を再現できない。
  * そこで `NativeSqliteDriver(configuration: DatabaseConfiguration)` の低レベルコンストラクタを使い、
  * `create` を no-op にした生ドライバを取得し、`androidHostTest` 版と同じく生 DDL で
- * v4 スキーマを直接構築してから `AppDatabase.Schema.migrate(driver, 5L, 7L)` を呼ぶ。
+ * v4 スキーマを直接構築してから `AppDatabase.Schema.migrate(driver, 5L, 8L)` を呼ぶ。
  *
- * バージョン番号の意味（`oldVersion=5, newVersion=7`）は `androidHostTest` 版と同じ
+ * バージョン番号の意味（`oldVersion=5, newVersion=8`）は `androidHostTest` 版と同じ
  * （`sqldelight_migration_version_semantics.md` 参照。`N.sqm` は `version N → N+1` の遷移。
- * 型付き `coffeeRecordQueries` は常に現行 head スキーマ（region 列を含む）基準のため、
- * migration 5 だけでなく 6（region 列追加）まで通して head バージョンに揃える）。
+ * 型付き `coffeeRecordQueries` は常に現行 head スキーマ（region / cafe_photo_attributions 列を含む）
+ * 基準のため、migration 5 だけでなく 6（region 列追加）・7（cafe_photo_attributions 列追加）まで
+ * 通して head バージョンに揃える）。
  */
 class CoffeeRecordMigration5IosTest {
 
@@ -69,6 +70,7 @@ class CoffeeRecordMigration5IosTest {
             cafe_latitude = null,
             cafe_longitude = null,
             cafe_photo_references = null,
+            cafe_photo_attributions = null,
             cafe_website_url = null,
             cafe_maps_url = null,
             visited_on = "2026-06-01",
@@ -102,6 +104,7 @@ class CoffeeRecordMigration5IosTest {
             cafe_latitude = null,
             cafe_longitude = null,
             cafe_photo_references = null,
+            cafe_photo_attributions = null,
             cafe_website_url = null,
             cafe_maps_url = null,
             visited_on = "2026-06-02",
@@ -139,11 +142,13 @@ class CoffeeRecordMigration5IosTest {
             sort_order = 0,
         )
 
-        // migration 5（rating nullable 化 + テーブル再作成）+ migration 6（region 列追加）を適用する。
+        // migration 5（rating nullable 化 + テーブル再作成）+ migration 6（region 列追加）+
+        // migration 7（cafe_photo_attributions 列追加）を適用する。
         // sqliter は FK 有効なままこの一連の DDL/DML を実行することになるため、
         // ここで FOREIGN KEY constraint 違反例外が飛ぶかどうかが本テストの核心の懸念点。
-        // newVersion を head（7）まで進める理由は androidHostTest 版と同じ（region 列の復元が必要）。
-        AppDatabase.Schema.migrate(driver, 5L, 7L)
+        // newVersion を head（8）まで進める理由は androidHostTest 版と同じ（region /
+        // cafe_photo_attributions 列の復元が必要）。
+        AppDatabase.Schema.migrate(driver, 5L, 8L)
 
         val zeroRow = db.coffeeRecordQueries.selectById("r-zero").executeAsOne()
         assertNull(zeroRow.rating, "旧 sentinel rating=0.0 は migration 5 で NULL に変換されるべき（sqliter）")
@@ -183,6 +188,7 @@ class CoffeeRecordMigration5IosTest {
                 cafe_latitude REAL,
                 cafe_longitude REAL,
                 cafe_photo_references TEXT,
+                cafe_photo_attributions TEXT,
                 cafe_website_url TEXT,
                 cafe_maps_url TEXT,
                 visited_on TEXT NOT NULL,
@@ -233,5 +239,31 @@ class CoffeeRecordMigration5IosTest {
             null,
         )
         driver.execute(null, "CREATE INDEX photo_by_record ON photo (record_id, sort_order)", 0, null)
+
+        // saved_cafe は migration 3.sqm（v2→v3）で追加済みのため、v4 時点では既に存在する。
+        // migration 7.sqm が saved_cafe にも ALTER TABLE ADD COLUMN するため、この生 DDL 環境にも
+        // 用意しておかないと「no such table: saved_cafe」で 7.sqm の実行が失敗する。
+        driver.execute(
+            null,
+            """
+            CREATE TABLE saved_cafe (
+                place_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                cafe_name TEXT NOT NULL,
+                cafe_address TEXT,
+                cafe_latitude REAL,
+                cafe_longitude REAL,
+                cafe_photo_references TEXT,
+                cafe_website_url TEXT,
+                cafe_maps_url TEXT,
+                note TEXT NOT NULL DEFAULT '',
+                saved_at INTEGER NOT NULL,
+                PRIMARY KEY (place_id, user_id)
+            )
+            """.trimIndent(),
+            0,
+            null,
+        )
+        driver.execute(null, "CREATE INDEX saved_cafe_by_user ON saved_cafe (user_id, saved_at DESC)", 0, null)
     }
 }

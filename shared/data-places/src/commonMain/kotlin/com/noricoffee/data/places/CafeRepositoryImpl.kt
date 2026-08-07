@@ -13,6 +13,8 @@ import com.noricoffee.repository.CafeRepository
  * ## 変換方針
  * - [Cafe.photoReferences] には [PlaceSummary.photoNames] をそのまま入れる
  *   （`"places/{placeId}/photos/{photoRef}"` 形式のまま。Photo Media API はスライス 4 で実装）
+ * - [Cafe.photoAttributions] には [PlaceSummary.photoAttributions] をそのまま入れる
+ *   （[photoReferences] と同じ順序・同じ長さ。写真表示時の作者クレジット表示に使う）
  * - `latitude` / `longitude` は [PlaceSummary] の nullable をそのまま [Cafe] に伝播する
  * - `placeId` は Places API の `id` フィールド（`"ChIJ..."` 形式）
  */
@@ -60,5 +62,6 @@ class CafeRepositoryImpl(
         priceLevel = priceLevel,
         googleRating = googleRating,
         userRatingCount = userRatingCount,
+        photoAttributions = photoAttributions,
     )
 }

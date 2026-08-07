@@ -59,6 +59,7 @@ class LocalCoffeeRepository(
                 cafe_latitude = row.cafe_latitude,
                 cafe_longitude = row.cafe_longitude,
                 cafe_photo_references = row.cafe_photo_references,
+                cafe_photo_attributions = row.cafe_photo_attributions,
                 cafe_website_url = row.cafe_website_url,
                 cafe_maps_url = row.cafe_maps_url,
                 visited_on = row.visited_on,

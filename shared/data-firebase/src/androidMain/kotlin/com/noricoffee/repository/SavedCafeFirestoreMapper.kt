@@ -12,8 +12,8 @@ import kotlinx.datetime.Instant
  * `users/{uid}/savedCafes/{placeId}` — ドキュメント ID = `cafe.placeId`（[data-model.md] §1.9 の自然キー）。
  *
  * ## フィールド規則（[CoffeeFirestoreMapper] と共通化）
- * - `cafe` マップは [CoffeeFirestoreMapper] と同じスナップショット 8 フィールドのみ。nullable フィールドは
- *   null 時にキーを省略する
+ * - `cafe` マップは [CoffeeFirestoreMapper] と同じスナップショット 8 フィールド + `photoAttributions`
+ *   のみ。nullable フィールドは null 時にキーを省略する。`photoAttributions` は空リストならキーごと省略
  * - `note` は空文字を含めて常に書き出す
  * - `savedAt` は Firestore `Timestamp`
  */
@@ -40,6 +40,10 @@ object SavedCafeFirestoreMapper {
         cafe.longitude?.let { map["longitude"] = it }
         cafe.websiteUrl?.let { map["websiteUrl"] = it }
         cafe.mapsUrl?.let { map["mapsUrl"] = it }
+        // 空リストならキーごと省略（CoffeeFirestoreMapper.cafeToMap と共通の流儀）
+        if (cafe.photoAttributions.isNotEmpty()) {
+            map["photoAttributions"] = cafe.photoAttributions
+        }
         return map
     }
 
@@ -72,6 +76,7 @@ object SavedCafeFirestoreMapper {
         val placeId = map["placeId"] as? String ?: return null
         val cafeName = map["name"] as? String ?: return null
         val photoReferences = (map["photoReferences"] as? List<String>) ?: emptyList()
+        val photoAttributions = (map["photoAttributions"] as? List<String>) ?: emptyList()
         return Cafe(
             placeId = placeId,
             name = cafeName,
@@ -79,6 +84,7 @@ object SavedCafeFirestoreMapper {
             latitude = (map["latitude"] as? Number)?.toDouble(),
             longitude = (map["longitude"] as? Number)?.toDouble(),
             photoReferences = photoReferences,
+            photoAttributions = photoAttributions,
             websiteUrl = map["websiteUrl"] as? String,
             mapsUrl = map["mapsUrl"] as? String,
         )

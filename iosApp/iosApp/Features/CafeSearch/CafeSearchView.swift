@@ -129,13 +129,19 @@ struct CafeSearchView: View {
     @ViewBuilder
     private var resultsList: some View {
         // タップでコールバックを呼ぶ（コールバックモード専用）
-        List(bridge.results, id: \.placeId) { cafe in
-            Button {
-                onCafeSelected?(cafe)
-            } label: {
-                CafeRow(cafe: cafe, loader: photoLoader)
+        List {
+            Section {
+                ForEach(bridge.results, id: \.placeId) { cafe in
+                    Button {
+                        onCafeSelected?(cafe)
+                    } label: {
+                        CafeRow(cafe: cafe, loader: photoLoader)
+                    }
+                    .accessibilityLabel(cafe.name)
+                }
+            } footer: {
+                GoogleMapsAttributionText()
             }
-            .accessibilityLabel(cafe.name)
         }
     }
 }

@@ -194,6 +194,8 @@ enum CoffeeFirestoreMapper {
         if let longitude = cafe.longitude { dict["longitude"] = longitude.doubleValue }
         if let websiteUrl = cafe.websiteUrl { dict["websiteUrl"] = websiteUrl }
         if let mapsUrl = cafe.mapsUrl { dict["mapsUrl"] = mapsUrl }
+        // 空リストならキーごと省略（nullable フィールドと同じ流儀。photoReferences は空でも常に書く既存挙動とは非対称）
+        if !cafe.photoAttributions.isEmpty { dict["photoAttributions"] = cafe.photoAttributions }
         return dict
     }
 
@@ -207,6 +209,8 @@ enum CoffeeFirestoreMapper {
         }
 
         let photoReferences = (dict["photoReferences"] as? [String]) ?? []
+        // キー欠如時は [] にフォールバック（旧データ・旧経路対応）
+        let photoAttributions = (dict["photoAttributions"] as? [String]) ?? []
         let latitude = (dict["latitude"] as? NSNumber)
             .map { KotlinDouble(value: $0.doubleValue) }
         let longitude = (dict["longitude"] as? NSNumber)
@@ -226,7 +230,8 @@ enum CoffeeFirestoreMapper {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: nil,
-            userRatingCount: nil
+            userRatingCount: nil,
+            photoAttributions: photoAttributions
         )
     }
 

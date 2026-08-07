@@ -27,9 +27,18 @@ struct CafePhotoHeader: View {
         cafe.photoReferences.isEmpty && ownItems.isEmpty
     }
 
-    /// 段階読み込みの対象となる Places 写真（上限 10 件）。
-    private var placePhotoNames: [String] {
-        Array(cafe.photoReferences.prefix(Self.maxVisibleCount))
+    /// 段階読み込みの対象となる Places 写真（上限 10 件）。作者帰属を同じ index で対応付ける。
+    ///
+    /// `cafe.photoAttributions` は `photoReferences` と同じ順序・同じ長さの契約だが、
+    /// 旧データ・旧経路では空または短いことがあるため、安全に index アクセスする。
+    /// 対応する要素が空文字（作者不明）のときは nil にする。
+    private var placePhotoItems: [(photoName: String, attribution: String?)] {
+        let names = Array(cafe.photoReferences.prefix(Self.maxVisibleCount))
+        return names.enumerated().map { index, name in
+            let raw = cafe.photoAttributions.indices.contains(index) ? cafe.photoAttributions[index] : nil
+            let attribution = (raw?.isEmpty ?? true) ? nil : raw
+            return (photoName: name, attribution: attribution)
+        }
     }
 
     private var ownItems: [Item] {
@@ -37,11 +46,13 @@ struct CafePhotoHeader: View {
     }
 
     private var hasMorePlacePhotos: Bool {
-        visibleCount < placePhotoNames.count
+        visibleCount < placePhotoItems.count
     }
 
     private var items: [Item] {
-        var result = placePhotoNames.prefix(visibleCount).map { Item.place(photoName: $0) }
+        var result = placePhotoItems.prefix(visibleCount).map {
+            Item.place(photoName: $0.photoName, attribution: $0.attribution)
+        }
         if hasMorePlacePhotos {
             result.append(.loadMore)
         }
@@ -65,10 +76,8 @@ struct CafePhotoHeader: View {
     @ViewBuilder
     private func cell(for item: Item) -> some View {
         switch item {
-        case .place(let photoName):
-            PlacePhotoThumbnail(photoName: photoName, maxWidthPx: 400, loader: photoLoader)
-                .frame(width: 224, height: 168)
-                .clipShape(RoundedRectangle(cornerRadius: 12))
+        case .place(let photoName, let attribution):
+            placePhotoCell(photoName: photoName, attribution: attribution)
         case .own(let photo):
             ownPhotoCell(photo)
         case .loadMore:
@@ -76,9 +85,35 @@ struct CafePhotoHeader: View {
         }
     }
 
+    /// Places 写真セル。作者帰属（`cafe.photoAttributions`）が判明している場合のみ
+    /// 左下にバッジで表示する（App Store ガイドライン 5.2.2 対応）。
+    @ViewBuilder
+    private func placePhotoCell(photoName: String, attribution: String?) -> some View {
+        PlacePhotoThumbnail(photoName: photoName, maxWidthPx: 400, loader: photoLoader)
+            .frame(width: 224, height: 168)
+            .clipShape(RoundedRectangle(cornerRadius: 12))
+            .overlay(alignment: .bottomLeading) {
+                if let attribution {
+                    Text(attribution)
+                        .font(.caption2.weight(.semibold))
+                        .foregroundStyle(.white)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 4)
+                        .background(.black.opacity(0.5), in: Capsule())
+                        .padding(8)
+                        .accessibilityHidden(true)
+                }
+            }
+            .accessibilityLabel(
+                attribution.map { String(localized: "撮影: \($0)") }
+                    ?? String(localized: "カフェの写真")
+            )
+    }
+
     private var loadMoreCell: some View {
         Button {
-            visibleCount = min(visibleCount + Self.incrementCount, placePhotoNames.count)
+            visibleCount = min(visibleCount + Self.incrementCount, placePhotoItems.count)
         } label: {
             VStack(spacing: 8) {
                 Image(systemName: "ellipsis.circle.fill")
@@ -130,13 +165,13 @@ struct CafePhotoHeader: View {
     // MARK: - Item
 
     private enum Item: Identifiable {
-        case place(photoName: String)
+        case place(photoName: String, attribution: String?)
         case own(photo: Photo_)
         case loadMore
 
         var id: String {
             switch self {
-            case .place(let photoName):
+            case .place(let photoName, _):
                 return "place-\(photoName)"
             case .own(let photo):
                 return "own-\(photo.id)"

@@ -163,6 +163,11 @@ function toDocument(record, userId, toTimestamp) {
       latitude: record.cafe.latitude,
       longitude: record.cafe.longitude,
       photoReferences: record.cafe.photoReferences ?? [],
+      // photoAttributions は photoReferences と違い「非空のときだけ書く」（クライアント実装と同じ規則）。
+      // 空配列を渡すと dropNullKeys が落とさないため、undefined に潰してキーごと省略させる。
+      photoAttributions: record.cafe.photoAttributions?.length
+        ? record.cafe.photoAttributions
+        : undefined,
       websiteUrl: record.cafe.websiteUrl,
       mapsUrl: record.cafe.mapsUrl,
     });

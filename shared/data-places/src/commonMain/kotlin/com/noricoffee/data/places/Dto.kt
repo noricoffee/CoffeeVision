@@ -137,12 +137,28 @@ internal data class LocationDto(
  *
  * `name` フィールドは `"places/{placeId}/photos/{photoReference}"` 形式。
  * Photo Media API で表示時取得する際のキーとして使う（スライス 4）。
+ *
+ * [authorAttributions] は `places.photos` を FieldMask に含めれば常に付随して返る
+ * （サブフィールドの明示指定は不要。Google Maps Platform 公式ドキュメントで確認済み）。
+ * Places API の利用規約上、写真表示時は作者クレジットの掲示が必須。
  */
 @Serializable
 internal data class PhotoDto(
     val name: String,
     val widthPx: Int? = null,
     val heightPx: Int? = null,
+    val authorAttributions: List<AuthorAttributionDto> = emptyList(),
+)
+
+/**
+ * `authorAttributions` 配列の 1 要素。写真の作者クレジット情報。
+ *
+ * API は常にこのフィールドを含める（空配列になりうる）。使うのは [displayName] のみ
+ * （[uri] / [photoUri] は現状 UI で未使用のためパースしない）。
+ */
+@Serializable
+internal data class AuthorAttributionDto(
+    val displayName: String? = null,
 )
 
 /**

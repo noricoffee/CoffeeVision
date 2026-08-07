@@ -1,0 +1,4 @@
+-- 2026-08-07: Places 写真の作者帰属（authorAttributions）を永続化する（App Store ガイドライン 5.2.2 対応）。
+-- cafe_photo_references と同じ順序・長さの JSON 配列。既存行は NULL。
+ALTER TABLE coffee_record ADD COLUMN cafe_photo_attributions TEXT;
+ALTER TABLE saved_cafe ADD COLUMN cafe_photo_attributions TEXT;

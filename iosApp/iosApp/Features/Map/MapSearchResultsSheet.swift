@@ -131,6 +131,7 @@ struct MapSearchResultsSheet: View {
                     .font(.subheadline.weight(.semibold))
                     .foregroundStyle(.secondary)
                 Spacer()
+                GoogleMapsAttributionText()
             }
             .padding(.horizontal, 16)
         }

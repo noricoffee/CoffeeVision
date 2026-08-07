@@ -74,7 +74,8 @@ extension MapTabView {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: nil,
-            userRatingCount: nil
+            userRatingCount: nil,
+            photoAttributions: []
         )
     }
 }

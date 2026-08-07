@@ -218,6 +218,8 @@ class PlacesClientImpl(
         priceLevel = priceLevel,
         googleRating = rating,
         userRatingCount = userRatingCount,
+        // photoNames と同じ順序・同じ長さ。作者情報が無い写真は空文字で長さを揃える。
+        photoAttributions = photos.map { it.authorAttributions.firstOrNull()?.displayName ?: "" },
     )
 
     private companion object {

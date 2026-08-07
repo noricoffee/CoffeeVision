@@ -30,6 +30,7 @@ class CoffeeRecordExportMapperTest {
         latitude = 35.6448,
         longitude = 139.6694,
         photoReferences = listOf("photo-ref-1"),
+        photoAttributions = listOf("Jane Doe"),
         websiteUrl = "https://bluebottlecoffee.jp/",
         mapsUrl = "https://maps.google.com/?cid=1",
         // 揮発フィールド（Places API 取得時のみ）。export DTO は含めないので敢えて非 null にして
@@ -115,6 +116,7 @@ class CoffeeRecordExportMapperTest {
         assertEquals(cafe.latitude, cafeDto.latitude)
         assertEquals(cafe.longitude, cafeDto.longitude)
         assertEquals(cafe.photoReferences, cafeDto.photoReferences)
+        assertEquals(cafe.photoAttributions, cafeDto.photoAttributions)
         assertEquals(cafe.websiteUrl, cafeDto.websiteUrl)
         assertEquals(cafe.mapsUrl, cafeDto.mapsUrl)
 

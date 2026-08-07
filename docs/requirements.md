@@ -91,6 +91,8 @@ CoffeeRecord は **1 杯のコーヒー = 1 件の記録**を表すアプリの�
 
 ### 5. カフェ検索（Google Places API）
 
+> **帰属表示の義務（2026-08-07 追加）**: Places のコンテンツを **Google マップ以外**（本アプリは Apple MapKit + 自前 UI）に表示する場合、Google Maps ロゴ（スペースが限られる場合は「Google Maps」テキスト）の表示がポリシー上必須。さらに**写真は表示のたびに作者をクレジット**する必要がある（`Cafe.photoAttributions`、data-model §1.2）。App Store ガイドライン 5.2.2（サードパーティ規約の遵守）に直結し、審査より **Google 側の是正要求 → API キー停止**のほうがリスクが大きい。**Places データを新しい画面に出すときは帰属表示をセットで実装すること**。出典: [Places ポリシー](https://developers.google.com/maps/documentation/places/web-service/policies)（2026-08-07 に一次確認）
+
 | # | 機能 | 優先度 | 備考 |
 |---|------|--------|------|
 | 5-1 | テキスト検索（店名 / キーワード） | ◎ | Places API Text Search |

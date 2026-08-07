@@ -23,6 +23,8 @@ import kotlinx.datetime.LocalDate
  *   decode 時はキー欠如 / null / `0.0`（nullable 化以前の legacy sentinel）をすべて null に正規化する
  * - nullable なコーヒー属性（origin / region / variety / processing / roastLevel / cup / brewRecipe）は null ならキーごと省略
  * - cafe が null（セルフ抽出）の場合は `cafe` キーごと省略
+ * - `cafe.photoAttributions`（写真の作者帰属。App Store ガイドライン 5.2.2 対応）は空リストならキーごと省略
+ *   （`photoReferences` は空でも常に書く既存挙動とは非対称。他の nullable フィールドと同じ流儀）
  * - photos は埋め込み配列。`localPath` / `remoteUrl` は端末固有値または未使用のため Firestore に書かない
  * - `sortOrder` はドメインモデルに持たせず、upload 時に配列 index で採番。decode 時はソートに使い破棄
  * - enum は Kotlin の `name` 文字列（例: `BrewMethod.HandDrip` → `"HandDrip"`）
@@ -109,6 +111,10 @@ object CoffeeFirestoreMapper {
         cafe.longitude?.let { map["longitude"] = it }
         cafe.websiteUrl?.let { map["websiteUrl"] = it }
         cafe.mapsUrl?.let { map["mapsUrl"] = it }
+        // 空リストならキーごと省略（nullable フィールドと同じ流儀。photoReferences は空でも常に書く既存挙動とは非対称）
+        if (cafe.photoAttributions.isNotEmpty()) {
+            map["photoAttributions"] = cafe.photoAttributions
+        }
         return map
     }
 
@@ -224,6 +230,7 @@ object CoffeeFirestoreMapper {
         val placeId = map["placeId"] as? String ?: return null
         val cafeName = map["name"] as? String ?: return null
         val photoReferences = (map["photoReferences"] as? List<String>) ?: emptyList()
+        val photoAttributions = (map["photoAttributions"] as? List<String>) ?: emptyList()
         return Cafe(
             placeId = placeId,
             name = cafeName,
@@ -231,6 +238,7 @@ object CoffeeFirestoreMapper {
             latitude = (map["latitude"] as? Number)?.toDouble(),
             longitude = (map["longitude"] as? Number)?.toDouble(),
             photoReferences = photoReferences,
+            photoAttributions = photoAttributions,
             websiteUrl = map["websiteUrl"] as? String,
             mapsUrl = map["mapsUrl"] as? String,
         )

@@ -60,7 +60,8 @@ enum PreviewSamples {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: nil,
-            userRatingCount: nil
+            userRatingCount: nil,
+            photoAttributions: []
         ),
         Cafe(
             placeId: "ChIJsampleSteamers",
@@ -76,7 +77,8 @@ enum PreviewSamples {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: nil,
-            userRatingCount: nil
+            userRatingCount: nil,
+            photoAttributions: []
         ),
         Cafe(
             placeId: "ChIJsampleFuglen",
@@ -92,7 +94,8 @@ enum PreviewSamples {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: nil,
-            userRatingCount: nil
+            userRatingCount: nil,
+            photoAttributions: []
         ),
     ]
 
@@ -148,7 +151,8 @@ enum PreviewSamples {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: KotlinDouble(value: 4.5),
-            userRatingCount: KotlinInt(value: 128)
+            userRatingCount: KotlinInt(value: 128),
+            photoAttributions: []
         ),
         visitedOn: localDate(year: 2026, month: 6, day: 2),
         rating: KotlinDouble(value: 4.5),
@@ -193,7 +197,8 @@ enum PreviewSamples {
             phoneNumber: nil,
             priceLevel: nil,
             googleRating: nil,
-            userRatingCount: nil
+            userRatingCount: nil,
+            photoAttributions: []
         ),
         visitedOn: localDate(year: 2026, month: 5, day: 28),
         rating: KotlinDouble(value: 3.0),
@@ -295,7 +300,8 @@ enum PreviewSamples {
                 phoneNumber: nil,
                 priceLevel: nil,
                 googleRating: nil,
-                userRatingCount: nil
+                userRatingCount: nil,
+                photoAttributions: []
             ),
             matches: [
                 RecommendationReasonTasteProfileMatch(

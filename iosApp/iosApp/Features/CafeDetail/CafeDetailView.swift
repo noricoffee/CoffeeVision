@@ -207,7 +207,7 @@ struct CafeDetailView: View {
     // MARK: - カフェ情報セクション
 
     private func cafeInfoSection(bridge: CafeDetailViewModelBridge) -> some View {
-        Section(String(localized: "カフェ情報")) {
+        Section {
             if let cafe = bridge.cafe ?? initialCafe {
                 if let address = cafe.address, !address.isEmpty {
                     LabeledContent(String(localized: "住所")) {
@@ -235,6 +235,10 @@ struct CafeDetailView: View {
                 Text(String(localized: "カフェ情報を読み込み中..."))
                     .foregroundStyle(.secondary)
             }
+        } header: {
+            Text(String(localized: "カフェ情報"))
+        } footer: {
+            GoogleMapsAttributionText()
         }
     }
 

@@ -78,6 +78,10 @@ struct CafeSelectionCard: View {
                         : String(localized: "行きたい店に追加")
                 )
             }
+            HStack {
+                Spacer()
+                GoogleMapsAttributionText()
+            }
         }
         .padding(16)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20))

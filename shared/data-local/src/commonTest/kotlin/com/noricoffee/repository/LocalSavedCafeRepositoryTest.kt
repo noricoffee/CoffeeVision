@@ -104,6 +104,7 @@ class LocalSavedCafeRepositoryTest {
                 latitude = 35.6448,
                 longitude = 139.6694,
                 photoReferences = listOf("ref-1", "ref-2"),
+                photoAttributions = listOf("Jane Doe", ""),
                 websiteUrl = "https://bluebottlecoffee.jp/",
                 mapsUrl = null,
             ),

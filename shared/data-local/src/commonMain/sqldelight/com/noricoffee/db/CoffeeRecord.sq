@@ -8,6 +8,7 @@ CREATE TABLE coffee_record (
     cafe_latitude REAL,
     cafe_longitude REAL,
     cafe_photo_references TEXT,            -- JSON 配列（cafe null のとき null）
+    cafe_photo_attributions TEXT,          -- JSON 配列（cafe_photo_references と同じ順序・長さ。migration 7.sqm で ALTER TABLE ADD COLUMN。2026-08-07 追加）
     cafe_website_url TEXT,
     cafe_maps_url TEXT,
     -- 記録本体
@@ -51,14 +52,14 @@ SELECT * FROM coffee_record WHERE user_id = ? AND cafe_place_id = ? ORDER BY vis
 upsert:
 INSERT OR REPLACE INTO coffee_record (
     id, user_id, cafe_place_id, cafe_name, cafe_address,
-    cafe_latitude, cafe_longitude, cafe_photo_references,
+    cafe_latitude, cafe_longitude, cafe_photo_references, cafe_photo_attributions,
     cafe_website_url, cafe_maps_url,
     visited_on, rating, notes,
     name, brew_method, origin, region, variety, processing, roast_level, cup, brew_recipe,
     sweetness, body, acidity, flavor, aftertaste,
     tags,
     created_at, updated_at
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 
 deleteById:
 DELETE FROM coffee_record WHERE id = ?;

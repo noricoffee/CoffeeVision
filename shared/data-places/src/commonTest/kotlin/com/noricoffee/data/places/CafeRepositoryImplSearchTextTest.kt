@@ -78,6 +78,7 @@ class CafeRepositoryImplSearchTextTest {
                 priceLevel = null,
                 googleRating = null,
                 userRatingCount = null,
+                photoAttributions = emptyList(),
             )
 
         override suspend fun photoMediaUrl(
@@ -136,6 +137,7 @@ class CafeRepositoryImplSearchTextTest {
                 priceLevel = null,
                 googleRating = null,
                 userRatingCount = 128,
+                photoAttributions = listOf("Jane Doe"),
             )
         )
 
@@ -150,6 +152,7 @@ class CafeRepositoryImplSearchTextTest {
         assertEquals(139.701, cafe.longitude)
         assertEquals(listOf("places/ChIJtest001/photos/ref1"), cafe.photoReferences)
         assertEquals(128, cafe.userRatingCount)
+        assertEquals(listOf("Jane Doe"), cafe.photoAttributions)
     }
 
     @Test

@@ -45,6 +45,7 @@ object CoffeeRecordExportMapper {
         latitude = cafe.latitude,
         longitude = cafe.longitude,
         photoReferences = cafe.photoReferences,
+        photoAttributions = cafe.photoAttributions,
         websiteUrl = cafe.websiteUrl,
         mapsUrl = cafe.mapsUrl,
     )

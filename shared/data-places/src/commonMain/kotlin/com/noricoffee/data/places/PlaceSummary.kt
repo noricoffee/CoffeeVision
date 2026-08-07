@@ -8,6 +8,8 @@ package com.noricoffee.data.places
  * `CafeRepositoryImpl`（同モジュール）からのみ参照される。
  *
  * - [photoNames]: `places.photos[].name` をそのまま格納（`"places/{placeId}/photos/{photoRef}"` 形式）
+ * - [photoAttributions]: [photoNames] と同じ順序・同じ長さ。各要素は
+ *   `places.photos[].authorAttributions[0].displayName`。存在しない場合は空文字
  */
 data class PlaceSummary(
     val id: String,
@@ -24,4 +26,5 @@ data class PlaceSummary(
     val priceLevel: String?,
     val googleRating: Double?,
     val userRatingCount: Int?,
+    val photoAttributions: List<String>,
 )

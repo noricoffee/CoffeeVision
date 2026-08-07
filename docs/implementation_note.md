@@ -1251,3 +1251,18 @@ UI/UX レビューで「閉店中を赤で出すのは、iOS で赤がエラー 
 - `ui-ux-guidelines.md` のカラー役割表が `.red` を「危険操作」に割り当てており、「テイスティングを削除」等と赤を共有する点は**認識のうえで許容**する。表に例外を書き足すこともしない（役割表はあくまで既定で、マップ慣習が優先する領域があるという整理）。
 - 代替案として検討したのは ①閉店時のみ `.secondary`（営業中の緑は維持）②両方 `.secondary` ③閉店時を `.orange`。③はオレンジがおすすめピンの概念色と衝突するため候補としても弱かった。**再提案しないこと。**
 - **別件として未解決で残っているもの**: 同じ状態の文言が `CafeDetailView` では「営業時間外」、`CafeSelectionCard` では「終了」で割れている。配色とは独立した問題で、「終了」は閉店＝廃業とも読める。tasks.md UX-5 の備考に残置。
+
+### 2026-08-07: コーヒー記録一覧の行レイアウト（UX-7 / UX-8）
+
+- 関連: `iosApp/iosApp/Features/CoffeeList/CoffeeListView.swift`（`CoffeeRow`）/ `Utilities/PhotoFileStore.swift`
+
+行の左に写真サムネイル（56pt 角丸）を追加し、コーヒー名を読めるようにする。**主従は入れ替えない**（カフェ名 `.headline` / コーヒー名を `.subheadline`+`.secondary` → `.body`+`.primary` へ格上げ）。
+
+- **入れ替え案（コーヒー名を主）は不採用**。「同じカフェが連続すると何を飲んだか追いにくい」という指摘には効くが、**コーヒー名が「本日のコーヒー」のような一般名のとき行の情報量が落ちる**（新規作成時の name 初期値がまさに「本日のコーヒー」= requirements 2-9）。サムネイルが入れば想起の手がかりは写真が担うため、格上げだけで足りるという判断（2026-08-07 ユーザー確定）。
+- **写真が無い記録でもサムネイル枠は常に確保する**。`if` で枠ごと消すと兄弟がシフトして行ごとにテキストの開始位置がズレる（`.claude/rules/swift-ios.md` の既存規則）。**写真ゼロの記録の方が多数派**なのでここが設計の中心で、プレースホルダは薄いグレー地 + `cup.and.saucer` のグレーアイコン。
+- **既存の写真読み込み経路はリストに転用できない**。`PhotoFileStore.loadImage(fileName:)` は `UIImage(contentsOfFile:)` によるフルデコードの同期 API で、詳細画面（数枚・1 画面）では妥当だが、**スクロールするリストで 1 行ごとに長辺 2048px の JPEG をデコードすると確実にカクつく**。`ImageDownsampler` は保存時用（`Data` 入力 → JPEG `Data` 出力）でそのままは使えない。サムネイル用に「ファイル URL から `CGImageSourceCreateThumbnailAtIndex` で縮小デコード + メモリキャッシュ + 非同期」の経路が要る。**`PhotoFileStore` の「絶対パスを呼び出し側に露出しない」という設計方針は維持すること**（同ファイル冒頭に明記）。
+- **日付の短縮（`2026/08/06` → `6日`）は今回対応しない**。月セクションヘッダ「2026年8月」と重複しているが、ユーザー判断で保留。
+
+追記（2026-08-07、実装後）: サムネイルの縮小デコードは `PhotoFileStore.loadThumbnail(fileName:maxPixelSize:) async` に置き、`NSCache` でメモリキャッシュする。**この関数がメインスレッドを離れて走ることは言語モードに依存している** — `PhotoFileStore` に actor / `@MainActor` 注釈が無いため `nonisolated` で、SE-0338 により `nonisolated` な async 関数はグローバル実行キューで実行される。`project.pbxproj` が `SWIFT_VERSION = 5.0` かつ `SWIFT_UPCOMING_FEATURE` / `SWIFT_DEFAULT_ACTOR_ISOLATION` を指定していないことを実確認済み。**Swift 6.2 の `NonisolatedNonsendingByDefault` を有効にすると `nonisolated` async は呼び出し元アクター上で走るようになり、この関数はメインスレッドでデコードするようになる**（ビルドは通り、スクロールが重くなるだけなので気づきにくい）。言語モードを上げるときはここを `@concurrent` 等で明示すること。
+
+`maxPixelSize` は `56pt × @Environment(\.displayScale)`。`UIScreen.main` は iOS 26 で deprecated なので使っていない。

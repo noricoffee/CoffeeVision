@@ -1,4 +1,5 @@
 import Foundation
+import ImageIO
 import UIKit
 
 /// Documents 配下の `photos/` ディレクトリへのファイル I/O を司るユーティリティ。
@@ -47,6 +48,48 @@ enum PhotoFileStore {
         let fileURL = photosDirectoryURL.appendingPathComponent(fileName)
         guard FileManager.default.fileExists(atPath: fileURL.path) else { return nil }
         return UIImage(contentsOfFile: fileURL.path)
+    }
+
+    // MARK: - サムネイル（一覧表示向け）
+
+    /// 縮小デコード結果のメモリキャッシュ（キー: `"\(fileName)#\(maxPixelSize)"`）。
+    ///
+    /// `NSCache` はスレッドセーフなため、`loadThumbnail` から並行アクセスしても安全。
+    private static let thumbnailCache = NSCache<NSString, UIImage>()
+
+    /// `fileName` で指定したファイルを、`maxPixelSize`（長辺 px）へ縮小デコードして読み込む。
+    ///
+    /// 一覧行のような「多数のセルを同時にスクロールする」表示向け。`loadImage(fileName:)` の
+    /// フルデコード（`UIImage(contentsOfFile:)`）と異なり `CGImageSourceCreateThumbnailAtIndex`
+    /// でデコード時点から縮小するため、スクロール中に長辺 2048px の JPEG を毎行フルデコードする
+    /// コストを避けられる（`ImageDownsampler` と同じ API・考え方。詳細は同ファイルのコメント）。
+    ///
+    /// - この関数は（`PhotoFileStore` 自体に actor / `@MainActor` 注釈が無いため）`nonisolated`。
+    ///   `@MainActor` の呼び出し元から `await` すると、本体はメインスレッドを離れて実行される
+    ///   （`Task.detached` 等を呼び出し側で明示する必要はない）
+    /// - キャッシュヒット時は同期的に即返る
+    /// - ファイルが存在しない・デコード失敗時は `nil`
+    static func loadThumbnail(fileName: String, maxPixelSize: Int) async -> UIImage? {
+        let cacheKey = "\(fileName)#\(maxPixelSize)" as NSString
+        if let cached = thumbnailCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let fileURL = photosDirectoryURL.appendingPathComponent(fileName)
+        guard let source = CGImageSourceCreateWithURL(fileURL as CFURL, nil) else { return nil }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+        ]
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return nil
+        }
+
+        let image = UIImage(cgImage: cgImage)
+        thumbnailCache.setObject(image, forKey: cacheKey)
+        return image
     }
 
     /// `fileName` で指定したファイルを削除する。

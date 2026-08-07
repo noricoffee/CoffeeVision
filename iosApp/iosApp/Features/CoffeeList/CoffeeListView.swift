@@ -1,5 +1,6 @@
 import SwiftUI
 import SharedLogic
+import UIKit
 
 // MARK: - CoffeeListView
 
@@ -191,20 +192,24 @@ struct CoffeeRow: View {
     let coffee: CoffeeRecord
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(coffee.cafe?.name ?? String(localized: "セルフ抽出"))
-                .font(.headline)
-                .foregroundStyle(.primary)
+        HStack(alignment: .top, spacing: 12) {
+            CoffeeRowThumbnail(fileName: coffee.photos.first?.fileName)
 
-            Text(coffee.name)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(coffee.cafe?.name ?? String(localized: "セルフ抽出"))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
 
-            Text(formattedDate)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+                Text(coffee.name)
+                    .font(.body)
+                    .foregroundStyle(.primary)
 
-            starRating
+                Text(formattedDate)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                starRating
+            }
         }
         .padding(.vertical, 4)
         .accessibilityElement(children: .combine)
@@ -238,6 +243,52 @@ struct CoffeeRow: View {
             ratingStr = String(localized: "未評価")
         }
         return "\(cafeName), \(coffee.name), \(formattedDate), \(ratingStr)"
+    }
+}
+
+// MARK: - CoffeeRowThumbnail
+
+/// `CoffeeRow` の左端に置く 56×56pt のサムネイル。
+///
+/// - 写真が無い記録でも枠は常に確保する（`if` で枠ごと消すと兄弟がシフトしてテキストの
+///   開始位置がズレるため。`.claude/rules/swift-ios.md` の既存規則）
+/// - 縮小デコードは `PhotoFileStore.loadThumbnail(fileName:maxPixelSize:)` に委譲し、
+///   `.task(id:)` で非同期に取得する（メインスレッドを塞がない）
+/// - 装飾用途のため `accessibilityHidden(true)`
+private struct CoffeeRowThumbnail: View {
+
+    static let size: CGFloat = 56
+
+    let fileName: String?
+
+    @Environment(\.displayScale) private var displayScale
+    @State private var image: UIImage?
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(uiImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                Rectangle()
+                    .fill(Color(.secondarySystemFill))
+                    .overlay {
+                        Image(systemName: "cup.and.saucer")
+                            .foregroundStyle(.tertiary)
+                    }
+            }
+        }
+        .frame(width: Self.size, height: Self.size)
+        .clipped()
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .accessibilityHidden(true)
+        .task(id: fileName) {
+            image = nil
+            guard let fileName else { return }
+            let maxPixelSize = Int(Self.size * displayScale)
+            image = await PhotoFileStore.loadThumbnail(fileName: fileName, maxPixelSize: maxPixelSize)
+        }
     }
 }
 

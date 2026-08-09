@@ -19,9 +19,9 @@ import UniformTypeIdentifiers
 
 /// ファイル名 → コピーの行。読点で改行して 2 行に割り、文字を大きく見せる。
 let captions: [String: [String]] = [
-    "01-map.png":             ["お気に入りの一杯を", "発見しよう"],
-    "02-analyze-summary.png": ["味覚の輪郭が、", "見えてくる"],
-    "03-analyze-suggest.png": ["好みから、", "次の一杯が見えてくる"],
+    "01-analyze-summary.png": ["味覚の輪郭が、", "見えてくる"],
+    "02-analyze-suggest.png": ["好みから、", "次の一杯が見えてくる"],
+    "03-map.png":             ["お気に入りの一杯を", "発見しよう"],
     "04-record-list.png":     ["一杯ずつ、", "積み上がっていく"],
     "05-record-editor.png":   ["味の記憶を、", "5 つの軸で"],
     "06-cafe-detail.png":     ["もちろん", "カフェの情報もチェック"],

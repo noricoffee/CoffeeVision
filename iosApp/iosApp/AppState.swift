@@ -12,11 +12,26 @@ import FirebaseFirestore
 ///
 /// `MapTabView` の `.onMapCameraChange` で生成し `AppState.mapSearchCenter` に代入する。
 /// `CafeSearchView` はこれを位置バイアスとして `onSearchTapped(latitude:longitude:radiusMeters:)` に渡す。
-struct MapSearchCenter {
+struct MapSearchCenter: Equatable {
     let latitude: Double
     let longitude: Double
     /// Places API の locationBias circle 半径（メートル）。`1...50_000` にクランプ済み。
     let radiusMeters: Double
+
+    /// カメラ変化が「実質同じ」かを判定する。
+    ///
+    /// MapKit のカメラは再適用のたびに浮動小数の下位桁がわずかに揺れた値を返すことがあるため、
+    /// `Equatable` の完全一致では同値判定が漏れる。位置バイアス（Places API の locationBias
+    /// circle）としての用途では 1m 未満の差も半径 1m 未満の差も意味を持たないため、その粒度で
+    /// 同一とみなし、`AppState.mapSearchCenter` への無駄な再代入（= 無駄な body 再評価）を防ぐ。
+    func isEquivalent(to other: MapSearchCenter) -> Bool {
+        // 緯度 1 度 ≈ 111km なので 1e-5 度 ≈ 1.1m
+        let coordinateTolerance = 1e-5
+        let radiusTolerance = 1.0
+        return abs(latitude - other.latitude) < coordinateTolerance
+            && abs(longitude - other.longitude) < coordinateTolerance
+            && abs(radiusMeters - other.radiusMeters) < radiusTolerance
+    }
 }
 
 /// アプリ全体の状態ホルダ。

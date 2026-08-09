@@ -104,7 +104,7 @@ final class AppleNearbyCafeLoader {
         do {
             let response = try await MKLocalSearch(request: request).start()
             guard !Task.isCancelled else { return }
-            cafes = response.mapItems.compactMap { item -> ApplePoiCafe? in
+            let newCafes = response.mapItems.compactMap { item -> ApplePoiCafe? in
                 let coordinate = item.location.coordinate
                 let name = item.name ?? String(localized: "カフェ")
                 guard !isExcludedByNameHeuristic(name) else { return nil }
@@ -114,6 +114,11 @@ final class AppleNearbyCafeLoader {
                     name: name,
                     coordinate: coordinate
                 )
+            }
+            // 差分がないときは代入しない（`@Observable` は値を比較せず代入だけで変更を通知する
+            // ため、同一内容の再代入は無駄な body 再評価になる）。
+            if newCafes != cafes {
+                cafes = newCafes
             }
         } catch {
             guard !Task.isCancelled else { return }

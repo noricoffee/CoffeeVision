@@ -34,7 +34,33 @@ struct MapTabView: View {
 
     // `cameraPosition` / `locationManager` / `didSetInitialCamera` は `MapTabView+Location.swift`
     // の extension から参照するため internal 化している（M-4）。
-    @State var cameraPosition: MapCameraPosition = .automatic
+    /// マップのカメラ位置。
+    ///
+    /// **`.automatic` を使ってはいけない。** `.automatic` は「コンテンツと現在地に基づいて MapKit が
+    /// カメラを自動決定する」モードで、**Map のコンテンツが変わるたびにカメラを再計算する**
+    /// （`-[MKMapView _updateFramingUsingSetRegionBlock:]`）。このアプリではピンの表示数がカメラの
+    /// 可視半径に依存する（`displayedCuratedCafes` のズームゲート）ため、
+    ///
+    ///   ズームイン → ズームゲート通過 → curated ピン 210 個が出る → コンテンツに合わせて
+    ///   全国（curated 421 件を含む領域）へズームアウト → ズームゲート不通過 → ピンが消える
+    ///   → 現在地へズームイン → 先頭へ
+    ///
+    /// という自己駆動ループになる。実測では 2 点間（現在地 r=1317m ↔ 全国 r=50000m）を
+    /// 10fps で往復し続け、1 周ごとに curated ピンを作り直して**毎秒 2100 回**のピン構築で
+    /// メインスレッドが飽和していた。フォアグラウンドでは「重い」だけだが、位置情報の許諾
+    /// ダイアログで Background に入ると CPU が 17% にスロットルされ、scene-update が 10 秒の
+    /// 壁時計予算を超えてウォッチドッグ（`0x8BADF00D`）に SIGKILL される（TestFlight ビルド 28 / 29）。
+    ///
+    /// 初期値は `setInitialCameraFromVisitedCafes` の「訪問済みカフェなし」時のデフォルトと同じ
+    /// 東京駅周辺に揃える。許可済みなら現在地、未許可なら訪問済みカフェの bounding box へ
+    /// 上書きされるため、この値が見えるのは初期カメラ確定までの一瞬のみ。
+    @State var cameraPosition: MapCameraPosition = .region(
+        MKCoordinateRegion(
+            center: CLLocationCoordinate2D(latitude: 35.6812, longitude: 139.7671),
+            latitudinalMeters: 5000,
+            longitudinalMeters: 5000
+        )
+    )
     @State var locationManager = LocationManager()
     @State var didSetInitialCamera = false
 
@@ -527,15 +553,23 @@ struct MapTabView: View {
                     longitude: region.center.longitude,
                     radiusMeters: radius
                 )
-                appState.mapSearchCenter = newCenter
+                // 実質同じカメラ位置なら代入しない（`@Observable` は値を比較しないため、同値の
+                // 再代入でも body 再評価が走る）。
+                if appState.mapSearchCenter?.isEquivalent(to: newCenter) != true {
+                    appState.mapSearchCenter = newCenter
+                }
 
                 // 「このエリアを検索」ボタンの出現判定。
                 // アンカー未設定（初回カメラ確定時）はボタンを出さず、静かにベースラインとして採用する。
                 if let anchor = searchController.lastAreaSearchCenter {
-                    searchController.showAreaSearchButton = searchController.shouldShowAreaSearchButton(
+                    // 同値なら代入しない（`mapSearchCenter` と同じ理由）。
+                    let shouldShow = searchController.shouldShowAreaSearchButton(
                         current: newCenter,
                         anchor: anchor
                     )
+                    if searchController.showAreaSearchButton != shouldShow {
+                        searchController.showAreaSearchButton = shouldShow
+                    }
                 } else {
                     searchController.lastAreaSearchCenter = newCenter
                 }

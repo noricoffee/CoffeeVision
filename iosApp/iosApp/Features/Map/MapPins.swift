@@ -8,10 +8,20 @@ import SharedLogic
 ///
 /// まだ記録も保存もしていない「周辺の店」を示す低強調ピンの表示専用モデル。
 /// Google `placeId` を持たないため座標文字列を `id` として使う（フェーズ 17）。
-struct ApplePoiCafe: Identifiable {
+struct ApplePoiCafe: Identifiable, Equatable {
     let id: String
     let name: String
     let coordinate: CLLocationCoordinate2D
+
+    /// `CLLocationCoordinate2D` が `Equatable` 非準拠のため手書きする。
+    /// `id` は座標から生成した文字列（`"\(lat)_\(lng)"`）なので、`id` + `name` の一致で
+    /// 「同じ POI」と判定できる。
+    ///
+    /// 用途は `AppleNearbyCafeLoader.fetch` での同値ガード。`@Observable` は値を比較せず代入だけで
+    /// 変更を通知するため、中身が同一の配列を代入すると無駄な body 再評価を招く。
+    static func == (lhs: ApplePoiCafe, rhs: ApplePoiCafe) -> Bool {
+        lhs.id == rhs.id && lhs.name == rhs.name
+    }
 }
 
 // MARK: - MapPinBadge（概念ピン共通の右上バッジ）

@@ -1475,3 +1475,23 @@ TestFlight ビルド 28 / 29 が位置情報許諾の直後に落ちる報告。
 - 経緯（遠回りの記録）: 推測ベースで 2 回、誤った修正方針を出した。①`assumeIsolated` の同期実行 ②`existingPinCoordinates` / `displayed(excluding:)` の O(N×M) 測地距離計算（実測 10 回で合計 1ms、無罪）。どちらも `git diff` とコードから筋書きを立てたもので、**「Release ビルドでのみ起きる」という前提を疑わなかった**のが根。実際にはビルド構成は原因ではなく、必要条件は「デバッガ非アタッチ」+「Background 遷移」だった。最初に計測を提案したが「原因が分かったなら計測不要」に同意して取り下げており、あそこで測っていれば 2 回の空振りは避けられた。**ハング系（`0x8BADF00D`）は実測しないと当たらない**。
 - 効いた計測手段は lessons に記録した（`Self._printChanges()` の出力を `sort | uniq -c` で集計 / `xcrun devicectl device process launch --console` はデバッガをアタッチしないので watchdog を有効にしたまま実機の stdout が取れる）。使い捨てプローブ（`MapPerfProbe`）は削除済み（`grep -rn "MapPerfProbe\|_printChanges\|DEBUG-w4t9" iosApp/` = 0 件で確認）。
 - 副産物（未対応・別件）: ①`displayedCuratedCafes` に可視領域フィルタが無く画面外のピンまで Annotation に載る（実測 210 個/回）②全ピンが `NavigationLink` / `Button` ラップで、`CafeDetailRoute.initialCafe` が Kotlin の `Cafe` オブジェクトを保持している。どちらも発散とは独立の非効率で、`tasks.md` カテゴリ 2「マップ更新コストの削減」（MU-1 / MU-2）に起票した。
+
+### 2026-08-09（追記）: ウォッチドッグは Swift 6 移行とは無関係だったことの確定
+
+- 関連: `docs/tasks/lessons.md` 2026-08-09 / `0dd21c1` / `761e9a0` / `5cf3c50`
+
+上のエントリの続報。git 履歴で循環の成立時期を確認し、**Swift 6 移行とは無関係**と確定した。あわせて**ユーザーが「Swift 6 前でも発生していた」ことを実際に確認**した。
+
+| 要素 | 導入 |
+|---|---|
+| `cameraPosition = .automatic` | `7904c7d`（Phase 4 スライス 6 / プロジェクト初期） |
+| curated ピンのズームゲート（表示数がカメラ半径依存） | `626fed6`（2026-07-18） |
+| curated が全国 421 件（東京 1 県 → 9 県） | `1802db9` / `79eed0a`（2026-07-28） |
+| Swift 6 移行 | `5cf3c50`（2026-08-07）/ マージ `8d7139f`（08-08） |
+
+循環の両側は移行の 10 日以上前に揃っている。Swift 6 移行が `CuratedCafeRepositoryIosImpl` に加えたのは `@preconcurrency import` / `nonisolated` 化 / キャッシュの `OSAllocatedUnfairLock` 保護で、**取得ロジック自体は変えていない**（`db.collection("curatedCafes").getDocuments()` は同一）。
+
+**「Swift 6 前は起きなかった」の実体は観測機会の差**: 位置情報の許諾ダイアログは初回インストール時（またはアプリ削除後の再インストール時）にしか出ない。TestFlight で更新を重ねる限り許諾は保持されるので Background 遷移が起きず、循環は「重い・熱い」だけで殺されない。ビルド 28 / 29 でたまたま許諾フローを通す機会が来て顕在化した。今回の診断中、実機に Debug 版を入れたときに署名が変わって許諾がリセットされ、ユーザーが「許諾ダイアログ出しっぱなしでいいの？」と気づいた経緯があるが、同じことが TestFlight 側でも起きていたことになる。
+
+- 影響: `761e9a0` のコミットメッセージは Swift 6 移行を原因と断定していた（`0dd21c1` で「原因の断定が誤り」と訂正済み）。本追記で**時系列的にも無関係**であることまで確定した。ただし `assumeIsolated` → `Task { @MainActor in }` の変更自体は `coding-conventions.md` §2.5 の規約準拠の回復にあたるため、引き続き revert しない。
+- 経緯: この誤りの入り口は「Swift 6 対応前は起きなかった」という証言を、**観測条件を確認せずに時系列の原因推定へ使った**こと。教訓は lessons 2026-08-09 に記録した（権限ダイアログ・初回起動フローが絡む症状は変更時期と発現時期がずれる）。

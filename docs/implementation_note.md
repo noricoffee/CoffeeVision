@@ -1495,3 +1495,15 @@ TestFlight ビルド 28 / 29 が位置情報許諾の直後に落ちる報告。
 
 - 影響: `761e9a0` のコミットメッセージは Swift 6 移行を原因と断定していた（`0dd21c1` で「原因の断定が誤り」と訂正済み）。本追記で**時系列的にも無関係**であることまで確定した。ただし `assumeIsolated` → `Task { @MainActor in }` の変更自体は `coding-conventions.md` §2.5 の規約準拠の回復にあたるため、引き続き revert しない。
 - 経緯: この誤りの入り口は「Swift 6 対応前は起きなかった」という証言を、**観測条件を確認せずに時系列の原因推定へ使った**こと。教訓は lessons 2026-08-09 に記録した（権限ダイアログ・初回起動フローが絡む症状は変更時期と発現時期がずれる）。
+
+### 2026-08-09: curated ピンの可視範囲フィルタ（MU-1）— 基準に可視領域の矩形を使わなかった理由
+
+- 関連: `iosApp/iosApp/Features/Map/MapTabView+PinResolution.swift`（`displayedCuratedCafes` / `curatedVisibilityMargin`）/ `docs/ui-ux-guidelines.md`「マップ概念の色セマンティクス」表 / `tasks.md` MU-1
+
+`.automatic` のループ修正（`0dd21c1`）の残務。`displayedCuratedCafes` はズームゲート（可視半径 3000m 以内）を通ると `curatedCafes` 421 件を件数で絞らずそのまま返しており、画面外のピンまで `Annotation` として View 構築されていた（実測 210 個/eval）。
+
+**基準に `latestVisibleRegion`（可視領域の矩形）を使わなかった**。矩形の方が正確だが、`latestVisibleRegion` は現在 body から読まれておらず（「このエリアを検索」実行時に `performAreaSearch` へ渡すだけ）、`onMapCameraChange` で**無条件代入**されている。これを body で読むと**新しいカメラ依存が生まれる** — 同日のウォッチドッグ障害は「カメラ → ピン表示数 → カメラ」の循環が原因だったため、依存方向を増やさないことを優先した。`MKCoordinateRegion` が `Equatable` 非準拠で同値ガードを書きにくいことも理由。採用した `mapSearchCenter` は本メソッドがズームゲートで既に読んでおり、`isEquivalent`（1m 許容）の同値ガードも入っている。
+
+- トレードオフ: 半径ベースなので横長の地図では矩形の角が漏れる。ただし `radiusMeters` は `max(latMeters, lngMeters)` = 可視領域の外接半径相当で**半径側が広く出る**方向であり、実用上は可視領域を包含する。curated は補助表示なので厳密な矩形一致は不要と判断した。マージン 1.3 倍はパン時の先読み分（`shouldShowAreaSearchButton` の「中心移動 > 半径 × 0.3」より手前で効く）。
+- 検証: 実機・**クリーンインストール + 許諾フロー**（= 本番の再現条件）で実測。curated ピン **210 個/eval → 4 個/eval**、body 再評価 **589 回/60秒 → 9 回/60秒**、引き金は 8 種すべて各 1 回、60 秒間プロセス生存。`devicectl device process launch --console` はデバッガをアタッチしないので **watchdog が有効**であり、「生存したこと」自体が発散していない証拠になる。**測定条件を上書きインストールで始めたのは誤りで、ユーザーの指摘（「元々クリーンインストールで再現した」）で修正した** — 上書きでは許諾ダイアログが出ず Background 遷移が起きないため、本番条件を再現できていなかった。
+- MU-2（全ピンの `NavigationLink` ラップ見直し）は**取り下げ**。curated が 4 個規模ならルート値のコピー削減は実測に現れず、`Button` へ変えても `ButtonBehavior` の `State` 初期化と `_UIHostingView` 1 個/ピンの本体コストは変わらない。判断の記録は `tasks.md` MU-2 の備考。

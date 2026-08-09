@@ -95,42 +95,58 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     //
     // CoreLocation のコールバックは `nonisolated` として宣言する必要がある
     // （`CLLocationManagerDelegate` は素の Obj-C プロトコルで MainActor を認識しないため）。
-    // 実際の呼び出しスレッドは、`manager`（`CLLocationManager`）が MainActor 上（`init` 内）で
-    // 生成されているため常にメインスレッドになる（Apple 公式ドキュメント: delegate コールバックは
-    // `CLLocationManager` を生成したスレッドの RunLoop 上で呼ばれる）。
-    // `Task { @MainActor in }` は「非同期にホップする可能性がある」ため、`CLLocationManager`
-    // （非 Sendable）を closure でキャプチャすると Swift 6 で警告になる。実態が
-    // 常にメインスレッドである以上、同期的に MainActor 分離を仮定する
-    // `MainActor.assumeIsolated` の方が正確（`AppleSignInCoordinator.presentationAnchor` と同じ方針）。
+    //
+    // **UI 状態（`@Observable` プロパティ）の更新は `Task { @MainActor in }` で行う。
+    // `MainActor.assumeIsolated`（同期）を使ってはいけない。**
+    //
+    // `assumeIsolated` は「メインスレッドで動いていること」の主張としては正しいが、**同期実行**
+    // であるため、代入が CoreLocation のデリゲート呼び出しスタックの**内側**で起きる。すると
+    // 許諾直後に次の連鎖が 1 本のスタックで走り切ってしまう:
+    //
+    //   locationManagerDidChangeAuthorization（許諾確定）
+    //   └ requestLocation() → didUpdateLocations（位置がキャッシュ済みなら即座に）
+    //     └ lastLocation 代入 → MapTabView の `.onChange` → cameraPosition 変更
+    //       └ MapKit カメラ移動 → _didChangeRegionMidstream → 全ピンの UIHostingView 構築
+    //         └ SwiftUI body 評価（更新サイクルの再入）
+    //
+    // これが 1 回の scene-update に集中し、**許諾ダイアログ表示中はアプリが Background 扱いで
+    // CPU がスロットルされる**ため 10 秒の壁時計予算を超え、ウォッチドッグ（`0x8BADF00D`）に
+    // SIGKILL される。TestFlight ビルド 28 で実際に発生した（デバッガアタッチ中はウォッチドッグ
+    // 自体が無効なので、Debug ビルドでは同じハングが起きていても殺されず気づけない）。
+    //
+    // `Task { @MainActor in }` は更新を別トランザクションへ切り離すので、コールバックスタックから
+    // 抜けてから UI が更新され、1 回の scene-update が短く終わる（Swift 6 移行前の挙動）。
+    // 非 Sendable な引数 `manager` は closure に渡さず、MainActor 上の `self.manager`
+    // （同一インスタンス）を使えば Swift 6 でも警告は出ない。
+    //
+    // 注: `AppleSignInCoordinator` の `assumeIsolated` は同型ではない（同期で値を返す
+    // `presentationAnchor` と、`@Observable` を触らない `continuation.resume()` のみ）。
 
     /// 権限変化の通知。**`manager.delegate = self` の代入時にも発火する**点に注意。
     ///
     /// そのため「許可済みなら取得する」と書いてはいけない（生成が副作用になる）。
     /// 取得を再開するのは [requestLocation] が権限ダイアログ待ちで保留していたときだけ。
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        // `manager`（非 Sendable）自体は `assumeIsolated` の closure に渡さない。
+        // `manager`（非 Sendable）自体は closure に渡さない。
         // `CLAuthorizationStatus`（Sendable な値型）だけを取り出して境界を越える。
         let newStatus = manager.authorizationStatus
-        let shouldResume = MainActor.assumeIsolated { () -> Bool in
+        Task { @MainActor in
             self.authorizationStatus = newStatus
-            guard self.hasPendingRequest else { return false }
+            guard self.hasPendingRequest else { return }
             switch newStatus {
             case .authorizedWhenInUse, .authorizedAlways:
                 self.hasPendingRequest = false
-                return true
+                // 引数の `manager` ではなく MainActor 上の `self.manager` を使う（同一インスタンス）
+                self.manager.requestLocation()
             case .denied, .restricted:
                 // 拒否で確定したので待たない（保留したままだと次の権限変化で不意に取得が走る）
                 self.hasPendingRequest = false
-                return false
             case .notDetermined:
                 // まだダイアログ表示中。保留を維持する
-                return false
+                break
             @unknown default:
-                return false
+                break
             }
-        }
-        if shouldResume {
-            manager.requestLocation()
         }
     }
 
@@ -139,7 +155,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         didUpdateLocations locations: [CLLocation]
     ) {
         guard let coord = locations.first?.coordinate else { return }
-        MainActor.assumeIsolated {
+        Task { @MainActor in
             self.lastLocation = coord
         }
     }
@@ -148,7 +164,7 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
         _ manager: CLLocationManager,
         didFailWithError error: Error
     ) {
-        MainActor.assumeIsolated {
+        Task { @MainActor in
             self.error = error
         }
     }

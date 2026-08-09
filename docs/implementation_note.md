@@ -1431,7 +1431,7 @@ Swift コードレビュー #2「`CallbackFlow` にエラーチャネルが無�
 - **`FlowCompletionGate` を挟んだ理由**: `collect` の completion handler は「正常終了」「例外終了」のどちらか一方で**ちょうど 1 回**呼ぶ契約だが、Firestore リスナは解除されるまで何度でもコールバックしうる（エラー直後にもう 1 度エラーが来る並びは普通に起きる）。取り出しと無効化を `OSAllocatedUnfairLock` でアトミックに行い、ハンドラ呼び出しはロックの外に出した（Kotlin 側から同期的に `deinit` まで走りうるため、ロック保持中に呼ぶと再入でデッドロックする）。
 - **`nonisolated` の付け忘れ 1 回**: `FlowCompletionGate` は `private` なヘルパなので指定不要と思っていたが、既定 MainActor 分離下では `private` でも暗黙 `@MainActor` になり、`nonisolated` な `__collect` から呼べず 4 件のコンパイルエラーになった。同じファイルに `nonisolated final class` が並んでいても継承されない。`kmp-bridge.md` に追記。
 - 検証: KMP テスト 2 件追加（`startSync` が終端例外を catch し、`Job` が完了・スコープ生存・以降のローカル書き込みが通ること）。**ネガティブ検証済み** — catch を外すと新テストだけが FAILED になることを確認してから復元した。全モジュール `iosSimulatorArm64Test` 505 件 PASS / Android `assembleDebug` 成功 / `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。正常系（フック無し）でシミュレータ起動し、同期停止ログも snapshot error も出ないことを確認。
-- **未検証**: サインアウト → 再サインインの実操作は通していない（`stopSync()` の呼び出し経路そのものはシミュレータで踏んでいない）。ユーザーによる確認が要る。
+- **シミュレータでの実操作確認: 済**（2026-08-09、ユーザー）。サインアウト → 新しい匿名 uid での同期再開までを実機操作で確認した（自動計測では `stopSync()` の呼び出し経路そのものを踏めていなかった部分）。
 
 ### 2026-08-09: LocationManager の生成が位置取得を誘発しないようにする（SR-5）
 
@@ -1456,4 +1456,4 @@ Swift コードレビュー #7「`LocationManager()` が View struct の init �
   - **許可済み**: 生成由来の取得が消えたことを確認 ✅
 - **計測できなかったこと**: パン / タブ切替による再生成頻度。`simctl` でタッチを送れないため。起動時に限れば `init` は 1 回で、**手順として「生成コストの集約（`AppState` への hoist）」は不要と判断**した（生成が副作用を持たなくなった以上、余分な init は割り当てが増えるだけ）。
 - **副産物（未対応・別件）**: `resetLastLocation()` / `clearError()` / `error` は**どの View からも参照されていない**（grep 済み）。位置取得の失敗は現状 UI にまったく出ないが、`error` の KDoc は「View 側で alert を出す」と書いている。KDoc と実装の乖離。
-- 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。計測用 `print` は 5 行すべて削除済み（`grep -c MEASURE` = 0 で確認）。**シミュレータでの実操作（マップのパン、FAB の recenter、記録エディタの現在地サジェスト）は未確認**でユーザー確認が要る。
+- 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。計測用 `print` は 5 行すべて削除済み（`grep -c MEASURE` = 0 で確認）。**シミュレータでの実操作確認: 済**（2026-08-09、ユーザー。マップのパン / FAB の recenter / 記録エディタの現在地サジェスト。`simctl` でタッチを送れず自動化できなかった部分）。

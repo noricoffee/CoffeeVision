@@ -8,6 +8,13 @@ import Observation
 ///   `locationManagerDidChangeAuthorization` で許可されたら自動で再取得する
 /// - `lastLocation` を `@Observable` プロパティとして公開し、SwiftUI の `.onChange` で検知できる
 /// - `CLLocationCoordinate2D` は `Equatable` 非準拠のため、View 側では `latitude` で観測する
+///
+/// ## 不変条件
+///
+/// **生成しただけでは位置取得は走らない。** `requestLocation()` を呼んだときだけ走る。
+/// `@State private var locationManager = LocationManager()` は View struct の init のたびに
+/// 式が評価される（SwiftUI は最初の 1 つだけ採用して残りを捨てる）ため、生成が副作用を
+/// 持つと捨てられるインスタンスまで GPS を叩くことになる。詳細は [hasPendingRequest]。
 @MainActor
 @Observable
 final class LocationManager: NSObject, CLLocationManagerDelegate {
@@ -22,6 +29,18 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
 
     /// 位置取得失敗時のエラー。
     private(set) var error: Error?
+
+    /// [requestLocation] が権限未確定のまま**保留**になっているか。
+    ///
+    /// `locationManagerDidChangeAuthorization` は権限が変化したときだけでなく
+    /// **`manager.delegate = self` を代入した時点でも発火する**（CoreLocation の仕様）。
+    /// そのためハンドラ側に「許可済みなら取得する」と素直に書くと、
+    /// **インスタンスを生成しただけで GPS 取得が 1 回走る**。
+    ///
+    /// このフラグは「ユーザー起点の要求が権限ダイアログ待ちで保留されている」ことだけを表し、
+    /// ハンドラはそれが立っているときにのみ再取得する。実測では修正前、マップタブの
+    /// 起動 1 回につき GPS 要求が 2 回（`setupLocation` の 1 回 + 生成由来の 1 回）走っていた。
+    private var hasPendingRequest = false
 
     // MARK: - Init
 
@@ -38,12 +57,17 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     ///
     /// - 権限未確定の場合は許可ダイアログを表示し、許可後に自動で位置取得を再実行する
     /// - 権限拒否 / 制限の場合は何もしない（View 側で `authorizationStatus` を見て alert を出す）
+    ///
+    /// **位置取得が走るのはこのメソッドを呼んだときだけ**（生成しただけでは走らない）。
+    /// その保証は [hasPendingRequest] が担っている。
     func requestLocation() {
         error = nil
         switch authorizationStatus {
         case .notDetermined:
+            // 許可後に locationManagerDidChangeAuthorization から取得を再開するため、
+            // 「ユーザーが要求した」ことを記録しておく
+            hasPendingRequest = true
             manager.requestWhenInUseAuthorization()
-            // 許可後は locationManagerDidChangeAuthorization から requestLocation() を再呼び出しする
         case .authorizedWhenInUse, .authorizedAlways:
             manager.requestLocation()
         case .denied, .restricted:
@@ -79,14 +103,33 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     // 常にメインスレッドである以上、同期的に MainActor 分離を仮定する
     // `MainActor.assumeIsolated` の方が正確（`AppleSignInCoordinator.presentationAnchor` と同じ方針）。
 
+    /// 権限変化の通知。**`manager.delegate = self` の代入時にも発火する**点に注意。
+    ///
+    /// そのため「許可済みなら取得する」と書いてはいけない（生成が副作用になる）。
+    /// 取得を再開するのは [requestLocation] が権限ダイアログ待ちで保留していたときだけ。
     nonisolated func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
         // `manager`（非 Sendable）自体は `assumeIsolated` の closure に渡さない。
         // `CLAuthorizationStatus`（Sendable な値型）だけを取り出して境界を越える。
         let newStatus = manager.authorizationStatus
-        MainActor.assumeIsolated {
+        let shouldResume = MainActor.assumeIsolated { () -> Bool in
             self.authorizationStatus = newStatus
+            guard self.hasPendingRequest else { return false }
+            switch newStatus {
+            case .authorizedWhenInUse, .authorizedAlways:
+                self.hasPendingRequest = false
+                return true
+            case .denied, .restricted:
+                // 拒否で確定したので待たない（保留したままだと次の権限変化で不意に取得が走る）
+                self.hasPendingRequest = false
+                return false
+            case .notDetermined:
+                // まだダイアログ表示中。保留を維持する
+                return false
+            @unknown default:
+                return false
+            }
         }
-        if newStatus == .authorizedWhenInUse || newStatus == .authorizedAlways {
+        if shouldResume {
             manager.requestLocation()
         }
     }

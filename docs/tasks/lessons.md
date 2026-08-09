@@ -1093,3 +1093,16 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **原因**: 既定 MainActor 分離（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`）は**宣言単位**で効く。`private` でも、同じファイルに `nonisolated` の宣言が並んでいても、**何も書かない型は `@MainActor` になる**。「Kotlin から見える型だけ `nonisolated` にすればよい」という理解が誤り
 - **教訓**: `nonisolated` な型が内部で使うヘルパ型にも同じ指定が要る。**幸いこれはコンパイルエラーになる**ので、既に文書化済みの `@concurrent` 付け忘れ（診断が一切出ない）より性質は良い。迷ったら「この型のメソッドを誰が呼ぶか」で決める
 - **発生源**: 2026-08-09、SR-4 の実装中。`.claude/rules/swift-ios.md` の既存項目（Kotlin interface 実装クラスは `nonisolated`）の適用範囲の話なので、`kmp-bridge.md` の該当節に追記して昇格
+
+### フレームワークが「登録時にも呼ぶ」コールバックを「変化した」と解釈すると、生成が副作用になる
+
+- **症状**: `LocationManager` を 1 つ生成するだけで GPS 取得が 1 回走っていた。`init` は `requestLocation()` を呼んでいないのに。実測で、マップタブの起動 1 回につき GPS 要求が **2 回**（`setupLocation` の 1 回 + 生成由来の 1 回）
+- **機序**: `manager.delegate = self` の代入で CoreLocation が `locationManagerDidChangeAuthorization` を発火させる（Apple: "Tells the delegate **when the app creates the location manager** and when the authorization status changes."）。ハンドラが `if 許可済み { manager.requestLocation() }` と無条件だったため、**代入 = 取得要求**になっていた。メソッド名が `DidChange` なので「変化したときに呼ばれる」と読んでしまうのが罠で、実際は**「現在値の通知」と「変化の通知」が同じ入口に来る**
+- **実害の見つけ方**: 無駄な GPS 起動そのものより、**呼び出し側が明示的に置いたガードが黙って迂回されること**が本体だった（`if !didSetInitialCamera { requestLocation() }` / 記録エディタの「未許可・未決定は何もしない」要件 2-8）。ガードは `requestLocation()` の呼び出し側に書かれているのに、取得はハンドラ側からも起きるので効かない。**「この副作用が起きる経路は何本あるか」を数える**と見える
+- **修正パターン**: **要求の意図を状態として持つ**。`hasPendingRequest` を立てるのは `requestLocation()` が `.notDetermined` で保留したときだけで、ハンドラはそれが立っているときにのみ再開する。確定したら（許可・拒否のどちら側でも）フラグを下ろす — 拒否のまま保留を残すと、後で設定アプリから許可したときに誰も要求していない取得が走る
+- **不変条件として書く**: 「**生成しただけでは何も起きない**」は型の KDoc に明記した。`@State private var x = Foo()` は View struct の init のたびに式が評価され SwiftUI が最初の 1 つ以外を捨てるため、**生成が副作用を持つ型は SwiftUI と相性が悪い**
+- **レビュー時の推測と実測のズレ（記録）**: 元の指摘は「View struct の init ごとに再生成され `requestLocation()` を誘発する」だったが、**実測すると再生成は起動時に再現しなかった**（`init` は 1 回。`RootTabView.body` が `mapSearchCenter` を読まないため `@Observable` の粒度で再生成されない）。**症状は当たっていたが機序は外れていた**。静的読解での「たぶん毎回呼ばれる」は計測で潰す
+- **発生源**: 2026-08-09、Swift コードレビュー #7（SR-5）。実測手順と数値は implementation_note 2026-08-09
+- **横展開点検（2026-08-09）**: `iosApp/iosApp` の `delegate =` / `addObserver` / `addStateDidChangeListener` / `addSnapshotListener` / `NotificationCenter` を全件確認（`head` 不使用、10 箇所）。**同型は無し**:
+  - `BannerAdLoader`（`bannerView.delegate`）/ `AppleSignInCoordinator`（`controller.delegate`）は **`load(_:)` / `performRequests()` を呼ぶまでコールバックが来ない**ので登録が副作用にならない
+  - Firestore の `addSnapshotListener` 3 件と Auth の `addStateDidChangeListener` 2 件は**登録時に現在値が来るのが仕様どおりで、かつそれが目的**（`observeChanges` / `observeUserId` / `observeAccount` は「現在のスナップショットから流し始める」契約）。同じ「登録時に発火する」でも、**その発火を欲しがっているかどうか**が分かれ目

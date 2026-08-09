@@ -1432,3 +1432,28 @@ Swift コードレビュー #2「`CallbackFlow` にエラーチャネルが無�
 - **`nonisolated` の付け忘れ 1 回**: `FlowCompletionGate` は `private` なヘルパなので指定不要と思っていたが、既定 MainActor 分離下では `private` でも暗黙 `@MainActor` になり、`nonisolated` な `__collect` から呼べず 4 件のコンパイルエラーになった。同じファイルに `nonisolated final class` が並んでいても継承されない。`kmp-bridge.md` に追記。
 - 検証: KMP テスト 2 件追加（`startSync` が終端例外を catch し、`Job` が完了・スコープ生存・以降のローカル書き込みが通ること）。**ネガティブ検証済み** — catch を外すと新テストだけが FAILED になることを確認してから復元した。全モジュール `iosSimulatorArm64Test` 505 件 PASS / Android `assembleDebug` 成功 / `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。正常系（フック無し）でシミュレータ起動し、同期停止ログも snapshot error も出ないことを確認。
 - **未検証**: サインアウト → 再サインインの実操作は通していない（`stopSync()` の呼び出し経路そのものはシミュレータで踏んでいない）。ユーザーによる確認が要る。
+
+### 2026-08-09: LocationManager の生成が位置取得を誘発しないようにする（SR-5）
+
+- 関連: `iosApp/iosApp/Utilities/LocationManager.swift` / `docs/tasks/lessons.md` 2026-08-09
+
+Swift コードレビュー #7「`LocationManager()` が View struct の init ごとに作られ `requestLocation()` を誘発する」。**計測したら指摘の前半と後半で当たり外れが分かれた。**
+
+- **前半（再生成）は起動時には再現しなかった**。`LocationManager.init` は 1 回だけ。`RootTabView.body` は `appState.mapSearchCenter` を読んでいないため、`@Observable` の追跡粒度ではカメラ移動で `MapTabView` は再生成されない。レビュー時の「View struct の init ごと」は**静的推測で、実測していなかった**
+- **後半（GPS 誘発）は実在した**。ただし機序は「init が `requestLocation()` を呼ぶ」ではなく、**`manager.delegate = self` の代入で CoreLocation が `locationManagerDidChangeAuthorization` を発火させる**こと。ハンドラが `if newStatus == .authorizedWhenInUse || ... { manager.requestLocation() }` と無条件だったため、**インスタンス生成 = GPS 取得 1 回**になっていた
+
+**実害の本体は無駄な GPS 起動ではなく、両画面が明示的に置いたガードの迂回**だった:
+
+| 画面 | ガード | 迂回のされ方 |
+|---|---|---|
+| `MapTabView+Location.setupLocation` | `if !didSetInitialCamera { requestLocation() }` | init 由来の取得は `didSetInitialCamera` を見ない |
+| `CoffeeEditorView` の `.task` | 要件 2-8「許可ダイアログは出さない・未許可/未決定は何もしない」 | 許可済みだと init 由来 + `.task` で 2 回走る |
+
+- **修正**: `hasPendingRequest` を追加し、ハンドラが取得を再開するのは「`requestLocation()` が `.notDetermined` で保留された」ときだけにした。許可・拒否のどちらに確定してもフラグを下ろす（拒否のまま保留を残すと、後で設定アプリから許可したときに誰も要求していない取得が走る）。**呼び出し側は無変更** — 両画面とも「許可後は callback で自動取得される」前提で書かれており、その前提は保たれる。
+- **計測（`simctl` で自動化）**: 一時的な `print` を入れ `simctl privacy grant/revoke/reset location` + `simctl launch --console-pty` で実測。許可済み起動: **修正前 GPS 要求 2 回 → 修正後 1 回**（`init` は前後とも 1 回）。権限 3 経路も自動で確認した:
+  - **未決定 → 許可**: `didChangeAuthorization fired status=0`（delegate 代入由来）→ `shouldResume=false` / 許可付与後 `status=4` → `shouldResume=true` → 取得 ✅
+  - **未決定 → 拒否**: `status=2` → `shouldResume=false`、フラグは解除 ✅
+  - **許可済み**: 生成由来の取得が消えたことを確認 ✅
+- **計測できなかったこと**: パン / タブ切替による再生成頻度。`simctl` でタッチを送れないため。起動時に限れば `init` は 1 回で、**手順として「生成コストの集約（`AppState` への hoist）」は不要と判断**した（生成が副作用を持たなくなった以上、余分な init は割り当てが増えるだけ）。
+- **副産物（未対応・別件）**: `resetLastLocation()` / `clearError()` / `error` は**どの View からも参照されていない**（grep 済み）。位置取得の失敗は現状 UI にまったく出ないが、`error` の KDoc は「View 側で alert を出す」と書いている。KDoc と実装の乖離。
+- 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。計測用 `print` は 5 行すべて削除済み（`grep -c MEASURE` = 0 で確認）。**シミュレータでの実操作（マップのパン、FAB の recenter、記録エディタの現在地サジェスト）は未確認**でユーザー確認が要る。

@@ -54,8 +54,8 @@ final class MapSearchController {
     /// 「このエリアを検索」の検索実行中フラグ（ボタンのローディング表示用）。
     var isAreaSearchInFlight: Bool = false
 
-    /// エリア検索が 0 件だったときの軽量案内メッセージ。`errorToast` 経由で表示する。
-    var areaSearchEmptyMessage: String?
+    /// 検索が 0 件だったときの軽量案内メッセージ（エリア検索・テキスト検索共通）。`errorToast` 経由で表示する。
+    var emptyResultMessage: String?
 
     /// 一覧・ピンの表示に使う結果（`sb.results` を表示用に加工したもの。単一ソース）。
     ///
@@ -153,11 +153,12 @@ final class MapSearchController {
     ///
     /// テキスト検索・「このエリアを検索」の両方の完了を検知し、成功時は結果を全件ピンとして
     /// `mapBridge` に反映する。「このエリアを検索」由来の完了時はさらにアンカーを更新して
-    /// ボタンを隠し、0 件だった場合は軽量な案内メッセージを出す
+    /// ボタンを隠す
     /// （「このエリアを検索」はキーワードがあれば `searchText` 相当を実行するが、`isAreaSearchInFlight`
     /// による `wasAreaSearch` 判定はキーワード有無に関わらず「エリア検索由来」として扱う。2026-07-24）。
     /// テキスト検索（検索バー送信）由来の完了時は、結果が画面外に落ちないよう全結果ピンへカメラを
     /// 自動フィットする（「このエリアを検索」は表示範囲内検索で結果が構造的に画面内のため対象外。2026-07-22）。
+    /// どちらの経路でも 0 件だった場合は軽量な案内メッセージを出す（検索種別ごとに文言を変える。2026-08-10）。
     func handleCompletion(mapBridge: MapViewModelBridge, currentCenter: MapSearchCenter?) {
         guard let sb = searchBridge else { return }
         let wasAreaSearch = isAreaSearchInFlight
@@ -178,10 +179,17 @@ final class MapSearchController {
             }
             showAreaSearchButton = false
             if displayedResults.isEmpty {
-                areaSearchEmptyMessage = String(localized: "このエリアにカフェが見つかりませんでした")
+                emptyResultMessage = String(localized: "このエリアにカフェが見つかりませんでした")
             }
         } else {
             fitCameraToSearchResults(sb.results)
+            if displayedResults.isEmpty {
+                let trimmedQuery = query.trimmingCharacters(in: .whitespaces)
+                emptyResultMessage = String(
+                    format: String(localized: "「%@」に一致するカフェが見つかりませんでした"),
+                    trimmedQuery
+                )
+            }
         }
     }
 

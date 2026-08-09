@@ -346,7 +346,7 @@ struct MapTabView: View {
     /// 複数のエラー源を優先順位付きで単一トーストに集約する。
     ///
     /// 優先度: `bridge.error`（一般エラー）> `searchBridge.error`（検索失敗）
-    /// > `areaSearchEmptyMessage`（エリア検索 0 件案内）> `poiLookupError`（POI 検索失敗）。
+    /// > `emptyResultMessage`（検索 0 件案内）> `poiLookupError`（POI 検索失敗）。
     /// `.errorToast` は 1 つしか付けられないため、body から 1 個だけ渡す。
     private func activeToast(bridge: MapViewModelBridge) -> (message: String, dismiss: () -> Void)? {
         if let e = bridge.error {
@@ -355,8 +355,8 @@ struct MapTabView: View {
         if let e = searchController.searchBridge?.error {
             return (e, { searchController.searchBridge?.onErrorDismissed() })
         }
-        if let message = searchController.areaSearchEmptyMessage {
-            return (message, { searchController.areaSearchEmptyMessage = nil })
+        if let message = searchController.emptyResultMessage {
+            return (message, { searchController.emptyResultMessage = nil })
         }
         if let e = bridge.poiLookupError {
             return (e.message, {

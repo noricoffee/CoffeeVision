@@ -1518,3 +1518,13 @@ TestFlight ビルド 28 / 29 が位置情報許諾の直後に落ちる報告。
 - **削除範囲**: `users/{uid}` がルート doc / `coffees` / `savedCafes` の 3 つとも消え、端末ローカルにも「行きたい店」の孤児行が残らないこと。2026-08-06 に後ろ 2 つが残るのを是正した箇所で、その修正が実機で効いていることの実証でもある
 - **副次的に Swift 6 移行 ③ の 2/3 が実証された**: 削除経路は `AppleSignInCoordinator` 経由で `ASAuthorizationController` を起動する（サインイン経路と同じコーディネータ）。したがって ①`MainActor.assumeIsolated` 化したデリゲートがクラッシュしないこと ②`presentationAnchor(for:)` のフォールバックを削除（未設定なら `preconditionFailure`）した後もシートが実際に出ること の両方が、この確認の中で通っている。**残るはキャンセル経路のみ**で、`verification-checklist.md` の当該項目はそこへ削り込んだ
 - 未実施: 異常系（Apple シートをキャンセル → アラートを出さずオーバーレイが消え、記録・行きたい店・アカウントがすべて残る）。revoke 失敗時の削除中断は Firebase Console の設定を一時的に壊す必要があるため doc 上も任意扱い
+
+### 2026-08-10: マップのテキスト検索が 0 件のときのフィードバック — トーストに寄せてシートは出さない
+
+- 関連: `iosApp/iosApp/Features/Map/MapSearchController.swift`（`emptyResultMessage` / `handleCompletion`）/ `iosApp/iosApp/Features/Map/MapTabView.swift`（`activeToast` / `isShowingSearchResultsSheet`）/ `tasks.md` カテゴリ 1
+
+ユーザー報告「検索結果が 0 件だった時になんのフィードバックもない」への対応。**穴はテキスト検索側だけ**で、他の 3 経路は既に案内を持っていた（記録一覧 / 記録エディタのカフェ検索 = `ContentUnavailableView.search`、マップの「このエリアを検索」= トースト）。原因は 2026-07-24 にエリア検索へ 0 件案内（`areaSearchEmptyMessage`）を足したとき、それを `wasAreaSearch` 分岐の中に置いたこと。テキスト検索側は `fitCameraToSearchResults([])` が座標ゼロ件で早期 return して無反応に終わっていた。プロパティ名を `emptyResultMessage` に一般化し、両分岐で共有する形に直した（文言は検索種別ごとに出し分け: エリア =「このエリアにカフェが見つかりませんでした」/ テキスト =「「〈クエリ〉」に一致するカフェが見つかりませんでした」）。
+
+- **0 件でも結果シートを出す案は採らなかった**: `isShowingSearchResultsSheet` は「ローディング中 or 結果あり」を条件にしており、0 件でシートを出すと `MapSearchResultsSheet.peekHeight`（180pt）が情報ゼロで画面を占有する。さらにこの高さは現在地 FAB の下端インセット（`searchSheetFABBottomInset`）にも二重消費されるため、空シートのぶん FAB が押し上がる。フィードバックはトースト 1 本に寄せ、シートの表示条件は現状維持とした
+- **エラーとの二重表示はしない**: `handleCompletion` 冒頭の `guard sb.hasSearched, sb.error == nil` により検索失敗時は 0 件メッセージへ到達しない（失敗はエラートーストが担当）。トーストの優先順位も既存のまま（`bridge.error` > 検索失敗 > 0 件案内 > POI 検索失敗）
+- **エリア検索とテキスト検索が同じプロパティを共有しても競合しない**: `wasAreaSearch` で排他分岐するため、1 回の完了で立つメッセージは高々 1 つ

@@ -1075,3 +1075,21 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **発生源**: 2026-08-08、Swift コードレビュー #5（SR-3）。前日の SW6-A で「対象外（意図的）」とした同じ箇所。implementation_note 1350 行付近に追記で是正
 - **関連**: 同日の「パフォーマンス改善は『気づいた 1 箇所』で終わりやすい」と同根（症状が出ないので観点が漏れる）。あちらが**同一レイヤーの並列箇所**の取りこぼしなのに対し、こちらは**同じ 1 箇所の別の観点**の取りこぼし
 - **横展開点検（2026-08-08）**: SwiftUI View の computed property 内でファイル I/O / 画像デコードを行っている箇所を全 `.swift` から機械抽出（`var 宣言 { ... }` のブロックを波括弧で切り出し、`PhotoFileStore.` / `UIImage(contentsOfFile` / `Data(contentsOf` / `CGImageSource` / `FileManager.default.(contents|urls|fileExists)` / `.jpegData(` / `.pngData(` を検索。`head` 不使用）。ヒット 3 件はいずれも**正当**: `RecordPhotoThumbnail.body`（`.task(id:)` 内の `await` = 表示時 1 回・`@concurrent` で off-main）/ `CoffeeEditorView.body`（`.onChange` のクロージャ内 = イベント発火時のみ）/ `PhotoFileStore.photosDirectoryURL`（ディスク I/O ではなくパス導出。意図は KDoc に明記済み）。**真の該当は `CoffeeShareCardView.loadedPhoto` の 1 件のみ**で修正済み
+
+### 「エラーが握り潰されている」の下に「そのエラーを自分で作っていた」が隠れている
+
+- **症状**: iOS の `CallbackFlow` が Firestore の `permission-denied` を `print` して `return` するだけで、Kotlin 側の `collect` は永久に宙吊りになる（Android は `close(error)` で伝播しており**同じ interface の 2 実装が非対称**）。レビュー指摘は「エラーチャネルが無い」だった
+- **原因の構造**: 指摘は表層で、根本はその 1 段下にあった。`AppContainer.startInitialSync()` が `startSync` の戻り値 `Job` を**捨てており**、`AppState.resetAndRebootstrap()` もブリッジしか止めていなかった。Firestore Rules は `request.auth.uid == uid` しか許さないので、**サインアウトのたびに旧 uid の購読が 1 組ずつ残り、必ず `permission-denied` を受ける**。つまり握り潰されていたエラーは外から降ってくる事故ではなく、**自分で作って自分で捨てていた**もの。リーク（Job + Firestore リスナ）と権限エラーが同じ 1 つの原因から出ていた
+- **なぜ表層だけ直すと危ないか**: iOS のエラー伝播だけを Android に揃えると、`startSync` に try/catch が無いため**サインアウトのたびに例外が両プラットフォームで呼び出し元スコープへ抜ける**。「非対称を直す」が「両方を壊す」になりうる。**ライフサイクル管理（根本）→ 受け止め（catch）→ 伝播** の順で組む必要があった
+- **見つけ方**: 「このエラーはどういうときに起きるのか」を**Rules / 権限の条件から逆算**した。`permission-denied` は正しく認証されたユーザーには起きえないので、起きるなら購読側の uid がずれている——と辿ると Job を捨てている行に着く。**エラーハンドリングの不備を見たら、まずそのエラーの発生条件を特定する**。発生条件が「自分の側の bug」なら、ハンドリングを足すのは 2 番目の仕事
+- **判別軸（Job を捨ててよいか）**: `launch` の戻り値を捨てられるのは**スコープがリソースの有効期間を正しく囲っているとき**だけ。ViewModel の `viewModelScope`（子 `SupervisorJob` を `clear()` で畳む）はこれを満たす。**アプリ生存期間のスコープ（`MainScope()`）に直接 launch し、中身が uid のようなより短いライフサイクルに紐づく**ときは、スコープが囲えていないので `Job` を保持するしかない
+- **教訓**: **長命スコープに短命な購読を launch したら、その `Job` は必ず保持する。** そして**開始 API を作ったら停止 API も同じ場所に置く**（`startInitialSync()` だけがあり `stopSync()` が無かったので、呼び出し側も「止める」を思いつけなかった）。開始側だけ公開されている API は、利用者に「止めなくてよい」と誤って教える
+- **発生源**: 2026-08-09、Swift コードレビュー #2（SR-4）。経緯は implementation_note 2026-08-09、契約は `architecture.md`（DI 節・読み取りデータフロー節）と両 `RemoteXxxDataSource` の KDoc へ
+- **横展開点検（2026-08-09）**: `shared/**` の `scope.launch` / `viewModelScope.launch` を全件確認（`head` 不使用）。**アプリ生存期間の `AppContainer.scope` に直接 launch しているのは `CoffeeRepositoryImpl.startSync` / `SavedCafeRepositoryImpl.startSync` の 2 件のみ**で、いずれも本件で `AppContainer` が `Job` を保持するようにした。他はすべて `viewModelScope`（各 ViewModel が子 `SupervisorJob` を所有し `clear()` で畳む）経由で、スコープが有効期間を囲えているため戻り値を捨ててよい。iOS 側は `AppState` が保持する 4 ブリッジ（coffeeList / map / account / analysis）がすべて `resetAndRebootstrap()` で cancel され、画面ローカルのブリッジは `deinit` → `clear()` に畳まれることを確認。`placePhotoLoader` は uid 非依存
+
+### `nonisolated` は同じファイルの `private` ヘルパ型には伝播しない
+
+- **症状**: `nonisolated final class CallbackFlow` の中で使う `private final class FlowCompletionGate` に `nonisolated` を付け忘れ、`call to main actor-isolated instance method 'arm' in a synchronous nonisolated context` が 4 件出た
+- **原因**: 既定 MainActor 分離（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor`）は**宣言単位**で効く。`private` でも、同じファイルに `nonisolated` の宣言が並んでいても、**何も書かない型は `@MainActor` になる**。「Kotlin から見える型だけ `nonisolated` にすればよい」という理解が誤り
+- **教訓**: `nonisolated` な型が内部で使うヘルパ型にも同じ指定が要る。**幸いこれはコンパイルエラーになる**ので、既に文書化済みの `@concurrent` 付け忘れ（診断が一切出ない）より性質は良い。迷ったら「この型のメソッドを誰が呼ぶか」で決める
+- **発生源**: 2026-08-09、SR-4 の実装中。`.claude/rules/swift-ios.md` の既存項目（Kotlin interface 実装クラスは `nonisolated`）の適用範囲の話なので、`kmp-bridge.md` の該当節に追記して昇格

@@ -9,6 +9,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -165,16 +167,59 @@ class SavedCafeRepositoryImplTest {
         assertTrue(fakeRemote.uploaded.isEmpty(), "観測経路はリモートを叩かない")
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun start_sync_stops_quietly_when_remote_flow_fails_without_killing_the_scope() = runTest {
+        local = LocalSavedCafeRepository(db, coroutineContext)
+        fakeRemote = FakeRemoteSavedCafeDataSource()
+        val repo = SavedCafeRepositoryImpl(local, fakeRemote)
+
+        val scope = CoroutineScope(coroutineContext)
+        val job = repo.startSync(USER_ID, scope)
+        runCurrent()
+
+        fakeRemote.emit(listOf(sampleSavedCafe(placeId = "place-1")))
+        runCurrent()
+        assertEquals(listOf("place-1"), local.observeAll(USER_ID).first().map { it.cafe.placeId })
+
+        // 上流が回復不能な失敗（Firestore の permission-denied 相当）で Flow を例外終了させる
+        fakeRemote.fail(RuntimeException("PERMISSION_DENIED"))
+        runCurrent()
+
+        assertTrue(job.isCompleted, "Flow の例外終了で Job は完了する（宙吊りにならない）")
+        assertTrue(!job.isCancelled, "例外は catch されるので Job は失敗扱いにならない")
+        assertTrue(scope.isActive, "同期が止まっても呼び出し元スコープは生き続ける")
+
+        repo.save(sampleSavedCafe(placeId = "place-after-failure"))
+        assertEquals(
+            setOf("place-1", "place-after-failure"),
+            local.observeAll(USER_ID).first().map { it.cafe.placeId }.toSet(),
+        )
+    }
+
     private class FakeRemoteSavedCafeDataSource(
         private val failUpload: Boolean = false,
         private val failRemove: Boolean = false,
     ) : RemoteSavedCafeDataSource {
 
+        /** [CoffeeRepositoryImplTest] の同名 sealed と同じ意図（例外終了の再現）。 */
+        private sealed interface Signal {
+            data class Snapshot(val savedCafes: List<SavedCafe>) : Signal
+            data class Failure(val error: Throwable) : Signal
+        }
+
         val uploaded = mutableListOf<SavedCafe>()
         val removed = mutableListOf<Pair<String, String>>()
-        private val changes = MutableSharedFlow<List<SavedCafe>>(replay = 0, extraBufferCapacity = 8)
+        private val changes = MutableSharedFlow<Signal>(replay = 0, extraBufferCapacity = 8)
 
-        override fun observeChanges(userId: String): Flow<List<SavedCafe>> = changes
+        override fun observeChanges(userId: String): Flow<List<SavedCafe>> = flow {
+            changes.collect { signal ->
+                when (signal) {
+                    is Signal.Snapshot -> emit(signal.savedCafes)
+                    is Signal.Failure -> throw signal.error
+                }
+            }
+        }
 
         override suspend fun upload(savedCafe: SavedCafe) {
             if (failUpload) throw RuntimeException("remote upload failed")
@@ -187,7 +232,12 @@ class SavedCafeRepositoryImplTest {
         }
 
         suspend fun emit(savedCafes: List<SavedCafe>) {
-            changes.emit(savedCafes)
+            changes.emit(Signal.Snapshot(savedCafes))
+        }
+
+        /** 上流が回復不能な失敗をして Flow が例外終了する状況を再現する。 */
+        suspend fun fail(error: Throwable) {
+            changes.emit(Signal.Failure(error))
         }
     }
 

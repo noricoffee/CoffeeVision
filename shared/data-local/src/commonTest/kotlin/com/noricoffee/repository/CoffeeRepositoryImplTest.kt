@@ -11,9 +11,11 @@ import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.datetime.Instant
@@ -177,6 +179,37 @@ class CoffeeRepositoryImplTest {
         job.cancel()
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun start_sync_stops_quietly_when_remote_flow_fails_without_killing_the_scope() = runTest {
+        local = LocalCoffeeRepository(db, coroutineContext)
+        fakeRemote = FakeRemoteCoffeeDataSource()
+        val repo = CoffeeRepositoryImpl(local, fakeRemote)
+
+        val scope = CoroutineScope(coroutineContext)
+        val job = repo.startSync(USER_ID, scope)
+        runCurrent()
+
+        // 失敗前に届いたスナップショットは通常どおり反映される
+        fakeRemote.emit(listOf(sampleRecord(id = "r-remote-1")))
+        runCurrent()
+        assertEquals(listOf("r-remote-1"), local.observeAll(USER_ID).first().map { it.id })
+
+        // 上流が回復不能な失敗（Firestore の permission-denied 相当）で Flow を例外終了させる
+        fakeRemote.fail(RuntimeException("PERMISSION_DENIED"))
+        runCurrent()
+
+        // 例外は startSync の中で受け止められ、scope へは漏れない
+        assertTrue(job.isCompleted, "Flow の例外終了で Job は完了する（宙吊りにならない）")
+        assertTrue(!job.isCancelled, "例外は catch されるので Job は失敗扱いにならない")
+        assertTrue(scope.isActive, "同期が止まっても呼び出し元スコープは生き続ける")
+
+        // ローカル DB は Single Source of Truth なので、同期停止後も読み書きは動く
+        repo.save(sampleRecord(id = "after-failure"))
+        val ids = local.observeAll(USER_ID).first().map { it.id }.toSet()
+        assertEquals(setOf("r-remote-1", "after-failure"), ids)
+    }
+
     @Test
     fun observe_reads_local_db_only() = runTest {
         local = LocalCoffeeRepository(db, coroutineContext)
@@ -248,11 +281,28 @@ class CoffeeRepositoryImplTest {
         private val failRemove: Boolean = false,
     ) : RemoteCoffeeDataSource {
 
+        /**
+         * `observeChanges` が流す信号。スナップショットだけでなく
+         * **回復不能な失敗による Flow の例外終了**（[RemoteCoffeeDataSource.observeChanges]
+         * のエラー契約）も再現できるようにするための sealed。
+         */
+        private sealed interface Signal {
+            data class Snapshot(val records: List<CoffeeRecord>) : Signal
+            data class Failure(val error: Throwable) : Signal
+        }
+
         val uploaded = mutableListOf<CoffeeRecord>()
         val removed = mutableListOf<Pair<String, String>>()
-        private val changes = MutableSharedFlow<List<CoffeeRecord>>(replay = 0, extraBufferCapacity = 8)
+        private val changes = MutableSharedFlow<Signal>(replay = 0, extraBufferCapacity = 8)
 
-        override fun observeChanges(userId: String): Flow<List<CoffeeRecord>> = changes
+        override fun observeChanges(userId: String): Flow<List<CoffeeRecord>> = flow {
+            changes.collect { signal ->
+                when (signal) {
+                    is Signal.Snapshot -> emit(signal.records)
+                    is Signal.Failure -> throw signal.error
+                }
+            }
+        }
 
         override suspend fun upload(record: CoffeeRecord) {
             if (failUpload) throw RuntimeException("remote upload failed")
@@ -265,7 +315,12 @@ class CoffeeRepositoryImplTest {
         }
 
         suspend fun emit(records: List<CoffeeRecord>) {
-            changes.emit(records)
+            changes.emit(Signal.Snapshot(records))
+        }
+
+        /** 上流が回復不能な失敗をして Flow が例外終了する状況を再現する。 */
+        suspend fun fail(error: Throwable) {
+            changes.emit(Signal.Failure(error))
         }
     }
 

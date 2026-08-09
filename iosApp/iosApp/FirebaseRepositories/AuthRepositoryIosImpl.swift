@@ -48,8 +48,9 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
     /// Flow<String?> は SKIE 経由で SkieSwiftOptionalFlow<String> として実装する。
     func observeUserId() -> SkieSwiftOptionalFlow<String> {
         var handle: AuthStateDidChangeListenerHandle?
+        // Auth の state listener はエラーを返さない API なので `fail` は使わない。
         let callbackFlow = CallbackFlow<NSString>(
-            onStart: { emit in
+            onStart: { emit, _ in
                 handle = Auth.auth().addStateDidChangeListener { _, user in
                     if let uid = user?.uid {
                         emit(uid as NSString)
@@ -80,8 +81,9 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
     /// SKIE 実装側は `SkieSwiftOptionalFlow<AuthAccount>` を返す。
     func observeAccount() -> SkieSwiftOptionalFlow<AuthAccount> {
         var handle: AuthStateDidChangeListenerHandle?
+        // Auth の state listener はエラーを返さない API なので `fail` は使わない。
         let callbackFlow = CallbackFlowOptional<AuthAccount>(
-            onStart: { emitSome, emitNone in
+            onStart: { emitSome, emitNone, _ in
                 handle = Auth.auth().addStateDidChangeListener { _, user in
                     if let user {
                         let account = AuthRepositoryIosImpl.makeAuthAccount(from: user)
@@ -288,13 +290,17 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
 
     /// Firestore `users/{uid}` の `analyticsConsent` フィールドを Flow<Boolean> として観察する。
     ///
-    /// ドキュメントが存在しない場合は `false` を emit する。
+    /// ドキュメントが存在しない場合は `false` を emit する（初回ユーザー = 未同意）。
     /// SKIE の要求により `SkieSwiftFlow<KotlinBoolean>` を返す。
+    ///
+    /// **読み取りエラーは `false` に丸めず Flow を例外終了させる。** 「ドキュメントが無い」と
+    /// 「読めなかった」は別の事象で、後者で `false` を emit するのは同意状態の**値の捏造**に
+    /// あたる（`permission-denied` が UI 上は「同意していない」として現れてしまう）。
     func observeAnalyticsConsent() -> SkieSwiftFlow<KotlinBoolean> {
         var listenerRegistration: ListenerRegistration?
 
         let flow = CallbackFlow<KotlinBoolean>(
-            onStart: { emit in
+            onStart: { emit, fail in
                 guard let uid = Auth.auth().currentUser?.uid else {
                     emit(KotlinBoolean(value: false))
                     return
@@ -302,7 +308,12 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
                 listenerRegistration = Firestore.firestore()
                     .collection("users")
                     .document(uid)
-                    .addSnapshotListener { snapshot, _ in
+                    .addSnapshotListener { snapshot, error in
+                        if let error {
+                            print("[AuthRepositoryIosImpl] analyticsConsent snapshot error: \(error)")
+                            fail(error)
+                            return
+                        }
                         let consent = snapshot?.data()?["analyticsConsent"] as? Bool ?? false
                         emit(KotlinBoolean(value: consent))
                     }

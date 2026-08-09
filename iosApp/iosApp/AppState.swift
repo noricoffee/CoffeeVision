@@ -325,10 +325,16 @@ final class AppState {
 
     /// サインアウト / アカウント削除後に全ブリッジをリセットして再起動する。
     ///
+    /// - **`container.stopSync()` で旧 uid の同期購読を止める**
     /// - `coffeeListBridge` / `mapBridge` / `accountBridge` / `uid` を nil に戻す
     /// - `status = .idle` にして `AppRootView` をローディング表示に切り替える
     /// - 再度 `bootstrap()` を呼んで新規匿名 uid を確定する
     func resetAndRebootstrap() {
+        // ブリッジ（= ViewModel の observation）を止めるだけでは Firestore の同期購読は残る。
+        // Rules は `request.auth.uid == uid` しか許さないので、放置すると旧 uid のリスナが
+        // `permission-denied` を受け続け、サインアウトのたびに 1 組ずつ積み上がる。
+        container.stopSync()
+
         coffeeListBridge?.onDisappear()
         mapBridge?.cancel()
         accountBridge?.cancel()

@@ -321,6 +321,7 @@ ViewModel が UIState を更新 → View が再描画
 - **書き込みは常に「ローカル → リモート」の順序**（ローカルが Source of Truth。リモートの結果を待たずに UI へ反映される）
 - **リモート失敗の扱いは `CoffeeRepositoryImpl.WritePolicy`**: 既定 `PropagateRemoteFailure`（例外を呼び出し元へ伝播し ViewModel がエラー表示）/ `IgnoreRemoteFailure`（Firestore SDK のオフライン永続化・リトライに委譲して握りつぶす）
 - オフライン時の再送は Firestore SDK のオフライン永続化が引き受ける（独自の同期キューは書かない）
+- **読み取り側（`observeChanges`）の失敗の扱いは `WritePolicy` とは別**: 回復不能な失敗では **Flow を例外で終了させる**のが両プラットフォーム共通の契約（インターフェースの KDoc が正本）。`startSync` はそれを catch して**同期だけ止め、リトライしない**（`permission-denied` は非一時的）。ローカル DB が Source of Truth なので閲覧・記録は動き続ける
 - 削除・更新も同じパターンで、UI は常にローカルの最新状態を見る
 - **`SavedCafe`（フェーズ 15-A）も同型の合成**: `SavedCafeRepositoryImpl`（`shared/core`）が local + `RemoteSavedCafeDataSource` を合成し、読み取り・書き込み・reconciliation とも本節と同じパターン（`WritePolicy` も `CoffeeRepositoryImpl` と共用）
 
@@ -339,7 +340,7 @@ ViewModel が UIState を更新 → View が再描画
 - **プラットフォーム別 SDK が要る依存は外から受け取る**（`RemoteCoffeeDataSource` / `AuthRepository` / Places API キー等）。`AppContainer` 自身は `commonMain` で SDK に触らない
 - コンストラクタは 3 系統: **scope 引数ありのプライマリ = テスト専用** / scope なしセカンダリ 2 つ（iOS = `coffeeInsightProvider` 注入 / Android = 省略）。SKIE がデフォルト引数を Swift に出さないため
 - 合成は `AppContainer` の中で完結させ、**UI には合成後の 1 本だけ見せる**（`CoffeeRepositoryImpl(local, remote)` 等）
-- 起動シーケンス（匿名サインイン → uid 確定 → 同期購読）は `startInitialSync()` の 1 メソッドに閉じる
+- 起動シーケンス（匿名サインイン → uid 確定 → 同期購読）は `startInitialSync()` の 1 メソッドに閉じる。**停止側 `stopSync()` と対で使う**（`startInitialSync()` は冒頭で `stopSync()` を呼ぶので冪等）。同期購読はアプリ生存期間の `scope` に直接 launch する唯一の経路なので、**`Job` は `AppContainer` が保持する**。サインアウト / アカウント削除時に `stopSync()` を呼ばないと旧 uid の購読が残り、Firestore Rules（`request.auth.uid == uid`）により必ず `permission-denied` になる（2026-08-09 に修正。implementation_note SR-4）
 - **ViewModel ファクトリは `shared/framework` の拡張関数**（`core → feature` の循環依存を避けるため）
 
 - `SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。

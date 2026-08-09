@@ -117,6 +117,19 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 - `CallbackFlowOptional<T: AnyObject>`: nil を流せる版（サインアウト時の `AuthAccount?` nil emit 用）
 - 新しい Flow 戻り値 interface を Swift 実装するときは、独自に `MutableStateFlow` 等を組み立てず、まずこの 2 ヘルパを再利用する
 
+**終了経路は 2 系統に分かれる**（混同しやすい）:
+
+| 何が起きたか | どう伝わるか |
+|---|---|
+| 上流が回復不能な失敗 / 正常完了 | **実装側が completion handler を呼ぶ義務がある**（`onStart` の `fail:` 引数 = `CallbackFlow` が内部で handler を呼ぶ） |
+| Kotlin 側コルーチンの cancel | handler は呼ばれない。**オブジェクトが解放され `deinit` として現れる** |
+
+つまり「Kotlin ランタイムが例外時に handler を呼んでくれる」わけではない。**握り潰して emit を止めるだけにすると、購読側は「まだ来ていない」と区別できず Flow が永久に宙吊りになる**（2026-08-09 SR-4 まで実際にそうなっていた）。
+
+**`fail` に渡した `NSError` は Kotlin 側で `NSError-based exception` になり、`catch (e: Exception)` で捕まえられる（fatal ではない）** — シミュレータで実測済み（2026-08-09）。生成ヘッダの `collect` に付く `Other uncaught Kotlin exceptions are fatal.` は **Kotlin → Obj-C 方向**の注意書きで、Swift 実装 → Kotlin 呼び出しのこちら側には効かない。`localizedDescription` も保たれる。
+
+なお `completionHandler` は「正常終了」「例外終了」のどちらか一方で**ちょうど 1 回**呼ぶ契約。Firestore リスナは解除まで何度でもコールバックしうるため、`FlowBridge.swift` の `FlowCompletionGate`（`OSAllocatedUnfairLock` で取り出しと無効化をアトミックに行う）を必ず経由する。
+
 ---
 
 ## Swift 6 の並行性境界（2026-08-07 移行）
@@ -130,7 +143,9 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 既定 MainActor 分離では宣言に何も書かないと `@MainActor` になるが、**Kotlin ランタイムはこれらを任意スレッドから呼ぶ**ため実態と食い違う。`FirebaseRepositories/` 配下と `CoffeeInsightProviderIosImpl`、`FlowBridge` の `CallbackFlow` / `CallbackFlowOptional` は `nonisolated final class` を明示する。
 
-**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** メモリキャッシュを持つ実装（`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl`）は `OSAllocatedUnfairLock` で包み、クラスに `@unchecked Sendable` を付けて「ロックが唯一のアクセス経路である」ことを手動で保証する。
+**`nonisolated` は「Kotlin から見える型」だけの話ではない。** それらが内部で使う `private` なヘルパ型にも同じ指定が要る（`FlowBridge.swift` の `FlowCompletionGate` が実例。付け忘れると `nonisolated` な `__collect` から呼べず `call to main actor-isolated instance method ... in a synchronous nonisolated context` になる）。同じファイルに `nonisolated` の宣言が並んでいても**継承されない**。
+
+**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** メモリキャッシュを持つ実装（`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl`）と `FlowCompletionGate` は `OSAllocatedUnfairLock` で包み、クラスに `@unchecked Sendable` を付けて「ロックが唯一のアクセス経路である」ことを手動で保証する。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
 
 ```swift
 nonisolated final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository, @unchecked Sendable {

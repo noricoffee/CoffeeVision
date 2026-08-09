@@ -23,6 +23,9 @@ interface RemoteSavedCafeDataSource {
      * 各要素は **指定 userId の全 [SavedCafe] のスナップショット**（差分ではなく全体）を返す。
      * [SavedCafeRepositoryImpl] はこの Flow を購読してローカル DB を更新する
      * （reconciliation を含む。詳細は [SavedCafeRepositoryImpl.startSync]）。
+     *
+     * **エラー契約は [RemoteCoffeeDataSource.observeChanges] と同じ**。回復不能な失敗では
+     * 握り潰さず Flow をその例外で終了させること。
      */
     fun observeChanges(userId: String): Flow<List<SavedCafe>>
 

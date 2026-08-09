@@ -9,7 +9,7 @@ paths:
 正本は [`docs/coding-conventions.md`](../../docs/coding-conventions.md) / [`docs/ui-ux-guidelines.md`](../../docs/ui-ux-guidelines.md) / [`docs/kmp-bridge.md`](../../docs/kmp-bridge.md)。ここは常時確認する要点のみ。
 
 - **`iosApp` は Swift 6 言語モード + 既定 MainActor 分離**（2026-08-07 移行。設定は `iosApp/Configuration/Base.xcconfig` が正本で、`project.pbxproj` には `SWIFT_VERSION` を書かない）。**何も書かなければ `@MainActor`** なので、規約は「既定から外れる側」を明示することに尽きる。外し方は 3 つだけ（詳細は coding-conventions §2.5）:
-  - **Kotlin interface（Obj-C プロトコル）の実装クラス** → `nonisolated final class`。Kotlin ランタイムが任意スレッドから呼ぶため。可変キャッシュを持つなら `OSAllocatedUnfairLock` + `@unchecked Sendable` をセットで
+  - **Kotlin interface（Obj-C プロトコル）の実装クラス** → `nonisolated final class`。Kotlin ランタイムが任意スレッドから呼ぶため。可変キャッシュを持つなら `OSAllocatedUnfairLock` + `@unchecked Sendable` をセットで。**その実装が内部で使う `private` なヘルパ型にも同じ指定が要る**（既定 MainActor 分離は宣言単位で効き、同じファイルに `nonisolated` が並んでいても伝播しない）。幸いコンパイルエラーになる（`FlowCompletionGate` が実例。lessons 2026-08-09）
   - **CPU バウンドな処理を含む `nonisolated async` 関数** → `@concurrent`。**付け忘れても診断が一切出ない**のが最大の罠で、`NonisolatedNonsendingByDefault` 下では素の `nonisolated async` は**呼び出し元アクター上で実行される** — ビルドは通り、メインスレッドで重い処理が走ってスクロールが重くなるだけ。型もテストも助けないので、`async` 関数に重い同期処理を書いた時点で自分で判断する（`PhotoFileStore.loadThumbnail` が実例。lessons 2026-08-07）
   - **MainActor 上でのみ生成・破棄されるクラスの `deinit`** → `isolated deinit`。既定 MainActor 分離下でも `deinit` だけは `nonisolated` になり、非 Sendable プロパティに触れないため。**破棄が MainActor 上で起きる保証がないクラスに使ってはいけない**（`CallbackFlow` は Kotlin ランタイムが任意スレッドで破棄するので `nonisolated` 側。使うと Firestore リスナの解放が MainActor へホップして遅延する）
 - 検査を外す手段は**穴の広さで選ぶ**。プロパティ 1 個が非 Sendable なだけなら `nonisolated(unsafe)`、`@Sendable` クロージャの引数型に Kotlin 型が直接現れる場合だけ `@preconcurrency import SharedLogic`（ファイル内の SharedLogic 型すべての検査が外れる）

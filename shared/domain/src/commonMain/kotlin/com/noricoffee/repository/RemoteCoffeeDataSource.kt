@@ -31,6 +31,20 @@ interface RemoteCoffeeDataSource {
      * - 各要素は **指定 userId の全 CoffeeRecord のスナップショット**（差分ではなく全体）を返す
      * - [CoffeeRepositoryImpl] はこの Flow を購読してローカル DB を更新する
      * - サインアウト等で購読が無効になったら、購読側スコープのキャンセルに任せる
+     *
+     * ## エラー契約（実装が守ること）
+     *
+     * 上流が**回復不能な失敗**（Firestore の `permission-denied` 等）を返したら、
+     * **Flow をその例外で終了させる**こと。握り潰して黙って emit を止めてはいけない
+     * （購読側から「まだ来ていないだけ」と区別がつかず、Flow が永久に宙吊りになる）。
+     *
+     * - Android: `callbackFlow` の `close(error)`
+     * - iOS: Swift 側ブリッジ `CallbackFlow` の `fail(_:)`（= `collect` の completionHandler に
+     *   `NSError` を渡す）
+     *
+     * 一時的なネットワーク断は Firestore SDK のオフライン永続化が内部で吸収するため、
+     * ここに現れるのは「リトライしても直らない」失敗だけになる。購読側
+     * （[CoffeeRepositoryImpl.startSync]）はこの終了を**同期の停止**として扱い、再購読しない。
      */
     fun observeChanges(userId: String): Flow<List<CoffeeRecord>>
 

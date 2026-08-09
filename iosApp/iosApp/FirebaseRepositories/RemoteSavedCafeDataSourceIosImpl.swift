@@ -49,14 +49,17 @@ nonisolated final class RemoteSavedCafeDataSourceIosImpl: NSObject, RemoteSavedC
         let firestore = self.firestore
 
         let callbackFlow = CallbackFlow<NSArray>(
-            onStart: { [firestore] emit in
+            onStart: { [firestore] emit, fail in
                 listener = firestore
                     .collection("users")
                     .document(userId)
                     .collection("savedCafes")
                     .addSnapshotListener { snapshot, error in
                         if let error {
+                            // 握り潰さず Flow を例外終了させる（`RemoteSavedCafeDataSource.observeChanges`
+                            // のエラー契約。理由は `RemoteCoffeeDataSourceIosImpl` の同じ箇所を参照）。
                             print("[RemoteSavedCafeDataSourceIosImpl] snapshot error: \(error)")
+                            fail(error)
                             return
                         }
                         guard let snapshot else { return }

@@ -1405,3 +1405,30 @@ Swift コードレビュー #5。`loadedPhoto` を computed property から `ini
 - 採らなかった案: `ShareCardRenderer.render` を `async` にして写真解決を `@concurrent` で off-main してから注入する形。呼び出し側（`ShareCardSheet.generate()`）は既に `async` なので実現は容易だが、**それはレビュー #6（`render` の `pngData()` / ファイル書き込みがメインスレッド）の範囲**で、#5 の「回数」とは別問題。`CoffeeShareCardView(coffee:)` のシグネチャを変えずに済む init 解決を採り、Preview 4 件も無変更に保った。#6 に着手するときはこの注入形式へ移すのが自然。
 - 残る性質: 修正後も **1 回のフルデコードはメインスレッドで走る**（`ShareCardRenderer.render` が `@MainActor` の同期関数のため）。#6 未着手。
 - 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。**デコード回数の実測はしていない**（共有カード生成は UI 操作起点で、テストターゲットも無いため）。回数が 1 になることは Swift の言語仕様（stored property は init で 1 回評価）で構造的に保証される。修正前の「3 回以上」は参照連鎖の静的解析による。
+
+### 2026-08-09: Firestore 同期の Job ライフサイクル管理と Flow のエラー伝播（SR-4）
+
+- 関連: `shared/core/AppContainer.kt` / `CoffeeRepositoryImpl.kt` / `SavedCafeRepositoryImpl.kt` / `shared/domain` の両 `RemoteXxxDataSource.kt` / `iosApp/FirebaseRepositories/FlowBridge.swift` ほか / `docs/architecture.md` / `docs/kmp-bridge.md` / `docs/tasks/lessons.md` 2026-08-09
+
+Swift コードレビュー #2「`CallbackFlow` にエラーチャネルが無く `permission-denied` が握り潰される」。**着手して分かった本題は、指摘そのものではなくその 1 段下**にあった。
+
+**根本**: `AppContainer.startInitialSync()` が `startSync` の戻り値 `Job` を捨てており、`AppState.resetAndRebootstrap()` もブリッジしか止めていなかった。Firestore Rules は全パスで `request.auth.uid == uid` しか許さないため、**サインアウトのたびに旧 uid の購読が 1 組ずつ残り、新 uid に切り替わった瞬間に必ず `permission-denied` を受ける**。つまり「握り潰されていたエラー」は外から降ってくる事故ではなく、**自分で作って自分で捨てていた**もの。リークと権限エラーが同じ 1 つの原因から出ていた。
+
+**この構造は「エラー伝播だけ直す」と逆効果になりうる**点が設計上の論点だった。Android は既に `close(error)` で伝播しているが `startSync` に try/catch が無く、例外が `MainScope` へ抜ける形になっていた。iOS だけを Android に揃えると、サインアウトのたびに例外が両プラットフォームで漏れる。そのため**ライフサイクル管理（根本）→ 受け止め（`startSync` の catch）→ 伝播（iOS の `fail`）の順**で組んだ。
+
+- **ブリッジ挙動の実測（本件の主要な不確実性）**: 「Swift 実装の suspend 完了ハンドラに `NSError` を渡すと Kotlin 側でどうなるか」が未検証だった。生成ヘッダの `collect` には `Other uncaught Kotlin exceptions are fatal.` と書かれているが、これは **Kotlin → Obj-C 方向**の注意書きで逆方向には効かない、という読みを裏取りする必要があった。`RemoteSavedCafeDataSourceIosImpl` に DEBUG 限定の強制失敗フックを一時的に入れ、`SIMCTL_CHILD_POC_FLOW_ERROR=1` + `simctl launch --console-pty` で実測:
+
+  ```
+  [SavedCafeRepositoryImpl] リモート同期を停止しました (userId=...):
+      NSError-based exception: PoC forced flow error
+  ```
+
+  **catch 可能な Kotlin 例外になり、fatal ではない**（アプリはクラッシュせず起動を継続し、`localizedDescription` も保たれた）。フックは検証後に削除。結論は `kmp-bridge.md` と `FlowBridge.swift` の KDoc に残した（次に同じ疑問が出たときに再実験しなくて済むように）。
+- **リトライしない判断**: `permission-denied` は非一時的で、リトライすると無限ループになる。一時的なネットワーク断は Firestore SDK のオフライン永続化が内部で吸収するため、`startSync` の catch に届くのは「リトライしても直らない」失敗だけ。ローカル DB が Source of Truth なので同期が止まってもアプリは動き続ける。
+- **`println` の導入**: `shared` の main ソースに `println` は 1 件も無かったが、`startSync` の catch に 1 行だけ入れた。commonMain に他のログ手段が無く、**「同期が静かに止まる」ことが本件の実害そのもの**だったため。同期停止を UI に出すチャネルは現状無く、将来の課題。
+- **ついでに直した同系統の別バグ**: `AuthRepositoryIosImpl.observeAnalyticsConsent` が `addSnapshotListener { snapshot, _ in }` とエラーを捨て、読めなかったときに `false` を emit していた。「ドキュメントが無い（= 初回ユーザー、未同意）」と「読めなかった」を同じ値に潰しており、**同意状態の値の捏造**にあたる（`permission-denied` が UI 上「同意していない」として現れる）。`fail(error)` に変更。
+- **残る窓（意図的に閉じない）**: `AccountViewModel.signOut()` 完了 → iOS が `resetAndRebootstrap()` を呼ぶまでの間は旧リスナが生きており、権限エラーが 1 回届きうる。完全に閉じるにはサインアウト経路そのもの（`AccountViewModel` が `AppContainer` を知らない構造）の再構成が要るためスコープ外とし、`startSync` の catch で無害化する形にした。
+- **`FlowCompletionGate` を挟んだ理由**: `collect` の completion handler は「正常終了」「例外終了」のどちらか一方で**ちょうど 1 回**呼ぶ契約だが、Firestore リスナは解除されるまで何度でもコールバックしうる（エラー直後にもう 1 度エラーが来る並びは普通に起きる）。取り出しと無効化を `OSAllocatedUnfairLock` でアトミックに行い、ハンドラ呼び出しはロックの外に出した（Kotlin 側から同期的に `deinit` まで走りうるため、ロック保持中に呼ぶと再入でデッドロックする）。
+- **`nonisolated` の付け忘れ 1 回**: `FlowCompletionGate` は `private` なヘルパなので指定不要と思っていたが、既定 MainActor 分離下では `private` でも暗黙 `@MainActor` になり、`nonisolated` な `__collect` から呼べず 4 件のコンパイルエラーになった。同じファイルに `nonisolated final class` が並んでいても継承されない。`kmp-bridge.md` に追記。
+- 検証: KMP テスト 2 件追加（`startSync` が終端例外を catch し、`Job` が完了・スコープ生存・以降のローカル書き込みが通ること）。**ネガティブ検証済み** — catch を外すと新テストだけが FAILED になることを確認してから復元した。全モジュール `iosSimulatorArm64Test` 505 件 PASS / Android `assembleDebug` 成功 / `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。正常系（フック無し）でシミュレータ起動し、同期停止ログも snapshot error も出ないことを確認。
+- **未検証**: サインアウト → 再サインインの実操作は通していない（`stopSync()` の呼び出し経路そのものはシミュレータで踏んでいない）。ユーザーによる確認が要る。

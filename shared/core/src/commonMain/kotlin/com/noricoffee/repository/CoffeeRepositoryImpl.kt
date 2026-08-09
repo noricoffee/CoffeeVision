@@ -26,7 +26,9 @@ import kotlinx.coroutines.launch
  *
  * 起動コードで [startSync] を呼ぶと、リモート変更の購読が始まる。サインアウトや uid 変更時は
  * 返り値の [Job] をキャンセルし、新しい uid で再度 [startSync] を呼ぶこと（uid のライフサイクル
- * 管理は本クラスのスコープ外）。
+ * 管理は本クラスのスコープ外）。**実際にその管理を担うのは
+ * [com.noricoffee.AppContainer.startInitialSync] / [com.noricoffee.AppContainer.stopSync]** で、
+ * 返り値の [Job] を捨てるとリークする（詳細はそちらの KDoc）。
  *
  * @param local SQLDelight ベースのローカル実装。実体は [LocalCoffeeRepository]
  * @param remote Firestore 等のリモートデータソース。実装はプラットフォーム別
@@ -91,15 +93,35 @@ class CoffeeRepositoryImpl(
      *   までの間に「その新規レコードを含まないスナップショット」が届くと、reconciliation で一瞬ローカル
      *   から消え、upload 完了後のリスナ echo で復活しうる。Firestore リスナは pending writes を含むため
      *   窓は極小であり MVP では許容する（本格的な競合解決は backlog）
+     *
+     * ## 上流の失敗時の扱い
+     *
+     * [RemoteCoffeeDataSource.observeChanges] は回復不能な失敗（`permission-denied` 等）で
+     * **例外終了する契約**（インターフェースの KDoc 参照）。ここで catch して同期を止める:
+     *
+     * - **リトライしない**。`permission-denied` は非一時的で、リトライすると無限ループになる。
+     *   一時的なネットワーク断は Firestore SDK のオフライン永続化が内部で吸収する
+     * - **アプリは止めない**。ローカル DB が Single Source of Truth なので、同期が止まっても
+     *   閲覧・記録は動き続ける。catch しないと例外が呼び出し元スコープへ抜ける
+     * - 再開したいときは呼び出し元が [com.noricoffee.AppContainer.startInitialSync] を
+     *   呼び直す（uid のライフサイクル管理は本クラスのスコープ外のため）
      */
     fun startSync(userId: String, scope: CoroutineScope): Job =
         scope.launch {
-            remote.observeChanges(userId).collect { records ->
-                val remoteIds = records.map { it.id }.toSet()
-                local.observeAll(userId).first()
-                    .filter { it.id !in remoteIds && it.id !in DummyCoffeeData.ids }
-                    .forEach { local.delete(userId, it.id) }
-                records.forEach { local.save(it) }
+            try {
+                remote.observeChanges(userId).collect { records ->
+                    val remoteIds = records.map { it.id }.toSet()
+                    local.observeAll(userId).first()
+                        .filter { it.id !in remoteIds && it.id !in DummyCoffeeData.ids }
+                        .forEach { local.delete(userId, it.id) }
+                    records.forEach { local.save(it) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // commonMain に他のログ手段が無いため println。同期が「静かに」止まることが
+                // まさに本件の実害だったので、1 行だけ痕跡を残す。
+                println("[CoffeeRepositoryImpl] リモート同期を停止しました (userId=$userId): $e")
             }
         }
 

@@ -58,15 +58,24 @@ class SavedCafeRepositoryImpl(
      * 2. スナップショットの全件を upsert する
      *
      * dev ダミーデータのような除外対象は無い（SavedCafe に dev シードデータは存在しないため）。
+     *
+     * 上流が回復不能な失敗で例外終了したときの扱いも [CoffeeRepositoryImpl.startSync] と同じ
+     * （リトライせず同期だけ止め、ローカル DB ベースの動作は続ける）。
      */
     fun startSync(userId: String, scope: CoroutineScope): Job =
         scope.launch {
-            remote.observeChanges(userId).collect { savedCafes ->
-                val remotePlaceIds = savedCafes.map { it.cafe.placeId }.toSet()
-                local.observeAll(userId).first()
-                    .filter { it.cafe.placeId !in remotePlaceIds }
-                    .forEach { local.delete(userId, it.cafe.placeId) }
-                savedCafes.forEach { local.save(it) }
+            try {
+                remote.observeChanges(userId).collect { savedCafes ->
+                    val remotePlaceIds = savedCafes.map { it.cafe.placeId }.toSet()
+                    local.observeAll(userId).first()
+                        .filter { it.cafe.placeId !in remotePlaceIds }
+                        .forEach { local.delete(userId, it.cafe.placeId) }
+                    savedCafes.forEach { local.save(it) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                println("[SavedCafeRepositoryImpl] リモート同期を停止しました (userId=$userId): $e")
             }
         }
 

@@ -52,14 +52,19 @@ nonisolated final class RemoteCoffeeDataSourceIosImpl: NSObject, RemoteCoffeeDat
         let firestore = self.firestore
 
         let callbackFlow = CallbackFlow<NSArray>(
-            onStart: { [firestore] emit in
+            onStart: { [firestore] emit, fail in
                 listener = firestore
                     .collection("users")
                     .document(userId)
                     .collection("coffees")
                     .addSnapshotListener { snapshot, error in
                         if let error {
+                            // 握り潰さず Flow を例外終了させる（`RemoteCoffeeDataSource.observeChanges`
+                            // のエラー契約）。以前は print して return するだけだったため、
+                            // `permission-denied` を受けても Kotlin 側の collect は永久に宙吊りになり、
+                            // 同期が黙って止まったことが誰にも分からなかった。
                             print("[RemoteCoffeeDataSourceIosImpl] snapshot error: \(error)")
+                            fail(error)
                             return
                         }
                         guard let snapshot else { return }

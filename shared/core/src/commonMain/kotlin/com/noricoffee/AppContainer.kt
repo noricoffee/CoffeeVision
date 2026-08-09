@@ -21,6 +21,7 @@ import com.noricoffee.repository.RemoteSavedCafeDataSource
 import com.noricoffee.repository.SavedCafeRepository
 import com.noricoffee.repository.SavedCafeRepositoryImpl
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.MainScope
 
 /**
@@ -177,20 +178,59 @@ class AppContainer(
         coffeeRepository = coffeeRepository,
     )
 
+    // ─────────────────────────────────────────────────
+    // 同期購読のライフサイクル
+    // ─────────────────────────────────────────────────
+
+    /**
+     * [startInitialSync] が起動した同期購読の [Job]。
+     *
+     * **必ず保持すること。** 捨てると uid が変わっても古い購読が止まらず、
+     * サインアウトのたびに「前の uid の Firestore リスナ + collect コルーチン」が
+     * 1 組ずつ積み上がる。Firestore Rules は `request.auth.uid == uid` しか許さないので、
+     * 残った購読は新 uid に切り替わった瞬間に必ず `permission-denied` を受ける
+     * （リークと権限エラーが同じ原因から出る）。
+     *
+     * 生成・破棄はどちらも [scope]（`Dispatchers.Main`）上の呼び出しから行われる。
+     */
+    private var coffeeSyncJob: Job? = null
+    private var savedCafeSyncJob: Job? = null
+
     /**
      * 匿名サインインを起こし、確定した uid でリモート → ローカルの同期購読を開始する。
      *
      * 戻り値の uid を呼び出し元（iOS / Android のアプリ層）が保持し、UI からの参照や
      * [CoffeeRepository.observeAll] の引数に渡すのに使う。
      *
+     * **冪等**: 先に [stopSync] を呼ぶため、複数回呼んでも購読は常に 1 組だけになる
+     * （iOS の `AppState.bootstrap()` は再入しうる）。
+     *
      * 失敗時は例外を投げる（呼び出し元で UI 通知すること）。
      */
     @Throws(Exception::class)
     suspend fun startInitialSync(): String {
         val uid = authRepository.signInAnonymouslyIfNeeded()
-        (coffeeRepository as CoffeeRepositoryImpl).startSync(uid, scope)
-        (savedCafeRepository as SavedCafeRepositoryImpl).startSync(uid, scope)
+        stopSync()
+        coffeeSyncJob = (coffeeRepository as CoffeeRepositoryImpl).startSync(uid, scope)
+        savedCafeSyncJob = (savedCafeRepository as SavedCafeRepositoryImpl).startSync(uid, scope)
         return uid
+    }
+
+    /**
+     * 同期購読を停止する（リスナ解放を含む）。
+     *
+     * **サインアウト / アカウント削除の直後に呼ぶこと。** 呼ばないと古い uid の購読が
+     * 生き残り、[coffeeSyncJob] の KDoc に書いたリークと権限エラーが起きる。
+     *
+     * 冪等（未起動でも 2 回目でも安全）。[startInitialSync] を呼び直せば再開できる。
+     *
+     * Swift からの呼び出しシグネチャ（SKIE）: `appContainer.stopSync()`
+     */
+    fun stopSync() {
+        coffeeSyncJob?.cancel()
+        coffeeSyncJob = null
+        savedCafeSyncJob?.cancel()
+        savedCafeSyncJob = null
     }
 
     /**

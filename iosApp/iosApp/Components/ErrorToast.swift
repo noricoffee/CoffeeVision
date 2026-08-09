@@ -2,11 +2,11 @@ import SwiftUI
 
 // MARK: - ToastBanner
 
-/// エラートースト本体。上部スライドインで表示される非致命エラー通知バナー。
+/// エラートースト本体。下部（タブバーの上）スライドインで表示される非致命エラー通知バナー。
 ///
 /// - SF Symbol `exclamationmark.triangle.fill`（orange）+ メッセージ Text を横並び
 /// - `.regularMaterial` 背景 + 角丸 12pt + 軽い shadow で地図 / コンテンツ上に浮遊表示
-/// - タップまたは上方向 DragGesture で `onDismiss()` を呼ぶ（手動消去）
+/// - タップまたは下方向 DragGesture で `onDismiss()` を呼ぶ（手動消去）
 private struct ToastBanner: View {
 
     let message: String
@@ -36,11 +36,11 @@ private struct ToastBanner: View {
         .onTapGesture {
             onDismiss()
         }
-        // 上方向スワイプで消去
+        // 下方向スワイプで消去
         .gesture(
             DragGesture(minimumDistance: 20)
                 .onEnded { value in
-                    if value.translation.height < 0 {
+                    if value.translation.height > 0 {
                         onDismiss()
                     }
                 }
@@ -54,9 +54,9 @@ private struct ToastBanner: View {
 
 // MARK: - ErrorToastModifier
 
-/// エラートーストを上部 overlay で表示する ViewModifier。
+/// エラートーストを下部（タブバーの上）overlay で表示する ViewModifier。
 ///
-/// - `message != nil` のとき `.overlay(alignment: .top)` で `ToastBanner` を表示
+/// - `message != nil` のとき `.overlay(alignment: .bottom)` で `ToastBanner` を表示
 /// - 自動消去: `.task(id: message)` で `message` 変化時に前タスクを自動キャンセルし、
 ///   4 秒後に `onDismiss()` を呼ぶ
 /// - `@Environment(\.accessibilityReduceMotion)` が true のときは opacity のみで遷移
@@ -70,13 +70,13 @@ private struct ErrorToastModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         content
-            // トーストバナーを SafeArea 内の上部に overlay する。
+            // トーストバナーを SafeArea 内の下部（タブバーの上）に overlay する。
             // `.ignoresSafeArea()` を持つコンテンツ（Map 等）でも safeAreaInset で押し下げを
             // 避けるため overlay を採用し、コンテンツ自体のレイアウトは変えない。
-            .overlay(alignment: .top) {
+            .overlay(alignment: .bottom) {
                 if let message {
                     ToastBanner(message: message, onDismiss: onDismiss)
-                        .padding(.top, 8)
+                        .padding(.bottom, 8)
                         .transition(toastTransition)
                         .zIndex(1)
                 }
@@ -98,14 +98,14 @@ private struct ErrorToastModifier: ViewModifier {
             }
     }
 
-    /// Reduce Motion 対応: true なら opacity のみ、false なら上スライド + opacity。
+    /// Reduce Motion 対応: true なら opacity のみ、false なら下スライド + opacity。
     private var toastTransition: AnyTransition {
         if reduceMotion {
             return .opacity
         } else {
             return .asymmetric(
-                insertion: .move(edge: .top).combined(with: .opacity),
-                removal: .move(edge: .top).combined(with: .opacity)
+                insertion: .move(edge: .bottom).combined(with: .opacity),
+                removal: .move(edge: .bottom).combined(with: .opacity)
             )
         }
     }
@@ -115,7 +115,7 @@ private struct ErrorToastModifier: ViewModifier {
 
 extension View {
 
-    /// エラートーストを上部に表示する。
+    /// エラートーストを下部（タブバーの上）に表示する。
     ///
     /// - Parameters:
     ///   - message: 表示するエラーメッセージ。`nil` のときは非表示。
@@ -135,7 +135,7 @@ extension View {
         .errorToast(message: message) {
             message = nil
         }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .top) {
             Button("トーストを表示") {
                 message = "同期に失敗しました"
             }
@@ -154,7 +154,7 @@ extension View {
         .errorToast(message: message) {
             message = nil
         }
-        .safeAreaInset(edge: .bottom) {
+        .safeAreaInset(edge: .top) {
             Button("トーストを表示") {
                 message = "周辺のカフェを読み込めませんでした。ネットワーク接続を確認してから再度お試しください。"
             }

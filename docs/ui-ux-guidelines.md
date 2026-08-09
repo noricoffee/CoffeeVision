@@ -411,8 +411,9 @@ List { ... }
 ## エラー表示
 
 - 致命的でないエラー（同期失敗・検索失敗など）は **画面上にバナー or トーストで控えめに表示**
-  - 共通コンポーネント `View.errorToast(message:onDismiss:)`（`iosApp/iosApp/Components/ErrorToast.swift`）を使う。上部スライドイン / 約 4 秒で自動消去 + タップ・上スワイプで手動消去
-  - 複数のエラー源がある画面（現状は `MapTabView` の `bridge.error` + `bridge.poiLookupError` + エリア検索 0 件の案内）は `activeToast` で優先順位付き単一値に集約し、`.errorToast` は 1 つだけ付ける（`.overlay(alignment: .top)` の衝突回避）。エラー源が 1 つの画面はそのまま `.errorToast(message: bridge.error)` でよい
+  - 共通コンポーネント `View.errorToast(message:onDismiss:)`（`iosApp/iosApp/Components/ErrorToast.swift`）を使う。**下部（タブバーの上）スライドイン** / 約 4 秒で自動消去 + タップ・下スワイプで手動消去
+    - **上部ではなく下部に出す**（2026-08-10 変更）。上部は画面ごとに検索欄・ナビゲーションバーが占めており、`MapTabView` では検索バーと**同じ位置**（双方 `.padding(.top, 8)`）に重なって、検索 0 件の案内が検索欄自体を 4 秒間覆っていた。下部は現在地 FAB と重なりうるが、トーストは自動消去 + タップ消去できるため許容する（FAB を押し上げるインセット計算は増やさない）
+  - 複数のエラー源がある画面（現状は `MapTabView` の `bridge.error` > `searchBridge.error` > 検索 0 件の案内 > `bridge.poiLookupError`）は `activeToast` で優先順位付き単一値に集約し、`.errorToast` は 1 つだけ付ける（`.overlay(alignment: .bottom)` の衝突回避）。エラー源が 1 つの画面はそのまま `.errorToast(message: bridge.error)` でよい
   - 表示時に `AccessibilityNotification.Announcement` を投稿（VoiceOver 対応済）。`accessibilityReduceMotion` true 時は opacity のみで遷移
 - 致命的なエラー（保存失敗など）、およびアクションを伴うエラー（位置情報許可拒否 → 設定アプリ誘導など）は `.alert` で確認を求める
 - ネットワーク不通は「オフライン」表示にとどめ、Firestore の自動同期に任せる

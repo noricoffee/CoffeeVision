@@ -1507,3 +1507,14 @@ TestFlight ビルド 28 / 29 が位置情報許諾の直後に落ちる報告。
 - トレードオフ: 半径ベースなので横長の地図では矩形の角が漏れる。ただし `radiusMeters` は `max(latMeters, lngMeters)` = 可視領域の外接半径相当で**半径側が広く出る**方向であり、実用上は可視領域を包含する。curated は補助表示なので厳密な矩形一致は不要と判断した。マージン 1.3 倍はパン時の先読み分（`shouldShowAreaSearchButton` の「中心移動 > 半径 × 0.3」より手前で効く）。
 - 検証: 実機・**クリーンインストール + 許諾フロー**（= 本番の再現条件）で実測。curated ピン **210 個/eval → 4 個/eval**、body 再評価 **589 回/60秒 → 9 回/60秒**、引き金は 8 種すべて各 1 回、60 秒間プロセス生存。`devicectl device process launch --console` はデバッガをアタッチしないので **watchdog が有効**であり、「生存したこと」自体が発散していない証拠になる。**測定条件を上書きインストールで始めたのは誤りで、ユーザーの指摘（「元々クリーンインストールで再現した」）で修正した** — 上書きでは許諾ダイアログが出ず Background 遷移が起きないため、本番条件を再現できていなかった。
 - MU-2（全ピンの `NavigationLink` ラップ見直し）は**取り下げ**。curated が 4 個規模ならルート値のコピー削減は実測に現れず、`Button` へ変えても `ButtonBehavior` の `State` 初期化と `_UIHostingView` 1 個/ピンの本体コストは変わらない。判断の記録は `tasks.md` MU-2 の備考。
+
+### 2026-08-10: アカウント削除の revoke 完走 + 削除範囲を実機で確認（リリースブロッカー解消）
+
+- 関連: `iosApp/iosApp/Features/Account/AccountView.swift` / `iosApp/iosApp/FirebaseRepositories/AuthRepositoryIosImpl.swift`（`reauthenticate` → `revokeToken`）/ `iosApp/iosApp/Utilities/AppleSignInCoordinator.swift` / ガイドライン 5.1.1(v) / フェーズ 5.2
+
+ユーザーが実機で確認し、**revoke の完走と削除範囲の両方が取れた**（2026-08-10）。`verification-checklist.md` のパス 6 にあった「アカウント削除の revoke 完走 + 削除範囲」は同運用（完了項目は削除する）に従い除去済み。**審査に直結する唯一の項目**だったため、確認できた事実をここに残す。
+
+- **revoke が効いた直接証拠**: iOS 設定 App → Apple アカウント → サインインとセキュリティ →「Apple でサインイン」の一覧から CoffeeVision が消えていること。Firestore と Authentication のユーザー消滅（①②）は revoke が失敗していても達成されうるため、この③だけが `revokeToken` の成否を分ける
+- **削除範囲**: `users/{uid}` がルート doc / `coffees` / `savedCafes` の 3 つとも消え、端末ローカルにも「行きたい店」の孤児行が残らないこと。2026-08-06 に後ろ 2 つが残るのを是正した箇所で、その修正が実機で効いていることの実証でもある
+- **副次的に Swift 6 移行 ③ の 2/3 が実証された**: 削除経路は `AppleSignInCoordinator` 経由で `ASAuthorizationController` を起動する（サインイン経路と同じコーディネータ）。したがって ①`MainActor.assumeIsolated` 化したデリゲートがクラッシュしないこと ②`presentationAnchor(for:)` のフォールバックを削除（未設定なら `preconditionFailure`）した後もシートが実際に出ること の両方が、この確認の中で通っている。**残るはキャンセル経路のみ**で、`verification-checklist.md` の当該項目はそこへ削り込んだ
+- 未実施: 異常系（Apple シートをキャンセル → アラートを出さずオーバーレイが消え、記録・行きたい店・アカウントがすべて残る）。revoke 失敗時の削除中断は Firebase Console の設定を一時的に壊す必要があるため doc 上も任意扱い

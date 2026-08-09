@@ -342,7 +342,7 @@ CoffeeVision を初めてリリースしました。
 - [x] リリースビルドで Places API キーが正しく注入される（`Secrets.xcconfig` の Release 設定）— **2026-08-06 に TestFlight ビルドでカフェ検索の動作を確認**（Release 構成で実キーが通っている実証。CI 側の書き出しは `release-testflight.yml` の「Restore secret files」）
 - [x] `GoogleService-Info.plist`（本番 Firebase プロジェクト）が同梱されている — 同上。匿名 Auth → Firestore 同期が動かないとアプリが機能しないため、TestFlight での通常利用が実証になる
 - [x] Firestore Security Rules が本番にデプロイ済（2026-08-06 ユーザーが Console で確認。`users/{uid}` / `beanProfiles` / `curatedCafes` の 3 ブロック）
-- [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / **2026-08-06 にユーザーが Console で再確認**。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
+- [x] Sign in with Apple の revoke 用 OAuth コードフロー設定（Services ID / Team ID / Key ID / 秘密鍵）を Firebase Console に登録済（2026-07-09 登録 / 2026-08-06 にユーザーが Console で再確認 / **2026-08-10 に実機で削除フローを完走し revoke が効いていることを実証**＝設定 App の「Apple でサインイン」一覧からアプリが消えた。削除範囲も確認済み。implementation_note 2026-08-10 参照。フェーズ 5.2 参照。未設定だとアカウント削除がエラーになる）
 - [x] **App Icon がアルファチャンネルを持たない**（Apple の要件。違反すると `ITMS-90717`）— 2026-08-06 の点検でソース 3 バリアントが `hasAlpha: yes` であることを検出し是正（`iosApp/scripts/generate_app_icon.swift` の描画を `CGContext(.noneSkipLast)` へ）。3 枚とも `hasAlpha: no` / RGB 差分ゼロ（アルファ面は元から全ピクセル不透明だったため**意匠は不変**）
   - **検証は Release / Archive で行う。Debug ビルドでは判定できない** — 派生 PNG（`AppIcon60x60@2x.png` 等）は **Debug では常に `hasAlpha: yes`**（actool が RGBA コンテナで書き出すため。ソースのアルファ有無と**無関係**）、**Release では常に `no`**。親が当初「Debug 成果物の該当 PNG を見れば分かる」と指示したが、実測で**新旧どちらのソースでも同じ値**になり検証手段として成立しなかった（lessons 2026-08-06）
   - 2026-08-06 の Release アーカイブ実測: 派生 PNG 2 枚とも `hasAlpha: no`、`Assets.car` の 1024 レンディション 3 種とも `Opaque=True`（`xcrun assetutil --info`）

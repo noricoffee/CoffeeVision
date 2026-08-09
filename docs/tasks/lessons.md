@@ -10,15 +10,15 @@
 
 本文は日付順で並ぶため、テーマから引くための地図。各項目末尾の `(MM-DD)` は該当エントリが載る日付セクション（`## 2026-MM-DD` を Cmd+F でジャンプ）。**新規 lesson を追記したら、この索引にも 1 行足す**（`record-lesson` skill の手順に含める）。
 
-- **SKIE / KMP ブリッジ（Swift⇄Kotlin）**: SuspendInterop は呼び出し方向限定 (06-04) / デフォルト引数を引き出さない (06-04) / EnumInterop enum→@frozen・camelCase (06-09) / SKIE 型は `.swiftinterface` を見る (06-09) / `KotlinDouble?` を `String(format:)` 直渡しで 0.0 (06-21)
+- **SKIE / KMP ブリッジ（Swift⇄Kotlin）**: SuspendInterop は呼び出し方向限定 (06-04) / デフォルト引数を引き出さない (06-04) / EnumInterop enum→@frozen・camelCase (06-09) / SKIE 型は `.swiftinterface` を見る (06-09) / `KotlinDouble?` を `String(format:)` 直渡しで 0.0 (06-21) / `nonisolated` は宣言単位で効き同じファイルの `private` ヘルパ型には伝播しない (08-09)
 - **Gradle / Convention Plugin / XCFramework / 署名**: Gradle タスク名 (06-02) / includeBuild + version catalog パス (06-08) / precompiled script plugin と `register` 併用不可 (06-08) / `jvmToolchain(N)` で JDK 依存 (06-08) / build-logic で type-safe accessor 不可 (06-08) / `export` は `api` と別に明示 (06-08) / `XCFramework(name)` = `baseName` を揃える・宣言なしでタスク無し (06-08) / Umbrella 移行は Run Script 1 行 (06-08) / SPM `upToNextMajor` で古いメジャー解決 (07-14) / archive は Development 署名固定・`CODE_SIGN_IDENTITY` 明示で失敗 (07-20)
 - **ビルド成功⇄実態の乖離（SourceKit / DerivedData / 偽成功）**: `No such module` が実ビルドと乖離 (06-08) / DerivedData 古い symlink (06-09) / `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` は偽の成功 (06-19) / 実機バイナリは `grep -a` で確認 (06-23) / JVM green・iOS だけコンパイル不能の 2 種 (07-07)
 - **SQLDelight / ローカル DB / migration**: 命名規則・テスト配置・`expect class` Beta 警告・トランザクションと Flow emit・`sqlite3_bind_blob` 未定義・モデルとマッパの責任分担 (06-02) / `schemaVersion` は `.sqm` ファイル名で決まる (06-10) / JdbcSqliteDriver は `PRAGMA foreign_keys=ON` (06-19) / 列追加は `Mapper.toRow` と `upsert` 両方 (07-07) / `Schema.migrate` の `oldVersion` の意味 (07-13) / 埋め込み型（`Cafe`）のフィールド追加は 2 テーブルに波及・別テーブルに触れる migration は生 DDL 再現テストを時限式に壊す (08-07)
 - **Firebase / Firestore / Auth**: nullable はキー省略 (06-04) / Firebase CLI 重複インストール・Storage は Blaze 必須・Security Rules はリポジトリ管理 (06-06) / Android `Task` を `suspendCancellableCoroutine` (06-10) / `SignInWithAppleButton` rawNonce 非公開 (06-17) / Firestore マッパー二重手書きの追随漏れ (07-08)
 - **xcconfig / Places / API キー / シリアライズ**: 既存 xcconfig の継承漏れ (06-10) / フォールバック宣言は `#include?` の前 (06-23) / REST DTO `emptyList` + `expectSuccess=false` で握り潰し・`encodeDefaults=false` で default フィールド脱落 (06-23)
-- **Coroutines / Flow / ViewModel scope / テスト**: test ヘルパは実装モジュール内で閉じる (06-08) / `androidMain` の `implementation` は推移しない・`callbackFlow` は ProducerScope を取り出す (06-10) / `runTest` 永続購読 Fake で `UncompletedCoroutinesError` (06-17) / `runCatching` はコルーチン内で使わない・所有 `viewModelScope` + `clear()` (06-24) / 所有 scope テストは `finally { clear() }` (06-25) / `combine` に `MutableStateFlow` で 60 秒タイムアウト (06-29) / `clear()` は iOS/Native で `advanceUntilIdle` drain 必須・interface メソッド追加で fake 追随漏れ (07-06)
+- **Coroutines / Flow / ViewModel scope / テスト**: test ヘルパは実装モジュール内で閉じる (06-08) / `androidMain` の `implementation` は推移しない・`callbackFlow` は ProducerScope を取り出す (06-10) / `runTest` 永続購読 Fake で `UncompletedCoroutinesError` (06-17) / `runCatching` はコルーチン内で使わない・所有 `viewModelScope` + `clear()` (06-24) / 所有 scope テストは `finally { clear() }` (06-25) / `combine` に `MutableStateFlow` で 60 秒タイムアウト (06-29) / `clear()` は iOS/Native で `advanceUntilIdle` drain 必須・interface メソッド追加で fake 追随漏れ (07-06) / 長命スコープに短命購読を launch したら `Job` を保持する・開始 API を作ったら停止 API も同じ場所に置く（握り潰されていたエラーは自分で作っていた）(08-09)
 - **Kotlin/Native 言語仕様の罠**: KDoc 内 `/*` がネストコメント (06-08) / クロスモジュール nullable は smart cast 不可 (06-19) / `Map.mapNotNull` + `maxWith` が全 null・`maxWith(compareByDescending)` が逆 (06-22) / `enum.valueOf` は未知値で例外・`when(mode)` 早期 return で値を無言脱落・正規化辞書の contains 部分一致すれ違い (07-08)
-- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22) / 幅を持つ子 View の `if` 条件生成は右寄せコンテナで兄弟をずらす (07-26) / `MapCameraPosition.automatic`（コンテンツ追従）× カメラ依存の表示数で自己駆動ループ・`@Observable` は同値でも通知するが `.onChange(of:)` は値比較する (08-09)
+- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22) / 幅を持つ子 View の `if` 条件生成は右寄せコンテナで兄弟をずらす (07-26) / `MapCameraPosition.automatic`（コンテンツ追従）× カメラ依存の表示数で自己駆動ループ・`@Observable` は同値でも通知するが `.onChange(of:)` は値比較する (08-09) / delegate 登録時にも呼ばれるコールバックを「変化」と解釈すると生成が副作用になる (08-09)
 - **統計 / 分析 / Foundation Models**: FM tool calling は instructions の逃げ道で呼ばれない (06-21) / 好み判定は無相関ペルソナで偽陽性率を測る・winner's curse は n 連動閾値 (06-22)
 - **プロセス / 設計 / 診断の姿勢**: 横断 doc は構造的に陳腐化 (06-16) / テストダブルの接続を本番と乖離させない・dev シードが本番バグをマスク・KMP テスト実行の環境メモ (07-03) / 無音フォールバックは偽バグ報告になる (07-06) / 地図の「表示」と「解決」の集合ズレ (07-08) / 外部 SDK の required 判定はクライアントで制御不能 (07-14) / レイアウト実測の再入ガードが過渡値を破棄 (07-15) / ドメインのフィールドが写る先は 5 経路・export DTO が抜けやすい (07-25) / background dispatch 中の `git add -A` はコミットを混ぜる (07-25) / 永続ストアを増やしたら削除経路にも足す・消し漏れはコードに現れない (08-06) / 外部 API の表示義務・帰属義務は動作にもテストにも現れない・規約の一部だけ doc 化すると残りは存在しない要件になる (08-07) / `0x8BADF00D` はクラッシュではなくハング・デバッガ接続中は watchdog 無効で Debug では再現しない・ハング系は実測しないと当たらない（推測で 2 回誤修正）・`Self._printChanges()` の集計で発散の引き金を特定 (08-09)
 
@@ -1076,6 +1076,10 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **関連**: 同日の「パフォーマンス改善は『気づいた 1 箇所』で終わりやすい」と同根（症状が出ないので観点が漏れる）。あちらが**同一レイヤーの並列箇所**の取りこぼしなのに対し、こちらは**同じ 1 箇所の別の観点**の取りこぼし
 - **横展開点検（2026-08-08）**: SwiftUI View の computed property 内でファイル I/O / 画像デコードを行っている箇所を全 `.swift` から機械抽出（`var 宣言 { ... }` のブロックを波括弧で切り出し、`PhotoFileStore.` / `UIImage(contentsOfFile` / `Data(contentsOf` / `CGImageSource` / `FileManager.default.(contents|urls|fileExists)` / `.jpegData(` / `.pngData(` を検索。`head` 不使用）。ヒット 3 件はいずれも**正当**: `RecordPhotoThumbnail.body`（`.task(id:)` 内の `await` = 表示時 1 回・`@concurrent` で off-main）/ `CoffeeEditorView.body`（`.onChange` のクロージャ内 = イベント発火時のみ）/ `PhotoFileStore.photosDirectoryURL`（ディスク I/O ではなくパス導出。意図は KDoc に明記済み）。**真の該当は `CoffeeShareCardView.loadedPhoto` の 1 件のみ**で修正済み
 
+---
+
+## 2026-08-09
+
 ### 「エラーが握り潰されている」の下に「そのエラーを自分で作っていた」が隠れている
 
 - **症状**: iOS の `CallbackFlow` が Firestore の `permission-denied` を `print` して `return` するだけで、Kotlin 側の `collect` は永久に宙吊りになる（Android は `close(error)` で伝播しており**同じ interface の 2 実装が非対称**）。レビュー指摘は「エラーチャネルが無い」だった
@@ -1106,12 +1110,6 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **横展開点検（2026-08-09）**: `iosApp/iosApp` の `delegate =` / `addObserver` / `addStateDidChangeListener` / `addSnapshotListener` / `NotificationCenter` を全件確認（`head` 不使用、10 箇所）。**同型は無し**:
   - `BannerAdLoader`（`bannerView.delegate`）/ `AppleSignInCoordinator`（`controller.delegate`）は **`load(_:)` / `performRequests()` を呼ぶまでコールバックが来ない**ので登録が副作用にならない
   - Firestore の `addSnapshotListener` 3 件と Auth の `addStateDidChangeListener` 2 件は**登録時に現在値が来るのが仕様どおりで、かつそれが目的**（`observeChanges` / `observeUserId` / `observeAccount` は「現在のスナップショットから流し始める」契約）。同じ「登録時に発火する」でも、**その発火を欲しがっているかどうか**が分かれ目
-
----
-
-## 2026-08-09
-
-> 注: 上の `## 2026-08-08` セクション末尾の 3 エントリ（`エラーが握り潰されている` / `nonisolated は伝播しない` / `フレームワークが「登録時にも呼ぶ」`）は発生源が 2026-08-09 だが 08-08 セクション内に置かれている。索引の日付参照も `(08-08)` を指しているため、整列は別タスクとした（`tasks.md`）。
 
 ### 「コンテンツがカメラを決める」API と「カメラがコンテンツを決める」ロジックを同時に置くと、UI が自己駆動ループに入る
 

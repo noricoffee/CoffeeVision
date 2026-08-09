@@ -18,9 +18,9 @@
 - **xcconfig / Places / API キー / シリアライズ**: 既存 xcconfig の継承漏れ (06-10) / フォールバック宣言は `#include?` の前 (06-23) / REST DTO `emptyList` + `expectSuccess=false` で握り潰し・`encodeDefaults=false` で default フィールド脱落 (06-23)
 - **Coroutines / Flow / ViewModel scope / テスト**: test ヘルパは実装モジュール内で閉じる (06-08) / `androidMain` の `implementation` は推移しない・`callbackFlow` は ProducerScope を取り出す (06-10) / `runTest` 永続購読 Fake で `UncompletedCoroutinesError` (06-17) / `runCatching` はコルーチン内で使わない・所有 `viewModelScope` + `clear()` (06-24) / 所有 scope テストは `finally { clear() }` (06-25) / `combine` に `MutableStateFlow` で 60 秒タイムアウト (06-29) / `clear()` は iOS/Native で `advanceUntilIdle` drain 必須・interface メソッド追加で fake 追随漏れ (07-06)
 - **Kotlin/Native 言語仕様の罠**: KDoc 内 `/*` がネストコメント (06-08) / クロスモジュール nullable は smart cast 不可 (06-19) / `Map.mapNotNull` + `maxWith` が全 null・`maxWith(compareByDescending)` が逆 (06-22) / `enum.valueOf` は未知値で例外・`when(mode)` 早期 return で値を無言脱落・正規化辞書の contains 部分一致すれ違い (07-08)
-- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22) / 幅を持つ子 View の `if` 条件生成は右寄せコンテナで兄弟をずらす (07-26)
+- **iOS / SwiftUI / UI レイアウト**: PhotosPicker selection リセット (06-10) / 実機 debug の UI ジャンクは debug アーティファクトを疑う (06-23) / `UIWindow()` ゼロ引数 deprecated (06-24) / `Color.primary` ボタン背景がダークで不可視・タブ常駐 observation を `onDisappear` で切らない (06-25、07-03 再発) / `IPHONEOS_DEPLOYMENT_TARGET` 引き上げ後は `@available` を sweep (06-26) / `Group{if let}` + `.task` は発火しない (07-14) / `UIViewRepresentable` はサイズ明示 (07-15) / 深いネスト ViewBuilder が KeyPath エラーを誤誘導 (07-16) / 遅延コンテナ N 番目の `.task` が fold 下で未発火・位置が動く View の `DragGesture` は `.global` (07-22) / 幅を持つ子 View の `if` 条件生成は右寄せコンテナで兄弟をずらす (07-26) / `MapCameraPosition.automatic`（コンテンツ追従）× カメラ依存の表示数で自己駆動ループ・`@Observable` は同値でも通知するが `.onChange(of:)` は値比較する (08-09)
 - **統計 / 分析 / Foundation Models**: FM tool calling は instructions の逃げ道で呼ばれない (06-21) / 好み判定は無相関ペルソナで偽陽性率を測る・winner's curse は n 連動閾値 (06-22)
-- **プロセス / 設計 / 診断の姿勢**: 横断 doc は構造的に陳腐化 (06-16) / テストダブルの接続を本番と乖離させない・dev シードが本番バグをマスク・KMP テスト実行の環境メモ (07-03) / 無音フォールバックは偽バグ報告になる (07-06) / 地図の「表示」と「解決」の集合ズレ (07-08) / 外部 SDK の required 判定はクライアントで制御不能 (07-14) / レイアウト実測の再入ガードが過渡値を破棄 (07-15) / ドメインのフィールドが写る先は 5 経路・export DTO が抜けやすい (07-25) / background dispatch 中の `git add -A` はコミットを混ぜる (07-25) / 永続ストアを増やしたら削除経路にも足す・消し漏れはコードに現れない (08-06) / 外部 API の表示義務・帰属義務は動作にもテストにも現れない・規約の一部だけ doc 化すると残りは存在しない要件になる (08-07)
+- **プロセス / 設計 / 診断の姿勢**: 横断 doc は構造的に陳腐化 (06-16) / テストダブルの接続を本番と乖離させない・dev シードが本番バグをマスク・KMP テスト実行の環境メモ (07-03) / 無音フォールバックは偽バグ報告になる (07-06) / 地図の「表示」と「解決」の集合ズレ (07-08) / 外部 SDK の required 判定はクライアントで制御不能 (07-14) / レイアウト実測の再入ガードが過渡値を破棄 (07-15) / ドメインのフィールドが写る先は 5 経路・export DTO が抜けやすい (07-25) / background dispatch 中の `git add -A` はコミットを混ぜる (07-25) / 永続ストアを増やしたら削除経路にも足す・消し漏れはコードに現れない (08-06) / 外部 API の表示義務・帰属義務は動作にもテストにも現れない・規約の一部だけ doc 化すると残りは存在しない要件になる (08-07) / `0x8BADF00D` はクラッシュではなくハング・デバッガ接続中は watchdog 無効で Debug では再現しない・ハング系は実測しないと当たらない（推測で 2 回誤修正）・`Self._printChanges()` の集計で発散の引き金を特定 (08-09)
 
 ---
 
@@ -1106,3 +1106,38 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **横展開点検（2026-08-09）**: `iosApp/iosApp` の `delegate =` / `addObserver` / `addStateDidChangeListener` / `addSnapshotListener` / `NotificationCenter` を全件確認（`head` 不使用、10 箇所）。**同型は無し**:
   - `BannerAdLoader`（`bannerView.delegate`）/ `AppleSignInCoordinator`（`controller.delegate`）は **`load(_:)` / `performRequests()` を呼ぶまでコールバックが来ない**ので登録が副作用にならない
   - Firestore の `addSnapshotListener` 3 件と Auth の `addStateDidChangeListener` 2 件は**登録時に現在値が来るのが仕様どおりで、かつそれが目的**（`observeChanges` / `observeUserId` / `observeAccount` は「現在のスナップショットから流し始める」契約）。同じ「登録時に発火する」でも、**その発火を欲しがっているかどうか**が分かれ目
+
+---
+
+## 2026-08-09
+
+> 注: 上の `## 2026-08-08` セクション末尾の 3 エントリ（`エラーが握り潰されている` / `nonisolated は伝播しない` / `フレームワークが「登録時にも呼ぶ」`）は発生源が 2026-08-09 だが 08-08 セクション内に置かれている。索引の日付参照も `(08-08)` を指しているため、整列は別タスクとした（`tasks.md`）。
+
+### 「コンテンツがカメラを決める」API と「カメラがコンテンツを決める」ロジックを同時に置くと、UI が自己駆動ループに入る
+
+- **症状**: TestFlight ビルド 28 / 29 が**位置情報の許諾直後にフリーズして落ちる**。デバッグビルドでは何も起きない。クラッシュログは `EXC_CRASH (SIGKILL)` だが例外は無く、`termination: FRONTBOARD code 0x8BADF00D` = **scene-update watchdog**（次のエントリ参照）
+- **原因の構造**: `MapTabView` の `@State var cameraPosition: MapCameraPosition = .automatic` が起点。`.automatic` は「コンテンツと現在地に基づいて MapKit がカメラを自動決定する」モードで、**`Map` のコンテンツが変わるたびにカメラを再計算する**（`-[MKMapView _updateFramingUsingSetRegionBlock:]`）。一方このアプリは**ピンの表示数がカメラの可視半径に依存する**（`displayedCuratedCafes` のズームゲート = 可視半径 3000m 以下でのみ curated ピンを出す）。両方向の依存が閉じて自己駆動する:
+
+      ズームイン → ズームゲート通過 → curated ピン 210 個が出る
+        → コンテンツに合わせて全国（curated 421 件を含む領域）へズームアウト
+          → ズームゲート不通過 → ピンが消える → 現在地へズームイン → 先頭へ
+
+  実測で**現在地 r=1317m ⇄ 全国 r=50000m を 10fps で往復**し（`onMapCameraChange` が 25 秒に 272 回）、1 周ごとに curated ピンを作り直して**毎秒 2100 回**のピン構築でメインスレッドが飽和していた
+- **フォアグラウンドでは症状が出ない**のが厄介な点。watchdog が見るのは「1 回の scene-update が 10 秒以内に終わるか」で、ループが 10fps で回っていても**各サイクルは 0.1 秒で完了する**ため間に合う（体感は「重い」「熱い」だけ）。許諾ダイアログでアプリが非アクティブになると Background へのシーン遷移が要求され、同時に CPU が 17% にスロットルされて初めて予算を超える
+- **修正パターン**: `.automatic` を使わず**明示的な `.region` で初期化する**。これでコンテンツ追従フレーミングが止まり、`onMapCameraChange` は 3 回 / 30 秒へ落ちて収束した（東京駅デフォルト → 現在地 で停止）
+- **併せて入れた多重防御**: `@Observable` は**値を比較せず代入だけで変更を通知する**ため、ハンドラ内の無条件代入は無駄な body 再評価を生む。`AppState.mapSearchCenter` / `AppleNearbyCafeLoader.cafes` / `MapSearchController.showAreaSearchButton` に同値ガードを入れた。`mapSearchCenter` は単独で 533 → 1 回の効果があったが、**これだけではループは止まらず引き金が `showAreaSearchButton` へ移っただけ**だった（症状を抑えても原因は消えない実例）
+- **`.onChange(of:)` と `.onMapCameraChange` の非対称に注意**: `.onChange(of:)` は SwiftUI が値を比較して**変化時のみ**発火するので同値ループを作れない。`.onMapCameraChange` は MapKit 側のイベントで**値比較が無い**。「ハンドラ内の代入」が危険かどうかはこの差で決まる
+- **教訓**: フレームワークに「中身に合わせて外枠を決める」自動モードがあるとき、**その中身が外枠に依存していないかを必ず確認する**。片方向なら便利機能、双方向なら無限ループになり、型もテストもコンパイラも検出しない。`.automatic` / `.fit` / `sizeToFit` 系を使うときの共通の問いにする
+- **発生源**: 2026-08-09、TestFlight ビルド 28 / 29 のウォッチドッグ強制終了。原因特定は実機 Debug 計測（`devicectl` + `Self._printChanges()` + 使い捨てプローブ）。修正は `0dd21c1`
+- **横展開点検（2026-08-09）**: ①`grep -rn "\.automatic\|MapCameraPosition" iosApp/` → `MapCameraPosition` は修正済みの 1 箇所のみ。`AnalysisView+Statistics.swift` の `AxisMarks(values: .automatic)` は Swift Charts の軸マークでコンテンツ追従フレーミングとは無関係（**該当なし**）②`grep -rn "onMapCameraChange" iosApp/` → ハンドラ実体は `MapTabView.swift` の 1 箇所のみ ③`grep -rn "\.onChange(of:" iosApp/` → **15 箇所すべて該当なし**（上記の非対称のため同値ループにならない）④`grep -rn "zoomGateRadiusMeters" iosApp/` → カメラ半径依存は `displayedCuratedCafes` と `AppleNearbyCafeLoader.schedule` の 2 箇所。構造としては残るが、コンテンツ追従フレーミングを外したので**循環の相手がいない**
+
+### `0x8BADF00D` はクラッシュではなくハング。デバッガ接続中はウォッチドッグが無効なので Debug では原理的に再現しない
+
+- **症状**: 「TestFlight でアプリがクラッシュしている。デバッグビルドでは何ともないのはなぜ」という報告
+- **原因の構造**: `.ips` の `bug_type: 309` / `exception: EXC_CRASH (SIGKILL)` かつ `termination: namespace FRONTBOARD, code 0x8BADF00D` は**例外ではなく、OS がハングを検知して殺した**もの。理由文字列に `scene-update watchdog transgression: exhausted real (wall clock) time allowance of 10.00 seconds` と出る。**Xcode から Run している間 iOS はウォッチドッグを無効化する**ため、同じハングが起きていても Debug では殺されない。「Release だけで起きる」ように見えるが、**ビルド構成は原因ではない**
+- **切り分けの起点**: 「Debug では再現しない」報告を受けたら、まず `.ips` の **`bug_type` と `termination.namespace` を読む**。309 / FRONTBOARD ならクラッシュではなくハングなので、探すべきは「例外を投げる箇所」ではなく「**メインスレッドを継続的に焼いている処理**」。`WatchdogCPUStatistics` の `Elapsed application CPU time` と CPU 使用率が「フォアグラウンド換算でどれだけの処理量か」の目安になる（今回は 9.992s / 17% = 実質 1.7 秒相当）
+- **`ProcessVisibility: Background` を見落とさない**: 許諾ダイアログ等でアプリが非アクティブになると CPU がスロットルされる。フォアグラウンドで間に合っていた処理が、この瞬間だけ 10 秒予算を超える。**「特定の操作の直後だけ落ちる」の正体がこれ**であることがある
+- **教訓**: この型を知らずに 2 回、誤った修正を出した。①`LocationManager` の `MainActor.assumeIsolated` の同期実行が原因と判断（`761e9a0`）→ **クラッシュログのスタックに CoreLocation のフレームが 1 つも無い**のを見落とし、`git diff` で見つけた変更に筋書きを合わせていた ②`existingPinCoordinates` / `displayed(excluding:)` の O(N×M) 測地距離計算が原因と判断 → 実測は 10 回で合計 1ms で無罪。どちらも**実測せずコードから物語を作った**もので、「Release 固有の何か」を探し続けたのが遠回りの根。ハング系は**計測しないと当たらない**
+- **効いた計測手段**: `Self._printChanges()` を疑う View の `body` 冒頭に置き、出力を `sort | uniq -c` で集計する。「何が」「何回」body 再評価を起こしたかがプロパティ名で出るので、発散の引き金が一撃で分かる（今回は `mapSearchCenter` 533 回 → ガード後 `showAreaSearchButton` 586 回、と引き金が移る様子まで見えた）。実機で Debug ビルドを動かす手段は `xcrun devicectl device process launch --device <id> --console <bundleID>`（**デバッガはアタッチされない**ので、watchdog を有効にしたまま stdout を取れる）
+- **発生源**: 2026-08-09、TestFlight ビルド 28 / 29 の診断。原因そのものは上のエントリ
+- **横展開点検（2026-08-09）**: 過去の「Release では消える」系エントリと突き合わせた。2026-06-23 の「実機 debug の UI ジャンクは debug アーティファクトを疑う」は**逆向きの事例**（Debug でのみ遅い / Release で消える）で、今回はその裏返し（Debug でのみ**殺されない**）。両方を並べて「ビルド構成で症状が変わる報告は、まず**観測条件の差**を疑う」として索引に載せた

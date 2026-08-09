@@ -452,6 +452,14 @@
 | [x] | SW6-B | ~~**`AppleSignInCoordinator` の `UIWindow()` が iOS 26 で deprecated**~~ → **2026-08-08 完了**。`presentationAnchor(for:)` のフォールバック（scene 探索 → `UIWindow(windowScene:)` → `UIWindow()`）を**丸ごと削除**し、`presentationAnchor` が nil なら `preconditionFailure` に変更（ユーザー選択）。呼び出し経路を追うと全パスが到達不能で、探索ロジックは `AccountView.currentPresentationAnchor()` と二重だった。実行パス 18 行 → 2 行。**これで iosApp のビルド警告が 0 件になった**（Debug / Release 両方） | iosApp 完結 |
 | [-] | SW6-C | ~~**CI が `CURRENT_PROJECT_VERSION` を `xcodebuild` の引数で渡している**~~ → **2026-08-08 取り下げ（ユーザー判断）**。`release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、コマンドライン引数のビルド設定は**ターゲットを選ばず SPM 依存パッケージにも適用される**（lessons 2026-08-08 の sweep で検出）。ただし **CI の run_number をビルド番号に採用するのは意図した設計**で、TestFlight ビルドも通っているため対処しない。`SWIFT_VERSION` のような「依存先が対応していないと壊れる」設定とは性質が違う（`CURRENT_PROJECT_VERSION` は数値が渡るだけ） | — |
 
+#### implementation_note.md の月次アーカイブ（2026-08-09 起票）
+
+> フロー型 doc の閾値は **1200 行 / 月次アーカイブ**（2026-07-25 の棚卸しで確定）。現在 **1477 行**で超過している。内訳は 2026-07 が 73 エントリ、2026-08 が 24 エントリ。前回は 2026-06 の 36 件を `implementation-note-archive.md`（現 322 行）へ凍結した実績がある。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 2026-07 の 73 エントリを `implementation-note-archive.md` へ移す。`curate-doc` skill の手順に従い**縮約から入らない**（陳腐化チェック → 縮約 → 分離）。移動前に他 doc / rules / skill からの名指し参照の生存を確認する（`grep -rn "implementation_note 2026-07" docs/ .claude/`）| 中。7 月は名指し参照が多い月なので、参照の付け替え漏れが起きやすい |
+
 #### docs 棚卸し 第 2 巡（2026-07-27 / 未実施 doc への Phase 1 適用）
 
 > 2026-07-25 の第 1 巡（data-model / implementation_note / kmp-bridge / architecture）で**触れていない 8 本**にコード突き合わせ（curate-doc Phase 1）を通した。行数閾値の超過は `data-model.md` 708 行のみで、今回の主目的は縮約ではなく**実装との乖離の検出**。検出は陳腐化 10 件 / 欠落 4 件 / コード側 2 件。
@@ -549,6 +557,15 @@
 | [x] | MP-4 | ios-engineer: `SavedCafeListSheet` の「記録あり」バッジが `.brown` 直書きで孤立している（`visitedCafePin` の brown → accentColor 化に未追随）。**訪問済みの意味なので `Color.accentColor` へ揃える**（ui-ux-guidelines「マップ概念の色セマンティクス」の「ブランド / 訪問済み」行）。色 1 点のみ、他は無変更 | 2026-07-27 完了。1 行のみ（`.foregroundStyle(.brown)` → `Color.accentColor`）。**親がフラグ無しで `** BUILD SUCCEEDED **` を独立再確認**。起源は implementation_note 2026-07-06 の「後続候補」で、棚卸しの行番号検査（live pointer の掃除）で拾い上げた。**横断点検で同型 5 箇所を検出**（下記 MP-5 として分離）。ライト / ダーク両方の目視はユーザー作業 |
 | [x] | MP-5 | オンボーディング系 2 画面の `.brown` 直書き 5 箇所を `Color.accentColor` へ揃えるか判断する（`DataConsentOnboardingView` = 見出しアイコン / 目的リスト 3 アイコン / CTA の `tint`、`AdPrePromptView` = 見出しアイコン / CTA の `tint`）。ui-ux-guidelines「カラーの役割定義」は**アプリ全体**で「アクセント = `.accentColor`」と定めており、`.brown`（固定色）は AccentColor（light #8B5A2B / dark #C08552）と一致しないためダークで色がずれる | 2026-07-27 完了（**5 箇所すべて揃えるでユーザー確定**）。`purposeRow` は 3 アイコン共通のヘルパなので実変更は 2 ファイル 5 差分。色のみで文言・レイアウト・アクセシビリティは無変更。`AdPrePromptView` だけ brown 維持の案も出したが、直前の同意オンボーディングと地続きの導入フローなので統一を採った。**`.brown` 直書きは `iosApp/**` から 0 件**（親が grep で独立確認）、**親がフラグ無しで `** BUILD SUCCEEDED **` を独立再確認**。両 View の `#Preview` を Light / Dark 2 本立てにして目視しやすくした。**目視はユーザー作業**（初回起動フローのため、アプリ削除 → 再インストールが要る）|
 
+#### マップ更新コストの削減（2026-08-09 起票 / ウォッチドッグ修正の残務）
+
+> TestFlight ビルド 28 / 29 のウォッチドッグ強制終了（`0x8BADF00D`）は `MapCameraPosition.automatic` の自己駆動ループが原因で、`0dd21c1` で解消済み（実測: `onMapCameraChange` 272 回/25 秒 → 3 回/30 秒、ピン構築 2100 回/秒 → 定常構築なし。TestFlight ビルド 30 でユーザー確認済み）。**以下は同じ診断で見つかった、発散とは独立の非効率**。発散が止まったので watchdog には至らないが、1 回の更新コストが重いこと自体は未対処。
+
+| 状態 | ID | タスク | リスク |
+|------|----|------|--------|
+| [ ] | MU-1 | `displayedCuratedCafes`（`MapTabView+PinResolution.swift`）に**可視領域フィルタが無い**。ズームゲート（可視半径 3000m 以内）を通ると `curatedCafes` 421 件を件数で絞らずそのまま返すため、**画面外のピンまで Annotation に載る**（実測でピン body 評価 210 個/回）。`latestVisibleRegion` でマージン付きに絞る | 中。ズームゲートと可視領域の二重条件になるため、境界でピンが出入りする挙動を目視確認する必要がある。**カメラ依存を増やす変更なので、`.automatic` を再導入しない限り循環はしないが、依存方向を増やす点は要注意**（lessons 2026-08-09） |
+| [ ] | MU-2 | 全ピンが `NavigationLink` / `Button` でラップされており、ピン 1 個 = `_UIHostingView` 1 個 + `ButtonBehavior` の `State` 初期化になっている（クラッシュログのスタックに `WrappedButtonStyleBody` / `initializeWithCopy for NavigationLink` が出ていた）。`NavigationLink(value:)` が保持する `CafeDetailRoute.initialCafe` は Kotlin の `Cafe` オブジェクトで、更新ごとに ObjC 参照カウントのコピーが走る。タップ時解決に変えられないか検討する | 中〜大。遷移方式の変更なので影響範囲が広い。MU-1 でピン数が減れば不要になる可能性があり、**MU-1 の効果を測ってから判断する** |
+
 ### 完了
 
 #### CoffeeEditorView 分割（2026-07-24 完了）
@@ -618,6 +635,14 @@
 | 状態 | タスク | 備考 |
 |------|------|------|
 | [ ] | `/memory` でロード確認（CLAUDE.md 常時 + `shared/**` のファイルを開いた際に kotlin-kmp.md が載ること） | **ユーザー作業**（セッション内で `/memory` 実行） |
+
+#### lessons.md の日付セクション整列（2026-08-09 起票）
+
+> `docs/tasks/lessons.md` の前文は「セクションは発生日ごと・日付昇順」と定めているが、**発生源が 2026-08-09 のエントリ 3 件が `## 2026-08-08` セクション内に置かれている**（`エラーが握り潰されている` / `nonisolated は伝播しない` / `フレームワークが「登録時にも呼ぶ」`）。2026-08-09 のウォッチドッグ調査で `## 2026-08-09` セクションを新設した際に発見。移動すると主題別インデックスの日付参照 `(08-08)` も連動して直す必要があり、バグ記録の差分に混ぜると読めなくなるため分離した。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [ ] | 上記 3 エントリを `## 2026-08-09` セクションへ移動し、主題別インデックスの該当参照を `(08-08)` → `(08-09)` に直す。移動後、新設セクション冒頭に置いた「注:」ブロックを削除する | 低リスク（本文の移動と参照の付け替えのみ）。索引の該当行は「Firebase / Firestore / Auth」「iOS / SwiftUI / UI レイアウト」等に分散しているため、`grep -n "(08-08)" docs/tasks/lessons.md` で全件洗ってから判断する |
 
 ### 完了
 

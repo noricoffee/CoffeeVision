@@ -1457,3 +1457,21 @@ Swift コードレビュー #7「`LocationManager()` が View struct の init �
 - **計測できなかったこと**: パン / タブ切替による再生成頻度。`simctl` でタッチを送れないため。起動時に限れば `init` は 1 回で、**手順として「生成コストの集約（`AppState` への hoist）」は不要と判断**した（生成が副作用を持たなくなった以上、余分な init は割り当てが増えるだけ）。
 - **副産物（未対応・別件）**: `resetLastLocation()` / `clearError()` / `error` は**どの View からも参照されていない**（grep 済み）。位置取得の失敗は現状 UI にまったく出ないが、`error` の KDoc は「View 側で alert を出す」と書いている。KDoc と実装の乖離。
 - 検証: `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無しで `** BUILD SUCCEEDED **`。計測用 `print` は 5 行すべて削除済み（`grep -c MEASURE` = 0 で確認）。**シミュレータでの実操作確認: 済**（2026-08-09、ユーザー。マップのパン / FAB の recenter / 記録エディタの現在地サジェスト。`simctl` でタッチを送れず自動化できなかった部分）。
+
+### 2026-08-09: TestFlight のウォッチドッグ強制終了 — 診断の遠回りと、初期カメラのデフォルト値の決め方
+
+- 関連: `iosApp/iosApp/Features/Map/MapTabView.swift`（`cameraPosition`）/ `iosApp/iosApp/AppState.swift`（`MapSearchCenter.isEquivalent`）/ `docs/ui-ux-guidelines.md`「マップの初期カメラ」/ `docs/coding-conventions.md` §2.3・§2.5 / lessons 2026-08-09
+
+TestFlight ビルド 28 / 29 が位置情報許諾の直後に落ちる報告。真因は `MapCameraPosition.automatic` の自己駆動ループで、修正は `0dd21c1`（TestFlight ビルド 30 でユーザー確認済み）。落とし穴そのものは lessons に記録した。ここには**判断とトレードオフ**を残す。
+
+**初期カメラのデフォルト値をどう決めたか**: `.automatic` を外すと「初期カメラ確定までの一瞬に何を見せるか」をアプリが決める必要が出る。候補は ①東京駅（`setInitialCameraFromVisitedCafes` の既存デフォルトと同値）②日本全体 ③直近のカメラ位置を永続化して復元。**①を採った**。②は curated ピン 421 件が全国に散っているためズームゲートを跨いでピンが出入りし、修正前と似た見え方になる。③は永続化の追加とマイグレーションが要るうえ、「前回の位置」が現在地と無関係な県だと初回体験が悪い。①なら既存デフォルトと重複しないコードで、かつ許可済みなら現在地・未許可なら訪問済み bounding box に即座に上書きされるため、実際に見えるのは一瞬だけ。
+
+- トレードオフ: 「位置情報を拒否 + 訪問済みカフェ 0 件」の新規ユーザーには東京駅が出る。これは修正前から `setInitialCameraFromVisitedCafes` がそうしていた挙動なので、**変更ではなく現状維持**。日本以外のユーザーには不適切だが、App Store の配信地域が日本のみのため現時点では問題にしない（配信地域を広げるときに再検討する）。
+
+**同値ガード 3 件を残した判断**: `.automatic` を外せば循環は止まるので、`mapSearchCenter` / `cafes` / `showAreaSearchButton` の同値ガードは**なくても症状は出ない**。それでも残したのは、`@Observable` が値を比較しないという性質が変わらない限り、値比較の入らないハンドラからの無条件代入は将来また同じ形の無駄な再評価を生むため。ただし**ガードは原因ではなく症状への対処**だったことは明記しておく — 3 件を入れた時点では引き金が `mapSearchCenter`（533 回）から `showAreaSearchButton`（586 回）へ移っただけで、ループは止まらなかった。
+
+**`761e9a0` を revert しない判断**: あのコミットは `LocationManager` の delegate 3 メソッドを `MainActor.assumeIsolated` から `Task { @MainActor in }` に戻したもので、コミットメッセージは「これがウォッチドッグの原因」と断定していた。**原因の断定は誤り**（クラッシュログのスタックに CoreLocation のフレームが 1 つも無かったのを見落とした）。ただし変更自体は `coding-conventions.md` §2.5 が元から定めていた規約（delegate メソッドの UI 更新は `Task { @MainActor in }` で戻す）への準拠を回復するもので、Swift 6 移行（SW6-1）時の `assumeIsolated` 化が規約違反だった。よって revert せず、規約側に「`assumeIsolated` に置き換えてはいけない」理由（仮定が外れたら precondition failure でクラッシュする / その保証に賭ける必要がない）を明記して昇格させた。
+
+- 経緯（遠回りの記録）: 推測ベースで 2 回、誤った修正方針を出した。①`assumeIsolated` の同期実行 ②`existingPinCoordinates` / `displayed(excluding:)` の O(N×M) 測地距離計算（実測 10 回で合計 1ms、無罪）。どちらも `git diff` とコードから筋書きを立てたもので、**「Release ビルドでのみ起きる」という前提を疑わなかった**のが根。実際にはビルド構成は原因ではなく、必要条件は「デバッガ非アタッチ」+「Background 遷移」だった。最初に計測を提案したが「原因が分かったなら計測不要」に同意して取り下げており、あそこで測っていれば 2 回の空振りは避けられた。**ハング系（`0x8BADF00D`）は実測しないと当たらない**。
+- 効いた計測手段は lessons に記録した（`Self._printChanges()` の出力を `sort | uniq -c` で集計 / `xcrun devicectl device process launch --console` はデバッガをアタッチしないので watchdog を有効にしたまま実機の stdout が取れる）。使い捨てプローブ（`MapPerfProbe`）は削除済み（`grep -rn "MapPerfProbe\|_printChanges\|DEBUG-w4t9" iosApp/` = 0 件で確認）。
+- 副産物（未対応・別件）: ①`displayedCuratedCafes` に可視領域フィルタが無く画面外のピンまで Annotation に載る（実測 210 個/回）②全ピンが `NavigationLink` / `Button` ラップで、`CafeDetailRoute.initialCafe` が Kotlin の `Cafe` オブジェクトを保持している。どちらも発散とは独立の非効率で、`tasks.md` カテゴリ 2「マップ更新コストの削減」（MU-1 / MU-2）に起票した。

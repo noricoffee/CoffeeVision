@@ -363,6 +363,7 @@ struct CoffeeListView: View {
 - `@State` は View 内に閉じる値のみ。共有状態は ViewModel に寄せる
 - 例外: 高頻度テキスト入力（検索欄等）の表示値は Kotlin `StateFlow` に直結せず、**View ローカル `@State` を表示の真実の源**にして `.onChange` で Kotlin へ一方向転送する（`set → Kotlin → SKIE emit → 再描画` の非同期ラウンドトリップによる入力ラグ防止）
 - 各 View にプレビューを実装する（ダミー Demo 方式。下記「プレビュー」参照）
+- **`MapCameraPosition.automatic` を使わない。** `.automatic` は「コンテンツと現在地に基づいて MapKit がカメラを自動決定する」モードで、`Map` のコンテンツが変わるたびにカメラを再計算する。本アプリはピンの表示数がカメラの可視半径に依存する（`displayedCuratedCafes` のズームゲート）ため、**カメラ → 表示数 → カメラ の循環になり自己駆動ループに入る**（実測 10fps で往復、毎秒 2100 回のピン構築でメインスレッドが飽和し、Background 遷移時に scene-update ウォッチドッグで SIGKILL された）。初期値は明示的な `.region(...)` にする。一般則として、**フレームワークが「中身に合わせて外枠を決める」自動モードを持つとき、その中身が外枠に依存していないかを必ず確認する**（`.automatic` / `.fit` / `sizeToFit` 系に共通。lessons 2026-08-09）
 
 ```swift
 // Good
@@ -428,7 +429,8 @@ CoffeeListView(...)
 
 - `@Observable` は `lazy var` 非対応（マクロの init accessor が他 stored property を参照できない）。遅延生成は `private(set) var x: T?` + bootstrap 成功後の 1 回生成で表現する。`init` 内では全 stored property 初期化前の `self` アクセスも不可（依存はローカル変数に受けてから順に代入）
 - 外部からのリセットが必要なプロパティは `private(set)` + リセットメソッド公開（例: `resetLastLocation()` / `clearError()`）。View からの直接代入はさせない
-- `@MainActor` クラスを CoreLocation 等の delegate に準拠させる場合、delegate メソッドは**すべて `nonisolated` 宣言**し、内部の `@MainActor` プロパティ更新は `Task { @MainActor in ... }` で戻す（コールバックは背景スレッドから呼ばれるため）
+- `@MainActor` クラスを CoreLocation 等の delegate に準拠させる場合、delegate メソッドは**すべて `nonisolated` 宣言**し、内部の `@MainActor` プロパティ更新は `Task { @MainActor in ... }` で戻す。**`MainActor.assumeIsolated` に置き換えてはいけない** — `assumeIsolated` は「今メインスレッドである」という仮定が外れた瞬間に precondition failure でクラッシュする。CoreLocation のコールバックは実際には manager を生成したスレッドの RunLoop で呼ばれるので通常はメインだが、**その保証に賭ける必要がない**（`Task { @MainActor in }` はどのスレッドから呼ばれても安全）。非 Sendable な引数（`CLLocationManager` 等）を closure に渡さないよう、Sendable な値だけ取り出すか、MainActor 側の同一インスタンス（`self.manager`）を使えば Swift 6 でも警告は出ない。Swift 6 移行（SW6-1）で 3 メソッドが `assumeIsolated` に置き換えられていたのを `761e9a0` で是正した
+- **`@Observable` は値を比較せず、代入するだけで変更を通知する。** フレームワーク側のイベントを直接受けるハンドラ（`.onMapCameraChange` 等）から同じ値を再代入すると、無駄な body 再評価が走り続ける。**ハンドラ内の代入は同値ガードで囲む**。座標・半径のような浮動小数は下位桁が揺れて完全一致では止まらないため、許容誤差付きの比較を用意する（`MapSearchCenter.isEquivalent` は 1m 未満を同値扱い）。対して **`.onChange(of:)` は SwiftUI が値を比較して変化時のみ発火する**のでこの問題は起きない。危険なのは「値比較が入らない経路」だけ（lessons 2026-08-09）
 
 ---
 

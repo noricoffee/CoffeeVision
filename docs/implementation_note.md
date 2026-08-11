@@ -88,7 +88,7 @@
 - iOS のルートは **4 タブ（マップ / コーヒー / 分析 / 設定）**。検索タブは廃止（iOS 27 で `Tab(role: .search)` の右端固定が廃止されたため）し、**マップ上部の埋め込み検索バー**（テキスト検索はマップ中心の位置バイアス付き）+「このエリアを検索」ボタン + 検索モードに移行。コーヒー記録の作成は**コーヒータブとカフェ詳細のいずれもナビバー右上の `+`**（2026-08-07 に FAB から統一。下記「追加アクションの配置」）
 - Places API は **New v1** + `X-Goog-FieldMask` で取得フィールド明示。API キーは `AppContainer` コンストラクタ注入（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Nearby は `includedPrimaryTypes = [cafe, coffee_shop]`・1 回最大 20 件。Places 写真は永続キャッシュ禁止（規約）で都度取得
 - iOS の xcconfig は `Base.xcconfig`（base）→ 先頭 `#include "Config.xcconfig"`（必須）+ `#include? "Secrets.xcconfig"`（任意・gitignore 済）の 3 段構造。**フォールバック宣言（`PLACES_API_KEY =` 等）は `#include?` より前に置く**（後ろだと実キーを空で上書き）
-- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ
+- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ。**予算アラートとクォータ上限は 2026-08-11 に設定済み**（App Store 提出後。設定状況の正本は paid-services §1「コスト抑制の現状」で、**実値は Cloud Console が正本**）。**API 制限の Places 限定は未確認のまま残っている**
 - 分析は 3 階層分離: 階層1・2 は KMP で決定論（`CoffeeStats` / `FavoriteSignals`。収縮平均 + n 連動 z ゲート `CATEGORY_Z = 2.0` + 相関 floor で「弱い傾向」だけを信号化、断定しない）、階層3 は iOS Foundation Models（`CoffeeInsightProvider`。可否は注入時判定、null = 非対応端末で graceful degradation）。Q&A は v1 = `CoffeeStats` digest 注入（単発・ステートレス）/ v2 = `Tool` から `CoffeeRecordQuery.searchRecords`（計算は KMP・LLM は解釈と整形のみ）
 - `BeanProfile`（12-B）はサーバ管理 read-only の豆ナレッジ。`CoffeeRecord` と ID 紐付けせず origin / processings のファジーマッチ。取得は one-shot get + メモリキャッシュ。12-C で `FavoriteSignals` と突合した `preferredBeanTraits` を `CoffeeStats` に付加し、Foundation Models で言語化
 - 味覚一致カフェ推薦: **9-5（コンテンツベース v1）は実装完了・○ 確定**（2026-07-21。`ObserveTasteMatchedCafesUseCase` / `RecommendedCafe` / `CafeRecommendationProvider`、産地/焙煎/抽出/精製の 4 軸マッチ、マップの好み一致ピン + 理由表示 + 分析タブ連携。テイスティング 5 軸の一致はスコープ外）。**9-6（協調フィルタ / 他ユーザー横断 v2）は設計確定・△（未実装）**（`sharedTasteProfiles/{uid}` + Cloud Function 特権 read。閾値定数 / Function 内実装 / インフラ選定は未決。tasks 12-D で段階 dispatch）。詳細は analysis-model §2
@@ -678,3 +678,22 @@ TestFlight ビルド 28 / 29 が位置情報許諾の直後に落ちる報告。
 **アーカイブは月別ファイルに分けず 1 本に積む**（ユーザー確定）。2026-07 の 73 エントリ（880 行）を `implementation-note-archive.md` へ移し、`## 2026-06` / `## 2026-07` の月見出しで区切った。分割案（`implementation-note-archive-2026-07.md`）を採らなかったのは、**約 70 箇所ある「implementation_note 2026-0X-XX エントリ」参照が日付でしか引かれないため**。行き先が 1 ファイルに固定されていれば参照側の書き換えも「月 → ファイル」索引の維持も不要になるが、ファイルを増やすとその索引が新たな陳腐化ポイントになる。移送は逐語で、`diff` で移送前後の本文が完全一致することを確認してからコミットした（凍結移送であって縮約ではない = 歴史を書き換えない）。archive は 1214 行になるが、**フロー型の 1200 行閾値は「追記が止まった月をアーカイブへ送れ」という発火条件**であり、既にその移送先である archive には意味を持たない。次回誤検出しないよう archive の前文に明記した。
 
 **`data-model.md`（739 行）は分割も縮約もしなかった。** 前文の例外規定（2026-07-27 ユーザー確定・700 行台を許容）が判断の正本で、`check-file-size.sh` の警告より優先する。Phase 1 だけ通し、欠落 1 件を埋めて据え置いた。**kmp-bridge は 505 → 477 行**（Gradle 設定の逐語コピー 12 行と `AppContainer(...)` の引数列挙 11 行を削除。後者は直下に「正本は `AppContainer.kt`」と書いてあるのに列挙が併記されている自己矛盾だった）。ViewModel ブリッジの 52 行の Swift サンプルは**残した** — 実ファイルの逐語コピーではなく最小化した規範テンプレートで、`isolated deinit` の理由がコメントとして埋まっているため。
+
+### 2026-08-11: App Store 提出後の状況レビュー — 「方針は決めたが、やったかの記録が無い」型の積み残し
+
+- 関連: `docs/paid-services.md` §1「コスト抑制の現状」/ `iosApp/iosApp/Utilities/ReviewPrompt.swift` / tasks カテゴリ 4「リリース前バックログ」
+
+審査提出（ビルド `68a2e0d`）の直後に、リポジトリ側でやり残しが無いかを点検した。提出前チェックリスト（app-store-metadata §10）は全項目消し込み済みで、公開 URL 3 本も 200 を実測。**提出ビルドが最新コードであることも確認した**（release run 31322321387 = 2026-08-10 00:53 JST が `68a2e0d` から生成されており、前日の UI 修正 2 件を含む）。
+
+**にもかかわらず、チェックリストに載っていない積み残しが 2 件出た。どちらも同じ型で、「本ノートに方針として書いてあるが、実施したかの記録がどこにも無い」もの**だった。
+
+- **Places の予算アラート + クォータ上限**: サマリの Places キー行は 2026-07-08 から「バンドル ID 制限は実効的防御ではない。現実的な守りは予算アラート + クォータ上限」と書いていたが、`paid-services` の「コスト抑制の現状」に該当行が無く、実施済みか誰にも分からない状態だった。**公開された瞬間にキーは抽出可能になる**ので、本来は承認前に閉じるべき窓
+- **Remote Config `review_prompt_enabled`**: ASO-1 のキルスイッチは「キー未設定なら発火する」側に倒してある（`setDefaults` なし → `source == .static` で `true`）。つまり**コンソールにキーが存在しない = 止める手段が無い**状態で出荷していた。緊急時に作るのでは遅い
+
+**チェックリストは「実装したか」を追跡していて、「本番環境に設定したか」を追跡していなかった。** app-store-metadata §10 の「ビルド / 技術」には Firestore Rules のデプロイや Sign in with Apple の Firebase 登録は入っていたが、それは**無いとアプリが動かない**設定だからで、今回の 2 件は**無くてもアプリは正常に動く**（動くまま無防備になる / 動くまま止められなくなる）。この差が抜けの構造で、両方とも tasks カテゴリ 4 に完了行として起票した。
+
+**副次的に確定した運用上の制約**: `minimumFetchInterval` は SDK 既定 12h で fetch は起動時 1 回のため、**キルスイッチを倒しても反映は最大 12h + 次回起動**。「即時停止できる」と誤解したまま運用しないよう tasks 側に明記した。即時性が要るなら間隔短縮 = 新ビルド提出になる。
+
+**`per user` クォータは無制限のままにした**（ユーザー判断）。2 つのクォータは AND 評価なので、プロジェクト × API 単位の分あたり上限だけで請求の天井は成立する。`per user` が買うのは天井ではなく**発信元の隔離**（単一発信元が全体枠を食い尽くして正規ユーザーが 429 になるのを防ぐ）だが、本アプリは API キーのみで OAuth ユーザー identity を持たず Google 側の「user」識別が確実でないため、依存しない判断とした。
+
+**残る未確認**: API キーの「API の制限」が Places に絞られているか。未制限だと抜かれたキーで他 Maps API を叩かれ、Places のクォータ上限を迂回される（`paid-services` §1 に ⚠️ で残置）。

@@ -182,7 +182,7 @@ nonisolated enum CoffeeFirestoreMapper {
 
     // MARK: - Cafe Map
 
-    /// カフェスナップショット 8 フィールドを Firestore マップに変換する。
+    /// カフェスナップショット（`docs/data-model.md` §1.2 の永続フィールドのみ。揮発フィールドは含まない）を Firestore マップに変換する。
     ///
     /// `coffees.cafe` / `savedCafes.cafe`（`SavedCafeFirestoreMapper`）の両方から共有する
     /// （`docs/data-model.md` §3.2 / §1.9 で同一の直列化規則と規定されているため）。
@@ -202,7 +202,7 @@ nonisolated enum CoffeeFirestoreMapper {
         return dict
     }
 
-    /// カフェスナップショット 8 フィールドを Firestore マップから復元する。`toCafeMap` の逆変換。
+    /// カフェスナップショット（`docs/data-model.md` §1.2 の永続フィールドのみ。揮発フィールドは含まない）を Firestore マップから復元する。`toCafeMap` の逆変換。
     static func cafeFromMap(_ dict: [String: Any]) -> Cafe? {
         guard
             let placeId = dict["placeId"] as? String,

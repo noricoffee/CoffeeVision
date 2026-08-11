@@ -12,8 +12,8 @@ import kotlinx.datetime.Instant
  * `users/{uid}/savedCafes/{placeId}` — ドキュメント ID = `cafe.placeId`（[data-model.md] §1.9 の自然キー）。
  *
  * ## フィールド規則（[CoffeeFirestoreMapper] と共通化）
- * - `cafe` マップは [CoffeeFirestoreMapper] と同じスナップショット 8 フィールド + `photoAttributions`
- *   のみ。nullable フィールドは null 時にキーを省略する。`photoAttributions` は空リストならキーごと省略
+ * - `cafe` マップは [CoffeeFirestoreMapper] と同じ [data-model.md] §1.2 の永続フィールドのみ
+ *   （揮発フィールドは含まない）。nullable フィールドは null 時にキーを省略する。`photoAttributions` は空リストならキーごと省略
  * - `note` は空文字を含めて常に書き出す
  * - `savedAt` は Firestore `Timestamp`
  */

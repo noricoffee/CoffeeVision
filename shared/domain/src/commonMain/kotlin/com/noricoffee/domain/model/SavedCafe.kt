@@ -16,7 +16,7 @@ import kotlinx.datetime.Instant
  * （[data-model.md] §1.9 / §5 参照）。
  *
  * @property userId Firebase Auth uid
- * @property cafe Places 由来のカフェスナップショット（保存時点。永続化されるのは §1.2 と同じ 8 フィールドのみ）
+ * @property cafe Places 由来のカフェスナップショット（保存時点。永続化されるのは [data-model.md] §1.2 の永続フィールドのみ。揮発フィールドは含まない）
  * @property note 任意メモ（「◯◯さんおすすめ」等）。空文字可。v1 では常に空文字で保存し、
  *                編集 UI は将来追加する（フィールドだけ確保）
  * @property savedAt 保存日時。一覧の並び順キー（降順）

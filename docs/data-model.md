@@ -123,7 +123,7 @@ data class Cafe(
 
 > `CoffeeRecord.cafe` が null の場合はカフェに紐づかないセルフ抽出を表す。
 
-> **永続化されるのは 9 フィールド**: `placeId` / `name` / `address` / `latitude` / `longitude` / `photoReferences` / `websiteUrl` / `mapsUrl` / **`photoAttributions`**。フェーズ 10-B で追加した 5 フィールド（`openNow`〜`googleRating`）とフェーズ 16 で追加した `userRatingCount` の計 6 フィールドは Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面・マップ下部カードの表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
+> **永続化されるのは次のフィールド**（★ この列挙が正本。他の節・コードコメントは件数を書かずここを参照する — 加算されるたびに全箇所の件数がまとめて嘘になるため。2026-08-11 制定）: `placeId` / `name` / `address` / `latitude` / `longitude` / `photoReferences` / `websiteUrl` / `mapsUrl` / **`photoAttributions`**。フェーズ 10-B で追加した `openNow` / `weekdayDescriptions` / `phoneNumber` / `priceLevel` / `googleRating` とフェーズ 16 で追加した `userRatingCount` は Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面・マップ下部カードの表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
 >
 > ⚠️ **`photoAttributions` だけは宣言順が揮発フィールドの後（末尾）なのに永続対象**という直感に反する並びになっている。SKIE がデフォルト引数を Swift の init に伝播しないため、末尾以外に挿入すると Swift 側の `Cafe(...)` 構築箇所が全て壊れる制約による（`kmp-bridge.md`）。**「先頭から N 個が永続」という読み方をしないこと**。
 
@@ -253,7 +253,7 @@ data class BeanProfile(
 ```kotlin
 data class SavedCafe(
     val userId: String,                   // Firebase Auth uid
-    val cafe: Cafe,                       // Places 由来のスナップショット（保存時点。永続化は 9 フィールドのみ = §1.2 と同じ）
+    val cafe: Cafe,                       // Places 由来のスナップショット（保存時点。永続化されるのは §1.2 の永続フィールドのみ）
     val note: String,                     // 任意メモ（「◯◯さんおすすめ」等）。空文字可
     val savedAt: Instant,                 // 保存日時（一覧の並び順キー、降順）
 )
@@ -267,7 +267,7 @@ data class SavedCafe(
   - 行きたい一覧では、記録が既にある店に「記録あり」バッジを表示し、手動解除を促す
 - **一覧の導線はマップ画面内**: マップのツールバー（またはフィルタチップ列）のブックマークボタン → ハーフシートで `SavedCafe` 一覧（`savedAt` 降順、タップでカフェ詳細 push、スワイプで解除）。**新規 feature モジュールは作らない**（シートはマップ画面の一部。状態は `MapViewModel` に持たせ、1 画面 = 1 モジュール原則のカウント外とする）
 - **カフェ詳細のトグル状態**: `CafeDetailViewModel` が `observeByPlaceId` を購読して「行きたい」ボタンの ON/OFF を表示。保存時は表示中の `Cafe`（Places Details 取得済み）からスナップショットを作る
-- **スナップショットの鮮度**: 保存時点の 9 フィールドを固定保存。営業時間等の揮発情報はカフェ詳細画面が都度 Places Details を取得する既存挙動（§1.2）に委ねる
+- **スナップショットの鮮度**: 保存時点の §1.2 の永続フィールドを固定保存。営業時間等の揮発情報はカフェ詳細画面が都度 Places Details を取得する既存挙動（§1.2）に委ねる
 - **`note` は v1 では常に空文字**: フィールド・永続化（SQLDelight / Firestore）だけ確保し、入力 UI は用意していない（保存は `CafeDetailViewModel.onSaveToggled` / `MapViewModel` から `note = ""` で行う）。メモ編集は将来の加算的追加
 
 ---
@@ -446,7 +446,7 @@ CREATE INDEX photo_by_record ON photo (record_id, sort_order);
 CREATE TABLE saved_cafe (
     place_id TEXT NOT NULL,
     user_id TEXT NOT NULL,
-    -- Cafe スナップショット（place_id 以外の 8 フィールド。coffee_record の cafe_* と同じ直列化規則）
+    -- Cafe スナップショット（place_id 以外の §1.2 永続フィールド。coffee_record の cafe_* と同じ直列化規則）
     cafe_name TEXT NOT NULL,
     cafe_address TEXT,
     cafe_latitude REAL,
@@ -567,7 +567,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
   "cup": "ノリタケ", "brewRecipe": "豆 15g / 湯 240ml / 92℃ / 2:30",
   "tags": ["ラテアート", "浅煎り"],
 
-  "cafe":    { "placeId": "ChIJ...", "name": "...", "...": "§1.2 の永続 9 フィールド" },
+  "cafe":    { "placeId": "ChIJ...", "name": "...", "...": "§1.2 の永続フィールド" },
   "tasting": { "sweetness": 7, "body": 5, "acidity": 9, "flavor": 7, "aftertaste": 6 },
   "photos":  [ { "id": "uuid-v4", "fileName": "{photoId}.jpg", "width": 1920, "height": 1080,
                  "createdAt": "<Timestamp>", "sortOrder": 0 } ],
@@ -581,7 +581,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 - **nullable なコーヒー属性**（origin / region / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。`brewRecipe` はフェーズ 15-E 追加、`region` は 2026-07-22 追加（いずれも decode 時にキー欠如は null 扱い）
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
 - **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
-- **cafe** に書くのはスナップショット 9 フィールドのみ（§1.2 の注記参照。`openNow` 等の表示用フィールドは書かない）
+- **cafe** に書くのは §1.2 の永続フィールドのみ（`openNow` 等の表示用フィールドは書かない）
 - **cafe.photoAttributions**（2026-08-07 追加）: 文字列配列。**非空のときだけキーを書き、空リストならキーごと省略する**。decode 時のキー欠如は `[]`。同じ「写真関連の配列」でも `photoReferences` は空でも常に書く既存挙動なので、**両者の省略規則は意図的に非対称**（`photoAttributions` は他の nullable フィールドの流儀に合わせた）。この規則は iOS / Android の mapper と `scripts/seed/seed-coffees.mjs` の 3 経路で揃える必要がある
 - **photos**: 埋め込み配列。`localPath` は端末固有値のため Firestore には書かない。`remoteUrl` も書かない（Storage 採用見送り）。`sortOrder` は配列 index を upload 時に採番、decode 時はソート用途で破棄
 - `visitedOn` は `"YYYY-MM-DD"` 文字列、`createdAt` / `updatedAt` は Firestore `Timestamp`
@@ -591,7 +591,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 フィールドは `cafe`（マップ）/ `note`（String、空文字可）/ `savedAt`（`Timestamp`）の 3 つだけ。
 
 - ドキュメント ID = `cafe.placeId`（§1.9 の自然キー方針）。保存 = `set`（上書き）、解除 = `delete` の冪等トグル
-- `cafe` マップは **`coffees` の `cafe` と完全に同形**（スナップショット 9 フィールドのみ・揮発フィールドは書かない・nullable は null 時キー省略・`photoAttributions` は空ならキー省略）。JSON 例は上の `coffees` を参照
+- `cafe` マップは **`coffees` の `cafe` と完全に同形**（§1.2 の永続フィールドのみ・揮発フィールドは書かない・nullable は null 時キー省略・`photoAttributions` は空ならキー省略）。JSON 例は上の `coffees` を参照
 - Security Rules は既存の `users/{uid}` 配下ワイルドカード（`match /{document=**}`）でカバーされるため**変更不要**
 
 ### `curatedCafes/{prefectureCode}`（都道府県別おすすめカフェ / フェーズ 19）
@@ -714,7 +714,7 @@ Kotlin / SQLDelight / Firestore に続く **第 4 の表現＝外部向けフォ
 - **生成**: `ExportCoffeeRecordsUseCase`（`shared/domain/.../usecase/`、`suspend operator fun invoke(userId): String`）。`observeAll(userId).first()` の全件を DTO 化して 1 本の JSON 文字列にする（ファイル書き出し・共有シートは iOS 側）
 - **DTO は export 専用**（`shared/domain/.../domain/export/`）: ドメインモデルに `@Serializable` を付けず `CoffeeRecordExportDto` / `CafeExportDto` / `PhotoExportDto` / `TastingScoresExportDto` に変換する（ドメイン層に kotlinx-serialization を持ち込まない）
 - **`Json` 設定は `prettyPrint = true` + `encodeDefaults = true`**: `version` や空 `tags` / `photos` がキーごと省略されるのを防ぐ。結果として **null フィールドもキーとして出力される**（Firestore 側の「null はキー省略」とはここだけ非対称）
-- **フィールド規則は Firestore（§3.2）を踏襲**: enum は `.name` 文字列 / `visitedOn` は `"YYYY-MM-DD"` / `createdAt` `updatedAt` は ISO-8601 文字列 / `cafe` は永続 9 フィールドのみ（§1.2 の揮発フィールドは含めない。`CafeExportDto` では Swift 制約がないため `photoAttributions` を `photoReferences` の直後に置いており、`Cafe` の末尾配置とは並びが異なる）/ `photos` はメタデータのみ（`localPath` は端末固有値のため除外、画像バイナリは対象外）
+- **フィールド規則は Firestore（§3.2）を踏襲**: enum は `.name` 文字列 / `visitedOn` は `"YYYY-MM-DD"` / `createdAt` `updatedAt` は ISO-8601 文字列 / `cafe` は §1.2 の永続フィールドのみ（揮発フィールドは含めない。`CafeExportDto` では Swift 制約がないため `photoAttributions` を `photoReferences` の直後に置いており、`Cafe` の末尾配置とは並びが異なる）/ `photos` はメタデータのみ（`localPath` は端末固有値のため除外、画像バイナリは対象外）
 
 ```json
 {

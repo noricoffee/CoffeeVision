@@ -469,8 +469,10 @@
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | **KMP 側 2 箇所**: `shared/domain/.../model/SavedCafe.kt`（`@property cafe` の「§1.2 と同じ 8 フィールドのみ」）/ `shared/data-firebase/.../SavedCafeFirestoreMapper.kt`（「スナップショット 8 フィールド + `photoAttributions`」= 加算表記で誤りではないが表記を揃える）| `kmp-engineer`。コメントのみの変更 |
-| [ ] | **iOS 側 3 箇所**: `iosApp/.../FirebaseRepositories/CoffeeFirestoreMapper.swift`（`toCafeMap` / 逆変換の 2 つの KDoc）/ 同 `SavedCafeFirestoreMapper.swift`（「同一のスナップショット 8 フィールド・直列化規則」）| `ios-engineer`。コメントのみの変更 |
+| [x] | **KMP 側 2 箇所**: `shared/domain/.../model/SavedCafe.kt`（`@property cafe`）/ `shared/data-firebase/.../SavedCafeFirestoreMapper.kt` → **2026-08-11 完了**（`kmp-engineer`。フラグ無し `BUILD SUCCESSFUL`）。件数を消し「`[data-model.md]` §1.2 の永続フィールドのみ（揮発フィールドは含まない）」の参照表現へ統一 | 横断点検で `CoffeeRecordExportDto.kt` の `CafeExportDto` KDoc も同じ表現に揃えた（**件数としては正しかった**が、同じ加算集合を数えているため次の追加で同様に壊れる） |
+| [x] | **iOS 側 3 箇所**: `iosApp/.../FirebaseRepositories/CoffeeFirestoreMapper.swift`（`toCafeMap` / 逆変換）/ 同 `SavedCafeFirestoreMapper.swift` → **2026-08-11 完了**（`ios-engineer`。フラグ無し `** BUILD SUCCEEDED **`）。KMP 側と同じ参照表現へ | 表記は iOS 内の既存スタイル（`` `docs/data-model.md` `` のフルパス）に合わせ、文言の骨子だけ KMP と揃えた |
+| [x] | **`docs/data-model.md` 自身の同型箇所 6 件** → **2026-08-11 完了**（親）。§1.2 に「**このフィールド列挙が正本。他の節・コードコメントは件数を書かずここを参照する**」を明記し、他 6 箇所の「9 フィールド」を参照表現へ置換 | doc 側が正本のはずが、doc 自身も同じ地雷を 6 個持っていた |
+| [x] | **`.claude/agent-memory/ios-engineer/skie-bridge-interop.md` 2 件** → **2026-08-11 完了**（`ios-engineer`）。うち 1 件（「`Cafe` は Swift 側で **14 引数**の designated initializer 1 本」）は**実数として壊れていた**（現在 15）| **エージェントの永続メモリは git 管理下の doc と同じ陳腐化をするのに、これまで一度も sweep 対象に入っていなかった**。lessons 2026-08-01 の「数え上げ」エントリへ横展開点検 その 3 として追記 |
 
 #### implementation_note.md の月次アーカイブ（2026-08-09 起票）
 

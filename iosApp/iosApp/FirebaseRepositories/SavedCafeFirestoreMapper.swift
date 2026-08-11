@@ -7,7 +7,7 @@ import SharedLogic
 /// ## 設計判断
 ///
 /// - `CoffeeFirestoreMapper` と同じ手書きマッピング方針を踏襲する（`docs/data-model.md` §3.2 参照）
-/// - `cafe` マップは `coffees.cafe` と同一のスナップショット 8 フィールド・直列化規則のため、
+/// - `cafe` マップは `coffees.cafe` と同一のスナップショット（`docs/data-model.md` §1.2 の永続フィールドのみ）・直列化規則のため、
 ///   `CoffeeFirestoreMapper.toCafeMap` / `cafeFromMap` をそのまま再利用する（重複実装を避ける）
 /// - ドキュメント ID = `cafe.placeId`（`userId` はドキュメント自体には保存しない。
 ///   親コレクションパス `users/{uid}/savedCafes/{placeId}` から復元する）

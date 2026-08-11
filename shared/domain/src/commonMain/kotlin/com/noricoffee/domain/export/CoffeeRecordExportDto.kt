@@ -37,7 +37,7 @@ data class CoffeeRecordExportDto(
 )
 
 /**
- * [com.noricoffee.domain.Cafe] の永続化 9 フィールドのみを持つ export DTO。
+ * [com.noricoffee.domain.Cafe] の [data-model.md] §1.2 の永続フィールドのみを持つ export DTO。
  *
  * Places API 取得時のみ使う揮発フィールド（openNow 等、[data-model.md] §1.2）は含めない。
  */

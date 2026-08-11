@@ -427,6 +427,7 @@ CREATE INDEX photo_by_record ON photo (record_id, sort_order);
 
 | # | 内容 | 方式 |
 |---|---|---|
+| `1.sqm` | `photo.file_name` 列追加（機種変・復元時の `localPath` 再構築用。§1.4） | `ALTER TABLE ADD COLUMN`（既存行 NULL） |
 | `2.sqm` | 孤児 photo 行の掃除（FK 有効化以前に発生。§2.2） | `DELETE` |
 | `3.sqm` | `saved_cafe` テーブル追加（15-A） | `CREATE TABLE` + `CREATE INDEX` |
 | `4.sqm` | `brew_recipe` 列追加（15-E） | `ALTER TABLE ADD COLUMN`（既存行 NULL） |

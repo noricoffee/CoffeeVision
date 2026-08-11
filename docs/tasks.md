@@ -461,13 +461,24 @@
 | [x] | SW6-B | ~~**`AppleSignInCoordinator` の `UIWindow()` が iOS 26 で deprecated**~~ → **2026-08-08 完了**。`presentationAnchor(for:)` のフォールバック（scene 探索 → `UIWindow(windowScene:)` → `UIWindow()`）を**丸ごと削除**し、`presentationAnchor` が nil なら `preconditionFailure` に変更（ユーザー選択）。呼び出し経路を追うと全パスが到達不能で、探索ロジックは `AccountView.currentPresentationAnchor()` と二重だった。実行パス 18 行 → 2 行。**これで iosApp のビルド警告が 0 件になった**（Debug / Release 両方） | iosApp 完結 |
 | [-] | SW6-C | ~~**CI が `CURRENT_PROJECT_VERSION` を `xcodebuild` の引数で渡している**~~ → **2026-08-08 取り下げ（ユーザー判断）**。`release-testflight.yml` の archive ステップが `CURRENT_PROJECT_VERSION=${{ github.run_number }}` を渡しており、コマンドライン引数のビルド設定は**ターゲットを選ばず SPM 依存パッケージにも適用される**（lessons 2026-08-08 の sweep で検出）。ただし **CI の run_number をビルド番号に採用するのは意図した設計**で、TestFlight ビルドも通っているため対処しない。`SWIFT_VERSION` のような「依存先が対応していないと壊れる」設定とは性質が違う（`CURRENT_PROJECT_VERSION` は数値が渡るだけ） | — |
 
-#### implementation_note.md の月次アーカイブ（2026-08-09 起票）
+#### カフェスナップショットの「8 フィールド」記述の是正（2026-08-11 起票）
 
-> フロー型 doc の閾値は **1200 行 / 月次アーカイブ**（2026-07-25 の棚卸しで確定）。現在 **1477 行**で超過している。内訳は 2026-07 が 73 エントリ、2026-08 が 24 エントリ。前回は 2026-06 の 36 件を `implementation-note-archive.md`（現 322 行）へ凍結した実績がある。
+> **docs 棚卸し（2026-08-11）の Phase 1 で検出したコード側の誤り。** `Cafe` の永続フィールドは **2026-08-07 に `photoAttributions` が加わって 9 個**になったが、KDoc / コメントが「8 フィールド」のまま残っている箇所が 4 つある。**マッパ実装自体は 3 経路（iOS / Android / `seed-coffees.mjs`）とも 9 フィールドを読み書きしており、挙動は正しい** — 嘘をついているのはコメントだけ。正本は `data-model.md` §1.2（「永続化されるのは 9 フィールド」）で、`CoffeeRecordExportDto.kt` の `CafeExportDto` KDoc は 9 で正しい。
+>
+> **同型の再発を止めるため、件数表記そのものを避ける**（依存が 1 つ増えると全項目がまとめて嘘になり、増やした本人はソースしか見ないので気づけない。`implementation_note.md` のサマリでは 2026-08-01 に同じ規約を制定済みで、**それがコード KDoc にも及ぶことが今回実証された**）。件数の代わりにフィールド名の列挙か「§1.2 の永続フィールド」参照に置き換えてよい。
 
 | 状態 | タスク | 備考 |
 |------|------|------|
-| [ ] | 2026-07 の 73 エントリを `implementation-note-archive.md` へ移す。`curate-doc` skill の手順に従い**縮約から入らない**（陳腐化チェック → 縮約 → 分離）。移動前に他 doc / rules / skill からの名指し参照の生存を確認する（`grep -rn "implementation_note 2026-07" docs/ .claude/`）| 中。7 月は名指し参照が多い月なので、参照の付け替え漏れが起きやすい |
+| [ ] | **KMP 側 2 箇所**: `shared/domain/.../model/SavedCafe.kt`（`@property cafe` の「§1.2 と同じ 8 フィールドのみ」）/ `shared/data-firebase/.../SavedCafeFirestoreMapper.kt`（「スナップショット 8 フィールド + `photoAttributions`」= 加算表記で誤りではないが表記を揃える）| `kmp-engineer`。コメントのみの変更 |
+| [ ] | **iOS 側 3 箇所**: `iosApp/.../FirebaseRepositories/CoffeeFirestoreMapper.swift`（`toCafeMap` / 逆変換の 2 つの KDoc）/ 同 `SavedCafeFirestoreMapper.swift`（「同一のスナップショット 8 フィールド・直列化規則」）| `ios-engineer`。コメントのみの変更 |
+
+#### implementation_note.md の月次アーカイブ（2026-08-09 起票）
+
+> フロー型 doc の閾値は **1200 行 / 月次アーカイブ**（2026-07-25 の棚卸しで確定）。起票時 1477 行で超過していた（着手時は 1534 行）。内訳は 2026-07 が 73 エントリ、2026-08 が 28 エントリ。前回は 2026-06 の 36 件を `implementation-note-archive.md`（当時 322 行）へ凍結した実績がある。
+
+| 状態 | タスク | 備考 |
+|------|------|------|
+| [x] | 2026-07 の 73 エントリを `implementation-note-archive.md` へ移す → **2026-08-11 完了**（`implementation_note.md` 1534 → 655 行 / archive 322 → 1214 行）。`curate-doc` の 3 段を順に通し、**縮約から入らなかった**。**移送は逐語**（`diff` で 2026-06 / 2026-07 の本文が移送前後で完全一致することを確認） | **参照の付け替えは 1 件も発生しなかった**。約 70 箇所ある「implementation_note 2026-0X-XX エントリ」参照は日付で引く運用で、**月別ファイルに分けず archive 1 本に月見出しで積む**方式（2026-08-11 ユーザー確定）にしたため行き先が一意に定まる。archive には行数閾値を適用しない旨を前文に明記 |
 
 #### docs 棚卸し 第 2 巡（2026-07-27 / 未実施 doc への Phase 1 適用）
 

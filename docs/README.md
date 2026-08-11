@@ -11,7 +11,7 @@ CoffeeVision の設計・仕様・運用ドキュメントの置き場。ここ�
 コーディング時に従う正本。役割は CLAUDE.md「必読ドキュメント」表を参照：
 `architecture` / `coding-conventions` / `ui-ux-guidelines` / `requirements` / `data-model` / `analysis-model` / `kmp-bridge` / `implementation_note` / `tasks` / `app-store-metadata` / `paid-services`。
 
-- **[implementation-note-archive.md](./implementation-note-archive.md)** — `implementation_note.md` から切り出した**凍結済み**の過去分（2026-06 の 36 エントリ）。追記しない。他 doc の「implementation_note 2026-06-XX」参照はここを指す。切り出しの運用ルールは `implementation_note.md`「アーカイブ」節。
+- **[implementation-note-archive.md](./implementation-note-archive.md)** — `implementation_note.md` から切り出した**凍結済み**の過去分（2026-06 の 36 エントリ + 2026-07 の 73 エントリ）を月見出しで格納。追記しない。他 doc の「implementation_note 2026-06-XX / 2026-07-XX」参照はここを指す。切り出しの運用ルールは `implementation_note.md`「アーカイブ」節。
 - **[admob-setup-todo.md](./admob-setup-todo.md)** — AdMob 本番ユニット発行のユーザー作業手順（**一時ファイル・git 非追跡**。完了後に削除）。実装側の切替手順の正本は `iosApp/Configuration/README.md`。
 
 ## tasks/ — 進捗と学び

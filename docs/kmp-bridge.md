@@ -39,20 +39,9 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 
 > **採用済み: SKIE 0.10.12（Kotlin 2.3.21 互換）**。2026-06-04 に旧 `sharedLogic` モジュールへ組み込み、Phase 2.5 PR3（2026-06-08）で `shared/framework` umbrella に追随済。デフォルト機能（SuspendInterop / FlowInterop / SealedInterop）のみ有効化、独自設定なし。
 
-### Gradle 設定（実プロジェクト記述）
+### Gradle 設定
 
-```kotlin
-// gradle/libs.versions.toml
-[versions]
-skie = "0.10.12"
-[plugins]
-skie = { id = "co.touchlab.skie", version.ref = "skie" }
-
-// shared/framework/build.gradle.kts（umbrella 側に SKIE を適用）
-plugins {
-    alias(libs.plugins.skie)
-}
-```
+バージョンは version catalog の `skie`（`gradle/libs.versions.toml` の `[versions]` / `[plugins]`）、適用先は umbrella の `shared/framework/build.gradle.kts` だけ（`alias(libs.plugins.skie)`）。**正本はこの 2 ファイル**なのでここに複製しない。
 
 ### SKIE 適用後の見え方（呼び出し側）
 
@@ -145,7 +134,7 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 **`nonisolated` は「Kotlin から見える型」だけの話ではない。** それらが内部で使う `private` なヘルパ型にも同じ指定が要る（`FlowBridge.swift` の `FlowCompletionGate` が実例。付け忘れると `nonisolated` な `__collect` から呼べず `call to main actor-isolated instance method ... in a synchronous nonisolated context` になる）。同じファイルに `nonisolated` の宣言が並んでいても**継承されない**。
 
-**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** メモリキャッシュを持つ実装（`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl`）と `FlowCompletionGate` は `OSAllocatedUnfairLock` で包み、クラスに `@unchecked Sendable` を付けて「ロックが唯一のアクセス経路である」ことを手動で保証する。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
+**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** 可変状態は `OSAllocatedUnfairLock` で包む（メモリキャッシュを持つ `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl` と、`FlowBridge.swift` の `FlowCompletionGate`）。**`@unchecked Sendable` が要るかはクラス単位で変わる**: 格納プロパティが**ロックだけ**なら `Sendable` に素で適合する（`FlowCompletionGate` がこれ）。Kotlin 由来の非 Sendable 型を他に持つクラスは `@unchecked Sendable` を明示して「ロックが唯一のアクセス経路である」ことを手動で保証する。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
 
 ```swift
 nonisolated final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository, @unchecked Sendable {
@@ -354,26 +343,9 @@ RemoteCoffeeDataSource (commonMain interface)
 
 詳細仕様と判断経緯は [`implementation_note.md`](./implementation_note.md) を参照してください。
 
-iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kotlin → Swift で interface はプロトコル相当として見えるため）。
-`AppContainer` 構築時に、Swift 側で作った Repository 実装を Kotlin の `AppContainer` コンストラクタに渡します。
+iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kotlin → Swift で interface はプロトコル相当として見えるため）。iosApp 起動時（`AppState`）に、Swift 実装（`RemoteCoffeeDataSourceIosImpl` / `RemoteSavedCafeDataSourceIosImpl` / `AuthRepositoryIosImpl` / `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl`、および非対応端末で nil になる `CoffeeInsightProviderIosImpl.makeIfAvailable()`）を Kotlin の `AppContainer` **セカンダリコンストラクタ**にまとめて渡します。Android も同じ形を Kotlin 実装（`*AndroidImpl`）で埋めるだけ（`coffeeInsightProvider` のみ省略 = null）。
 
-```swift
-// iosApp 起動時（AppState）。Swift 実装を Kotlin の AppContainer に渡す
-let container = AppContainer(
-    sqlDriver: DatabaseDriverFactory().create(),
-    remoteCoffeeDataSource: RemoteCoffeeDataSourceIosImpl(),        // Swift 実装
-    remoteSavedCafeDataSource: RemoteSavedCafeDataSourceIosImpl(),  // Swift 実装
-    authRepository: AuthRepositoryIosImpl(),                        // Swift 実装
-    placesApiKey: placesApiKey,
-    coffeeInsightProvider: CoffeeInsightProviderIosImpl.makeIfAvailable(),  // 非対応端末は nil
-    beanProfileRepository: BeanProfileRepositoryIosImpl(),
-    curatedCafeRepository: CuratedCafeRepositoryIosImpl()
-)
-```
-
-Android も同じセカンダリコンストラクタを Kotlin 実装（`*AndroidImpl`）で埋めるだけ（`coffeeInsightProvider` のみ省略 = null）。
-
-> 引数の正確なシグネチャは `shared/core/.../AppContainer.kt` を真とする（scope 引数ありのプライマリはテスト専用）。
+> **引数の正確なシグネチャは `shared/core/.../AppContainer.kt` を真とする**（scope 引数ありのプライマリはテスト専用）。ここに引数を列挙しない — SKIE がデフォルト引数を伝播しない都合で追加のたびに Swift 側が全滅する箇所であり、doc に写しがあると必ず遅れる。
 
 ### なぜ `expect`/`actual` ではなく interface + DI なのか
 

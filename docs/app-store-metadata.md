@@ -334,6 +334,17 @@ CoffeeVision を初めてリリースしました。
 - [x] 価格・配信地域の設定（2026-08-06 ユーザー実施。無料 / **配信国は日本のみで確定**。2026-07-14 広告仕様 grilling にて。GDPR 同意フォーム不要の前提条件なので、将来 EU へ拡大する場合は UMP の GDPR フォーム実装が先）
 - [x] 輸出コンプライアンス（暗号化）: 標準 HTTPS + Apple 標準の SHA256 nonce のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を Info.plist に設定済み → App Store Connect の暗号化アンケートは自動スキップされる
 
+### 本番環境の設定（**アプリが動くかでは検出できない**もの）
+
+> **2026-08-11 新設。** ここは「無くてもアプリは正常に動くが、無いと無防備になる / 事故ったときに手が無い」設定を追跡する。下の「ビルド / 技術」に入っている Firestore Rules や Sign in with Apple の Firebase 登録は**無いとアプリが動かない**ので TestFlight で自然に検出されるが、この節の項目は**動いたまま抜ける**。実際 2026-08-11 の提出後レビューで 3 件が未実施のまま見つかった（方針は implementation_note に 1 か月前から書いてあった）。**本番環境への設定を伴う方針を決めたら、その場でここに行を立てる**。
+
+- [x] **Places API キーの悪用対策 3 点**（2026-08-11 / いずれも Google Cloud Console）。**3 つで 1 つの防御**として扱う — どれが欠けても天井が成立しない
+  - **予算アラート**（Cloud Billing / 気づくための層。通知するだけで請求は止まらない）
+  - **クォータ上限**（Places API (New) の分あたりリクエスト数 / Places の量に天井。`per user` は無制限のまま = 判断根拠は `paid-services.md` §1）
+  - **API の制限を Places に限定**（認証情報 → 該当キー / 他 Maps API への迂回路を塞ぐ。**新しい Google API を使い始めるときは許可リストへの追加が必要**）
+  - **実値は Cloud Console が正本**（doc に書かない）。背景はキーがクライアント埋め込みで抽出不可避なこと（implementation_note 2026-07-08）
+- [x] **Remote Config `review_prompt_enabled` の作成・公開**（2026-08-11 / Boolean・既定値 `true`・条件なし）。ASO-1 のレビュー依頼キルスイッチ。実装は**キー未設定なら発火する**側に倒してあるため、キーが無い状態は「止める手段が無い」と同義。⚠️ **即時停止はできない**（`minimumFetchInterval` 12h + fetch は起動時 1 回 → 反映まで最大 12h + 次回起動）
+
 ### ビルド / 技術
 - [x] `MARKETING_VERSION` / `CURRENT_PROJECT_VERSION`（2026-08-06 確認）
   - **`MARKETING_VERSION = 1.0`**（`iosApp/Configuration/Config.xcconfig`、CI でも上書きしない）。ASC 側でバージョン 1.0 を作れば一致する

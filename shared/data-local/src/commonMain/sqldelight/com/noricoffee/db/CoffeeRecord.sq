@@ -1,0 +1,65 @@
+CREATE TABLE coffee_record (
+    id TEXT NOT NULL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    -- cafe は任意（全 cafe_* が null = セルフ抽出）
+    cafe_place_id TEXT,
+    cafe_name TEXT,
+    cafe_address TEXT,
+    cafe_latitude REAL,
+    cafe_longitude REAL,
+    cafe_photo_references TEXT,            -- JSON 配列（cafe null のとき null）
+    cafe_photo_attributions TEXT,          -- JSON 配列（cafe_photo_references と同じ順序・長さ。migration 7.sqm で ALTER TABLE ADD COLUMN。2026-08-07 追加）
+    cafe_website_url TEXT,
+    cafe_maps_url TEXT,
+    -- 記録本体
+    visited_on TEXT NOT NULL,              -- ISO-8601 (YYYY-MM-DD)
+    rating REAL,                           -- 0.5..5.0（0.5 刻み）。NULL = 未評価（migration 5.sqm で NOT NULL 撤廃 + 既存 0.0 → NULL 変換）
+    notes TEXT NOT NULL,
+    -- コーヒー属性
+    name TEXT NOT NULL,
+    brew_method TEXT NOT NULL,             -- enum 文字列
+    origin TEXT,                           -- 国名（CoffeeOriginCatalog 選択値 / 「ブレンド」/ legacy 自由文字列）
+    region TEXT,                           -- エリア / 農園（自由入力。migration 6.sqm で ALTER TABLE ADD COLUMN。2026-07-22 追加）
+    variety TEXT,
+    processing TEXT,                       -- enum 文字列
+    roast_level TEXT,                      -- enum 文字列
+    cup TEXT,
+    brew_recipe TEXT,                      -- 抽出レシピ自由メモ（フェーズ 15-E 追加、migration 4.sqm で ALTER TABLE ADD COLUMN）
+    -- テイスティング 5 要素（各 1..10、null = 未設定）
+    sweetness INTEGER,
+    body INTEGER,
+    acidity INTEGER,
+    flavor INTEGER,
+    aftertaste INTEGER,
+    -- ユーザー定義タグ（JSON 配列文字列。空リストは "[]"、マイグレーション前の行は ""）
+    tags TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,           -- epoch millis
+    updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX coffee_record_by_user_visited ON coffee_record (user_id, visited_on DESC);
+CREATE INDEX coffee_record_by_cafe ON coffee_record (cafe_place_id);
+
+selectAll:
+SELECT * FROM coffee_record WHERE user_id = ? ORDER BY visited_on DESC, created_at DESC;
+
+selectById:
+SELECT * FROM coffee_record WHERE id = ?;
+
+selectByCafe:
+SELECT * FROM coffee_record WHERE user_id = ? AND cafe_place_id = ? ORDER BY visited_on DESC;
+
+upsert:
+INSERT OR REPLACE INTO coffee_record (
+    id, user_id, cafe_place_id, cafe_name, cafe_address,
+    cafe_latitude, cafe_longitude, cafe_photo_references, cafe_photo_attributions,
+    cafe_website_url, cafe_maps_url,
+    visited_on, rating, notes,
+    name, brew_method, origin, region, variety, processing, roast_level, cup, brew_recipe,
+    sweetness, body, acidity, flavor, aftertaste,
+    tags,
+    created_at, updated_at
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+
+deleteById:
+DELETE FROM coffee_record WHERE id = ?;

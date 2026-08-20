@@ -1,0 +1,2 @@
+-- フェーズ 15-E-1: 抽出レシピ自由メモ（brewRecipe）列を追加する。既存行は NULL（未記入）。
+ALTER TABLE coffee_record ADD COLUMN brew_recipe TEXT;

@@ -1,0 +1,46 @@
+// Base.xcconfig
+// iosApp ターゲットのベース Build Configuration。
+//
+// 既存の Config.xcconfig（PRODUCT_BUNDLE_IDENTIFIER / TEAM_ID / OTHER_LDFLAGS = -lsqlite3 等）を
+// 継承する必要があるため、必ず先頭で取り込む。
+#include "Config.xcconfig"
+
+// Swift 言語バージョン。project.pbxproj の buildSettings に直接書くと xcconfig の値より
+// 優先されてしまうため（同一キーは pbxproj > xcconfig）、ここに一本化する。
+// pbxproj 側の Base.xcconfig 参照ブロック（Debug / Release）からは SWIFT_VERSION を削除済み。
+//
+// SW6-1〜SW6-6（2026-08-07）で Swift 6 言語モードへ移行済み。
+// `SWIFT_STRICT_CONCURRENCY` は Swift 6 モードでは `complete` が既定になるため明示不要
+// （SW6-1 時点の診断採取用に一時的に立てていたが、SW6-6 で削除）。
+SWIFT_VERSION = 6.0
+SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor
+SWIFT_APPROACHABLE_CONCURRENCY = YES
+
+// PLACES_API_KEY のフォールバック宣言（Secrets.xcconfig 不在時は空文字）。
+// 【重要】この宣言は必ず Secrets.xcconfig の include より「前」に置くこと。
+// xcconfig は同一キーの最後の代入が勝つため、include の後ろに置くと Secrets の
+// 実キーを空文字で上書きしてしまい、アプリが空キーで Places API を叩いて 403 になる。
+// 空文字の場合（CI 環境等）はビルドは通るが Places API は 403（API キー無効）を返す。
+// Info.plist の $(PLACES_API_KEY) で参照する。
+PLACES_API_KEY =
+
+// AdMob App ID / アダプティブバナー広告ユニット ID（2 面）のフォールバック宣言。
+// PLACES_API_KEY と異なり、空文字ではなく Google 公式のテスト用バナーユニット ID をフォールバックに
+// している（テスト ID は実際に広告が返るため、Secrets.xcconfig 未設定の開発環境でもそのままテスト広告で
+// 動作する）。アンカーアダプティブバナーとインラインアダプティブバナーは同一のテストユニット ID を
+// 共用できる（Google 公式ドキュメント記載）。
+// 本番 ID は Secrets.xcconfig 側で上書きする（本番切り替え手順は Configuration/README.md 参照）。
+// 【重要】この宣言も PLACES_API_KEY と同様、必ず Secrets.xcconfig の include より「前」に置くこと。
+//
+// 【2026-07-14 フォーマット変更】ネイティブ広告 → アダプティブバナーへ再編したため、キー名を
+// ADMOB_NATIVE_AD_UNIT_ID_* → ADMOB_BANNER_AD_UNIT_ID_* にリネーム（requirements.md §11 参照）。
+// 【2026-07-16】コーヒー記録タブ / 分析タブの 2 面はユーザビリティレビューで撤去した
+// （requirements.md §11-3。git 履歴で復元可能）。
+ADMOB_APP_ID = ca-app-pub-3940256099942544~1458002511
+ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL = ca-app-pub-3940256099942544/2435281174
+ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH = ca-app-pub-3940256099942544/2435281174
+
+// Google Places API キー設定。
+// Secrets.xcconfig がある場合はそちらで PLACES_API_KEY を実キーに上書きする（コミット禁止・.gitignore 済）。
+// ファイルが存在しない場合（CI 環境等）は上のフォールバック（空文字）のままビルドが通る。
+#include? "Secrets.xcconfig"

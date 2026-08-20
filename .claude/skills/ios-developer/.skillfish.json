@@ -1,0 +1,10 @@
+{
+  "version": 2,
+  "name": "ios-developer",
+  "owner": "sickn33",
+  "repo": "antigravity-awesome-skills",
+  "path": "plugins/antigravity-awesome-skills-claude/skills/ios-developer",
+  "branch": "main",
+  "sha": "a589893cf7f9cc3ea72c6a7b6e2ef01a7a97908c",
+  "source": "manual"
+}

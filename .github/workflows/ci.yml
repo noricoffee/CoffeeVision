@@ -25,8 +25,47 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
+      # Android はリリース対象外の KMP 共通層検証ターゲット。assembleDebug の目的は
+      # 共通層が Android でコンパイル/リンクできることの確認で、実 Firebase 接続は不要。
+      # 実 google-services.json は秘匿情報として gitignore 済みのため、CI では
+      # google-services プラグインを通すためだけのダミーを生成する。
+      - name: Generate dummy google-services.json
+        run: |
+          cat > androidApp/google-services.json <<'EOF'
+          {
+            "project_info": {
+              "project_number": "000000000000",
+              "project_id": "coffeevision-ci",
+              "storage_bucket": "coffeevision-ci.appspot.com"
+            },
+            "client": [
+              {
+                "client_info": {
+                  "mobilesdk_app_id": "1:000000000000:android:0000000000000000",
+                  "android_client_info": {
+                    "package_name": "com.noricoffee.coffeevision"
+                  }
+                },
+                "oauth_client": [],
+                "api_key": [
+                  { "current_key": "AIzaSyDUMMY-KEY-FOR-CI-BUILD-ONLY-0000000" }
+                ],
+                "services": {
+                  "appinvite_service": { "other_platform_oauth_client": [] }
+                }
+              }
+            ],
+            "configuration_version": "1"
+          }
+          EOF
+
+      # testAndroidHostTest はタスク名のみで指定し、全モジュール（shared/domain・core・data-*・
+      # feature/* + sharedUI）の commonTest / androidHostTest を一括で走らせる。
+      # モジュールを個別列挙すると、新規 feature 追加時にテストが CI から静かに漏れる
+      # （2026-07-25 の docs 敵対的レビューで、:shared:data-local だけを指定していたため
+      #  domain / core / feature/* の 300 件超が未実行だったことが発覚）。
       - name: Run shared tests and Android assembleDebug
-        run: ./gradlew :sharedLogic:testAndroidHostTest :androidApp:assembleDebug --stacktrace
+        run: ./gradlew testAndroidHostTest :androidApp:assembleDebug --stacktrace
 
   ios:
     name: iOS framework (Kotlin/Native link)
@@ -53,7 +92,5 @@ jobs:
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
 
-      # Phase 3.5 で :shared:framework モジュールを切り出したら、ここを
-      # `:shared:framework:assembleSharedFrameworkXCFramework` に差し替える。
-      - name: Link iOS frameworks (arm64 / simulator-arm64)
-        run: ./gradlew :sharedLogic:linkReleaseFrameworkIosArm64 :sharedLogic:linkReleaseFrameworkIosSimulatorArm64 --stacktrace
+      - name: Assemble iOS XCFramework
+        run: ./gradlew :shared:framework:assembleSharedLogicXCFramework --stacktrace

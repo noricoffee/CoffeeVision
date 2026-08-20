@@ -8,7 +8,7 @@
 | プラットフォーム | 位置づけ | UI 実装 |
 |--------------|--------|--------|
 | **iOS** | リリース対象 | SwiftUI + `@Observable` ViewModel ラッパ |
-| **Android** | 共通レイヤーの検証ターゲット（リリース対象外） | Compose Multiplatform（Visit 一覧 1 画面のみ） |
+| **Android** | 共通レイヤーの検証ターゲット（リリース対象外） | Compose Multiplatform（コーヒー記録一覧 1 画面のみ） |
 
 Android ターゲットは、KMP の共通レイヤー（`feature` / `domain` / `data`）が両プラットフォームで成立することを実証するために維持しています。
 **CI で iOS / Android 両方のビルドを必須チェック**にしており、共通レイヤーの完全性を継続的に担保します。
@@ -25,9 +25,11 @@ SwiftUI / Compose  ─ Native UI
      domain         ─ Repository インターフェース・ドメインモデル（KMP 共通）
         ↓
   data-local / data-places / data-firebase
-        ↓
-      core          ─ Result / Logger / Dispatchers
+        ↑
+      core          ─ AppContainer（合成ルート）+ Repository 合成実装
 ```
+
+（`core` は基盤ではなく**合成ルート**。`domain` のインターフェースに対して `data-*` を組み合わせた実装を提供し、`feature/*` は `core` と `domain` の両方に依存する）
 
 詳細は [`docs/architecture.md`](./docs/architecture.md) を参照してください。
 
@@ -37,7 +39,7 @@ SwiftUI / Compose  ─ Native UI
 
 ### 1. ViewModel を含めて KMP で共通化
 
-ドメイン層だけでなく ViewModel + `UIState` まで `sharedLogic` に置き、両プラットフォームで同じ状態管理を共有します。
+ドメイン層だけでなく ViewModel + `UIState` まで `shared/feature/*` に置き、両プラットフォームで同じ状態管理を共有します。
 UI は各プラットフォームでネイティブ実装（iOS: SwiftUI、Android: Compose）し、薄いブリッジ層で `StateFlow` を購読する形にしています。
 
 ### 2. Firebase は公式プラットフォーム別 SDK を採用
@@ -46,7 +48,7 @@ GitLive 製 KMP Firebase SDK ではなく、**公式 SDK**（iOS: Swift Package 
 
 - 公式 SDK の機能追従が早く、長期保守の安定性が高い
 - Firestore のオフライン永続化 / Security Rules の挙動が公式ドキュメントと一致する
-- 代償として、Firebase Repository の **iOS 実装は `iosApp` 側 Swift / Android 実装は `sharedLogic/androidMain` Kotlin** という非対称構成になる
+- 代償として、Firebase Repository の **iOS 実装は `iosApp` 側 Swift / Android 実装は `shared/data-firebase/androidMain` Kotlin** という非対称構成になる
 - この非対称性を `domain/` の Repository インターフェースで吸収する
 
 ### 3. Umbrella Framework + XCFramework 配布
@@ -73,22 +75,23 @@ coffeevision/
 ├── build-logic/convention/        # KMP / Android 共通設定の Convention Plugin
 ├── shared/
 │   ├── framework/                 # iOS 向け Umbrella（XCFramework 出力元）
-│   ├── core/                      # Result / Logger / Dispatchers / DI 基盤
-│   ├── domain/                    # ドメインモデル + Repository インターフェース
+│   ├── core/                      # AppContainer（合成ルート）+ Repository 合成実装
+│   ├── domain/                    # ドメインモデル + UseCase + Repository インターフェース
 │   ├── data-local/                # SQLDelight
 │   ├── data-places/               # Google Places API クライアント（Ktor）
-│   ├── data-firebase/             # Firestore / Auth / Storage（Android 実装）
+│   ├── data-firebase/             # Firestore / Auth（Android 実装。Storage は採用見送り）
 │   └── feature/
-│       ├── visit-list/            # VisitListViewModel + UIState
-│       ├── visit-detail/
-│       ├── visit-editor/
-│       └── cafe-search/
+│       ├── coffee-list/           # CoffeeListViewModel + UIState
+│       ├── coffee-detail/
+│       ├── coffee-editor/
+│       └── ...                    # 1 画面 = 1 モジュール（一覧は settings.gradle.kts を真とする）
+├── sharedUI/                      # Compose Multiplatform（Android 検証用の 1 画面）
 ├── iosApp/                        # SwiftUI + Firebase Swift 実装
 └── androidApp/                    # Compose（検証用最小 UI）
 ```
 
-> 現在は Phase 1 の途中で、上記の分割は段階的に進行中です。
-> 現状の状態と移行計画は [`docs/architecture.md` §段階的移行ステップ](./docs/architecture.md#段階的移行ステップ) を参照してください。
+> モジュール分割は完了済み（上記は構造を示す代表例で、feature の網羅列挙はしない）。
+> 各モジュールの責務と依存方向ルールは [`docs/architecture.md`](./docs/architecture.md)「モジュール構成」を参照してください。
 
 ---
 
@@ -132,13 +135,16 @@ Xcode でターゲット `iosApp` を選択し、シミュレータまたは実�
 
 | ドキュメント | 内容 |
 |-------------|------|
-| [`docs/architecture.md`](./docs/architecture.md) | アーキテクチャ全体と段階的移行計画 |
+| [`docs/architecture.md`](./docs/architecture.md) | アーキテクチャ全体（モジュール構成・依存方向・状態管理） |
 | [`docs/coding-conventions.md`](./docs/coding-conventions.md) | Kotlin / Swift コーディング規約 |
 | [`docs/ui-ux-guidelines.md`](./docs/ui-ux-guidelines.md) | iOS UI/UX ガイドライン（HIG ベース） |
-| [`docs/data-model.md`](./docs/data-model.md) | Visit / CoffeeItem / FoodItem のドメインモデル |
+| [`docs/data-model.md`](./docs/data-model.md) | 永続エンティティ（CoffeeRecord / Cafe / Photo / BeanProfile / SavedCafe / CuratedCafe / AuthAccount）のドメインモデル |
+| [`docs/analysis-model.md`](./docs/analysis-model.md) | 分析の派生集計モデル（CoffeeStats / RecommendedCafe） |
 | [`docs/kmp-bridge.md`](./docs/kmp-bridge.md) | Swift ⇄ Kotlin ブリッジ規約 |
 | [`docs/requirements.md`](./docs/requirements.md) | 機能要件・非機能要件 |
 | [`docs/tasks.md`](./docs/tasks.md) | フェーズ別タスク管理 |
+
+上記以外の doc（実装ノート / App Store メタデータ / 有料サービス棚卸し / 法務ページ原稿など）の地図は [`docs/README.md`](./docs/README.md) を参照してください。
 
 ---
 

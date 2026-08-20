@@ -22,3 +22,23 @@ node_modules/
 GoogleService-Info.plist
 google-services.json
 .firebase/
+
+# Firebase Admin SDK サービスアカウント鍵（scripts/seed 用。コミット禁止）
+*service-account*.json
+scripts/seed/package-lock.json
+
+# アプリのエクスポート JSON（個人の記録データ。seed-coffees.mjs の入力用に置くことがある）
+scripts/seed/*export*.json
+
+# Places API キー（ローカル開発用。コミット禁止）
+iosApp/Configuration/Secrets.xcconfig
+
+# App Store 提出用に変換したスクリーンショット（原本 screenshots/6.9/ から
+# flatten-alpha.swift でいつでも再生成できるため追跡しない）
+screenshots/submit/
+
+# Claude Code ローカル設定（個人環境依存）
+.claude/settings.local.json
+
+# トーク作業ファイル（公開しない）
+docs/talks/

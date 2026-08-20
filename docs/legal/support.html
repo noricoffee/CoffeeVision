@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>サポート — CoffeeVision</title>
+<style>
+  :root {
+    --bg: #ffffff; --fg: #1c1c1e; --muted: #6b6b70;
+    --accent: #7a4a2b; --border: #e5e5ea; --card: #f7f7f8;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1c1c1e; --fg: #f2f2f7; --muted: #9a9aa0;
+      --accent: #c8956a; --border: #38383a; --card: #2c2c2e;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Hiragino Sans", "Noto Sans JP", sans-serif;
+    line-height: 1.8; font-size: 16px;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 40px 20px 80px; }
+  h1 { font-size: 1.75rem; margin: 0 0 0.25em; }
+  h2 { font-size: 1.25rem; margin: 2em 0 0.5em; padding-top: 0.5em; border-top: 1px solid var(--border); }
+  .meta { color: var(--muted); font-size: 0.9rem; margin-bottom: 2em; }
+  a { color: var(--accent); }
+  .faq { margin: 1em 0; }
+  .faq dt { font-weight: 600; margin-top: 1.2em; }
+  .faq dd { margin: 0.3em 0 0; padding-left: 0; color: var(--fg); }
+  .contact { background: var(--card); border-radius: 8px; padding: 20px; margin: 1.5em 0; }
+  footer { color: var(--muted); font-size: 0.85rem; margin-top: 3em; border-top: 1px solid var(--border); padding-top: 1em; }
+</style>
+</head>
+<body>
+<main>
+  <h1>CoffeeVision サポート</h1>
+  <p class="meta">訪れたカフェでのコーヒー体験を記録・振り返るアプリ</p>
+
+  <p>ご利用ありがとうございます。よくあるご質問と、お問い合わせ先をご案内します。</p>
+
+  <h2>よくある質問</h2>
+  <dl class="faq">
+    <dt>記録したデータは他の端末と同期されますか？</dt>
+    <dd>はい。記録はクラウド（Firebase）に保存され、同じアカウントでサインインした端末間で同期されます。「Apple でサインイン」でアカウントを連携すると、機種変更後も引き継げます。</dd>
+
+    <dt>写真はクラウドに保存されますか？</dt>
+    <dd>いいえ。写真は端末内にのみ保存され、外部サーバーには送信されません。端末を変更・初期化すると写真は引き継がれない点にご注意ください（記録テキストは同期されます）。</dd>
+
+    <dt>アカウントを削除するには？</dt>
+    <dd>設定タブからアカウントを削除できます。削除するとクラウド上の記録データも削除されます。「Apple でサインイン」連携アカウントの場合は、Apple 連携の失効も行われます。</dd>
+
+    <dt>記録データを書き出せますか？</dt>
+    <dd>はい。設定またはエクスポート機能から、記録データを JSON 形式で書き出せます。</dd>
+
+    <dt>データ分析への同意を後から変更できますか？</dt>
+    <dd>はい。設定タブのデータ利用同意トグルでいつでも変更できます。無効にすると使用状況データの収集は停止します。</dd>
+
+    <dt>分析タブの AI 機能はどのように動作しますか？</dt>
+    <dd>お使いの端末上（Apple のオンデバイス AI）で処理され、記録データが外部サーバーに送信されることはありません。対応していない端末では AI 機能は表示されません。</dd>
+
+    <dt>位置情報は常に取得されますか？</dt>
+    <dd>いいえ。アプリ使用中（周辺カフェ検索・地図での現在地表示）のときのみ利用し、バックグラウンドでの常時取得は行いません。</dd>
+  </dl>
+
+  <h2>お問い合わせ</h2>
+  <div class="contact">
+    <p>上記で解決しない場合は、以下までお気軽にご連絡ください。できる限り速やかに対応いたします。</p>
+    <p>連絡先: <a href="mailto:noricoffee593@gmail.com">noricoffee593@gmail.com</a></p>
+  </div>
+
+  <h2>関連リンク</h2>
+  <ul>
+    <li><a href="privacy-policy.html">プライバシーポリシー</a></li>
+  </ul>
+
+  <footer>
+    CoffeeVision<br>
+    &copy; 2026 noricoffee
+  </footer>
+</main>
+</body>
+</html>

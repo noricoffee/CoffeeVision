@@ -1,0 +1,30 @@
+package com.noricoffee.data.places
+
+/**
+ * Places API (New) v1 のレスポンスをフラットにまとめた内部モデル。
+ *
+ * `PlacesClient` が返す型であり、`CafeRepositoryImpl` で `Cafe` ドメインモデルに変換される。
+ * このクラスは `shared/data-places` 内部の実装詳細であるため `internal` 修飾は付けず、
+ * `CafeRepositoryImpl`（同モジュール）からのみ参照される。
+ *
+ * - [photoNames]: `places.photos[].name` をそのまま格納（`"places/{placeId}/photos/{photoRef}"` 形式）
+ * - [photoAttributions]: [photoNames] と同じ順序・同じ長さ。各要素は
+ *   `places.photos[].authorAttributions[0].displayName`。存在しない場合は空文字
+ */
+data class PlaceSummary(
+    val id: String,
+    val displayName: String,
+    val formattedAddress: String?,
+    val latitude: Double?,
+    val longitude: Double?,
+    val websiteUri: String?,
+    val googleMapsUri: String?,
+    val photoNames: List<String>,
+    val openNow: Boolean?,
+    val weekdayDescriptions: List<String>,
+    val phoneNumber: String?,
+    val priceLevel: String?,
+    val googleRating: Double?,
+    val userRatingCount: Int?,
+    val photoAttributions: List<String>,
+)

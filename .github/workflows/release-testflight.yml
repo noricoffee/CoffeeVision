@@ -1,0 +1,127 @@
+name: Release (TestFlight)
+
+# 手動実行のみ。App Store Connect（TestFlight）へ iOS ビルドをアップロードする。
+# 認証は ASC API キー + cloud signing（-allowProvisioningUpdates）。p12 / プロファイルの
+# Secrets 登録は不要だが、API キーには App Manager 以上のロールが必要
+# （cloud signing が Distribution 証明書を自動作成するため）。
+on:
+  workflow_dispatch:
+
+# checkout しか使わないため GITHUB_TOKEN は読み取り専用に最小化
+permissions:
+  contents: read
+
+# アップロード処理の途中中断を避けるため cancel-in-progress は付けない
+concurrency:
+  group: release-testflight
+
+jobs:
+  upload:
+    name: Archive & upload to App Store Connect
+    runs-on: macos-26
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # deployment target が iOS 26.0 のため Xcode 26 系が必須。
+      # ランナーに複数バージョンがある場合は 26 系の最新を選ぶ。
+      - name: Select Xcode 26
+        run: |
+          XCODE_APP="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
+          echo "Selected: $XCODE_APP"
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      # ci.yml と同一キーで Konan（Kotlin/Native コンパイラ + sysroot）キャッシュを共有する
+      - name: Cache Konan
+        uses: actions/cache@v4
+        with:
+          path: ~/.konan
+          key: konan-${{ runner.os }}-${{ hashFiles('gradle/libs.versions.toml', 'gradle/wrapper/gradle-wrapper.properties') }}
+          restore-keys: |
+            konan-${{ runner.os }}-
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      # gitignore 済みの秘匿ファイルを Secrets から復元する。
+      # GoogleService-Info.plist（Firebase）と Secrets.xcconfig（Places API キー +
+      # 本番 AdMob App ID / バナーユニット ID 2 面）が無いと、ビルドは通っても実機で
+      # Firebase / Places が動かない、または広告が Base.xcconfig のデモ ID のまま出荷される。
+      - name: Restore secret files
+        env:
+          GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
+          PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
+          ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
+          ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL: ${{ secrets.ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL }}
+          ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH: ${{ secrets.ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH }}
+        run: |
+          echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > iosApp/iosApp/GoogleService-Info.plist
+          plutil -lint iosApp/iosApp/GoogleService-Info.plist
+
+          # リリースビルドは本番 ID を必須にする（fail-fast）。未設定のまま出荷すると
+          # Base.xcconfig のデモ AdMob ID で広告が載る（収益ゼロ）／Places が 403 になる。
+          # また空文字を Secrets.xcconfig に書くと Base.xcconfig のフォールバックを空で
+          # 上書きし、GADApplicationIdentifier 空クラッシュや Places 403 を招く
+          # （Base.xcconfig の重要コメント参照）。よって非空を担保してから書き出す。
+          missing=""
+          for key in PLACES_API_KEY ADMOB_APP_ID \
+                     ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH; do
+            if [ -z "${!key}" ]; then missing="$missing $key"; fi
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing required release secrets:$missing"
+            exit 1
+          fi
+
+          {
+            printf 'PLACES_API_KEY = %s\n' "$PLACES_API_KEY"
+            printf 'ADMOB_APP_ID = %s\n' "$ADMOB_APP_ID"
+            printf 'ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL = %s\n' "$ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL"
+            printf 'ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH = %s\n' "$ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH"
+          } > iosApp/Configuration/Secrets.xcconfig
+
+      - name: Write ASC API key
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_PRIVATE_KEY: ${{ secrets.ASC_PRIVATE_KEY }}
+        run: |
+          printf '%s\n' "$ASC_PRIVATE_KEY" > "$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8"
+
+      # Run Script（Compile Kotlin Framework）内で Gradle が SharedLogic framework をビルドする
+      - name: Archive
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild archive \
+            -project iosApp/iosApp.xcodeproj \
+            -scheme iosApp \
+            -configuration Release \
+            -destination "generic/platform=iOS" \
+            -archivePath "$RUNNER_TEMP/CoffeeVision.xcarchive" \
+            CURRENT_PROJECT_VERSION=${{ github.run_number }} \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"
+
+      # ExportOptions.plist の destination=upload により、エクスポートと同時に ASC へアップロードされる
+      - name: Export & upload to App Store Connect
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+        run: |
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/CoffeeVision.xcarchive" \
+            -exportOptionsPlist iosApp/Configuration/ExportOptions.plist \
+            -allowProvisioningUpdates \
+            -authenticationKeyPath "$RUNNER_TEMP/AuthKey_${ASC_KEY_ID}.p8" \
+            -authenticationKeyID "$ASC_KEY_ID" \
+            -authenticationKeyIssuerID "$ASC_ISSUER_ID"

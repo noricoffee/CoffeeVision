@@ -1,0 +1,27 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(./iosApp/Configuration/Secrets.xcconfig)",
+      "Read(./iosApp/Configuration/Secrets*.xcconfig)",
+      "Read(./iosApp/Configuration/Secrets/**)",
+      "Read(./local.properties)",
+      "Read(**/GoogleService-Info.plist)",
+      "Read(**/google-services.json)",
+      "Read(./.firebase/**)"
+    ]
+  },
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"$CLAUDE_PROJECT_DIR/.claude/hooks/check-file-size.sh\"",
+            "statusMessage": "ファイルサイズを確認中"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,168 @@
+import AuthenticationServices
+import CryptoKit
+import Foundation
+import UIKit
+
+/// Sign in with Apple フローを `async` でラップするコーディネータ。
+///
+/// ## 使い方
+///
+/// ```swift
+/// let coordinator = AppleSignInCoordinator()
+/// let (idToken, rawNonce, authorizationCode) = try await coordinator.signIn(anchor: window)
+/// ```
+///
+/// ## nonce の役割
+///
+/// Firebase Authentication では CSRF 対策として SHA-256 ハッシュ済みの nonce を
+/// Apple サーバーに送り、JWT 内の nonce claim と突き合わせる。
+/// - `rawNonce` を生成 → SHA-256 してリクエストに含める
+/// - 受け取った idToken と `rawNonce`（平文）を Firebase に渡す
+///
+/// 参考: Firebase 公式 iOS ドキュメント「Sign in with Apple」
+@MainActor
+final class AppleSignInCoordinator: NSObject {
+
+    /// nonce 生成からサインイン UI 表示・完了まで非同期で処理する。
+    ///
+    /// - Parameter anchor: `ASAuthorizationControllerPresentationContextProviding` に渡す `UIWindow`。
+    /// - Returns: `(idToken: String, rawNonce: String, authorizationCode: String)` のタプル。
+    ///   `authorizationCode` は Apple が発行する使い捨てコード（約 5 分有効）で、
+    ///   `Auth.auth().revokeToken(withAuthorizationCode:)` に渡す用途に使う。保存禁止。
+    /// - Throws: Apple サインイン失敗 / ユーザーキャンセル時にエラーを throw。
+    func signIn(anchor: ASPresentationAnchor) async throws -> (idToken: String, rawNonce: String, authorizationCode: String) {
+        try await withCheckedThrowingContinuation { continuation in
+            self.continuation = continuation
+            let rawNonce = generateRandomNonce()
+            self.currentNonce = rawNonce
+            let hashedNonce = sha256(rawNonce)
+
+            let appleIDProvider = ASAuthorizationAppleIDProvider()
+            let request = appleIDProvider.createRequest()
+            request.requestedScopes = [.email]
+            request.nonce = hashedNonce
+
+            let controller = ASAuthorizationController(authorizationRequests: [request])
+            controller.delegate = self
+            controller.presentationContextProvider = self
+            self.presentationAnchor = anchor
+            controller.performRequests()
+        }
+    }
+
+    // MARK: - Private
+
+    private var continuation: CheckedContinuation<(idToken: String, rawNonce: String, authorizationCode: String), Error>?
+    private var currentNonce: String?
+    private var presentationAnchor: ASPresentationAnchor?
+
+    /// 暗号学的に安全なランダム nonce（32 bytes → hex string）を生成する。
+    private func generateRandomNonce(length: Int = 32) -> String {
+        var randomBytes = [UInt8](repeating: 0, count: length)
+        let errorCode = SecRandomCopyBytes(kSecRandomDefault, randomBytes.count, &randomBytes)
+        if errorCode != errSecSuccess {
+            // SecRandomCopyBytes の失敗はほぼ起きないが、万一のフォールバック
+            randomBytes = (0 ..< length).map { _ in UInt8.random(in: 0 ... 255) }
+        }
+        return randomBytes.map { String(format: "%02x", $0) }.joined()
+    }
+
+    /// 文字列を SHA-256 でハッシュし、hex string で返す。
+    private func sha256(_ input: String) -> String {
+        let inputData = Data(input.utf8)
+        let hashed = SHA256.hash(data: inputData)
+        return hashed.compactMap { String(format: "%02x", $0) }.joined()
+    }
+}
+
+// MARK: - ASAuthorizationControllerDelegate
+
+extension AppleSignInCoordinator: ASAuthorizationControllerDelegate {
+
+    // `ASAuthorizationControllerDelegate` のコールバックは `nonisolated` として宣言する必要がある
+    // （素の Obj-C プロトコルで MainActor を認識しないため）が、Apple 公式ドキュメント上
+    // 実際の呼び出しは常にメインスレッド（UI 提示と対になるフローのため）。
+    // `presentationAnchor` と同じ方針で `MainActor.assumeIsolated` を使う
+    // （`Task { @MainActor in }` は `authorization`（非 Sendable な `ASAuthorization`）を
+    // closure でキャプチャするため Swift 6 で警告になりうる）。
+
+    nonisolated func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithAuthorization authorization: ASAuthorization
+    ) {
+        MainActor.assumeIsolated {
+            guard
+                let appleIDCredential = authorization.credential as? ASAuthorizationAppleIDCredential,
+                let appleIDTokenData = appleIDCredential.identityToken,
+                let idToken = String(data: appleIDTokenData, encoding: .utf8),
+                let rawNonce = self.currentNonce
+            else {
+                let error = NSError(
+                    domain: "AppleSignInCoordinator",
+                    code: -1,
+                    userInfo: [NSLocalizedDescriptionKey: "Apple サインインの資格情報を取得できませんでした。"]
+                )
+                self.continuation?.resume(throwing: error)
+                self.continuation = nil
+                return
+            }
+
+            // authorizationCode は Apple が発行する使い捨てコード（約 5 分有効・保存禁止）。
+            // revokeToken(withAuthorizationCode:) に渡すために取り出す。
+            guard
+                let authCodeData = appleIDCredential.authorizationCode,
+                let authorizationCode = String(data: authCodeData, encoding: .utf8)
+            else {
+                let error = NSError(
+                    domain: "AppleSignInCoordinator",
+                    code: -2,
+                    userInfo: [NSLocalizedDescriptionKey: "Apple の認証コードを取得できませんでした。しばらく待ってから再試行してください。"]
+                )
+                self.continuation?.resume(throwing: error)
+                self.continuation = nil
+                return
+            }
+
+            self.continuation?.resume(returning: (idToken: idToken, rawNonce: rawNonce, authorizationCode: authorizationCode))
+            self.continuation = nil
+        }
+    }
+
+    nonisolated func authorizationController(
+        controller: ASAuthorizationController,
+        didCompleteWithError error: Error
+    ) {
+        MainActor.assumeIsolated {
+            // ユーザーキャンセル（ASAuthorizationError.canceled）もここに来る
+            self.continuation?.resume(throwing: error)
+            self.continuation = nil
+        }
+    }
+}
+
+// MARK: - ASAuthorizationControllerPresentationContextProviding
+
+extension AppleSignInCoordinator: ASAuthorizationControllerPresentationContextProviding {
+
+    nonisolated func presentationAnchor(
+        for controller: ASAuthorizationController
+    ) -> ASPresentationAnchor {
+        // `signIn(anchor:)` が `@MainActor` 上で設定した anchor をそのまま返す。
+        // `nonisolated` であっても本メソッドは UI スレッドから呼ばれるため
+        // `MainActor.assumeIsolated`（同期）で分離を仮定してよい。
+        MainActor.assumeIsolated {
+            guard let anchor = self.presentationAnchor else {
+                // 到達不能: `signIn(anchor:)` が `controller.performRequests()` より前に
+                // 必ず設定し、呼び出し元（`AccountView.startAppleSignIn`）も
+                // `currentPresentationAnchor()` の nil を guard で弾いている。
+                //
+                // ここで window を捏造しない理由: 以前は scene を探索して最後は
+                // `UIWindow()`（iOS 26 で deprecated）を返していたが、**無効な window を
+                // 返してもサインインシートは出ず、ユーザーには無反応に見えるだけ**だった。
+                // 探索ロジックも `AccountView.currentPresentationAnchor()` と二重になっていた。
+                preconditionFailure("presentationAnchor が未設定のまま提示された（signIn(anchor:) を経ていない）")
+            }
+            return anchor
+        }
+    }
+}

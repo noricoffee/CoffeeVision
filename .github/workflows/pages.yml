@@ -1,0 +1,42 @@
+name: Deploy legal pages
+
+# App Store 提出に必須のプライバシーポリシー / サポートページを GitHub Pages で公開する。
+# 公開対象は docs/legal/ のみ（docs/ 配下の設計 doc は Web サイト化しない）。
+on:
+  push:
+    branches: [develop]
+    paths:
+      - 'docs/legal/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一サイトへの同時デプロイを避ける。実行中のものは完走させる（公開ページを中断状態にしない）。
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Build & deploy docs/legal
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pages サイト自体（build_type: workflow）は 2026-08-06 に有効化済み。
+      # enablement: true は GITHUB_TOKEN の権限では Create Pages site が 403 になるため使わない。
+      - uses: actions/configure-pages@v5
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs/legal
+
+      - id: deployment
+        uses: actions/deploy-pages@v4

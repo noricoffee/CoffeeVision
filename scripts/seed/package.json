@@ -1,0 +1,9 @@
+{
+  "name": "coffeevision-seed",
+  "private": true,
+  "type": "module",
+  "description": "Firestore へのデータ投入スクリプト（beanProfiles 初期データ / エクスポート JSON の開発用投入）",
+  "dependencies": {
+    "firebase-admin": "^13.10.0"
+  }
+}

@@ -1,0 +1,71 @@
+-- 2026-07-12 B-4: rating の NOT NULL 制約を撤廃して nullable 化する（0.0 未評価 sentinel の全廃）。
+-- SQLite は「NOT NULL 制約を撤廃する」ALTER TABLE をサポートしないため、
+-- SQLite 公式のテーブル再作成手順（https://www.sqlite.org/lang_altertable.html#otheralter）に従う:
+-- CREATE 新テーブル → INSERT SELECT（0.0 → NULLIF で NULL 化）→ DROP 旧テーブル →
+-- RENAME → インデックス再作成。photo テーブルの FK（record_id → coffee_record.id、
+-- ON DELETE CASCADE、2026-07-03 本番有効化）を壊さないよう、公式手順どおり
+-- PRAGMA foreign_keys=OFF で挟む（DROP TABLE 時点で FK が有効だと孤児行検証に失敗しうるため）。
+
+PRAGMA foreign_keys=0;
+
+CREATE TABLE coffee_record_new (
+    id TEXT NOT NULL PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    cafe_place_id TEXT,
+    cafe_name TEXT,
+    cafe_address TEXT,
+    cafe_latitude REAL,
+    cafe_longitude REAL,
+    cafe_photo_references TEXT,
+    cafe_website_url TEXT,
+    cafe_maps_url TEXT,
+    visited_on TEXT NOT NULL,
+    rating REAL,
+    notes TEXT NOT NULL,
+    name TEXT NOT NULL,
+    brew_method TEXT NOT NULL,
+    origin TEXT,
+    variety TEXT,
+    processing TEXT,
+    roast_level TEXT,
+    cup TEXT,
+    brew_recipe TEXT,
+    sweetness INTEGER,
+    body INTEGER,
+    acidity INTEGER,
+    flavor INTEGER,
+    aftertaste INTEGER,
+    tags TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+
+INSERT INTO coffee_record_new (
+    id, user_id, cafe_place_id, cafe_name, cafe_address,
+    cafe_latitude, cafe_longitude, cafe_photo_references,
+    cafe_website_url, cafe_maps_url,
+    visited_on, rating, notes,
+    name, brew_method, origin, variety, processing, roast_level, cup, brew_recipe,
+    sweetness, body, acidity, flavor, aftertaste,
+    tags,
+    created_at, updated_at
+)
+SELECT
+    id, user_id, cafe_place_id, cafe_name, cafe_address,
+    cafe_latitude, cafe_longitude, cafe_photo_references,
+    cafe_website_url, cafe_maps_url,
+    visited_on, NULLIF(rating, 0.0), notes,
+    name, brew_method, origin, variety, processing, roast_level, cup, brew_recipe,
+    sweetness, body, acidity, flavor, aftertaste,
+    tags,
+    created_at, updated_at
+FROM coffee_record;
+
+DROP TABLE coffee_record;
+
+ALTER TABLE coffee_record_new RENAME TO coffee_record;
+
+CREATE INDEX coffee_record_by_user_visited ON coffee_record (user_id, visited_on DESC);
+CREATE INDEX coffee_record_by_cafe ON coffee_record (cafe_place_id);
+
+PRAGMA foreign_keys=1;

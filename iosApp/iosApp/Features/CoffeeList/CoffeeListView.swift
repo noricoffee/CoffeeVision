@@ -1,0 +1,333 @@
+import SwiftUI
+import SharedLogic
+
+// MARK: - CoffeeListView
+
+/// コーヒー記録一覧画面。
+///
+/// - RootTabView の NavigationStack 内に配置されるため、自身では NavigationStack を持たない
+/// - ナビバー右上の `+`（`toolbarContent`）から `CoffeeEditorView(mode: .Create)` を sheet 表示する
+/// - 既存記録の詳細は NavigationLink で CoffeeDetailView に push する
+struct CoffeeListView: View {
+
+    @State var viewModel: CoffeeListViewModelBridge
+    var appState: AppState
+
+    /// ツールバーの `+` タップで開くエディタの表示状態。
+    @State private var isPresentingEditor = false
+
+    /// 長押しコンテキストメニューから編集対象に選ばれたコーヒー記録（sheet アンカー、ツールバー用とは別）。
+    @State private var editingCoffee: CoffeeRecord?
+
+    /// 長押しコンテキストメニューから削除確認ダイアログの対象に選ばれたコーヒー記録。
+    @State private var deletionTarget: CoffeeRecord?
+
+    var body: some View {
+        content
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+        .toolbar { toolbarContent }
+        .searchable(
+            text: Binding(
+                get: { viewModel.searchQuery },
+                set: { viewModel.searchQuery = $0 }
+            ),
+            prompt: String(localized: "コーヒー名・カフェ名・メモで検索")
+        )
+        .task {
+            guard let uid = appState.uid else { return }
+            viewModel.onAppear(userId: uid)
+        }
+        .onDisappear {
+            viewModel.onDisappear()
+        }
+        .errorToast(message: viewModel.error) {
+            viewModel.onErrorDismissed()
+        }
+        .sheet(isPresented: $isPresentingEditor) {
+            CoffeeEditorView(
+                mode: CoffeeEditorViewModelModeCreate.shared,
+                appState: appState,
+                initialCafe: nil
+            )
+        }
+        .sheet(item: $editingCoffee) { coffee in
+            CoffeeEditorView(
+                mode: CoffeeEditorViewModelModeEdit(coffeeId: coffee.id),
+                appState: appState,
+                initialCafe: coffee.cafe
+            )
+        }
+    }
+
+    // MARK: - ツールバー
+
+    @ToolbarContentBuilder
+    private var toolbarContent: some ToolbarContent {
+        ToolbarItem(placement: .topBarTrailing) {
+            Button {
+                isPresentingEditor = true
+            } label: {
+                Label(
+                    String(localized: "コーヒーを記録"),
+                    systemImage: "plus"
+                )
+            }
+            .accessibilityLabel(String(localized: "コーヒーを記録"))
+            .disabled(appState.uid == nil)
+        }
+    }
+
+    // MARK: - コンテンツ
+
+    @ViewBuilder
+    private var content: some View {
+        if viewModel.isLoading {
+            ProgressView()
+        } else if viewModel.sections.isEmpty && viewModel.searchQuery.isEmpty {
+            emptyView
+        } else if viewModel.sections.isEmpty {
+            // 検索クエリはあるがヒット 0 件
+            ContentUnavailableView.search(text: viewModel.searchQuery)
+        } else {
+            coffeeList
+        }
+    }
+
+    private var emptyView: some View {
+        ContentUnavailableView(
+            String(localized: "まだコーヒー記録がありません"),
+            systemImage: "cup.and.saucer",
+            description: Text(
+                String(localized: "右上の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
+            )
+        )
+    }
+
+    private var coffeeList: some View {
+        List {
+            ForEach(viewModel.sections) { section in
+                Section {
+                    ForEach(section.records) { coffee in
+                        NavigationLink {
+                            CoffeeDetailView(coffeeId: coffee.id, appState: appState)
+                        } label: {
+                            CoffeeRow(coffee: coffee)
+                        }
+                        .swipeActions(edge: .trailing, allowsFullSwipe: true) {
+                            Button(role: .destructive) {
+                                viewModel.onCoffeeDeleted(
+                                    id: coffee.id,
+                                    photoFileNames: coffee.photos.compactMap(\.fileName)
+                                )
+                            } label: {
+                                Label(
+                                    String(localized: "削除"),
+                                    systemImage: "trash"
+                                )
+                            }
+                        }
+                        .contextMenu {
+                            Button {
+                                editingCoffee = coffee
+                            } label: {
+                                Label(String(localized: "編集"), systemImage: "pencil")
+                            }
+                            Button(role: .destructive) {
+                                deletionTarget = coffee
+                            } label: {
+                                Label(String(localized: "削除"), systemImage: "trash")
+                            }
+                        }
+                    }
+                } header: {
+                    Text(Self.monthHeaderText(yearMonth: section.yearMonth))
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .confirmationDialog(
+            String(localized: "コーヒー記録を削除"),
+            isPresented: Binding(
+                get: { deletionTarget != nil },
+                set: { isPresented in if !isPresented { deletionTarget = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: deletionTarget
+        ) { coffee in
+            Button(String(localized: "削除"), role: .destructive) {
+                viewModel.onCoffeeDeleted(
+                    id: coffee.id,
+                    photoFileNames: coffee.photos.compactMap(\.fileName)
+                )
+                deletionTarget = nil
+            }
+            Button(String(localized: "キャンセル"), role: .cancel) {}
+        } message: { _ in
+            Text(String(localized: "この記録と写真は完全に削除されます。この操作は取り消せません。"))
+        }
+    }
+
+    // MARK: - 月ヘッダ文字列の生成
+
+    /// `"YYYY-MM"`（ゼロパディング）を `"YYYY年M月"`（月はゼロ埋めしない）へ変換する。
+    ///
+    /// 想定外のフォーマットが来た場合はそのまま `yearMonth` を返す（フォールバック）。
+    static func monthHeaderText(yearMonth: String) -> String {
+        let parts = yearMonth.split(separator: "-")
+        guard parts.count == 2, let month = Int(parts[1]) else {
+            return yearMonth
+        }
+        return String(localized: "\(parts[0])年\(month)月")
+    }
+}
+
+// MARK: - CoffeeRow
+
+/// コーヒー記録一覧の行コンポーネント。
+struct CoffeeRow: View {
+
+    let coffee: CoffeeRecord
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            RecordPhotoThumbnail(
+                fileName: coffee.photos.first?.fileName,
+                pendingData: nil,
+                targetPointSize: 56
+            ) {
+                Rectangle()
+                    .fill(Color(.secondarySystemFill))
+                    .overlay {
+                        Image(systemName: "cup.and.saucer")
+                            .foregroundStyle(.tertiary)
+                    }
+            }
+            .frame(width: 56, height: 56)
+            .clipped()
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .accessibilityHidden(true)
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text(coffee.cafe?.name ?? String(localized: "セルフ抽出"))
+                    .font(.headline)
+                    .foregroundStyle(.primary)
+
+                Text(coffee.name)
+                    .font(.body)
+                    .foregroundStyle(.primary)
+
+                Text(formattedDate)
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+
+                starRating
+            }
+        }
+        .padding(.vertical, 4)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(accessibilityDescription)
+    }
+
+    // MARK: - Private
+
+    private var formattedDate: String {
+        let d = coffee.visitedOn
+        return String(
+            format: "%04d/%02d/%02d",
+            Int(d.year),
+            Int(d.monthNumber),
+            Int(d.dayOfMonth)
+        )
+    }
+
+    private var starRating: some View {
+        StarRatingView(rating: coffee.rating?.doubleValue, size: .caption2)
+    }
+
+    private var accessibilityDescription: String {
+        let cafeName = coffee.cafe?.name ?? String(localized: "セルフ抽出")
+        let ratingStr: String
+        if let rating = coffee.rating?.doubleValue {
+            ratingStr = rating.truncatingRemainder(dividingBy: 1) == 0
+                ? "\(Int(rating))星"
+                : "\(rating)星"
+        } else {
+            ratingStr = String(localized: "未評価")
+        }
+        return "\(cafeName), \(coffee.name), \(formattedDate), \(ratingStr)"
+    }
+}
+
+// MARK: - Preview (CoffeeRow 単体)
+
+#Preview("CoffeeRow") {
+    List {
+        CoffeeRow(coffee: PreviewSamples.sampleCoffeeRecord)
+        CoffeeRow(coffee: PreviewSamples.sampleCoffeeRecordSelfBrew)
+    }
+}
+
+// MARK: - Preview (空状態)
+
+#Preview("空状態") {
+    NavigationStack {
+        ContentUnavailableView(
+            String(localized: "まだコーヒー記録がありません"),
+            systemImage: "cup.and.saucer",
+            description: Text(
+                String(localized: "右上の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
+            )
+        )
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+// MARK: - Preview (一覧 Demo)
+
+#Preview("一覧 Demo") {
+    NavigationStack {
+        List {
+            ForEach(PreviewSamples.sampleCoffeeRecords) { coffee in
+                CoffeeRow(coffee: coffee)
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+    }
+}
+
+// MARK: - Preview (月別セクション Demo)
+
+#Preview("月別セクション Demo") {
+    let sections: [CoffeeListViewModel.MonthSection] = [
+        CoffeeListViewModel.MonthSection(
+            yearMonth: "2026-06",
+            records: [PreviewSamples.sampleCoffeeRecord, PreviewSamples.sampleCoffeeRecordSelfBrew]
+        ),
+        CoffeeListViewModel.MonthSection(
+            yearMonth: "2026-05",
+            records: [PreviewSamples.sampleCoffeeRecordWithoutPhotos]
+        ),
+    ]
+    NavigationStack {
+        List {
+            ForEach(sections) { section in
+                Section {
+                    ForEach(section.records) { coffee in
+                        CoffeeRow(coffee: coffee)
+                    }
+                } header: {
+                    Text(CoffeeListView.monthHeaderText(yearMonth: section.yearMonth))
+                        .accessibilityAddTraits(.isHeader)
+                }
+            }
+        }
+        .listStyle(.plain)
+        .navigationTitle(String(localized: "コーヒー記録"))
+        .navigationBarTitleDisplayMode(.large)
+    }
+}

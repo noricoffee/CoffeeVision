@@ -7,9 +7,14 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		AD0000010000000000000001 /* GoogleMobileAds in Frameworks */ = {isa = PBXBuildFile; productRef = AD0000020000000000000001 /* GoogleMobileAds */; };
 		FB0000010000000000000001 /* FirebaseAuth in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000001 /* FirebaseAuth */; };
 		FB0000010000000000000002 /* FirebaseFirestore in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000002 /* FirebaseFirestore */; };
 		FB0000010000000000000003 /* FirebaseStorage in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000003 /* FirebaseStorage */; };
+		FB0000010000000000000004 /* FirebaseCrashlytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000004 /* FirebaseCrashlytics */; };
+		FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000005 /* FirebaseAnalytics */; };
+		FB0000010000000000000006 /* FirebasePerformance in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000006 /* FirebasePerformance */; };
+		FB0000010000000000000007 /* FirebaseRemoteConfig in Frameworks */ = {isa = PBXBuildFile; productRef = FB0000020000000000000007 /* FirebaseRemoteConfig */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -50,6 +55,11 @@
 				FB0000010000000000000001 /* FirebaseAuth in Frameworks */,
 				FB0000010000000000000002 /* FirebaseFirestore in Frameworks */,
 				FB0000010000000000000003 /* FirebaseStorage in Frameworks */,
+				FB0000010000000000000004 /* FirebaseCrashlytics in Frameworks */,
+				FB0000010000000000000005 /* FirebaseAnalytics in Frameworks */,
+				FB0000010000000000000006 /* FirebasePerformance in Frameworks */,
+				FB0000010000000000000007 /* FirebaseRemoteConfig in Frameworks */,
+				AD0000010000000000000001 /* GoogleMobileAds in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -84,6 +94,7 @@
 				2A96A4DBB4D19D0F23597A05 /* Sources */,
 				869DC8FE24DD3F3D3CF10A44 /* Frameworks */,
 				46FF7C0E050BEA9D646DD937 /* Resources */,
+				FB0000040000000000000001 /* Upload dSYM to Crashlytics */,
 			);
 			buildRules = (
 			);
@@ -97,6 +108,11 @@
 				FB0000020000000000000001 /* FirebaseAuth */,
 				FB0000020000000000000002 /* FirebaseFirestore */,
 				FB0000020000000000000003 /* FirebaseStorage */,
+				FB0000020000000000000004 /* FirebaseCrashlytics */,
+				FB0000020000000000000005 /* FirebaseAnalytics */,
+				FB0000020000000000000006 /* FirebasePerformance */,
+				FB0000020000000000000007 /* FirebaseRemoteConfig */,
+				AD0000020000000000000001 /* GoogleMobileAds */,
 			);
 			productName = iosApp;
 			productReference = 5934ABC536940296DA2BC581 /* coffeevision.app */;
@@ -118,16 +134,17 @@
 				};
 			};
 			buildConfigurationList = B86C12CF0886C627DA3DA84A /* Build configuration list for PBXProject "iosApp" */;
-			developmentRegion = en;
+			developmentRegion = ja;
 			hasScannedForEncodings = 0;
 			knownRegions = (
-				en,
+				ja,
 				Base,
 			);
 			mainGroup = 9F29D6ED5DF03FE98C420FBA;
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */,
+				AD0000030000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = E34C9F83EBE8C5966FE1C553 /* Products */;
@@ -167,7 +184,27 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 			shellPath = /bin/sh;
-			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\ncd \"$SRCROOT/..\"\n./gradlew :sharedLogic:embedAndSignAppleFrameworkForXcode\n";
+			shellScript = "if [ \"YES\" = \"$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED\" ]; then\n  echo \"Skipping Gradle build task invocation due to OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED environment variable set to \\\"YES\\\"\"\n  exit 0\nfi\n# Android Studio の JBR があるローカル環境でのみ上書きする（CI では setup-java の JAVA_HOME をそのまま使う）\nif [ -d \"/Applications/Android Studio.app/Contents/jbr/Contents/Home\" ]; then\n  export JAVA_HOME=\"/Applications/Android Studio.app/Contents/jbr/Contents/Home\"\nfi\ncd \"$SRCROOT/..\"\n./gradlew :shared:framework:embedAndSignAppleFrameworkForXcode\n";
+		};
+		FB0000040000000000000001 /* Upload dSYM to Crashlytics */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+				"${DWARF_DSYM_FOLDER_PATH}/${DWARF_DSYM_FILE_NAME}",
+				"$(SRCROOT)/$(BUILT_PRODUCTS_DIR)/$(INFOPLIST_PATH)",
+			);
+			name = "Upload dSYM to Crashlytics";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "\"${BUILD_DIR%/Build/*}/SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run\"\n";
 		};
 /* End PBXShellScriptBuildPhase section */
 
@@ -184,29 +221,29 @@
 /* Begin XCBuildConfiguration section */
 		82FC15CF374D4A2FFF053979 /* Release */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 0935A1A6B7D50CE2A0BDEB47 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Base.xcconfig;
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
-				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				DEVELOPMENT_TEAM = HL5AQP4983;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Release;
 		};
@@ -277,29 +314,29 @@
 		};
 		E6D68CD3978690886DFAF412 /* Debug */ = {
 			isa = XCBuildConfiguration;
+			baseConfigurationReferenceAnchor = 0935A1A6B7D50CE2A0BDEB47 /* Configuration */;
+			baseConfigurationReferenceRelativePath = Base.xcconfig;
 			buildSettings = {
 				ARCHS = arm64;
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = iosApp/iosApp.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				DEVELOPMENT_ASSET_PATHS = "\"iosApp/Preview Content\"";
-				DEVELOPMENT_TEAM = "${TEAM_ID}";
+				DEVELOPMENT_TEAM = HL5AQP4983;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_FILE = iosApp/Info.plist;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
-				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
-				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_VERSION = 5.0;
-				TARGETED_DEVICE_FAMILY = "1,2";
+				TARGETED_DEVICE_FAMILY = 1;
 			};
 			name = Debug;
 		};
@@ -385,6 +422,14 @@
 /* End XCConfigurationList section */
 
 /* Begin XCRemoteSwiftPackageReference section */
+		AD0000030000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/googleads/swift-package-manager-google-mobile-ads";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 13.0.0;
+			};
+		};
 		FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */ = {
 			isa = XCRemoteSwiftPackageReference;
 			repositoryURL = "https://github.com/firebase/firebase-ios-sdk";
@@ -396,6 +441,11 @@
 /* End XCRemoteSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
+		AD0000020000000000000001 /* GoogleMobileAds */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD0000030000000000000001 /* XCRemoteSwiftPackageReference "swift-package-manager-google-mobile-ads" */;
+			productName = GoogleMobileAds;
+		};
 		FB0000020000000000000001 /* FirebaseAuth */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
@@ -410,6 +460,26 @@
 			isa = XCSwiftPackageProductDependency;
 			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
 			productName = FirebaseStorage;
+		};
+		FB0000020000000000000004 /* FirebaseCrashlytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseCrashlytics;
+		};
+		FB0000020000000000000005 /* FirebaseAnalytics */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseAnalytics;
+		};
+		FB0000020000000000000006 /* FirebasePerformance */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebasePerformance;
+		};
+		FB0000020000000000000007 /* FirebaseRemoteConfig */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = FB0000030000000000000001 /* XCRemoteSwiftPackageReference "firebase-ios-sdk" */;
+			productName = FirebaseRemoteConfig;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

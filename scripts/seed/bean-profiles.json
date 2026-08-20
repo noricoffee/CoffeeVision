@@ -1,0 +1,344 @@
+[
+  {
+    "beanId": "ethiopia-yirgacheffe-washed",
+    "name": "エチオピア イルガチェフェ ウォッシュト",
+    "origin": "エチオピア",
+    "variety": "原種（エアルーム）",
+    "processings": ["Washed"],
+    "flavorNotes": ["ジャスミン", "ベルガモット", "レモン", "紅茶"],
+    "description": "エチオピア南部イルガチェフェ産の在来品種。明るく澄んだ酸の質と紅茶のような繊細な質感が特徴で、クリーンカップに優れフローラルな余韻が長く続く。"
+  },
+  {
+    "beanId": "ethiopia-yirgacheffe-natural",
+    "name": "エチオピア イルガチェフェ ナチュラル",
+    "origin": "エチオピア",
+    "variety": "原種（エアルーム）",
+    "processings": ["Natural"],
+    "flavorNotes": ["ブルーベリー", "ストロベリー", "チョコレート", "ワイン"],
+    "description": "乾式精製由来のベリー系の果実感とワインのような複雑さ。完熟果実の甘さが飲み込んだ後まで続く。"
+  },
+  {
+    "beanId": "ethiopia-guji-natural",
+    "name": "エチオピア グジ ナチュラル",
+    "origin": "エチオピア",
+    "variety": "原種（エアルーム）",
+    "processings": ["Natural"],
+    "flavorNotes": ["ピーチ", "パッションフルーツ", "ハチミツ", "フローラル"],
+    "description": "グジゾーン産。トロピカルな風味特性とハチミツの甘さ、シルキーな質感の調和が取れた一杯になりやすい。"
+  },
+  {
+    "beanId": "ethiopia-sidamo-washed",
+    "name": "エチオピア シダモ ウォッシュト",
+    "origin": "エチオピア",
+    "variety": "原種（エアルーム）",
+    "processings": ["Washed"],
+    "flavorNotes": ["レモン", "アプリコット", "ハチミツ", "フローラル"],
+    "description": "シダモ地方の水洗式。柔らかな柑橘の酸とハチミツの甘さのバランスが良く、雑味のないきれいなカップ。"
+  },
+  {
+    "beanId": "ethiopia-geisha-natural",
+    "name": "エチオピア ゲイシャ ナチュラル",
+    "origin": "エチオピア",
+    "variety": "ゲイシャ",
+    "processings": ["Natural"],
+    "flavorNotes": ["ジャスミン", "ライチ", "ピーチ", "ローズ"],
+    "description": "ゲイシャ種発祥の地エチオピアのナチュラル精製。華やかな香りとライチのようなみずみずしい甘さが際立つ。"
+  },
+  {
+    "beanId": "kenya-sl28-washed",
+    "name": "ケニア SL28 ウォッシュト",
+    "origin": "ケニア",
+    "variety": "SL28",
+    "processings": ["Washed"],
+    "flavorNotes": ["カシス", "グレープフルーツ", "ブラウンシュガー"],
+    "description": "カシスを思わせるジューシーで力強い酸の質が身上。しっかりした質感と黒糖様の甘さが下支えする。"
+  },
+  {
+    "beanId": "kenya-sl34-washed",
+    "name": "ケニア SL34 ウォッシュト",
+    "origin": "ケニア",
+    "variety": "SL34",
+    "processings": ["Washed"],
+    "flavorNotes": ["ラズベリー", "オレンジ", "黒糖"],
+    "description": "SL28 と並ぶケニアの代表品種。ベリーと柑橘の重なる風味特性で、冷めるほど甘さの輪郭がはっきりする。"
+  },
+  {
+    "beanId": "colombia-castillo-washed",
+    "name": "コロンビア カスティージョ ウォッシュト",
+    "origin": "コロンビア",
+    "variety": "カスティージョ",
+    "processings": ["Washed"],
+    "flavorNotes": ["キャラメル", "アップル", "ナッツ"],
+    "description": "コロンビアで広く栽培される耐病性品種。キャラメルの甘さと穏やかな酸のハーモニーが取れた、毎日飲みやすい味わい。"
+  },
+  {
+    "beanId": "colombia-pink-bourbon-washed",
+    "name": "コロンビア ピンクブルボン ウォッシュト",
+    "origin": "コロンビア",
+    "variety": "ピンクブルボン",
+    "processings": ["Washed"],
+    "flavorNotes": ["フローラル", "洋梨", "ハチミツ"],
+    "description": "近年人気の希少品種。洋梨のような柔らかい果実味と上品な甘さで、クリーンカップの美しさが際立つ。"
+  },
+  {
+    "beanId": "colombia-geisha-washed",
+    "name": "コロンビア ゲイシャ ウォッシュト",
+    "origin": "コロンビア",
+    "variety": "ゲイシャ",
+    "processings": ["Washed"],
+    "flavorNotes": ["ジャスミン", "ベルガモット", "マンゴー"],
+    "description": "高標高農園のゲイシャ。華やかな香りと熟したマンゴーの甘さ、透明感のある酸の質が楽しめる。"
+  },
+  {
+    "beanId": "colombia-caturra-anaerobic",
+    "name": "コロンビア カトゥーラ アナエロビック",
+    "origin": "コロンビア",
+    "variety": "カトゥーラ",
+    "processings": ["Anaerobic"],
+    "flavorNotes": ["トロピカルフルーツ", "ワイン", "シナモン"],
+    "description": "嫌気性発酵による個性的なロット。発酵由来の複雑な風味特性が好みを分けるが、ハマる人には強く刺さる。"
+  },
+  {
+    "beanId": "panama-geisha-washed",
+    "name": "パナマ ゲイシャ ウォッシュト",
+    "origin": "パナマ",
+    "variety": "ゲイシャ",
+    "processings": ["Washed"],
+    "flavorNotes": ["ジャスミン", "ベルガモット", "ピーチ", "紅茶"],
+    "description": "ゲイシャ人気の火付け役となった産地。圧倒的な香りの華やかさと紅茶のような質感、長い余韻が別格とされる。"
+  },
+  {
+    "beanId": "panama-geisha-natural",
+    "name": "パナマ ゲイシャ ナチュラル",
+    "origin": "パナマ",
+    "variety": "ゲイシャ",
+    "processings": ["Natural"],
+    "flavorNotes": ["ストロベリー", "トロピカルフルーツ", "ローズ"],
+    "description": "ナチュラル精製のゲイシャは果実の甘さが前面に出る。ストロベリーとバラを思わせる甘く華やかな一杯。"
+  },
+  {
+    "beanId": "guatemala-antigua-bourbon-washed",
+    "name": "グアテマラ アンティグア ブルボン",
+    "origin": "グアテマラ",
+    "variety": "ブルボン",
+    "processings": ["Washed"],
+    "flavorNotes": ["チョコレート", "オレンジ", "キャラメル"],
+    "description": "火山性土壌のアンティグア地区産。チョコレートの甘さとオレンジの明るい酸が調和した王道の中米らしさ。"
+  },
+  {
+    "beanId": "guatemala-huehuetenango-caturra-washed",
+    "name": "グアテマラ ウエウエテナンゴ カトゥーラ",
+    "origin": "グアテマラ",
+    "variety": "カトゥーラ",
+    "processings": ["Washed"],
+    "flavorNotes": ["アップル", "ハチミツ", "ナッツ"],
+    "description": "高標高ウエウエテナンゴ産。りんごのような爽やかな酸の質とハチミツの甘さで、後味がきれいに消えていく。"
+  },
+  {
+    "beanId": "costa-rica-catuai-honey",
+    "name": "コスタリカ カトゥアイ ハニー",
+    "origin": "コスタリカ",
+    "variety": "カトゥアイ",
+    "processings": ["Honey"],
+    "flavorNotes": ["ハチミツ", "アプリコット", "ブラウンシュガー"],
+    "description": "ミューシレージを残して乾燥させるハニープロセス発祥国の定番。とろりとした甘さと丸い質感が特徴。"
+  },
+  {
+    "beanId": "costa-rica-caturra-anaerobic",
+    "name": "コスタリカ カトゥーラ アナエロビック",
+    "origin": "コスタリカ",
+    "variety": "カトゥーラ",
+    "processings": ["Anaerobic"],
+    "flavorNotes": ["パイナップル", "シナモン", "バニラ"],
+    "description": "シナモンやバニラを思わせる発酵由来のフレーバーが乗る実験的ロット。甘さの密度が高い。"
+  },
+  {
+    "beanId": "costa-rica-villa-sarchi-natural",
+    "name": "コスタリカ ビジャサルチ ナチュラル",
+    "origin": "コスタリカ",
+    "variety": "ビジャサルチ",
+    "processings": ["Natural"],
+    "flavorNotes": ["チェリー", "黒糖", "ワイン"],
+    "description": "コスタリカ在来の小粒品種。チェリーの果実味と黒糖の甘さ、ワインのような余韻を楽しめる。"
+  },
+  {
+    "beanId": "el-salvador-pacamara-washed",
+    "name": "エルサルバドル パカマラ ウォッシュト",
+    "origin": "エルサルバドル",
+    "variety": "パカマラ",
+    "processings": ["Washed"],
+    "flavorNotes": ["グレープフルーツ", "ハーブ", "ブラウンシュガー"],
+    "description": "大粒のパカマラ種。グレープフルーツの快活な酸とハーブのニュアンスが個性的で、質感は厚くクリーミー。"
+  },
+  {
+    "beanId": "el-salvador-bourbon-honey",
+    "name": "エルサルバドル ブルボン ハニー",
+    "origin": "エルサルバドル",
+    "variety": "ブルボン",
+    "processings": ["Honey"],
+    "flavorNotes": ["キャラメル", "オレンジ", "アーモンド"],
+    "description": "ブルボン種のハニープロセス。キャラメルの甘さを軸に、オレンジの酸とナッツ感が穏やかにまとまる。"
+  },
+  {
+    "beanId": "honduras-catuai-washed",
+    "name": "ホンジュラス カトゥアイ ウォッシュト",
+    "origin": "ホンジュラス",
+    "variety": "カトゥアイ",
+    "processings": ["Washed"],
+    "flavorNotes": ["チョコレート", "アップル", "ハチミツ"],
+    "description": "中米らしいチョコレートの甘さに、りんごの酸が明るさを添えるバランス型。デイリーに向く。"
+  },
+  {
+    "beanId": "honduras-parainema-natural",
+    "name": "ホンジュラス パライネマ ナチュラル",
+    "origin": "ホンジュラス",
+    "variety": "パライネマ",
+    "processings": ["Natural"],
+    "flavorNotes": ["ラズベリー", "プルーン", "黒糖"],
+    "description": "耐病性品種パライネマのナチュラル。ベリーとプルーンの熟した果実感、粘性のある甘さが特徴。"
+  },
+  {
+    "beanId": "brazil-bourbon-natural",
+    "name": "ブラジル ブルボン ナチュラル",
+    "origin": "ブラジル",
+    "variety": "ブルボン",
+    "processings": ["Natural"],
+    "flavorNotes": ["ナッツ", "チョコレート", "キャラメル"],
+    "description": "酸は控えめで、ナッツとチョコレートの香ばしい甘さと丸い質感が主役。エスプレッソのベースにも好適。"
+  },
+  {
+    "beanId": "brazil-mundo-novo-honey",
+    "name": "ブラジル ムンドノーボ パルプドナチュラル",
+    "origin": "ブラジル",
+    "variety": "ムンドノーボ",
+    "processings": ["Honey"],
+    "flavorNotes": ["ヘーゼルナッツ", "ブラウンシュガー", "オレンジ"],
+    "description": "ブラジル発祥のパルプドナチュラル（ハニー相当）。香ばしさと穏やかな甘さの調和が良い。"
+  },
+  {
+    "beanId": "brazil-yellow-bourbon-natural",
+    "name": "ブラジル イエローブルボン ナチュラル",
+    "origin": "ブラジル",
+    "variety": "イエローブルボン",
+    "processings": ["Natural"],
+    "flavorNotes": ["ハチミツ", "アーモンド", "アップル"],
+    "description": "黄実のブルボン変種。ハチミツ様の柔らかい甘さとアーモンドの香ばしさ、控えめできれいな酸。"
+  },
+  {
+    "beanId": "peru-typica-washed",
+    "name": "ペルー ティピカ ウォッシュト",
+    "origin": "ペルー",
+    "variety": "ティピカ",
+    "processings": ["Washed"],
+    "flavorNotes": ["キャラメル", "オレンジ", "紅茶"],
+    "description": "アンデス高地の小規模農家由来が多い。キャラメルの甘さと紅茶のような軽やかな質感で飲み疲れしない。"
+  },
+  {
+    "beanId": "bolivia-caturra-washed",
+    "name": "ボリビア カトゥーラ ウォッシュト",
+    "origin": "ボリビア",
+    "variety": "カトゥーラ",
+    "processings": ["Washed"],
+    "flavorNotes": ["チョコレート", "プルーン", "アップル"],
+    "description": "生産量の少ない希少産地。チョコレートの甘さに果実の膨らみが乗る、クリーンで整った味わい。"
+  },
+  {
+    "beanId": "rwanda-bourbon-washed",
+    "name": "ルワンダ ブルボン ウォッシュト",
+    "origin": "ルワンダ",
+    "variety": "ブルボン",
+    "processings": ["Washed"],
+    "flavorNotes": ["オレンジ", "紅茶", "ブラウンシュガー"],
+    "description": "アフリカ大湖地域のブルボン。オレンジの酸と紅茶様の繊細さ、後半に出てくる黒糖系の甘さが心地よい。"
+  },
+  {
+    "beanId": "burundi-bourbon-washed",
+    "name": "ブルンジ ブルボン ウォッシュト",
+    "origin": "ブルンジ",
+    "variety": "ブルボン",
+    "processings": ["Washed"],
+    "flavorNotes": ["カシス", "レモン", "ハチミツ"],
+    "description": "隣国ルワンダと並ぶ高品質産地。カシスの果実感と快活な酸の質、ハチミツの甘さがきれいに調和する。"
+  },
+  {
+    "beanId": "tanzania-bourbon-washed",
+    "name": "タンザニア キリマンジャロ ブルボン",
+    "origin": "タンザニア",
+    "variety": "ブルボン",
+    "processings": ["Washed"],
+    "flavorNotes": ["グレープフルーツ", "ダークチョコレート", "ワイン"],
+    "description": "キリマンジャロ山麓産。柑橘の明るい酸とダークチョコレートのコクが同居する、飲みごたえのある一杯。"
+  },
+  {
+    "beanId": "yemen-udaini-natural",
+    "name": "イエメン モカ マタリ",
+    "origin": "イエメン",
+    "variety": "ウダイニ",
+    "processings": ["Natural"],
+    "flavorNotes": ["ワイン", "レーズン", "スパイス", "ダークチョコレート"],
+    "description": "伝統的な天日乾燥による唯一無二のワイニーな風味特性。レーズンやスパイスの複雑さはモカならでは。"
+  },
+  {
+    "beanId": "indonesia-mandheling",
+    "name": "インドネシア マンデリン",
+    "origin": "インドネシア",
+    "variety": null,
+    "processings": ["Other"],
+    "flavorNotes": ["アーシー", "ハーブ", "ダークチョコレート", "スパイス"],
+    "description": "スマトラ島の伝統的なスマトラ式（ギリンバサ）精製。大地を思わせる重厚な質感と低い酸、ハーブ様の余韻が個性。"
+  },
+  {
+    "beanId": "indonesia-toraja-washed",
+    "name": "インドネシア トラジャ",
+    "origin": "インドネシア",
+    "variety": null,
+    "processings": ["Washed"],
+    "flavorNotes": ["スパイス", "黒糖", "アーシー"],
+    "description": "スラウェシ島トラジャ地方産。どっしりした質感と黒糖の甘さ、スパイスの香りが特徴の深煎り向き。"
+  },
+  {
+    "beanId": "india-monsooned-malabar",
+    "name": "インド モンスーンマラバール",
+    "origin": "インド",
+    "variety": null,
+    "processings": ["Other"],
+    "flavorNotes": ["スパイス", "アーシー", "スモーキー"],
+    "description": "季節風に生豆を晒す独特のモンスーニング製法。酸がほぼ消え、スモーキーで独特の風味特性になる。"
+  },
+  {
+    "beanId": "china-yunnan-catimor-washed",
+    "name": "中国 雲南 カティモール",
+    "origin": "中国",
+    "variety": "カティモール",
+    "processings": ["Washed"],
+    "flavorNotes": ["ブラウンシュガー", "プルーン", "ナッツ"],
+    "description": "近年品質向上が著しい雲南省産。黒糖系の甘さと果実の丸み、穏やかな酸で親しみやすい。"
+  },
+  {
+    "beanId": "jamaica-blue-mountain-washed",
+    "name": "ジャマイカ ブルーマウンテン",
+    "origin": "ジャマイカ",
+    "variety": "ティピカ",
+    "processings": ["Washed"],
+    "flavorNotes": ["ナッツ", "キャラメル", "フローラル"],
+    "description": "突出した個性よりも欠点のなさと調和が身上。滑らかな質感と上品な甘さ、静かな余韻が続く。"
+  },
+  {
+    "beanId": "hawaii-kona-typica-washed",
+    "name": "ハワイ コナ",
+    "origin": "ハワイ",
+    "variety": "ティピカ",
+    "processings": ["Washed"],
+    "flavorNotes": ["アーモンド", "メープルシロップ", "オレンジ"],
+    "description": "コナ地区の火山斜面で育つティピカ。メープルシロップのような甘さと柔らかい酸、クリーンな後味。"
+  },
+  {
+    "beanId": "png-arusha-washed",
+    "name": "パプアニューギニア アルーシャ",
+    "origin": "パプアニューギニア",
+    "variety": "アルーシャ",
+    "processings": ["Washed"],
+    "flavorNotes": ["アップル", "ハチミツ", "ハーブ"],
+    "description": "高地産らしい爽やかな酸とハチミツの甘さ。ハーブのニュアンスが後味に軽く残る。"
+  }
+]

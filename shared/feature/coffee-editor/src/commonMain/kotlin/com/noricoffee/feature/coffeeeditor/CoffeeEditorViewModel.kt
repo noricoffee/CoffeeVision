@@ -1,0 +1,793 @@
+package com.noricoffee.feature.coffeeeditor
+
+import com.noricoffee.domain.BrewMethod
+import com.noricoffee.domain.Cafe
+import com.noricoffee.domain.CoffeeRecord
+import com.noricoffee.domain.Photo
+import com.noricoffee.domain.ProcessingMethod
+import com.noricoffee.domain.RoastLevel
+import com.noricoffee.domain.TastingScores
+import com.noricoffee.repository.CafeRepository
+import com.noricoffee.repository.CoffeeRepository
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.update
+import kotlinx.coroutines.launch
+import kotlinx.datetime.Clock
+import kotlinx.datetime.LocalDate
+import kotlinx.datetime.TimeZone
+import kotlinx.datetime.todayIn
+
+/**
+ * コーヒー記録作成 / 編集画面の ViewModel。
+ *
+ * 新規作成（[Mode.Create]）と既存記録の編集（[Mode.Edit]）を 1 つの ViewModel で扱う。
+ *
+ * ## 状態の流れ
+ *
+ * - [onAppear] で [Mode] と userId を受け取り、初期 draft を設定する
+ * - フィールド更新メソッド群（`on<Field>Changed(...)` 等）で [UIState.draft] を更新する
+ * - [onSaveTapped] でバリデーション → [CoffeeRepository.save] → 成功時に [UIState.savedCoffeeId] に id を詰める
+ * - Swift 側は `onChange(of: viewModel.savedCoffeeId)` で非 null を検知して `dismiss()`
+ *
+ * ## Edit モードの初期化
+ *
+ * [Mode.Edit] の場合は [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得する。
+ * 継続購読にすると他端末更新が編集中の draft を上書きする事故が起き得るため、
+ * MVP では last-write-wins（`updatedAt = now` で上書き）で対処する。
+ *
+ * ## Duplicate モード（複製）の初期化
+ *
+ * [Mode.Duplicate] は複製元 [CoffeeRecord.id] を受け取り、[Mode.Edit] と同様に
+ * [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得して draft の初期値に展開する
+ * （`toDuplicateDraft`）。保存時は [Mode.Create] と同じく新規 id / createdAt を採番する（[buildRecord]）。
+ * 引き継ぐ項目・引き継がない項目は `docs/requirements.md` 2-10 を参照。
+ *
+ * ## cafe の任意化
+ *
+ * [CoffeeDraft.cafeName] が空のとき、cafe = null のレコード（セルフ抽出）として保存する。
+ * [validate] は cafeName 不要、name 必須のみを検証する。
+ *
+ * ## Places 選択カフェの座標 / 写真参照の引き継ぎ
+ *
+ * [onPlacesCafeSelected] は選択された [Cafe] を丸ごと内部プロパティ（`selectedCafe`）に保持する
+ * （表示用フィールドだけでなく `latitude` / `longitude` / `photoReferences` も含む）。
+ * [buildRecord] はこの `selectedCafe` があればその座標 / 写真参照を採用し、
+ * name / address / websiteUrl / mapsUrl は draft の編集値を優先する。
+ * [UIState.selectedPlaceId] は `selectedCafe?.placeId` から導出される表示用の派生値。
+ *
+ * ## 現在地カフェサジェスト（[Mode.Create] 専用）
+ *
+ * [onLocationAvailable] はプラットフォーム側から現在地座標が取得できたときに呼ぶ。
+ * [Mode.Create] かつ cafe 未選択（`draft.cafeName` が空）のときだけ [CafeRepository.searchNearby]
+ * を実行し、上位 3 件を [UIState.suggestedCafes] に反映する。カフェが選択されると
+ * （[onPlacesCafeSelected] / [onSuggestedCafeSelected] いずれも）チップは消える。
+ * Nearby 検索の失敗は無音（補助機能のため [UIState.error] には流さない）。
+ *
+ * ## タグサジェスト（要件 2-13）
+ *
+ * [onAppear] で [CoffeeRepository.observeAll] を継続購読し、全記録から集めたタグを使用回数降順
+ * （同数は昇順）で `allTagsByFrequency` に保持する。継続購読にする理由は、Firestore 同期が
+ * 完了する前にエディタを開くとローカル DB が空でサジェストが出ないまま固定されるため（後から
+ * 同期が終われば Flow の再 emit で埋まる）。
+ *
+ * [UIState.suggestedTags] は「付与済み除外 → [UIState.tagInput] で部分一致 → 上限 10 件」の順で
+ * `allTagsByFrequency` に適用した結果（[recomputeSuggestedTags]）。**絞り込みを先に行い、その後で
+ * 上限を適用する**順序が要点 — 逆順（先に上位 10 件を切ってから絞り込む）にすると 11 位以下の
+ * タグが検索しても永久に出せなくなる。再計算はタグ購読の emit / [onTagInputChanged] /
+ * [onTagAdded] / [onTagRemoved] / Edit・Duplicate の初期ロード完了、いずれのタイミングでも起こる。
+ *
+ * @param coffeeRepository コーヒー記録の永続化と取得を担うリポジトリ
+ * @param cafeRepository 現在地カフェサジェスト（Nearby 検索）を担うリポジトリ
+ * @param scope CoroutineScope。[com.noricoffee.AppContainer] の MainScope から注入する
+ */
+class CoffeeEditorViewModel(
+    private val coffeeRepository: CoffeeRepository,
+    private val cafeRepository: CafeRepository,
+    scope: CoroutineScope,
+) {
+
+    private val viewModelScope = CoroutineScope(
+        scope.coroutineContext + SupervisorJob(scope.coroutineContext[Job])
+    )
+
+    /**
+     * 画面の動作モードを表す sealed interface。
+     *
+     * - [Create]: 新規作成モード
+     * - [Edit]: 既存記録の編集モード
+     * - [Duplicate]: 既存記録を初期値にした複製モード（保存動作は [Create] と同一）
+     */
+    sealed interface Mode {
+        /** 新規作成モード。 */
+        data object Create : Mode
+
+        /**
+         * 既存記録の編集モード。
+         *
+         * @property coffeeId 編集対象の [CoffeeRecord.id]
+         */
+        data class Edit(val coffeeId: String) : Mode
+
+        /**
+         * 既存記録を複製元にした新規作成モード（要件 2-10）。
+         *
+         * 引き継ぐ: cafe / name / brewMethod / origin / region / variety / processing / roastLevel / cup / brewRecipe / tags。
+         * 引き継がない: rating（null = 未評価）/ notes（空）/ photos（空）/ tasting（null）。
+         * `visitedOn` は今日、保存時の id / createdAt は [Create] と同様に新規採番する。
+         *
+         * @property sourceCoffeeId 複製元の [CoffeeRecord.id]
+         */
+        data class Duplicate(val sourceCoffeeId: String) : Mode
+    }
+
+    /**
+     * 編集中の UI 値を保持する draft オブジェクト。
+     *
+     * cafe は任意 — cafeName が空のとき null cafe（セルフ抽出）で保存する。
+     *
+     * @property cafeName カフェ名（任意。空の場合はセルフ抽出として扱う）
+     * @property cafeAddress カフェ住所（任意）
+     * @property cafeWebsiteUrl カフェの Web サイト URL（任意）
+     * @property cafeMapsUrl カフェの Google Maps URL（任意）
+     * @property visitedOn 飲んだ日（デフォルトは今日）
+     * @property rating 評価（0.5..5.0（0.5 刻み）。null = 未評価（未評価のまま保存可。2026-07-12 B-4））
+     * @property notes 自由メモ（任意。最大 2000 文字）
+     * @property photos 写真アイテム一覧
+     * @property name コーヒー名（必須。最大 200 文字）
+     * @property brewMethod 抽出方法
+     * @property origin 産地（国名。空文字 = 未選択。`CoffeeOriginCatalog` からのドロップダウン選択値）
+     * @property region エリア / 農園（任意自由入力。空文字 = 未入力。origin から分離。2026-07-22 追加）
+     * @property variety 品種（任意）
+     * @property processing 精製方法（任意）
+     * @property roastLevel 焙煎度（任意）
+     * @property cup カップ（任意）
+     * @property brewRecipe 抽出レシピ（任意。自由メモ。最大 500 文字）
+     * @property tasting テイスティング 5 要素（null = 未記入。非 null = 5 要素すべてセット済み）
+     * @property tags ユーザー定義タグ（任意。空リスト = タグなし）
+     */
+    data class CoffeeDraft(
+        val cafeName: String,
+        val cafeAddress: String,
+        val cafeWebsiteUrl: String,
+        val cafeMapsUrl: String,
+        val visitedOn: LocalDate,
+        val rating: Double?,
+        val notes: String,
+        val photos: List<Photo> = emptyList(),
+        val name: String,
+        val brewMethod: BrewMethod,
+        val origin: String,
+        val region: String,
+        val variety: String,
+        val processing: ProcessingMethod?,
+        val roastLevel: RoastLevel?,
+        val cup: String,
+        val brewRecipe: String,
+        val tasting: TastingScores? = null,  // all-or-nothing: null = 未入力 / 非 null = 5 要素全セット
+        val tags: List<String> = emptyList(), // ユーザー定義タグ
+    )
+
+    /**
+     * コーヒー記録作成 / 編集画面の UI 状態。
+     *
+     * @property mode 現在の動作モード
+     * @property draft 編集中の UI 値
+     * @property isLoading Edit モードで初回ロード中かどうか
+     * @property isSaving 保存処理実行中かどうか
+     * @property error 直近の操作で発生したエラーメッセージ。[onErrorDismissed] で null に戻る
+     * @property savedCoffeeId 保存成功時に非 null になる。Swift 側はこれを監視して画面を dismiss する
+     * @property selectedPlaceId Places API 検索で選択したカフェの Google placeId（任意）。
+     *   内部で保持する選択済み [Cafe]（`selectedCafe`）の `placeId` を表示用に写した派生値
+     * @property suggestedCafes 現在地カフェサジェスト（最大 3 件）。[Mode.Create] かつ cafe 未選択の
+     *   ときだけ [onLocationAvailable] で反映される。カフェが選択されると空リストに戻る
+     * @property tagInput タグ入力欄の現在値。サジェストの絞り込みに使う（Swift の `@State` から移管）
+     * @property suggestedTags 過去の記録から集めたタグのサジェスト（使用回数降順 → 昇順、付与済み除外、
+     *   [tagInput] で部分一致、最大 10 件。要件 2-13）
+     */
+    data class UIState(
+        val mode: Mode = Mode.Create,
+        val draft: CoffeeDraft = defaultDraft(),
+        val isLoading: Boolean = false,
+        val isSaving: Boolean = false,
+        val error: String? = null,
+        val savedCoffeeId: String? = null,
+        val selectedPlaceId: String? = null,
+        val suggestedCafes: List<Cafe> = emptyList(),
+        val tagInput: String = "",
+        val suggestedTags: List<String> = emptyList(),
+    )
+
+    private val _state = MutableStateFlow(UIState())
+    val state: StateFlow<UIState> = _state.asStateFlow()
+
+    // Edit モードで取得した初期 CoffeeRecord。保存時に id / placeId / createdAt を引き出すために保持する。
+    private var currentInitialRecord: CoffeeRecord? = null
+
+    // onPlacesCafeSelected で選択された Cafe を丸ごと保持する（placeId / 座標 / photoReferences を含む）。
+    // buildRecord はこれを見つけたら座標 / photoReferences をこの値から採用する。onAppear でリセットする。
+    private var selectedCafe: Cafe? = null
+
+    // onAppear で受け取った userId を保持し、save / onAppear 内で使う。
+    private var currentUserId: String? = null
+
+    // Edit モードでの初回ロード Job。onAppear が複数回呼ばれた場合に前回を cancel する。
+    private var loadJob: Job? = null
+
+    // 保存 Job。保存中に再度 onSaveTapped が呼ばれた場合に前回を cancel する。
+    private var saveJob: Job? = null
+
+    // 現在地カフェサジェスト（Nearby 検索）Job。onLocationAvailable が複数回呼ばれた場合に前回を cancel する。
+    private var suggestionJob: Job? = null
+
+    // タグカタログ購読 Job（要件 2-13）。onAppear のたびに前回を cancel して再購読する。
+    private var tagCatalogJob: Job? = null
+
+    // 全記録から集めたタグ（使用回数降順 → 昇順）。tagCatalogJob の collect のたびに更新する。
+    private var allTagsByFrequency: List<String> = emptyList()
+
+    // --- ライフサイクル ---
+
+    /**
+     * 画面表示時に呼ぶ。[mode] と [userId] を受け取り初期 draft を設定する。
+     *
+     * - [Mode.Create]: draft を初期値にリセットする
+     * - [Mode.Edit]: [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得して draft を更新する
+     * - [Mode.Duplicate]: 複製元を [CoffeeRepository.observeById] の `.first()` で 1 回だけ取得し、
+     *   複製用の初期値（`toDuplicateDraft`）に展開する
+     */
+    fun onAppear(mode: Mode, userId: String) {
+        currentUserId = userId
+        loadJob?.cancel()
+        saveJob?.cancel()
+        suggestionJob?.cancel()
+        tagCatalogJob?.cancel()
+        selectedCafe = null
+
+        tagCatalogJob = viewModelScope.launch {
+            coffeeRepository.observeAll(userId).collect { records ->
+                allTagsByFrequency = records
+                    .flatMap { it.tags }
+                    .groupingBy { it }.eachCount()
+                    .entries
+                    .sortedWith(compareByDescending<Map.Entry<String, Int>> { it.value }.thenBy { it.key })
+                    .map { it.key }
+                recomputeSuggestedTags()
+            }
+        }
+
+        when (mode) {
+            is Mode.Create -> {
+                currentInitialRecord = null
+                _state.update {
+                    it.copy(
+                        mode = mode,
+                        draft = defaultDraft(),
+                        isLoading = false,
+                        selectedPlaceId = null,
+                        suggestedCafes = emptyList(),
+                        tagInput = "",
+                        suggestedTags = emptyList(),
+                    )
+                }
+            }
+            is Mode.Edit -> {
+                _state.update {
+                    it.copy(
+                        mode = mode,
+                        isLoading = true,
+                        selectedPlaceId = null,
+                        suggestedCafes = emptyList(),
+                        tagInput = "",
+                        suggestedTags = emptyList(),
+                    )
+                }
+                loadJob = viewModelScope.launch {
+                    val record = coffeeRepository.observeById(mode.coffeeId).first()
+                    if (record == null) {
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "コーヒー記録が見つかりませんでした",
+                            )
+                        }
+                    } else {
+                        currentInitialRecord = record
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                draft = record.toDraft(),
+                            )
+                        }
+                        recomputeSuggestedTags()
+                    }
+                }
+            }
+            is Mode.Duplicate -> {
+                _state.update {
+                    it.copy(
+                        mode = mode,
+                        isLoading = true,
+                        selectedPlaceId = null,
+                        suggestedCafes = emptyList(),
+                        tagInput = "",
+                        suggestedTags = emptyList(),
+                    )
+                }
+                loadJob = viewModelScope.launch {
+                    val record = coffeeRepository.observeById(mode.sourceCoffeeId).first()
+                    if (record == null) {
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                error = "複製元のコーヒー記録が見つかりませんでした",
+                            )
+                        }
+                    } else {
+                        currentInitialRecord = record
+                        _state.update {
+                            it.copy(
+                                isLoading = false,
+                                draft = record.toDuplicateDraft(),
+                            )
+                        }
+                        recomputeSuggestedTags()
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * 画面消去時に呼ぶ。進行中の load / save / タグカタログ購読 Job をすべてキャンセルする。
+     */
+    fun onDisappear() {
+        loadJob?.cancel()
+        saveJob?.cancel()
+        suggestionJob?.cancel()
+        tagCatalogJob?.cancel()
+    }
+
+    // --- フィールド更新（cafe 関連）---
+
+    /** カフェ名を更新する。 */
+    fun onCafeNameChanged(name: String) {
+        _state.update { it.copy(draft = it.draft.copy(cafeName = name)) }
+    }
+
+    /** カフェ住所を更新する。 */
+    fun onCafeAddressChanged(address: String) {
+        _state.update { it.copy(draft = it.draft.copy(cafeAddress = address)) }
+    }
+
+    /** カフェ Web サイト URL を更新する。 */
+    fun onCafeWebsiteUrlChanged(url: String) {
+        _state.update { it.copy(draft = it.draft.copy(cafeWebsiteUrl = url)) }
+    }
+
+    /** カフェ Google Maps URL を更新する。 */
+    fun onCafeMapsUrlChanged(url: String) {
+        _state.update { it.copy(draft = it.draft.copy(cafeMapsUrl = url)) }
+    }
+
+    // --- フィールド更新（記録本体）---
+
+    /** 飲んだ日を更新する。 */
+    fun onVisitedOnChanged(date: LocalDate) {
+        _state.update { it.copy(draft = it.draft.copy(visitedOn = date)) }
+    }
+
+    /** 評価を更新する（0.5..5.0、0.5 刻み）。null = 未評価。 */
+    fun onRatingChanged(rating: Double?) {
+        _state.update { it.copy(draft = it.draft.copy(rating = rating)) }
+    }
+
+    /** 自由メモを更新する。 */
+    fun onNotesChanged(text: String) {
+        _state.update { it.copy(draft = it.draft.copy(notes = text)) }
+    }
+
+    // --- フィールド更新（コーヒー属性）---
+
+    /** コーヒー名を更新する（必須フィールド）。 */
+    fun onNameChanged(name: String) {
+        _state.update { it.copy(draft = it.draft.copy(name = name)) }
+    }
+
+    /** 抽出方法を更新する。 */
+    fun onBrewMethodChanged(brewMethod: BrewMethod) {
+        _state.update { it.copy(draft = it.draft.copy(brewMethod = brewMethod)) }
+    }
+
+    /** 産地（国名）を更新する。`CoffeeOriginCatalog` からのドロップダウン選択値、または「その他」選択時の自由入力国名。 */
+    fun onOriginChanged(origin: String) {
+        _state.update { it.copy(draft = it.draft.copy(origin = origin)) }
+    }
+
+    /** 産地のエリア / 農園（任意自由入力）を更新する。 */
+    fun onRegionChanged(region: String) {
+        _state.update { it.copy(draft = it.draft.copy(region = region)) }
+    }
+
+    /** 品種を更新する。 */
+    fun onVarietyChanged(variety: String) {
+        _state.update { it.copy(draft = it.draft.copy(variety = variety)) }
+    }
+
+    /** 精製方法を更新する。null で「未設定」。 */
+    fun onProcessingChanged(processing: ProcessingMethod?) {
+        _state.update { it.copy(draft = it.draft.copy(processing = processing)) }
+    }
+
+    /** 焙煎度を更新する。null で「未設定」。 */
+    fun onRoastLevelChanged(roastLevel: RoastLevel?) {
+        _state.update { it.copy(draft = it.draft.copy(roastLevel = roastLevel)) }
+    }
+
+    /** カップを更新する。 */
+    fun onCupChanged(cup: String) {
+        _state.update { it.copy(draft = it.draft.copy(cup = cup)) }
+    }
+
+    /** 抽出レシピ（自由メモ。最大 500 文字）を更新する。 */
+    fun onBrewRecipeChanged(brewRecipe: String) {
+        _state.update { it.copy(draft = it.draft.copy(brewRecipe = brewRecipe)) }
+    }
+
+    // --- テイスティング要素更新（all-or-nothing）---
+
+    /**
+     * テイスティングを追加する（`+` ボタン相当）。
+     *
+     * `draft.tasting == null` のとき `TastingScores(5,5,5,5,5)` をデフォルト値として生成し、
+     * 5 スライダーを一度に表示できる状態にする。
+     * 既に tasting がある場合は no-op。
+     */
+    fun onTastingAdded() {
+        if (_state.value.draft.tasting == null) {
+            _state.update {
+                it.copy(draft = it.draft.copy(tasting = TastingScores(5, 5, 5, 5, 5)))
+            }
+        }
+    }
+
+    /**
+     * テイスティングをクリアする（削除ボタン相当）。
+     *
+     * `draft.tasting` を null に戻す。スライダーをすべて非表示にする。
+     */
+    fun onTastingCleared() {
+        _state.update { it.copy(draft = it.draft.copy(tasting = null)) }
+    }
+
+    /**
+     * 甘味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op（先に [onTastingAdded] を呼ぶ必要がある）。
+     */
+    fun onSweetnessChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(sweetness = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * ボディ（コク）を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onBodyChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(body = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 酸味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onAcidityChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(acidity = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 風味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onFlavorChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(flavor = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    /**
+     * 後味を更新する。非 null の Int のみ受け付ける。設定値は 1..10 にクランプされる。
+     *
+     * `draft.tasting == null` の場合は no-op。
+     */
+    fun onAftertasteChanged(value: Int) {
+        _state.update { state ->
+            state.draft.tasting?.let { t ->
+                state.copy(draft = state.draft.copy(tasting = t.copy(aftertaste = value.clampTasting())))
+            } ?: state
+        }
+    }
+
+    // --- タグ操作 ---
+
+    /**
+     * タグを追加する。
+     *
+     * [tag] を trim した結果が空または既に存在する場合は no-op。成功時は [UIState.tagInput] を
+     * 空に戻す（チップタップ経由の追加でも入力欄がクリアされる挙動に揃える）。
+     *
+     * @param tag 追加するタグ文字列（前後の空白は自動 trim される）
+     */
+    fun onTagAdded(tag: String) {
+        val trimmed = tag.trim()
+        if (trimmed.isBlank() || _state.value.draft.tags.contains(trimmed)) return
+        _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags + trimmed), tagInput = "") }
+        recomputeSuggestedTags()
+    }
+
+    /**
+     * タグを削除する。
+     *
+     * [tag] が存在しない場合は no-op。
+     *
+     * @param tag 削除するタグ文字列
+     */
+    fun onTagRemoved(tag: String) {
+        _state.update { it.copy(draft = it.draft.copy(tags = it.draft.tags - tag)) }
+        recomputeSuggestedTags()
+    }
+
+    /**
+     * タグ入力欄が変化したときに呼ぶ。[UIState.tagInput] を更新し [UIState.suggestedTags] を再計算する。
+     *
+     * @param text 入力欄の現在値
+     */
+    fun onTagInputChanged(text: String) {
+        _state.update { it.copy(tagInput = text) }
+        recomputeSuggestedTags()
+    }
+
+    /**
+     * [UIState.suggestedTags] を再計算する（要件 2-13）。
+     *
+     * `allTagsByFrequency`（使用回数降順 → 昇順）に対して
+     * 「付与済み除外 → [UIState.tagInput] で部分一致（大小文字無視） → 上限 [MAX_SUGGESTED_TAGS]（10）件」
+     * の順で適用する。**絞り込みを先に行い、その後で上限を適用する順序を変えないこと** —
+     * 逆順にすると 11 位以下のタグが検索しても永久に出せなくなる（要件 2-13 確定事項）。
+     */
+    private fun recomputeSuggestedTags() {
+        _state.update { state ->
+            val alreadyAttached = state.draft.tags.toSet()
+            val query = state.tagInput
+            val filtered = allTagsByFrequency
+                .asSequence()
+                .filter { it !in alreadyAttached }
+                .filter { query.isBlank() || it.contains(query, ignoreCase = true) }
+                .take(MAX_SUGGESTED_TAGS)
+                .toList()
+            state.copy(suggestedTags = filtered)
+        }
+    }
+
+    /**
+     * Places API 検索結果からカフェを選択した際に呼ぶ。
+     *
+     * [cafe] を丸ごと内部プロパティ（`selectedCafe`）に保持し（[buildRecord] が座標 / photoReferences の
+     * 引き継ぎに使う）、[cafe] の表示用フィールドで [UIState.draft] を上書きする。
+     * [UIState.selectedPlaceId] にも Google placeId を保持する（表示用の派生値）。
+     * カフェが選択されたので [UIState.suggestedCafes] は空にする（進行中の Nearby 検索も cancel する）。
+     *
+     * @param cafe Places API 検索から選択したカフェ情報
+     */
+    fun onPlacesCafeSelected(cafe: Cafe) {
+        selectedCafe = cafe
+        suggestionJob?.cancel()
+        _state.update {
+            it.copy(
+                draft = it.draft.copy(
+                    cafeName = cafe.name,
+                    cafeAddress = cafe.address ?: "",
+                    cafeWebsiteUrl = cafe.websiteUrl ?: "",
+                    cafeMapsUrl = cafe.mapsUrl ?: "",
+                ),
+                selectedPlaceId = cafe.placeId,
+                suggestedCafes = emptyList(),
+            )
+        }
+    }
+
+    /**
+     * 現在地カフェサジェストのチップをタップした際に呼ぶ。
+     *
+     * 挙動は [onPlacesCafeSelected] と完全に同一（サジェスト経由・検索経由を問わずカフェ選択の
+     * アクションを共通化する）。
+     *
+     * @param cafe サジェストチップに表示していたカフェ情報
+     */
+    fun onSuggestedCafeSelected(cafe: Cafe) {
+        onPlacesCafeSelected(cafe)
+    }
+
+    /**
+     * プラットフォーム側から現在地座標が取得できたときに呼ぶ。
+     *
+     * [Mode.Create] かつ [UIState.draft] の `cafeName` が空（cafe 未選択）のときだけ
+     * [CafeRepository.searchNearby] を実行し、上位 3 件を [UIState.suggestedCafes] に反映する。
+     * それ以外のモード、または既にカフェ名が入っている場合は no-op（位置情報の取得自体は
+     * プラットフォーム側の関心事のため、呼び出し側は条件を気にせず毎回呼んでよい）。
+     *
+     * 前回の Nearby 検索 Job が実行中の場合はキャンセルして新しい検索を起動する。
+     * 検索失敗時は無音（[UIState.error] は変更しない。サジェストは補助機能のため）。
+     *
+     * @param latitude 現在地の緯度
+     * @param longitude 現在地の経度
+     */
+    fun onLocationAvailable(latitude: Double, longitude: Double) {
+        if (_state.value.mode !is Mode.Create) return
+        if (_state.value.draft.cafeName.isNotBlank()) return
+
+        suggestionJob?.cancel()
+        suggestionJob = viewModelScope.launch {
+            try {
+                val results = cafeRepository.searchNearby(latitude, longitude).take(3)
+                if (_state.value.mode is Mode.Create && _state.value.draft.cafeName.isBlank()) {
+                    _state.update { it.copy(suggestedCafes = results) }
+                }
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                // 無音: サジェストは補助機能のため error には流さない（要件 2-8）
+            }
+        }
+    }
+
+    // --- 写真操作 ---
+
+    /**
+     * 写真アイテムを追加または更新する（upsert 挙動）。
+     */
+    fun onPhotoUpserted(item: Photo) {
+        _state.update { state ->
+            val existing = state.draft.photos.indexOfFirst { it.id == item.id }
+            val updated = if (existing >= 0) {
+                state.draft.photos.toMutableList().also { it[existing] = item }
+            } else {
+                state.draft.photos + item
+            }
+            state.copy(draft = state.draft.copy(photos = updated))
+        }
+    }
+
+    /**
+     * 写真アイテムを削除する。
+     */
+    fun onPhotoRemoved(id: String) {
+        _state.update { it.copy(draft = it.draft.copy(photos = it.draft.photos.filter { p -> p.id != id })) }
+    }
+
+    // --- 保存 ---
+
+    /**
+     * 保存ボタンタップ時に呼ぶ。バリデーション → [CoffeeRepository.save] を実行する。
+     *
+     * - バリデーション失敗時: [UIState.error] にメッセージを詰めて早期 return する
+     * - 保存成功時: [UIState.savedCoffeeId] に保存した record の id を詰める
+     * - 保存失敗時: [UIState.error] にメッセージを詰める
+     */
+    fun onSaveTapped() {
+        val userId = currentUserId ?: run {
+            _state.update { it.copy(error = "user not signed in") }
+            return
+        }
+
+        val draft = _state.value.draft
+        val errorMessage = validate(draft)
+        if (errorMessage != null) {
+            _state.update { it.copy(error = errorMessage) }
+            return
+        }
+
+        saveJob?.cancel()
+        saveJob = viewModelScope.launch {
+            _state.update { it.copy(isSaving = true) }
+            val record = buildRecord(draft, userId, _state.value.mode, currentInitialRecord, selectedCafe)
+            try {
+                coffeeRepository.save(record)
+                _state.update { it.copy(isSaving = false, savedCoffeeId = record.id, error = null) }
+            } catch (e: CancellationException) {
+                _state.update { it.copy(isSaving = false) }
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(isSaving = false, error = e.message ?: "保存に失敗しました") }
+            }
+        }
+    }
+
+    /**
+     * エラーバナー / ダイアログを閉じた際に呼ぶ。[UIState.error] を null に戻す。
+     */
+    fun onErrorDismissed() {
+        _state.update { it.copy(error = null) }
+    }
+
+    /**
+     * 画面破棄時に呼ぶ。内部の viewModelScope をキャンセルして全コルーチンを停止する。
+     *
+     * iOS Bridge の deinit または onDisappear で呼ぶこと。
+     * [onDisappear] は個別 Job（load / save）のキャンセルのみを行うのに対し、
+     * [clear] はスコープ全体を畳む。[clear] 後は [onDisappear] を呼んでも安全（no-op）。
+     * キャンセル後に [onAppear] が呼ばれた場合は no-op になる（スコープはキャンセル済み）。
+     */
+    fun clear() {
+        viewModelScope.cancel()
+    }
+
+    companion object {
+        /**
+         * 新規作成モードにおけるコーヒー名の初期値（要件 2-9）。編集可能。
+         * 複製モード（[Mode.Duplicate]）では使わない（複製元の `name` を引き継ぐ）。
+         */
+        const val DEFAULT_COFFEE_NAME: String = "本日のコーヒー"
+
+        /**
+         * [UIState.suggestedTags] の最大件数（要件 2-13 確定事項）。
+         * Swift Bridge からは参照されないため `private` に留める（lessons 2026-07-25: public companion
+         * メンバは Swift から参照されうる公開 API になるため、必要最小限のみ public にする）。
+         */
+        private const val MAX_SUGGESTED_TAGS: Int = 10
+
+        /**
+         * [CoffeeDraft] の初期値を返す。
+         * Create モードの初期 draft として、また onAppear 前のデフォルト値として使う。
+         *
+         * Swift 側は `CoffeeEditorViewModel.companion.defaultDraft()` として参照する
+         * （`iosApp/iosApp/Features/CoffeeEditor/CoffeeEditorViewModelBridge.swift`）ため、
+         * companion object の public メンバとして維持する（internal 化・移動は不可）。
+         */
+        fun defaultDraft(): CoffeeDraft = CoffeeDraft(
+            cafeName = "",
+            cafeAddress = "",
+            cafeWebsiteUrl = "",
+            cafeMapsUrl = "",
+            visitedOn = Clock.System.todayIn(TimeZone.currentSystemDefault()),
+            rating = null,
+            notes = "",
+            photos = emptyList(),
+            name = DEFAULT_COFFEE_NAME,
+            brewMethod = BrewMethod.HandDrip,
+            origin = "",
+            region = "",
+            variety = "",
+            processing = null,
+            roastLevel = null,
+            cup = "",
+            brewRecipe = "",
+            tasting = null,  // all-or-nothing: 初期状態は tasting なし
+            tags = emptyList(),
+        )
+    }
+}

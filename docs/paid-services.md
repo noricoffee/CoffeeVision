@@ -89,7 +89,7 @@ CoffeeVision が利用する外部サービスのうち、課金が発生する�
 
 - **Apple MapKit / Apple Maps POI**: ネイティブアプリでの MapKit 利用は無料。マップ表示・POI タップ自体には課金なし（POI 解決で Places `searchText` を叩いた時点で課金）
 - **Sign in with Apple**: Apple Developer Program 年会費以外の従量課金なし
-- **StoreKit のレビュー依頼（`AppStore.requestReview(in:)`、9-8）**: OS 提供の機能で課金なし。キルスイッチ用に Remote Config のキー（`review_prompt_enabled`）が 1 つ増えるが、**Remote Config は上表のとおり無料**でパラメータ数による課金もないため、コスト構造は不変（2026-08-01）
+- **StoreKit のレビュー依頼（`AppStore.requestReview(in:)`、要件 9-9）**: OS 提供の機能で課金なし。キルスイッチ用に Remote Config のキー（`review_prompt_enabled`）が 1 つ増えるが、**Remote Config は上表のとおり無料**でパラメータ数による課金もないため、コスト構造は不変（2026-08-01）
 - **Foundation Models（分析タブ 階層 3）**: Apple のオンデバイス LLM。API 課金なし
 - **CloudKit（未採用 / 写真クラウド保持の対抗案）**: private database はデータが**ユーザー自身の iCloud 容量**を消費するため、**開発者側の従量課金はゼロ**。iOS 単独リリース（Android はリリース対象外）なので選択肢になる。identity が iCloud アカウントになる副次効果があり、Firebase 匿名アカウントのままでも機種変更で写真が引き継がれる（要件 7-3 の制約を部分的に回避）。ただし KMP 共通層からは使えず iosApp 側 Swift 完結になる。**写真をクラウドに置くかを判断する段階で Firebase Storage と比較すること**（どちらを選んでも上記のリサイズが前提）
 

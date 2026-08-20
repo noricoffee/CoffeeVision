@@ -1,6 +1,6 @@
 # CoffeeVision 要件定義
 
-**1.0 リリース時点（2026-08-21）の仕様。** 各機能の実装状態を「1.0 に入っているか」で示す。それ以前の要件の変遷は git log と [`tasks-archive.md`](./tasks-archive.md) を参照。
+**1.0 リリース時点（2026-08-21）の仕様。** 各機能の実装状態を「1.0 に入っているか」で示す。それ以前の要件の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md) を参照。
 
 ## アプリ概要
 

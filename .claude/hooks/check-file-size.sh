@@ -19,9 +19,9 @@
 #     つく（アラーム疲れで仕組みが無効化される）。2026-07-25 に 2 段化。
 #
 #   - 対象外: docs/tasks/lessons.md（「昇格しても発生源として残す」設計）/
-#     docs/talks/（登壇資料でプロダクト仕様ではない）/ 凍結アーカイブ
-#     （*-archive.md。移送の受け皿なので閾値は意味を持たず、通読されず日付・ID で
-#     grep されるだけ。鳴らすとアラーム疲れで他 doc の警告まで読み飛ばす）
+#     docs/talks/（登壇資料でプロダクト仕様ではない）/ docs/archive/（凍結アーカイブ。
+#     移送の受け皿なので閾値は意味を持たず、通読されず日付・ID で grep されるだけ。
+#     鳴らすとアラーム疲れで他 doc の警告まで読み飛ばす）
 #
 # 非ブロッキング（警告のみ・exit 0）。閾値は下記 3 定数で調整可。
 set -euo pipefail
@@ -46,7 +46,7 @@ case "$rel" in
     action="責務ごとのファイル分割を検討してください（分割規約: docs/coding-conventions.md / .claude/rules/）。"
     ;;
   # 棚卸し対象外の docs（先に弾く）— 凍結アーカイブは移送の受け皿なので閾値を持たない
-  docs/tasks/lessons.md|docs/talks/*|docs/*-archive.md) exit 0 ;;
+  docs/tasks/lessons.md|docs/talks/*|docs/archive/*) exit 0 ;;
   # フロー型 docs（作業ログ）— 縮約より月次アーカイブが効く
   docs/implementation_note.md|docs/tasks.md)
     threshold=$FLOW_DOCS_THRESHOLD

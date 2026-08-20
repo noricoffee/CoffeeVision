@@ -341,4 +341,4 @@ CoffeeVision を初めてリリースしました。
 
 ## 変更履歴
 
-1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。
+1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。

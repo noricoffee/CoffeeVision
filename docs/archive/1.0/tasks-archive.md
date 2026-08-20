@@ -2,12 +2,12 @@
 
 > **⚠ このファイルは凍結済み。追記しない。**
 >
-> `1.0` リリース（2026-08-21）までに完了した実装タスクの記録を、`tasks.md` から**逐語のまま**移送したもの。live 側の [`tasks.md`](./tasks.md) には未完・バックログだけが残る。
+> `1.0` リリース（2026-08-21）までに完了した実装タスクの記録を、`tasks.md` から**逐語のまま**移送したもの。live 側の [`tasks.md`](../../tasks.md) には未完・バックログだけが残る。次のリリースでは `docs/archive/1.1/` のように新しいフォルダを切り、このフォルダには手を入れない。
 >
 > - **他 doc・コードコメントからの参照 ID はここを指す**。フェーズ番号（1〜19）・サブ ID（15-A / 17-D / B-4 / SR-1 / UX-1 / MP-1 / SW6-A / M-0 / ASO-1 / 12-D 等）は 200 箇所以上から名指しされる**不変の参照 ID** で、見出しテキストも移送時に変更していない
 > - **行数閾値（`curate-doc` skill / `check-file-size.sh`）は適用しない**。凍結 doc は通読されず ID と日付で grep されるため（`implementation-note-archive.md` と同じ扱い）
 > - 過去エントリへの訂正・方針転換はここに書かず、**現在日付の新エントリ**として live 側に書く
-> - 各タスクの設計判断は [`implementation_note.md`](./implementation_note.md) / [`implementation-note-archive.md`](./implementation-note-archive.md)、汎用の落とし穴は [`tasks/lessons.md`](./tasks/lessons.md)、行単位の作業記録は git 履歴が正
+> - 各タスクの設計判断は [`implementation_note.md`](../../implementation_note.md) / [`implementation-note-archive.md`](./implementation-note-archive.md)、汎用の落とし穴は [`tasks/lessons.md`](../../tasks/lessons.md)、行単位の作業記録は git 履歴が正
 >
 > 末尾に **付録: Phase 1〜初期の PR 振り返りログ**（旧 `tasks/pr-log.md`、2026-06-25 に凍結済み）を収録している。
 
@@ -449,9 +449,9 @@
 >
 > 変更は 24 ファイル。**ViewModel ブリッジ 8 本 = `isolated deinit`（SE-0371）/ Kotlin interface 実装 8 本 = `nonisolated`（可変キャッシュは `OSAllocatedUnfairLock` + `@unchecked Sendable`）/ `PhotoFileStore.loadThumbnail` = `@concurrent` / デリゲート 2 本 = `MainActor.assumeIsolated`**。`@preconcurrency import SharedLogic` の追加は 3 ファイルに限定（移行前から 4 ファイルに存在）。
 >
-> **判断の根拠・使い分けの軸・計測方法の落とし穴は [`implementation_note.md`](./implementation_note.md) 2026-08-08 が正本**。規約への昇格先は [`coding-conventions.md`](./coding-conventions.md) §2.5 / [`kmp-bridge.md`](./kmp-bridge.md)「Swift 6 の並行性境界」/ `.claude/rules/swift-ios.md`。
+> **判断の根拠・使い分けの軸・計測方法の落とし穴は [`implementation_note.md`](../../implementation_note.md) 2026-08-08 が正本**。規約への昇格先は [`coding-conventions.md`](../../coding-conventions.md) §2.5 / [`kmp-bridge.md`](../../kmp-bridge.md)「Swift 6 の並行性境界」/ `.claude/rules/swift-ios.md`。
 >
-> **残務は実機目視のみ**（[`verification-checklist.md`](./tasks/verification-checklist.md) へ移送済み）。特に `CoffeeInsightProviderIosImpl` の `nonisolated` 化で**オンデバイス LLM 推論がメインスレッドから外れた**副次効果の確認が要る。
+> **残務は実機目視のみ**（[`verification-checklist.md`](../../tasks/verification-checklist.md) へ移送済み）。特に `CoffeeInsightProviderIosImpl` の `nonisolated` 化で**オンデバイス LLM 推論がメインスレッドから外れた**副次効果の確認が要る。
 
 #### Swift 6 移行で発見した別件（2026-08-08 起票）
 
@@ -521,7 +521,7 @@
 
 #### data-model.md 棚卸しの是正（2026-07-25 起票 / 完了）
 
-> `docs/data-model.md` をコードと突き合わせた棚卸し。**3 段**で実施し全て完了: ①陳腐化チェック（陳腐化 6 件是正 + 欠落 2 件補完。commit `4ae4885`）②縮約 1246 → 901 行（ソースの逐語コピーと経緯を排除。基準は doc 前文に明文化。commit `bc21dec`）③分析系 3 節を [`analysis-model.md`](./analysis-model.md) へ分離（data-model 901 → 708 行 + 新 doc 231 行。旧番号はリダイレクト表を残し、live pointer のみ張り替え = docs 24 + KDoc 19 箇所）。
+> `docs/data-model.md` をコードと突き合わせた棚卸し。**3 段**で実施し全て完了: ①陳腐化チェック（陳腐化 6 件是正 + 欠落 2 件補完。commit `4ae4885`）②縮約 1246 → 901 行（ソースの逐語コピーと経緯を排除。基準は doc 前文に明文化。commit `bc21dec`）③分析系 3 節を [`analysis-model.md`](../../analysis-model.md) へ分離（data-model 901 → 708 行 + 新 doc 231 行。旧番号はリダイレクト表を残し、live pointer のみ張り替え = docs 24 + KDoc 19 箇所）。
 > 副産物のバグ（エクスポートが `region` を落とす）は commit `bbf51c6` で修正済み。判断の経緯は implementation_note 2026-07-25、教訓は lessons 2026-07-25。
 
 | 状態 | タスク | 備考 |
@@ -541,7 +541,7 @@
 
 #### docs / 設計判断バックログ（後回し可）
 
-> 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない。必要になったフェーズで着手する（経緯は [`tasks/lessons.md`](./tasks/lessons.md) 2026-06-16 エントリ）。
+> 2026-06-16 の docs 全体精査で洗い出した中・低優先の項目。いずれも今すぐ直さないと害が出る種類ではない。必要になったフェーズで着手する（経緯は [`tasks/lessons.md`](../../tasks/lessons.md) 2026-06-16 エントリ）。
 > 完了済み（2026-07-09 縮約）: B-3（07-01 requirements の API キー記述修正）/ B-5（07-08 CI グリーン確認）/ B-6（07-07 Persona テストの Native `.format` 置換で domain iOS テスト回復）/ B-7（07-09 `AccountViewModelTest` の `vm.clear()` + drain）/ D-2（07-04 architecture 書き込みフロー現行化）/ E-1（07-09 フェーズ 5.2 で成立）。F-1 はカテゴリ 4「リリース前バックログ」へ移管。詳細は git 履歴 / lessons。
 > 追記（2026-07-12 実態突き合わせで解消確認）: B-2（「主要 VM が未テスト」が陳腐化 — 8 VM 中 7 つに commonTest あり、規約と実態の乖離は解消。未テストは `CoffeeDetailViewModel` のみ）/ C-1（「core 暫定置き場」運用は消滅 — 全 VM が最初から `shared/feature/*` 配下に配置済み）。
 
@@ -571,7 +571,7 @@
 >
 > 検討して見送った案（2026-07-27）: ① ロースト ランプ流用（訪問済み = イタリアン / おすすめ = ハイ）→ イタリアン #3A230D はダーク地図で 1.06:1 と同化、ハイ #8A715C は accent #8B5A2B と輝度 1.28:1 でほぼ同色。2026-07-18 に burnt orange が「訪問済みの茶と誤認」で orange へ戻した経緯の再演になるため不採用。② curated を mint 等の寒色へ変更 → まず①のフチ調整だけで足りるか見る（ユーザー判断）。
 >
-> MP-1 の目視確認後、**6 ピン全体でフチが不揃い**（当時 3/6 のみ）と判明したため MP-2 で統一（2026-07-27 ユーザー決定）。規則は ui-ux-guidelines「ピンの意匠ルール」に昇格、教訓と sweep 結果は [`tasks/lessons.md`](./tasks/lessons.md) 2026-07-27。
+> MP-1 の目視確認後、**6 ピン全体でフチが不揃い**（当時 3/6 のみ）と判明したため MP-2 で統一（2026-07-27 ユーザー決定）。規則は ui-ux-guidelines「ピンの意匠ルール」に昇格、教訓と sweep 結果は [`tasks/lessons.md`](../../tasks/lessons.md) 2026-07-27。
 
 | 状態 | ID | タスク | リスク |
 |------|----|------|--------|
@@ -706,7 +706,7 @@
 
 ### リリース前バックログ
 
-> 2026-07-09 の再編で新設。App Store 提出前に完了が必須の残タスクを集約する（移管元: 12-A / docs 設計判断バックログ F-1）。提出用の原稿・プライバシー申告・提出前チェックリストは [`app-store-metadata.md`](./app-store-metadata.md) が正。
+> 2026-07-09 の再編で新設。App Store 提出前に完了が必須の残タスクを集約する（移管元: 12-A / docs 設計判断バックログ F-1）。提出用の原稿・プライバシー申告・提出前チェックリストは [`app-store-metadata.md`](../../app-store-metadata.md) が正。
 >
 > **2026-08-11 に App Store 審査へ提出**（ビルドは `68a2e0d` / release-testflight run 31322321387 = 2026-08-10 00:53 JST。提出前チェックリストは全項目消し込み済み）。下 2 行は**提出後の状況レビューで見つかった積み残し**で、いずれも「方針は decided だが実施記録が無い」型だった。
 
@@ -733,7 +733,7 @@
 
 > **2026-08-01 現在: 残る ASO-4 / ASO-5 / ASO-7 は保留**（ユーザー判断）。実装系は ASO-1（レビュー依頼）と ASO-6（★1 リスクの期待値管理）が完了、ASO-2 は原稿確定済み（残るは ASC 転記）、ASO-3 は取り下げ。**保留 3 件はここまでとは性格が違い**、ASO-4 は動画・スクショの素材制作、ASO-5 は Widget / App Intents という新機能追加、ASO-7 は In-App Events 等のストア運用で、いずれも「既存コードの手直し」では済まない。優先度が上がった時点で再検討する。
 >
-> 「App Store で上位を狙うのに何が足りないか」の棚卸しから起票。**狙う土俵はカテゴリ総合ではなく検索キーワードでの上位**（フード/ドリンク総合は大手チェーン・デリバリーの枠）。機能面は作り込まれている一方、「見つけられる / 選ばれる / 続けてもらう / 評価される」の 4 系統が手つかずだった。原稿・申告の正は [`app-store-metadata.md`](./app-store-metadata.md)。
+> 「App Store で上位を狙うのに何が足りないか」の棚卸しから起票。**狙う土俵はカテゴリ総合ではなく検索キーワードでの上位**（フード/ドリンク総合は大手チェーン・デリバリーの枠）。機能面は作り込まれている一方、「見つけられる / 選ばれる / 続けてもらう / 評価される」の 4 系統が手つかずだった。原稿・申告の正は [`app-store-metadata.md`](../../app-store-metadata.md)。
 >
 > **実測した欠落**（2026-07-27 に grep で確認）: `requestReview` / `SKStoreReview` = **0 件** / `UserNotifications` `FirebaseMessaging` = 0 件 / `WidgetKit` `AppIntent` `CoreSpotlight` = 0 件 / `.xcstrings` `.lproj` = 0 件（`String(localized:)` のキーが日本語のまま = 英語化にはカタログ整備が必要）。
 
@@ -750,12 +750,12 @@
 #### BeanProfile 初期データ整備（2026-07-08）
 
 > 完了分（2026-07-08）: seed データ `scripts/seed/bean-profiles.json`（主要産地 38 件・日本語表記統一・flavorNotes 統一語彙 42 語 = data-model.md §3.2）+ 冪等 upsert スクリプト `seed-bean-profiles.mjs` + README。`--dry-run` バリデーション全通過。確定仕様（grilling で親確定）と経緯は implementation_note 2026-07-08 エントリ。
-> **本番 Firestore への投入は 2026-07-30 にユーザー実行済み（38 件）**。残る目視は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) 15-E-3。seed がカバーするのは `CoffeeOriginCatalog` 43 か国のうち **21 産地**で、ベトナム / メキシコ 等 22 か国は未カバー（`bestOrigin` がそこに落ちると投入済みでも両セクションが空になる = 確認時の誤判定要因）。
+> **本番 Firestore への投入は 2026-07-30 にユーザー実行済み（38 件）**。残る目視は [`tasks/verification-checklist.md`](../../tasks/verification-checklist.md) 15-E-3。seed がカバーするのは `CoffeeOriginCatalog` 43 か国のうち **21 産地**で、ベトナム / メキシコ 等 22 か国は未カバー（`bestOrigin` がそこに落ちると投入済みでも両セクションが空になる = 確認時の誤判定要因）。
 
 #### フェーズ 18: Firebase テレメトリ導入（Crashlytics / Analytics / Performance、2026-07-08 起票）
 
 > 実装完了（2026-07-08）: iOS のみ。**Crashlytics + Performance = 常時収集（同意不要）、Analytics = `analyticsConsent` 同意時のみ**（`Info.plist` で起動時 OFF → `AppState.applyTelemetryConsent` で有効化。IDFA 非依存で ATT 不要を維持）。SPM 3 プロダクト追加 + dSYM アップロード build phase + `.trackScreen` modifier（4 タブ + 主要画面）+ `PrivacyInfo.xcprivacy` 宣言まで実装済み、override 無しビルド成功。全体の Required Reason API 監査は「リリース前バックログ」の F-1。経緯は implementation_note 2026-07-08、プライバシー申告は app-store-metadata.md 6.1/6.3。
-> 目視: Analytics の consent gating と `screen_view` 発火は 2026-07-21 確認済み。**残る Crashlytics / Performance のコンソール観察は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md)「フェーズ18 の残務」**。
+> 目視: Analytics の consent gating と `screen_view` 発火は 2026-07-21 確認済み。**残る Crashlytics / Performance のコンソール観察は [`tasks/verification-checklist.md`](../../tasks/verification-checklist.md)「フェーズ18 の残務」**。
 
 ### 完了
 

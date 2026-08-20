@@ -1,6 +1,6 @@
 # CoffeeVision アーキテクチャ
 
-> 2026-06-19 に集約ルートを `Visit`（カフェ訪問）から `CoffeeRecord`（コーヒー 1 杯）へ再設計済み（クリーンブレイク。旧名との対応・経緯は git 履歴と `implementation_note.md` 2026-06-19 エントリ参照）。本ドキュメントの例文・スニペットは現行の `Coffee*` 系に更新済み。最新のデータ表現は [`data-model.md`](./data-model.md) を真とする。
+> データ表現は [`data-model.md`](./data-model.md) を真とする。
 
 > **この doc に書くこと / 書かないこと**（2026-07-25 の棚卸しで確定。589 → 434 行に縮約した際の基準）
 > - **書く**: モジュールの責務と依存方向、レイヤーの役割、データフロー（読み書きの順序と Source of Truth）、配布戦略、方針レベルの決め事（なぜこの構成か）。**構造を示す ASCII 図はここが正本**
@@ -29,7 +29,7 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ ネイティブ UI** 構成を
 
 ### 現状
 
-旧 `sharedLogic` 一枚モジュールを Phase 2.5（2026-06-08）で基盤レイヤーに分割し、その後 Phase 3 / 3.5 / 4 で `feature/*` と `data-places` を順次切り出した。構成は **基盤層（`core` / `domain` / `data-*`）+ feature 層（1 画面 = 1 モジュール、画面追加ごとに増える）+ `framework`（iOS Umbrella）+ アプリ層** という固定パターン。**モジュールの正確な一覧と件数は `settings.gradle.kts` を真とする**（このツリーは構造を示すための代表例で、feature の網羅列挙はしない）。
+構成は **基盤層（`core` / `domain` / `data-*`）+ feature 層（1 画面 = 1 モジュール、画面追加ごとに増える）+ `framework`（iOS Umbrella）+ アプリ層** という固定パターン。**モジュールの正確な一覧と件数は `settings.gradle.kts` を真とする**（このツリーは構造を示すための代表例で、feature の網羅列挙はしない）。
 
 ```
 coffeevision/
@@ -54,10 +54,12 @@ coffeevision/
 ├── sharedUI/                             # Compose Multiplatform（Android 検証用、feature/coffee-list を 1 画面表示）
 ├── iosApp/
 │   └── iosApp/
-│       ├── App/                          # @main・AppContainer 構築・Firebase 初期化
+│       ├── iOSApp.swift / AppState.swift / RootTabView.swift   # @main・AppContainer 構築・Firebase 初期化・タブ構成（直下）
 │       ├── Features/                     # SwiftUI View + ViewModelBridge（feature ごと）
+│       ├── Components/                   # 複数 Feature で使う共通 View
 │       ├── FirebaseRepositories/         # domain の Repository インターフェースの iOS 実装（Swift）+ FlowBridge.swift（Flow ヘルパ）
-│       └── Utilities/ ほか               # PhotoFileStore / LocationManager 等（ViewModelBridge は Features/<Name>/ 配下に同居）
+│       ├── Ads/                          # AdMob バナー（View 層完結）
+│       └── Utilities/ / PreviewSupport/  # PhotoFileStore / LocationManager 等（ViewModelBridge は Features/<Name>/ 配下に同居）
 │
 └── androidApp/                           # Android エントリポイント（検証ターゲット、リリース対象外、最小実装で維持）
     └── src/main/kotlin/
@@ -165,7 +167,7 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 
 ### モジュール分割の運用ルール
 
-段階的移行（旧 `sharedLogic` → 現行構成）は Phase 2.5〜4（2026-06-08〜06-15）で**完了済み**（経緯は git 履歴と `tasks.md` の該当フェーズサマリ参照）。以後、新しいモジュール（主に feature）を追加するときは以下を守る:
+新しいモジュール（主に feature）を追加するときは以下を守る:
 
 - 分割・追加は機能追加と別 PR / 別コミットにする
 - 追加直後に必ず `./gradlew :shared:framework:assembleSharedLogicXCFramework` と `./gradlew :androidApp:assembleDebug` が通ることを確認する
@@ -179,7 +181,7 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 本プロジェクトは iOS のみリリースを想定していますが、KMP のモジュール分割アーキテクチャが両プラットフォームで成立することを実証するため、
 Android ターゲットを **「常にビルドが通り、共通 ViewModel を最小 UI で動かせる状態」** で維持します。
 
-- **CI**: PR 単位で iOS / Android 両方のビルドを実行。`./gradlew :shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）と `./gradlew testAndroidHostTest :androidApp:assembleDebug`（Android ジョブ）を必須チェックにする。**テストはモジュールを個別列挙せず `testAndroidHostTest` のタスク名のみで指定する**（列挙すると新規 feature のテストが CI から静かに漏れるため。2026-07-25）。iOS ジョブは Kotlin/Native リンクまでで、`xcodebuild`（Swift 側）と `iosSimulatorArm64Test` は CI 対象外＝親のローカル検証（`verify-kmp-ios` skill）が担保する
+- **CI**: PR 単位で iOS / Android 両方のビルドを実行。`./gradlew :shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）と `./gradlew testAndroidHostTest :androidApp:assembleDebug`（Android ジョブ）を必須チェックにする。**テストはモジュールを個別列挙せず `testAndroidHostTest` のタスク名のみで指定する**（列挙すると新規 feature のテストが CI から静かに漏れるため）。iOS ジョブは Kotlin/Native リンクまでで、`xcodebuild`（Swift 側）と `iosSimulatorArm64Test` は CI 対象外＝親のローカル検証（`verify-kmp-ios` skill）が担保する
 - **Android UI スコープ**: `feature/coffee-list` を Compose で表示する 1 画面のみ。編集・検索・写真撮影は実装しない
 - **共通レイヤーの完全性**: `data-firebase` の Android 実装は読み取り（`observe`）まで実装し、iOS 側 Swift 実装と同じインターフェース契約を満たすことを示す
 - **依存追従**: Kotlin / KMP / AGP / Compose は年 2〜3 回のメジャー追従までを許容範囲とする。Android 検証が壊れた場合は最優先で復旧する
@@ -262,7 +264,7 @@ Bridge の生存スコープは、タブ常駐画面 = `AppState` で 1 つ保�
 
 SwiftUI View は ViewModel を `@State` または `@Bindable` で保持し、状態の読み出しのみを行います。
 
-### Android（当面は対象外）
+### Android（リリース対象外）
 
 実装時は `androidx.lifecycle.ViewModel` でラップする想定。共通の `UIState` をそのまま利用できる設計を維持します。
 
@@ -323,7 +325,7 @@ ViewModel が UIState を更新 → View が再描画
 - オフライン時の再送は Firestore SDK のオフライン永続化が引き受ける（独自の同期キューは書かない）
 - **読み取り側（`observeChanges`）の失敗の扱いは `WritePolicy` とは別**: 回復不能な失敗では **Flow を例外で終了させる**のが両プラットフォーム共通の契約（インターフェースの KDoc が正本）。`startSync` はそれを catch して**同期だけ止め、リトライしない**（`permission-denied` は非一時的）。ローカル DB が Source of Truth なので閲覧・記録は動き続ける
 - 削除・更新も同じパターンで、UI は常にローカルの最新状態を見る
-- **`SavedCafe`（フェーズ 15-A）も同型の合成**: `SavedCafeRepositoryImpl`（`shared/core`）が local + `RemoteSavedCafeDataSource` を合成し、読み取り・書き込み・reconciliation とも本節と同じパターン（`WritePolicy` も `CoffeeRepositoryImpl` と共用）
+- **`SavedCafe` も同型の合成**: `SavedCafeRepositoryImpl`（`shared/core`）が local + `RemoteSavedCafeDataSource` を合成し、読み取り・書き込み・reconciliation とも本節と同じパターン（`WritePolicy` も `CoffeeRepositoryImpl` と共用）
 
 ---
 
@@ -340,7 +342,7 @@ ViewModel が UIState を更新 → View が再描画
 - **プラットフォーム別 SDK が要る依存は外から受け取る**（`RemoteCoffeeDataSource` / `AuthRepository` / Places API キー等）。`AppContainer` 自身は `commonMain` で SDK に触らない
 - コンストラクタは 3 系統: **scope 引数ありのプライマリ = テスト専用** / scope なしセカンダリ 2 つ（iOS = `coffeeInsightProvider` 注入 / Android = 省略）。SKIE がデフォルト引数を Swift に出さないため
 - 合成は `AppContainer` の中で完結させ、**UI には合成後の 1 本だけ見せる**（`CoffeeRepositoryImpl(local, remote)` 等）
-- 起動シーケンス（匿名サインイン → uid 確定 → 同期購読）は `startInitialSync()` の 1 メソッドに閉じる。**停止側 `stopSync()` と対で使う**（`startInitialSync()` は冒頭で `stopSync()` を呼ぶので冪等）。同期購読はアプリ生存期間の `scope` に直接 launch する唯一の経路なので、**`Job` は `AppContainer` が保持する**。サインアウト / アカウント削除時に `stopSync()` を呼ばないと旧 uid の購読が残り、Firestore Rules（`request.auth.uid == uid`）により必ず `permission-denied` になる（2026-08-09 に修正。implementation_note SR-4）
+- 起動シーケンス（匿名サインイン → uid 確定 → 同期購読）は `startInitialSync()` の 1 メソッドに閉じる。**停止側 `stopSync()` と対で使う**（`startInitialSync()` は冒頭で `stopSync()` を呼ぶので冪等）。同期購読はアプリ生存期間の `scope` に直接 launch する唯一の経路なので、**`Job` は `AppContainer` が保持する**。サインアウト / アカウント削除時に `stopSync()` を呼ばないと旧 uid の購読が残り、Firestore Rules（`request.auth.uid == uid`）により必ず `permission-denied` になる（経緯は implementation_note 2026-08-09 SR-4）
 - **ViewModel ファクトリは `shared/framework` の拡張関数**（`core → feature` の循環依存を避けるため）
 
 - `SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。

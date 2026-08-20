@@ -142,7 +142,7 @@ data class Cafe(
 
 ## 1.3a CoffeeOriginCatalog（産地の国ドロップダウン）
 
-`CoffeeRecord.origin` を自由入力から**国ドロップダウン選択**に変更するための、コーヒー生産国の**日本語国名カタログ**。記録入力の手間削減が目的（[`requirements.md`](./requirements.md) 2-1）。
+`CoffeeRecord.origin` の選択肢となる、コーヒー生産国の**日本語国名カタログ**。自由入力ではなくドロップダウン選択にしているのは記録入力の手間を削るため（[`requirements.md`](./requirements.md) 2-1）。
 
 **配置**: `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/CoffeeOriginCatalog.kt`
 

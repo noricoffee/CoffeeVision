@@ -418,9 +418,9 @@ ViewModel が UIState を更新 → View が再描画
 | HTTP | Ktor Client（iOS = Darwin / Android = OkHttp エンジン） | `shared/data-places` |
 | Swift interop | SKIE（suspend / Flow / sealed の Swift 露出改善） | `shared/framework` |
 | オンデバイス LLM | Foundation Models（iOS 専用。分析タブの言語化のみ） | `iosApp` |
-| 広告 | Google Mobile Ads（AdMob。SPM。ネイティブ広告 + ATT） | `iosApp` |
+| 広告 | Google Mobile Ads（AdMob。SPM。**アダプティブバナー** + ATT。UMP は内部依存としてリンクされるのみ） | `iosApp` |
 | テレメトリ | Firebase Crashlytics / Performance（常時）/ Analytics（同意時のみ） | `iosApp` |
-| リモート設定 | Firebase Remote Config（POI 除外キーワードの外部注入） | `iosApp` |
+| リモート設定 | Firebase Remote Config（POI 除外キーワード / レビュー依頼のキルスイッチ） | `iosApp` |
 | iOS UI | SwiftUI（標準） | `iosApp` |
 | Android UI | Compose Multiplatform（検証用 1 画面のみ） | `sharedUI` / `androidApp` |
 

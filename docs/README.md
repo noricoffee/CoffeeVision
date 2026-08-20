@@ -13,7 +13,7 @@ CoffeeVision の設計・仕様・運用ドキュメントの置き場。ここ�
 
 - **[implementation-note-archive.md](./implementation-note-archive.md)** — `implementation_note.md` から切り出した**凍結済み**の過去分（2026-06 / 2026-07 / 2026-08 = 1.0 リリースまでの全エントリ）を月見出しで格納。追記しない。他 doc の「implementation_note 2026-0X-XX」参照はここを指す。切り出しの運用ルールは `implementation_note.md`「アーカイブ」節。
 - **[tasks-archive.md](./tasks-archive.md)** — `tasks.md` から切り出した**凍結済み**の完了タスク（1.0 リリースまで）+ 付録として Phase 1〜初期の PR 振り返りログ（旧 `tasks/pr-log.md`）。追記しない。**フェーズ番号・サブ ID（15-A / SR-1 / UX-1 等）の名指し参照はここを指す**。
-- **[admob-setup-todo.md](./admob-setup-todo.md)** — AdMob 本番ユニット発行のユーザー作業手順（**一時ファイル・git 非追跡**。完了後に削除）。実装側の切替手順の正本は `iosApp/Configuration/README.md`。
+- **[admob-setup-todo.md](./admob-setup-todo.md)** — AdMob 本番ユニットの ID 控え（**git 非追跡**）。実装側の切替手順の正本は `iosApp/Configuration/README.md`。
 
 ## tasks/ — 進捗と学び
 
@@ -23,7 +23,7 @@ CoffeeVision の設計・仕様・運用ドキュメントの置き場。ここ�
 
 ## legal/ — 法務ページ原稿
 
-- **[legal/privacy-policy.html](./legal/privacy-policy.html)** / **[legal/support.html](./legal/support.html)** — プライバシーポリシー / サポートページの起草（HTML）。公開・URL 化・プレースホルダ差し替えの残作業は `app-store-metadata.md` と `tasks.md`「リリース準備」を参照。
+- **[legal/privacy-policy.html](./legal/privacy-policy.html)** / **[legal/support.html](./legal/support.html)** — プライバシーポリシー / サポートページの本文（HTML）。**GitHub Pages で公開中**（`.github/workflows/pages.yml` が `docs/legal/` のみを配信し、設計 doc は Web 公開しない）。URL は `app-store-metadata.md` §6.4。収集項目や第三者 SDK を変える変更では §6.1 / §6.3 / `PrivacyInfo.xcprivacy` と 4 点セットで整合を取る。
 
 ## talks/ — 登壇資料
 

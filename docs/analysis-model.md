@@ -212,7 +212,7 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 ---
 
-## 3. UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8・フェーズ 15-E-3）
+## 3. UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8）
 
 好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計（永続化しない）。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
 

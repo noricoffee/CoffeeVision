@@ -105,13 +105,13 @@ data class Cafe(
     val photoReferences: List<String>,    // Places の photo_reference
     val websiteUrl: String?,
     val mapsUrl: String?,
-    // --- Places API 取得時のみ利用する表示用フィールド（フェーズ 10-B 追加。永続化しない）---
+    // --- Places API 取得時のみ利用する表示用フィールド（永続化しない）---
     val openNow: Boolean? = null,                        // 営業中か（currentOpeningHours.openNow）
     val weekdayDescriptions: List<String> = emptyList(), // 曜日別営業時間の表示文字列
     val phoneNumber: String? = null,                     // 電話番号（nationalPhoneNumber）
     val priceLevel: String? = null,                      // 価格帯（PRICE_LEVEL_* 文字列）
     val googleRating: Double? = null,                    // Google 上の評価
-    val userRatingCount: Int? = null,                    // Google 上の評価件数（フェーズ 16 追加）
+    val userRatingCount: Int? = null,                    // Google 上の評価件数
     // --- 永続化する（宣言順は末尾だが揮発フィールドではない。下記注記）---
     val photoAttributions: List<String> = emptyList(),   // Places 写真の作者名
 )
@@ -119,7 +119,7 @@ data class Cafe(
 
 > `CoffeeRecord.cafe` が null の場合はカフェに紐づかないセルフ抽出を表す。
 
-> **永続化されるのは次のフィールド**（★ この列挙が正本。他の節・コードコメントは件数を書かずここを参照する — 加算されるたびに全箇所の件数がまとめて嘘になるため。2026-08-11 制定）: `placeId` / `name` / `address` / `latitude` / `longitude` / `photoReferences` / `websiteUrl` / `mapsUrl` / **`photoAttributions`**。フェーズ 10-B で追加した `openNow` / `weekdayDescriptions` / `phoneNumber` / `priceLevel` / `googleRating` とフェーズ 16 で追加した `userRatingCount` は Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面・マップ下部カードの表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
+> **永続化されるのは次のフィールド**（★ この列挙が正本。他の節・コードコメントは件数を書かずここを参照する — 加算されるたびに全箇所の件数がまとめて嘘になるため。2026-08-11 制定）: `placeId` / `name` / `address` / `latitude` / `longitude` / `photoReferences` / `websiteUrl` / `mapsUrl` / **`photoAttributions`**。`openNow` / `weekdayDescriptions` / `phoneNumber` / `priceLevel` / `googleRating` / `userRatingCount` は Places API（Text / Nearby / Details）のレスポンスから組み立てて**カフェ詳細画面・マップ下部カードの表示にのみ使う揮発値**。`CoffeeRecord.cafe` としてスナップショット保存する際は SQLDelight（§2.1 の `cafe_*` 列）にも Firestore（§3.2 の `cafe` マップ）にも書き出さず、読み戻した `Cafe` では既定値のままになる（営業時間等は鮮度が要るため都度取得が正）。
 >
 > ⚠️ **`photoAttributions` だけは宣言順が揮発フィールドの後（末尾）なのに永続対象**という直感に反する並びになっている。SKIE がデフォルト引数を Swift の init に伝播しないため、末尾以外に挿入すると Swift 側の `Cafe(...)` 構築箇所が全て壊れる制約による（`kmp-bridge.md`）。**「先頭から N 個が永続」という読み方をしないこと**。
 
@@ -251,7 +251,7 @@ data class SavedCafe(
 
 - **キーは `cafe.placeId`（自然キー。UUID を持たない）**: 同じカフェを二重に「行きたい」登録する意味がないため、`(userId, placeId)` で一意とする。§5 の「ID は UUID v4」ルールの**意図的な例外**（保存/解除がトグルとして冪等になり、二重登録の防御ロジックが不要になる）。Places の place_id は英数字 + `-`/`_` で構成され `/` を含まないため、Firestore ドキュメント ID にそのまま使える
 - **記録作成時の自動解除はしない（データは独立）**: 記録保存フローに `SavedCafeRepository` への書き込みを結合させない（Simplicity First / ユーザーの意図しないデータ消失を避ける。「また行きたい」用途でリストに残す使い方も許容）。重複感は**表示側で解決**する:
-  - マップのピンは同一 placeId が競合したら **訪問済み（+ 好み一致）> 行きたい > 検索結果 > おすすめ（curated、§1.10）** の優先順位で 1 本だけ出す（フェーズ 19 で curated を末尾に追加。表示切替チップの状態に関わらず適用）
+  - マップのピンは同一 placeId が競合したら **訪問済み（+ 好み一致）> 行きたい > 検索結果 > おすすめ（curated、§1.10）** の優先順位で 1 本だけ出す（表示切替チップの状態に関わらず適用）
   - 行きたい一覧では、記録が既にある店に「記録あり」バッジを表示し、手動解除を促す
 - **一覧の導線はマップ画面内**: マップのツールバー（またはフィルタチップ列）のブックマークボタン → ハーフシートで `SavedCafe` 一覧（`savedAt` 降順、タップでカフェ詳細 push、スワイプで解除）。**新規 feature モジュールは作らない**（シートはマップ画面の一部。状態は `MapViewModel` に持たせ、1 画面 = 1 モジュール原則のカウント外とする）
 - **カフェ詳細のトグル状態**: `CafeDetailViewModel` が `observeByPlaceId` を購読して「行きたい」ボタンの ON/OFF を表示。保存時は表示中の `Cafe`（Places Details 取得済み）からスナップショットを作る
@@ -355,7 +355,7 @@ CREATE TABLE coffee_record (
     processing TEXT,                       -- enum 文字列
     roast_level TEXT,                      -- enum 文字列
     cup TEXT,
-    brew_recipe TEXT,                      -- 抽出レシピ自由メモ（フェーズ 15-E 追加、migration 4.sqm で ALTER TABLE ADD COLUMN）
+    brew_recipe TEXT,                      -- 抽出レシピ自由メモ（migration 4）
     -- テイスティング 5 要素（各 1..10）。5 列は all-or-nothing（全列 NULL = tasting なし / 全列セット = tasting あり）
     sweetness INTEGER,
     body INTEGER,
@@ -464,7 +464,7 @@ CREATE INDEX saved_cafe_by_user ON saved_cafe (user_id, saved_at DESC);
 ```
 users/{uid}                               # ユーザープロフィール（analyticsConsent フラグ等）
   coffees/{coffeeId}                      # CoffeeRecord 本体（Cafe 埋め込み / 評価 / メモ / photos 配列）
-  savedCafes/{placeId}                    # 行きたい店（フェーズ 15-A。ドキュメント ID = Places の place_id）
+  savedCafes/{placeId}                    # 行きたい店（ドキュメント ID = Places の place_id）
 
 beanProfiles/{beanId}                     # 豆ナレッジベース（サービス管理 / 全認証ユーザーが read-only）
 curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ（サービス管理 / 全認証ユーザーが read-only。フェーズ 19）
@@ -487,7 +487,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 **この順序は仕様**。①Firestore はドキュメントを削除しても**サブコレクションをカスケードしない**のでサブコレクションが先、②Auth ユーザー削除後は §3.3 の Rules（`request.auth.uid == uid`）により `users/{uid}` 配下へ一切到達できなくなるので **Auth 削除は必ず最後**。逆順にすると、本人も運営も消せない孤児データが永久に残る。
 
-**`users/{uid}` 配下にサブコレクションを追加したら、この一覧と `DeleteAccountUseCase` の両方を更新する**（`savedCafes` はフェーズ 15-A で追加された際に削除経路へ追随せず、2026-08-06 の実機検証で消し残りとして発見された。経緯は [`implementation_note.md`](./implementation_note.md) 2026-08-06）。`beanProfiles` / `curatedCafes` はサービス管理のグローバルコレクションなので削除対象外。
+**`users/{uid}` 配下にサブコレクションを追加したら、この一覧と `DeleteAccountUseCase` の両方を更新する**（`savedCafes` は追加時に削除経路へ追随せず、リリース前の実機検証で消し残りとして発見された。経緯は [`implementation_note.md`](./implementation_note.md) 2026-08-06）。`beanProfiles` / `curatedCafes` はサービス管理のグローバルコレクションなので削除対象外。
 
 写真本体は Firestore / Storage に同期せず、端末の Documents 配下にのみ保存します（[`requirements.md`](./requirements.md) §7-2）。
 
@@ -568,7 +568,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 - **rating**: `rating == null`（未評価）なら他の nullable フィールドと同じく**キーごと省略**。decode 時は **キー欠如 / null / `0.0`（nullable 化以前の legacy sentinel）をすべて `null` に正規化**する（iOS / Android 対称。リモートの既存 0.0 ドキュメントは migration せず読み側で吸収）
 - **nullable なコーヒー属性**（origin / region / variety / processing / roastLevel / cup / brewRecipe）: null の場合はキーごと省略。decode 時のキー欠如はいずれも null 扱い
 - **tasting**: `tasting != null` のとき 5 要素すべてを持つマップを書き出す。`tasting == null`（未記入）なら `tasting` マップごと省略。decode 時、`tasting` マップが存在し 5 要素揃っていれば `TastingScores`、欠如していれば `null`（防御的に、いずれかキー欠如も `null` 扱い）。SQLDelight も同様に **5 列全セット → `TastingScores` / それ以外 → `null`**
-- **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如している（フェーズ 10-D 以前の）ドキュメントは空リスト扱い
+- **tags**: 文字列配列。空でも配列として書き出す。decode 時にキーが欠如しているドキュメントは空リスト扱い
 - **cafe** に書くのは §1.2 の永続フィールドのみ（`openNow` 等の表示用フィールドは書かない）
 - **cafe.photoAttributions**: 文字列配列。**非空のときだけキーを書き、空リストならキーごと省略する**。decode 時のキー欠如は `[]`。同じ「写真関連の配列」でも `photoReferences` は空でも常に書く既存挙動なので、**両者の省略規則は意図的に非対称**（`photoAttributions` は他の nullable フィールドの流儀に合わせた）。この規則は iOS / Android の mapper と `scripts/seed/seed-coffees.mjs` の 3 経路で揃える必要がある
 - **photos**: 埋め込み配列。`localPath` は端末固有値のため Firestore には書かない。`remoteUrl` も書かない（Storage 採用見送り）。`sortOrder` は配列 index を upload 時に採番、decode 時はソート用途で破棄

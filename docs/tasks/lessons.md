@@ -1155,3 +1155,29 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **修正パターン**: 位置を引数化して画面ごとに出し分ける案は**採らない**。トーストの出る位置が画面によって変わる方がユーザーには悪い。全画面 1 箇所に統一し、移した先の端の混雑を点検して、残る重なり（現在地 FAB）は「自動消去 + タップ消去できる」ことを根拠に**明示的に許容と記録する**。許容判断を書き残さないと、次に誰かが同じ重なりを見て場当たりに直す
 - **発生源**: 2026-08-10、マップのテキスト検索 0 件フィードバック（`1a928da`）。配置の判断は implementation_note 2026-08-10、規約は `ui-ux-guidelines.md`「エラー表示」に反映済み（rules への昇格はしない — 頻度が低く、正本の規約 1 箇所で足りる）
 - **横展開点検（2026-08-10）**: ①**複数画面に適用され画面端に固定描画する共有 modifier** — `grep -rln "extension View {" iosApp/iosApp --include="*.swift"` → 2 ファイルのみ。`AnalyticsScreenTracking.trackScreen` は描画しないため非該当、`ErrorToast.errorToast` が唯一の該当で**本件で修正済み**。②**`overlay(alignment:)` 全 9 箇所**（production） — 画面全体に対する配置は `MapTabView` の現在地 FAB（`.bottomTrailing`）と検索結果シート（`.bottom`）+ `ErrorToast` の 3 つだけ。残り 6 箇所（`MapPins` のピンバッジ ×4 / `CafePhotoHeader` のラベル ×2）は**自要素内の装飾**で、親が小さく閉じているため画面端の混雑とは無関係（非該当）。③**`safeAreaInset(edge:)`** — production は `MapTabView` のカフェ選択カード 1 箇所のみ（他 2 件は `ErrorToast` の Preview）。④**画面下端固定の広告** — 無し（`InlineBannerAdView` は検索結果シート内のインライン枠のみで、アンカー広告は不採用）。**結論: 下端に複数要素が集まるのは `MapTabView` だけで、その 4 要素（トースト / FAB / カード / シート）の関係は本件で検討済み。他画面の下端は空いており該当なし**
+
+## 2026-08-21
+
+### push される画面が自身を `NavigationStack` で包むと、内側に書いたナビゲーション制御が全部効かなくなる
+
+- **症状**: `AccountView` でサインアウト / アカウント削除の処理中に「戻る」を封じたかったが、`.navigationBarBackButtonHidden` を書いても**戻るボタンがグレーアウトしない**。回避策として「完了」ボタンの `.disabled` しか入れられず、SR-1 の残務として 1.0 に持ち越された
+- **原因の構造**: `AccountView` は `SettingsView` の `NavigationStack` に `NavigationLink` で push されるのに、自身の `body` も `NavigationStack { ... }` で包んでいた。**内側の `NavigationStack` は独立した `UINavigationController` を作る**が、その中では `AccountView` が**トップレベル**なので戻るボタンは存在しない。画面に見えている戻るボタンは**外側のスタックのもの**で、内側へ書いた `.navigationBarBackButtonHidden` は**存在しないボタンを隠しているだけ**だった。指定は正しく適用されており、効果だけが無い
+- **検出されない理由**: コンパイルも通り、警告も出ず、**画面は正常に描画される**（二重ナビゲーションバーになるとは限らない）。「modifier を書いたのに効かない」という形でしか現れず、しかもその modifier は文法的に正しい。呼び出し元（`SettingsView`）と実装（`AccountView`）の**両方を並べて初めて**入れ子が見える
+- **修正パターン**: push される画面は `NavigationStack` を**持たない**。`.navigationTitle` / `.toolbar` / `.alert` は中身のコンテナ（`Form` 等）に直接付ける。判定基準は**提示方法**で、`.sheet` で開く画面は独立したスタックが要るので**包むのが正しい**（`CoffeeEditorView` / `TasteSearchSheet` が正例）。「包む / 包まない」は画面の性質ではなく**呼び出し側がどう出すか**で決まるため、**View の冒頭コメントに前提を書く**（`CoffeeDetailView` が実践している: 「`CoffeeListView` の `NavigationStack` 内に push される前提のため、自身では `NavigationStack` に包まない」）
+- **教訓**: **「効かない modifier」を見たら、まず自分がどのコンテナの中にいるかを疑う**。SwiftUI の modifier は「一番近い担当コンテナ」に効くので、担当が意図と違うと**無言で何もしない**。同種の罠は既出（2026-08-07「`List` / `Form` の中では `tint` を明示しても `Label` のアイコンだけ効かない」）で、いずれも**コンテナが子の見た目・挙動を書き換える**型。子側のコードをいくら読んでも分からない
+- **発生源**: 2026-08-21、1.0.1 の SR-1 残務対応（`AccountView.swift`）
+- **横展開点検（2026-08-21）**: `grep -rln "NavigationStack {" iosApp/iosApp --include="*.swift"` → **15 ファイル**。各々の提示方法を呼び出し元まで辿って照合した結果:
+  - **該当あり 1 件**: `TastePreferenceConversionView`（`AnalysisView` の `NavigationLink` で push されるのに自身の `body` で `NavigationStack` を作っている）。**本件と同型**。ただし「処理中の戻る封じ」要件が無いため実害は見た目に留まる見込みで、**`tasks.md` にバックログとして起票**（1.0.1 スコープ外）
+  - **非該当（`.sheet` 提示 = 包むのが正しい）**: `CoffeeEditorView` / `TasteSearchSheet` / `ShareCardSheet` / `RecommendedCafeListSheet` / `SavedCafeListSheet` / `CafeSearchView`
+  - **非該当（`#Preview` 内のみ / body は包んでいない）**: `LicensesView` / `CoffeeDetailView` / `AnalysisView+Preview`
+  - **非該当（スタックの所有者そのもの）**: `RootTabView` / `SettingsView` / `AnalysisView` / `CoffeeListView`
+
+### `.navigationBarBackButtonHidden` はエッジスワイプでの戻るを止めない
+
+- **症状**: 上のエントリの修正で戻るボタンは消せたが、**画面左端からのスワイプでは依然として pop できる**。処理中の離脱を封じたつもりが、経路が 1 本残る
+- **原因の構造**: `.navigationBarBackButtonHidden(_:)` はその名のとおり**戻るボタンの表示**だけを制御する。`UINavigationController.interactivePopGestureRecognizer` は別経路で、ボタンの有無と連動しない（むしろ iOS はボタンを隠してもスワイプを残す）。**sheet 用の `interactiveDismissDisabled()` は push には効かない**ので代替にもならない
+- **修正パターン**: `UIViewControllerRepresentable` で不可視の `UIViewController` を挿入し、`navigationController?.interactivePopGestureRecognizer?.isEnabled` を直接切り替える（`Utilities/InteractivePopGestureLock.swift`）。**2 つの作法が要る**: ①`makeUIViewController` の時点では `navigationController` が未確定なことがあるので `viewDidAppear` でも再適用する ②`viewWillDisappear` で**必ず解除する** — 同じ `UINavigationController` に後から積まれる別画面へロックを引きずるため（解除漏れは「無関係な画面でスワイプが効かない」という**原因の遠い**バグになる）
+- **併せて確認すること**: **離脱を封じる実装は、封じた状態が確実に解けることとセットで設計する**。エラー時に解除されないと画面から出られなくなり、封じる前より悪い。本件は `AccountViewModel.UIState.isProcessing` が成功・失敗どちらでも `false` を emit する既存保証（SR-1 で担保）にそのまま乗っている
+- **教訓**: **「操作を封じる」要件は、UI 要素を消すことと同義ではない**。同じ操作に複数の入口（ボタン / ジェスチャー / キーボードショートカット / システムジェスチャー）があるとき、片方だけ塞いでも要件は満たされない。**入口を数えてから塞ぐ**
+- **発生源**: 2026-08-21、上のエントリと同じ対応。`.claude/rules/swift-ios.md` へ要点を昇格済み（発生源として本エントリは残す）
+- **横展開点検（2026-08-21）**: ①`grep -rn "navigationBarBackButtonHidden" iosApp/iosApp` → `AccountView` の**1 箇所のみ**（他に戻るを隠している画面は無い＝スワイプが残っている画面も無い）②`grep -rn "interactiveDismissDisabled" iosApp/iosApp` → **0 件**（sheet 側で離脱を封じている画面は無い。`CoffeeEditorView` は編集中でも離脱を許す設計）③`InteractivePopGestureLock` の利用箇所は `AccountView` のみ＝ロック解除漏れが他画面へ波及する経路は現状 1 本

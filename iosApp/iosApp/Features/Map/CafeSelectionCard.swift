@@ -99,8 +99,9 @@ struct CafeSelectionCard: View {
                     Circle()
                         .fill(openNow ? Color.green : Color.red)
                         .frame(width: 6, height: 6)
-                    Text(openNow ? String(localized: "営業中") : String(localized: "終了"))
+                    Text(openNow ? String(localized: "営業中") : String(localized: "営業時間外"))
                         .font(.caption)
+                        .lineLimit(1)
                         .foregroundStyle(openNow ? .green : .red)
                 }
             }
@@ -111,12 +112,14 @@ struct CafeSelectionCard: View {
                         .foregroundStyle(.yellow)
                     Text(ratingText(rating: rating, count: cafe.userRatingCount?.intValue))
                         .font(.caption)
+                        .lineLimit(1)
                         .foregroundStyle(.secondary)
                 }
             }
             if let level = cafe.priceLevel {
                 Text(mapPriceLevelText(level))
                     .font(.caption)
+                    .lineLimit(1)
                     .foregroundStyle(.secondary)
             }
             if let visits = visitCount(for: cafe, bridge: bridge) {
@@ -125,6 +128,7 @@ struct CafeSelectionCard: View {
                         .font(.caption2)
                     Text(String(localized: "\(visits)杯"))
                         .font(.caption)
+                        .lineLimit(1)
                 }
                 .foregroundStyle(Color.accentColor)
             }

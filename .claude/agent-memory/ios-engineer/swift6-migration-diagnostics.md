@@ -54,6 +54,35 @@ SW6-1 の追加検証（2026-08-07）で実物 2 パターンを確認:
 
 判定軸: そのクラスが「Swift/SwiftUI 側からのみ MainActor 上で保持・破棄される」なら `isolated deinit`、「Kotlin ランタイム等 MainActor 外から破棄されうる」なら `nonisolated` 化が筋が良い（ホップによる解放遅延を避けられる）。`ViewModelBridge` 系（8 ファイル）は前者、`FlowBridge.swift` の 2 クラスは後者に該当する。SW6-2 で実装確定（8 ファイル `isolated deinit`、`FlowBridge` は `nonisolated final class` + plain `deinit`）。
 
+## サンドボックスに GUI Simulator が無いときの `@concurrent` オフロード確認手段（2026-08-21）
+
+タップ操作でアプリの実際の画面を辿れない環境（`sandbox_no_gui_simulator.md` 参照）でも、`@concurrent` が実際にメインスレッドを外れるかは**アプリ本体を経由せず**確認できる。`iosApp` と同じコンパイラフラグ（`Base.xcconfig` の `SWIFT_VERSION = 6.0` + `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` + `SWIFT_APPROACHABLE_CONCURRENCY = YES`）を単体の `swiftc` 実行で再現し、`nonisolated async`（`@concurrent` 無し）と `@concurrent` を並べて `Thread.isMainThread` を出力させるだけで挙動差が出る:
+
+```bash
+DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcrun swiftc \
+  -swift-version 6 -default-isolation MainActor \
+  -enable-upcoming-feature NonisolatedNonsendingByDefault \
+  -parse-as-library -o /tmp/test main.swift && /tmp/test
+```
+
+`Thread.isMainThread` は `NS_SWIFT_UNAVAILABLE_FROM_ASYNC` なので、`async` 関数内から直接呼ぶとコンパイルエラーになる（`nonisolated func currentThreadIsMain() -> Bool { Thread.isMainThread }` という同期ラッパーを挟めば呼べる）。実測（2026-08-21, ShareCardRenderer.writeToTemporaryFile 検証時）:
+
+```
+[caller]            isMainThread=true
+[withoutConcurrent] isMainThread=true   // @concurrent 無し → 呼び出し元アクター（MainActor）のまま
+[withConcurrent]    isMainThread=false  // @concurrent あり → グローバル並行実行コンテキストへ退避
+```
+
+これは `.claude/rules/swift-ios.md` / `docs/coding-conventions.md` §2.5 に書かれている「`@concurrent` 無しの `nonisolated async` は呼び出し元アクター上で実行される」という記述の直接的な実測裏取りになる。アプリ本体の該当関数を個別に実機/シミュレータで確認できないときの代替手段として使える。
+
+## `UIImage` はこのプロジェクトの SDK では actor 境界を越えて渡せる（Sendable 扱い）
+
+`ImageDownsampler.downsampledJPEG` / `downsampledImage`（`@concurrent`）は `UIImage` を戻り値として MainActor 呼び出し元へ返しており、これは既に警告なしでビルドが通っている実例。`ShareCardRenderer.writeToTemporaryFile(_ image: UIImage)`（`@concurrent`、`UIImage` を引数として MainActor から渡す）も同じ前提で警告 0 件だった（2026-08-21）。`UIImage` を境界越しに渡すこと自体を疑って `nonisolated(unsafe)` 等で包む必要はない。
+
+## `@concurrent` は enclosing 型を `nonisolated` にしなくても付けられる（関数単位で完結）
+
+`nonisolated enum PhotoFileStore` は型ごと `nonisolated` だが、`ImageDownsampler`（`enum ImageDownsampler`、型注釈なし）の `@concurrent static func` は型を `nonisolated` にせずに成立している。`ShareCardRenderer`（`@MainActor` 相当の既定分離のまま）に `@concurrent private static func writeToTemporaryFile` を追加したケースでも同様に、型全体を書き換えずに該当関数だけ `@concurrent` を付ければ足りた。既定 MainActor 分離の enum に「CPU バウンドな処理だけ 1 関数だけ逃がしたい」ときは、型ごと `nonisolated` にする前にまず関数単体の `@concurrent` を試す。
+
 ## Kotlin interface 実装クラスを `nonisolated` にすると、内部で使う private ヘルパ（enum の static func 等）も連鎖して `nonisolated` にする必要がある（SW6-2, 2026-08-07）
 
 `RemoteCoffeeDataSourceIosImpl` / `RemoteSavedCafeDataSourceIosImpl`（Kotlin interface 実装、Kotlin ランタイムが任意スレッドから呼ぶため `nonisolated` にした）は、内部で `CoffeeFirestoreMapper.fromDocument` / `SavedCafeFirestoreMapper.toDocument` という**別ファイルの top-level enum**を呼んでいた。この enum 自体は既定 MainActor 分離のままだったため、`nonisolated` にしたクラスから呼ぶと `call to main actor-isolated static method ... in a synchronous nonisolated context` が新規発生する。**呼び出し元だけでなく、呼び出し先のヘルパ型も一緒に `nonisolated` 化する**必要がある（ステートレスな純粋変換関数なら安全）。同じパターンが `BeanProfileRepositoryIosImpl` の private enum `BeanProfileIosMapper` でも発生した（SW6-1 の検証時点で先に対処済み）。

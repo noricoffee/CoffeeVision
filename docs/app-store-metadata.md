@@ -16,7 +16,9 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | サブタイトル（Subtitle） | カフェ巡り記録・テイスティング・行きたい店 | 30 字以内（**21 字**）。**アプリ名と 1 語も重複させない**方針 — `コーヒー` / `分析` はアプリ名側が拾うため、サブタイトルは `カフェ` / `巡り` / `記録` / `テイスティング` / `行きたい` / `店` に充てる |
 | Bundle ID | `com.noricoffee.coffeevision` | `Config.xcconfig`（`$(TEAM_ID)` を除いた本体） |
 | SKU | `com.noricoffee.coffeevision` | Bundle ID と同値。外部には出ない社内識別子だが**登録後は変更できない** |
-| バージョン | 1.0 | `MARKETING_VERSION` |
+| Apple ID（App ID） | `6788339362` | ASC が採番。ストア URL は `https://apps.apple.com/app/id6788339362` |
+| ストア URL | `https://apps.apple.com/app/id6788339362` | **アプリ内に埋めるのはこの短縮形**。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id...`）の**スラグ部分はアプリ名から生成される装飾**で、リダイレクトにしか使われない。ASO で名前を変えるたびに変わる文字列をバイナリへ焼かない（アプリ名は ASO-2 で一度変更済み） |
+| バージョン | 1.0.1 | `MARKETING_VERSION` |
 | ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。`release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、`Config.xcconfig` の `1` は Release では使われない。**手入力・手動更新は不要**（詳細は §10） |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
 | デバイス | iPhone | `TARGETED_DEVICE_FAMILY = 1`。iPad は対象外（`"1,2"` のままだと iPad にインストール可能になり、ASC が iPad スクショを必須要求する）|

@@ -123,3 +123,40 @@
 
 <!-- 新しい決定は本セクションの末尾に追記する。陳腐化・昇格時は削除可 -->
 
+### 2026-08-21: 共有カードの「簡潔性」制約は share sheet の payload に及ばない
+
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/ShareCardSheet.swift` / `CoffeeShareCardView.swift` / 要件 2-12 / tasks ASO-7②
+
+1.0.1 で共有経由の流入導線（ASO-7②-a）を入れるにあたり、**要件 2-12 の「カードの簡潔性」が share sheet に渡すテキストまで縛るか**を判断した。**縛らない**と解釈する。
+
+2-12 が挙げる制約は「**メモ・タグは載せない**（誤共有防止 / カードの簡潔性）」で、どちらの理由も**画像として第三者に渡る面**を対象にしている。誤共有防止は「ユーザーが意図しない私的記述が画像に焼き付いて拡散する」ことを防ぐ趣旨であり、簡潔性は 1080×1350 の版面設計の話。**テキスト payload は投稿前のユーザーが編集できる**うえ、内容も定型文と URL で記録の中身を含まない。どちらの懸念も生じないため、URL 追加に要件改訂は要らない。
+
+- 影響: ②-a はカード画像のレイアウトに一切触れないため、`CoffeeShareCardView` の版面（`footerHeight` 等）と `ShareCardRenderer` の出力サイズは不変。**画像自体への URL / QR 焼き込み（②-b）は話が別**で、そちらは版面に入るので 2-12 の改訂が前提になる
+- 経緯: ASO-7② は起票時（2026-07-27）「共有カード footer の App Store 導線」と 1 件に見えていたが、1.0.1 のスコープ検討で実コードを読んだところ**穴が 2 箇所**あった。`CoffeeShareCardView.swift` の footer に URL が無いのは既知だったが、**カード画像の外側（テキスト payload）にも導線が無い**点は起票時に見落としていた
+- トレードオフ: 画像だけがスクショで転載された場合、②-a では導線が残らない。②-b はそこを塞げるが版面を汚す。**まず ②-a を出し、共有経由の流入が観測できてから ②-b を判断する**順序にした
+
+### 2026-08-21: `SharePreview` は共有されない — 画像 + テキストには `UIActivityViewController` が要る
+
+- 関連: `iosApp/iosApp/Features/CoffeeDetail/ShareCard/ShareCardSheet.swift` / tasks ASO-7②-a
+
+ASO-7②-a のスコープ見積もりで**一度誤った前提を置いた**ので記録する。現状のコードは
+
+```swift
+ShareLink(item: result.fileURL,
+          preview: SharePreview(shareTitle, image: Image(uiImage: result.image)))
+```
+
+で、`shareTitle`（`"\(coffee.name) - CoffeeVision"`）は `SharePreview` に渡っている。**`SharePreview` は share sheet の UI 上に出る表示用メタデータで、投稿先アプリには渡らない**。共有される実体は `item:` の `result.fileURL`（PNG）1 つだけ。したがって **`shareTitle` に URL を足しても X / LINE には一切届かない**（「文字列に 1 行足すだけ」という当初の見積もりは誤り）。
+
+`ShareLink` の `items:` は `RandomAccessCollection where Element: Transferable` を要求するため、**file URL と `String` を混在させられない**。単一の `Transferable` 型に複数 representation を持たせても、投稿先が選ぶのはそのうち 1 つで「画像とテキストの両方」にはならない。よって **`UIActivityViewController` を `UIViewControllerRepresentable` で包み、`activityItems: [fileURL, text]` を渡す**のが正攻法になる。
+
+- 影響: ②-a は「文字列 1 行の変更」ではなく **`ShareLink` の置き換え**。工数は上がるが 1.0.1 に収まらない規模ではない
+- 副次: `UIActivityViewController` は完了ハンドラ（`completionWithItemsHandler`）を持つ。ASO-1 で「共有完了をレビュー依頼のトリガにする案」が**`ShareLink` が完了コールバックを持たないことを理由に不採用**になっていた（tasks-archive ASO-1）。この置き換えでその制約自体は消えるが、**発火は分析タブの 1 箇所のみという 9-9 の仕様は維持する**（トリガを増やす判断は別途）
+- 教訓: 「share sheet にテキストを渡している」ように読める箇所が、実際には**プレビュー表示にしか使われていなかった**。`SharePreview` という名前が「共有されるプレビュー」とも「共有 UI のプレビュー」とも読めるのが原因。**スコープ見積もりの時点でソースを開いていたのに、引数名だけ見て役割を推定した**（CLAUDE.md「doc に書く事実は、書く前にソースを開いて確かめる」の失敗例。今回は doc に書いた直後に気づいて訂正した）
+
+### 2026-08-21: アプリ内に埋める App Store URL は短縮形に固定する
+
+- 関連: `docs/app-store-metadata.md` §1 / tasks ASO-7②
+
+App ID は `6788339362`。**バイナリやカード画像に焼くのは `https://apps.apple.com/app/id6788339362`** とする。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id6788339362`）の**スラグ部分はアプリ名から生成される装飾**でリダイレクトにしか使われず、ASO で名前を変えるたびに変わる。アプリ名は ASO-2 で既に一度変更しており、今後も動きうる。
+

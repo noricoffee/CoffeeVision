@@ -39,69 +39,78 @@ struct AccountView: View {
 
     // MARK: - Body
 
+    /// `SettingsView` の `NavigationStack` に push される前提のため、自身では
+    /// `NavigationStack` に包まない（SR-1 残務）。二重に包むと、内側の
+    /// `NavigationStack` のトップレベル画面には「戻る」ボタンが無いぶん、
+    /// 実際に画面遷移を握っているのは外側のスタックになる。その結果
+    /// `.navigationBarBackButtonHidden` を内側へ書いても外側の戻るボタンには効かず、
+    /// 「完了」ボタンの無効化しか入れられなかった。
     var body: some View {
-        NavigationStack {
-            Form {
-                accountSection
-                dangerSection
-            }
-            .trackScreen("account")
-            .navigationTitle(String(localized: "アカウント"))
-            .navigationBarTitleDisplayMode(.inline)
-            .toolbar {
-                ToolbarItem(placement: .topBarTrailing) {
-                    Button(String(localized: "完了")) {
-                        dismiss()
-                    }
-                    .accessibilityLabel(String(localized: "アカウント画面を閉じる"))
-                    // サインアウト / 削除の実行中は閉じさせない。完了検知自体は画面を離れても
-                    // 取りこぼさない（`awaitProcessingCompletion()`）が、処理中に離脱できると
-                    // 「押した直後に画面が消えて何も起きない」ように見えるため。
-                    .disabled(viewModel.isProcessing)
+        Form {
+            accountSection
+            dangerSection
+        }
+        .trackScreen("account")
+        .navigationTitle(String(localized: "アカウント"))
+        .navigationBarTitleDisplayMode(.inline)
+        // 処理中は「戻る」の全経路（ボタン / エッジスワイプ）を封じる。
+        // ボタンの表示制御はこれで足りるが、エッジスワイプは別経路のため
+        // `InteractivePopGestureLock` も併用する。
+        .navigationBarBackButtonHidden(viewModel.isProcessing)
+        .background(InteractivePopGestureLock(isLocked: viewModel.isProcessing))
+        .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                Button(String(localized: "完了")) {
+                    dismiss()
                 }
+                .accessibilityLabel(String(localized: "アカウント画面を閉じる"))
+                // サインアウト / 削除の実行中は閉じさせない。完了検知自体は画面を離れても
+                // 取りこぼさない（`awaitProcessingCompletion()`）が、処理中に離脱できると
+                // 「押した直後に画面が消えて何も起きない」ように見えるため。
+                .disabled(viewModel.isProcessing)
             }
-            .overlay {
-                if viewModel.isProcessing {
-                    processingOverlay
-                }
+        }
+        .overlay {
+            if viewModel.isProcessing {
+                processingOverlay
             }
-            .alert(
-                String(localized: "エラー"),
-                isPresented: Binding(
-                    get: { viewModel.error != nil },
-                    set: { if !$0 { viewModel.onErrorDismissed() } }
-                )
-            ) {
-                Button(String(localized: "OK")) {
-                    viewModel.onErrorDismissed()
-                }
-            } message: {
-                Text(viewModel.error ?? "")
+        }
+        .alert(
+            String(localized: "エラー"),
+            isPresented: Binding(
+                get: { viewModel.error != nil },
+                set: { if !$0 { viewModel.onErrorDismissed() } }
+            )
+        ) {
+            Button(String(localized: "OK")) {
+                viewModel.onErrorDismissed()
             }
-            .confirmationDialog(
-                String(localized: "サインアウト"),
-                isPresented: $showSignOutConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(String(localized: "サインアウト"), role: .destructive) {
-                    handleSignOut()
-                }
-                Button(String(localized: "キャンセル"), role: .cancel) {}
-            } message: {
-                Text(String(localized: "サインアウトすると、このデバイスでの同期が停止されます。"))
+        } message: {
+            Text(viewModel.error ?? "")
+        }
+        .confirmationDialog(
+            String(localized: "サインアウト"),
+            isPresented: $showSignOutConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "サインアウト"), role: .destructive) {
+                handleSignOut()
             }
-            .confirmationDialog(
-                String(localized: "アカウントを削除"),
-                isPresented: $showDeleteConfirm,
-                titleVisibility: .visible
-            ) {
-                Button(String(localized: "アカウントを削除"), role: .destructive) {
-                    handleDeleteAccount()
-                }
-                Button(String(localized: "キャンセル"), role: .cancel) {}
-            } message: {
-                Text(String(localized: "アカウントとすべての記録が完全に削除されます。この操作は取り消せません。"))
+            Button(String(localized: "キャンセル"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "サインアウトすると、このデバイスでの同期が停止されます。"))
+        }
+        .confirmationDialog(
+            String(localized: "アカウントを削除"),
+            isPresented: $showDeleteConfirm,
+            titleVisibility: .visible
+        ) {
+            Button(String(localized: "アカウントを削除"), role: .destructive) {
+                handleDeleteAccount()
             }
+            Button(String(localized: "キャンセル"), role: .cancel) {}
+        } message: {
+            Text(String(localized: "アカウントとすべての記録が完全に削除されます。この操作は取り消せません。"))
         }
         .task {
             viewModel.onAppear()

@@ -160,3 +160,15 @@ ShareLink(item: result.fileURL,
 
 App ID は `6788339362`。**バイナリやカード画像に焼くのは `https://apps.apple.com/app/id6788339362`** とする。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id6788339362`）の**スラグ部分はアプリ名から生成される装飾**でリダイレクトにしか使われず、ASO で名前を変えるたびに変わる。アプリ名は ASO-2 で既に一度変更しており、今後も動きうる。
 
+### 2026-08-21: Crashlytics の疎通を TestFlight 実機で実証した（シンボル化まで）
+
+- 関連: `iosApp/iosApp/iOSApp.swift`（`setCrashlyticsCollectionEnabled`） / `iosApp/iosApp.xcodeproj/project.pbxproj`（`Upload dSYM to Crashlytics` フェーズ） / `docs/app-store-metadata.md` §10 / tasks 1.0.1
+
+1.0.1 の提出は「Crashlytics / App Analytics に実データが溜まるのを 1〜2 週間待つ」方針だが、**待つ前提である Crashlytics 自体が動いている証拠が無かった**。静的に確認できるのは設定が揃っていることだけ（収集の明示有効化 / dSYM アップロードのビルドフェーズの存在 / Release の `DEBUG_INFORMATION_FORMAT = dwarf-with-dsym`）で、実際にレポートが届くこととは別物。検証専用ブランチで意図的クラッシュを 1 発起こし、端から端まで通した。
+
+**結果は全経路健全**。クラッシュは Firebase コンソールに到達し、スタックトレースは `SettingsView.swift` の行番号まで解決されていた（= dSYM アップロードも機能している）。
+
+- 影響: **2 週間後にクラッシュがゼロだったとき、それを「クラッシュが起きていない」と読んでよい**ことが確定した。この区別（無事故なのか計測が壊れているのか）が付かないまま待つのが一番まずかった
+- 検証の性質: **ビルド成功でも設定の存在でも証明できない**。意図的にクラッシュさせる導線を Release ビルドに載せる必要がある（`#if DEBUG` 配下では TestFlight に載らない）。このため検証は独立ブランチ `chore/crashlytics-verification-do-not-merge` で行い、`develop` へはマージせず検証後に削除した。再検証が要るときは同じ手順を踏む
+- 手順上の罠が 2 つ: ①Crashlytics はクラッシュ発生時ではなく**次回起動時**にレポートを送信する（クラッシュさせただけで確認しに行くと永久に届かない）②**デバッガ接続中はシグナルを捕捉できない**ため、Xcode から起動したビルドでは検証にならない。TestFlight 経由でホーム画面から起動する
+

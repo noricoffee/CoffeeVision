@@ -338,6 +338,7 @@ CoffeeVision を初めてリリースしました。
 - **App Icon は light / dark / tinted の 3 バリアント**が要る。**TestFlight 成功では証明できない** — dark / tinted は任意で、欠けていてもビルド・アップロードとも通るため、資産カタログを直接見る必要がある
 - **配信前は Apple 側の各所にアプリアイコンが出ないのが正常**（ASC の「App 情報」ページ / iOS 設定 App の「Apple でサインイン」一覧など）。これらは App Store の配信済みアートワークを引いており、バンドル内の `AppIcon` とは無関係。**未配信を理由とする空欄を不具合と誤認しないこと**
 - **Sign in with Apple の revoke 用 OAuth コードフロー設定**（Services ID / Team ID / Key ID / 秘密鍵）が Firebase Console に登録済みであること。**未設定だとアカウント削除がエラーになる**
+- **Crashlytics の疎通と dSYM アップロードは 2026-08-21 に TestFlight 実機で実証済み**（スタックが `SettingsView.swift` の行番号まで解決されることを確認）。⚠️ **ビルド成功でも設定の存在でも証明できない** — dSYM アップロードのビルドフェーズ（`project.pbxproj` の `Upload dSYM to Crashlytics`）が壊れても Archive もアップロードも普通に通り、**クラッシュが起きるまで誰も気づかない**。Firebase SDK のメジャー更新や当該フェーズのスクリプトパス（`.../SourcePackages/checkouts/firebase-ios-sdk/Crashlytics/run`）に触れたら再検証する。手順は implementation_note 2026-08-21（Release ビルドに意図的クラッシュの導線を載せた検証専用ブランチが要る）
 
 ---
 

@@ -111,6 +111,19 @@
 
 > 提出用の原稿・プライバシー申告・提出前チェックリストは [`app-store-metadata.md`](./app-store-metadata.md) が正。1.0 は 2026-08-11 に提出し、審査通過後リリース済み。
 
+### 1.0.2 リリース（2026-08-31 起票 / **未提出**）
+
+> **`MARKETING_VERSION` を 1.0.2 に上げた**（`iosApp/Configuration/Config.xcconfig`。Android の `versionName` も同値に揃えた）。**ビルド番号（`CURRENT_PROJECT_VERSION`）は据え置きで正しい** — `release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、xcconfig の `1` は Release では使われない（app-store-metadata §1 / §10）。
+>
+> **中身は UI 改善 1 件のみ**（カテゴリ 1「追加ボタンの視認性改善」が正本。ここには複製しない）。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [x] | `MARKETING_VERSION` / Android `versionName` を 1.0.2 へ | 2026-08-31。前例は `181329f`（1.0 → 1.0.1）。ビルド番号は据え置き |
+| [ ] | **スクリーンショット `04-record-list.png` / `06-cafe-detail.png` の再撮影** | 追加ボタンの見た目が変わり現物と一致しない。**原本と焼き込み版の両方**が対象（app-store-metadata §5 の警告） |
+| [ ] | **What's New（リリースノート）の原稿** | app-store-metadata §9 は**タイトルが「バージョン 1.0」のまま**で、1.0.1 でも更新されていない。1.0.2 の原稿を書く際にこの節の版管理の仕方ごと決める |
+| [ ] | 提出前チェックリストの消化 → 提出 | app-store-metadata §10 |
+
 ### 1.0.1 リリース（2026-08-21 起票 / **リリース済み**）
 
 > **機能追加なしのパッチ**。中身は「1.0 時点の既知の残務」（カテゴリ 1）からの 3 件 + 集客の 1 件で、**個別の詳細は各行が正本**（ここには複製しない）。

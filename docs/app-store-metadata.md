@@ -18,7 +18,7 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | SKU | `com.noricoffee.coffeevision` | Bundle ID と同値。外部には出ない社内識別子だが**登録後は変更できない** |
 | Apple ID（App ID） | `6788339362` | ASC が採番。ストア URL は `https://apps.apple.com/app/id6788339362` |
 | ストア URL | `https://apps.apple.com/app/id6788339362` | **アプリ内に埋めるのはこの短縮形**。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id...`）の**スラグ部分はアプリ名から生成される装飾**で、リダイレクトにしか使われない。ASO で名前を変えるたびに変わる文字列をバイナリへ焼かない（アプリ名は ASO-2 で一度変更済み） |
-| バージョン | 1.0.1 | `MARKETING_VERSION` |
+| バージョン | 1.0.2 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える） |
 | ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。`release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、`Config.xcconfig` の `1` は Release では使われない。**手入力・手動更新は不要**（詳細は §10） |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
 | デバイス | iPhone | `TARGETED_DEVICE_FAMILY = 1`。iPad は対象外（`"1,2"` のままだと iPad にインストール可能になり、ASC が iPad スクショを必須要求する）|
@@ -444,5 +444,7 @@ Three things set CoffeeVision apart. First, the five-axis tasting profile is the
 ## 変更履歴
 
 1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。
+
+**2026-08-31（バージョン）**: §1 のバージョンを **1.0.2** に更新（`Config.xcconfig` の `MARKETING_VERSION` / Android の `versionName` も同値。ビルド番号は CI 採番のため据え置き）。**§9 What's New は「バージョン 1.0」のまま未更新**で、1.0.1 でも書き換えられていない — 1.0.2 の原稿を書く際に、この節を版ごとに積むのか最新版だけ置くのかを決めること（tasks 1.0.2 節に起票済み）。**§5 の `04-record-list.png` / `06-cafe-detail.png` は再撮影が必要**（同節の警告を参照）。
 
 **2026-08-31**: §11 Featuring Nomination を新設（ASO-10）。§4 の日本語キーワードを **19 語 89 字 → 24 語 98 字**へ再配分（ASO-8。7 語を外し 12 語を追加、アプリ名 / サブタイトル / 英語キーワードは据え置き）。あわせて §4 末尾の「サブタイトルを旧文言に戻す場合は 83 字 / 17 語」という注記を**削除**した（旧 19 語構成を前提にした字数で、新構成では成立しないため）。

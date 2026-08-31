@@ -238,7 +238,13 @@ VStack(spacing: 11) { ... }
 
 **「新規作成」は必ず `ToolbarItem(placement: .topBarTrailing)` の `plus` に置く。FAB（`overlay(alignment: .bottomTrailing)` の円形ボタン）は使わない。** 同じ「コーヒーを記録」がコーヒー記録一覧では右下 FAB、カフェ詳細では右上 `+` と 2 通りに分かれていたのを統一したもの（2026-08-07、UX-3）。FAB は iOS 標準の語彙ではなく、加えてリスト最下行に重なって内容を隠していた。
 
-画面内に空状態の CTA を別途置くのは構わない（`ContentUnavailableView` の `description` など）。ただし**その文言が追加ボタンの位置を指す場合、ボタンを動かしたら必ず一緒に直す** — 「右下の + ボタンから」のような位置参照は、配置変更のたびに腐る。位置を書かずに済むなら書かない方が安全。
+**この `plus` には `.buttonStyle(.borderedProminent)` を付ける**（2026-08-31 追加）。素の `Button` は iOS 26 では無色の Liquid Glass として描かれ、`.large` タイトル + `.searchable` の検索欄と同居するナビバーの中で埋もれる（ユーザー指摘「追加ボタンが分かりづらい」）。`.tint` は明示しない — ここはブランドのアクセント茶が正しく、下記「マップ概念の色セマンティクス」の対象外（訪問済み / 保存済み等の概念を描くボタンではない）。
+
+画面内に空状態の CTA を別途置くのは構わない。**置くなら `ContentUnavailableView` の `description` に文章で書くのではなく `actions:` に実ボタンを置き**、ツールバー側と同じ `.borderedProminent` + 同じ文言「コーヒーを記録」+ 同じ `.disabled` 条件に揃える（2026-08-31、`CoffeeListView.emptyView` / `CafeDetailView.emptyRecordsView` の 2 箇所が該当）。
+
+> ⚠ **その CTA が `List` / `Form` の中にあり `Label`（アイコン付き）を使うなら、`Label` に `.foregroundStyle(.white)` を必ず当てる。** `List` 内の `Label` はアイコンだけ `tint` / `buttonStyle` を無視して `accentColor` で描かれ、`.borderedProminent` の塗りも `accentColor` なので、**アイコンが背景と同化して消える**（`CafeDetailView.emptyRecordsView` で 2026-08-31 に実際に起きた。対処済みの実例が同じファイルの `saveButton` にある）。詳細は下記「マップ概念の色セマンティクス」と lessons 2026-08-07 続報 / 2026-08-31。
+
+**文言が追加ボタンの位置を指す場合、ボタンを動かしたら必ず一緒に直す** — 「右下の + ボタンから」のような位置参照は、配置変更のたびに腐る。位置を書かずに済むなら書かない方が安全（記録一覧の「右上の + ボタンか、〜」は 2026-08-31 に実ボタン CTA へ置き換えて位置参照ごと解消した。**実ボタンを同じ画面に出せるなら、位置を説明する文章は要らなくなる**）。
 
 なお**マップの現在地 FAB（`currentLocationFAB`）はこの規則の対象外**。「新規作成」ではなく地図の視点操作で、Apple/Google マップとも同じ位置に置く慣習がある。
 

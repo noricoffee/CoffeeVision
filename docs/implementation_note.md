@@ -195,3 +195,23 @@ App ID は `6788339362`。**バイナリやカード画像に焼くのは `https
 
 **副産物: `docs/tasks.md` の誤りを 1 件訂正した**。ASO-7 行と ASO 節前文の「① In-App Events はバイナリ提出が不要」は誤りで、**In-App Events はイベントのディープリンクが必須**（[Apple 公式](https://developer.apple.com/app-store/in-app-events/)）。`grep` で確認したところ `onOpenURL` / カスタム URL スキーム / associated domains の**いずれも未実装**のため、バイナリが要る。起票時（2026-07-27）に Apple の要件を確認せず「ストア運用だから無料・バイナリ不要」と括ったのが原因。**イベント名 30 + 短い説明 50 + 長い説明 120 字が検索インデックスに乗る**点は魅力なので取り下げず、ASO-8 / ASO-9 の数字を見てから着手判断する。
 
+### 2026-08-31: 追加ボタンの視認性を「配置を動かさずに」上げた
+
+- 関連: `docs/ui-ux-guidelines.md`「追加アクションの配置」/ `docs/tasks.md` 同名節 / `docs/tasks/verification-checklist.md` パス 1・2・3 / 計画は `.claude/plans/noble-meandering-newell.md`
+
+ユーザー指摘「コーヒー記録タブの追加ボタンが分かりづらい」。**指摘の言葉は「FAB」だったが、実物は 2026-08-07（UX-3）にナビバー右上へ移した `ToolbarItem` の `plus`** で、FAB は既に存在しない。ここで**指摘の語をそのまま受けて FAB を作り直すと、UX-3 で解消した「一覧は FAB / カフェ詳細は `+`」の分岐が復活する**。配置は据え置き、見た目だけを変える方針をユーザーに確認して確定した。
+
+**打ち手は 2 つ**。①ツールバーの `plus` に `.buttonStyle(.borderedProminent)`（iOS 26 では素の `Button` が無色の Liquid Glass になり、`.large` タイトル + `.searchable` と同居するナビバーで埋もれる）②記録一覧の空状態に実ボタンの CTA。
+
+**②の副産物として位置参照の文言が消せた**。旧文言「**右上の + ボタン**か、マップのカフェ検索から〜」は、`ui-ux-guidelines` 自身が「位置参照は配置変更のたびに腐るので書かない方が安全」と警告している形そのものだった（UX-3 のときに「右下の」→「右上の」と直した箇所でもある）。実ボタンが同じ画面に出れば位置を説明する必要がなくなる — **「腐る文言を直す」より「文言を要らなくする」方が根本的**で、これを ui-ux-guidelines の規則にも反映した（空状態 CTA は `description` の文章ではなく `actions:` の実ボタンで置く）。
+
+**スコープを 1 箇所広げた**。`CafeDetailView.emptyRecordsView` の既存 CTA（`.buttonStyle` 未指定 / `plus.circle.fill` + `.font(.body.bold())`）も `.borderedProminent` + `plus` に揃えた。②を入れると**同じ「コーヒーを記録」の空状態 CTA が画面ごとに別スタイル**になり、UX-3 で潰した分岐が別の形で再発するため。ユーザー指摘の範囲外だが差分は 2 行。
+
+**目視未確認のままコミットした点を明示しておく**。`.borderedProminent` がツールバー内で実際に塗りとして描画されるかは、**コードからは判断できない** — `List` / `Form` では `tint` を明示しても `Label` のアイコンだけ効かない前例があり（lessons 2026-08-07）、**コンテナが子の見た目を書き換える挙動は子側のコードを読んでも分からない**。サブエージェントは sandbox の GUI 制約で目視できず、親も同様。ビルドはフラグ無しで `** BUILD SUCCEEDED **` を確認済みだが、**ビルド成功はこの変更の完了条件になっていない**ため、確認項目を verification-checklist のパス 1（記録 0 件は 1 インストールにつき 1 回しか見られない）/ パス 2 / パス 3 に分けて積んだ。
+
+`04-record-list.png` は訴求ポイント自体が「ナビバー右上の追加ボタン」を含み、`06-cafe-detail.png` にも同じボタンが写るため、**次回提出時の再撮影対象**として `app-store-metadata.md` §5 に警告を置いた（撮り直しは今回やらない）。
+
+**追記（同日）: 上の変更で退行を 1 件出し、ユーザーの目視で発覚した。** カフェ詳細の空状態 CTA で **`+` アイコンが消えた** — `List` 内の `Label` はアイコンだけ `accentColor` で描かれ、`tint` 未指定の `.borderedProminent` は塗りも `accentColor` なので同化した。`.foregroundStyle(.white)` で修正（`saveButton` と同じ処方）。
+
+この件で**上に書いた「目視未確認のままコミットした」の位置づけが変わった**。目視を verification-checklist に積んだこと自体は機能して発見に繋がったが、**この退行は目視の前に防げた**。罠は `lessons.md` 2026-08-07 続報に「②`List` 内 `borderedProminent` + `tint` → こちらもアイコンだけ茶」と**実測結果まで記録済み**で、対処済みの実例は**同じファイルの 200 行上**にあり、しかも親はプランと dispatch 指示の両方でこの罠に言及していた。**にもかかわらず、それを「実装後に目視で確かめる項目」としてしか使わず、「実装時に `.foregroundStyle` を当てる条件判定」に変換しなかった**。教訓は lessons 2026-08-31 に記録し、`.claude/rules/swift-ios.md` と `docs/ui-ux-guidelines.md`（「追加アクションの配置」）にも昇格させた。
+

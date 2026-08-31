@@ -393,10 +393,11 @@ struct CafeDetailView: View {
             } label: {
                 Label(
                     String(localized: "コーヒーを記録"),
-                    systemImage: "plus.circle.fill"
+                    systemImage: "plus"
                 )
-                .font(.body.bold())
+                .foregroundStyle(.white)
             }
+            .buttonStyle(.borderedProminent)
             .accessibilityLabel(String(localized: "コーヒーを記録"))
         }
         .frame(maxWidth: .infinity)
@@ -418,6 +419,7 @@ struct CafeDetailView: View {
             }
             .accessibilityLabel(String(localized: "コーヒーを記録"))
             .disabled(appState.uid == nil)
+            .buttonStyle(.borderedProminent)
         }
     }
 }

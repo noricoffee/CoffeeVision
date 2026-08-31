@@ -1181,3 +1181,24 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **教訓**: **「操作を封じる」要件は、UI 要素を消すことと同義ではない**。同じ操作に複数の入口（ボタン / ジェスチャー / キーボードショートカット / システムジェスチャー）があるとき、片方だけ塞いでも要件は満たされない。**入口を数えてから塞ぐ**
 - **発生源**: 2026-08-21、上のエントリと同じ対応。`.claude/rules/swift-ios.md` へ要点を昇格済み（発生源として本エントリは残す）
 - **横展開点検（2026-08-21）**: ①`grep -rn "navigationBarBackButtonHidden" iosApp/iosApp` → `AccountView` の**1 箇所のみ**（他に戻るを隠している画面は無い＝スワイプが残っている画面も無い）②`grep -rn "interactiveDismissDisabled" iosApp/iosApp` → **0 件**（sheet 側で離脱を封じている画面は無い。`CoffeeEditorView` は編集中でも離脱を許す設計）③`InteractivePopGestureLock` の利用箇所は `AccountView` のみ＝ロック解除漏れが他画面へ波及する経路は現状 1 本
+
+---
+
+## 2026-08-31
+
+### 既知の罠を「検証項目」に書いておきながら、自分の書くコードには適用しなかった
+
+2026-08-07 の「続報: `List` / `Form` の中では `tint` を明示しても `Label` のアイコンだけ効かない」（上記）の**再発**。同根なので原因の説明はそちらに譲り、**なぜ知っていて踏んだか**をここに記録する。
+
+- **症状**: 追加ボタンの視認性改善で `CafeDetailView.emptyRecordsView` の CTA に `.buttonStyle(.borderedProminent)` を付けたところ、ユーザーから「**逆に + アイコンが見えなくなった**」と報告
+- **原因の構造**: 既出の罠そのもの。`List` 内の `Label` はアイコンだけ `tint` / `buttonStyle` を無視して `accentColor`（茶）で描かれる。**新しいのは壊れ方の質**で、2026-08-07 の実測は「アイコンだけ**茶になる**」（`tint(.indigo)` = 背景 indigo なのでコントラストは残り、色の不一致として見えた）。今回は **`tint` を指定していない = 塗りの背景も `accentColor`** だったため、**茶の背景に茶のアイコンで完全に消えた**。テキストは `borderedProminent` の白前景で描かれるので残り、「アイコンだけ無くなった」という見え方になる。**同じ罠でも、背景色が何かによって「色がズレる」から「消える」へ悪化する**
+- **修正パターン**: 既出と同じ。`Label` に `.foregroundStyle(.white)` を明示する。**答えは同じファイルの 200 行上にあった** — `CafeDetailView.saveButton`（179-209 行）は KDoc でこの罠を明記した上で `.foregroundStyle(.white)` / `.foregroundStyle(Color.indigo)` を当てている
+- **教訓**: **罠を検証項目に挙げることと、その罠を踏まないコードを書くことは別の作業**。今回、親はプランにも dispatch 指示にも「`List` / `Form` では `tint` を明示しても `Label` のアイコンだけ効かない前例がある」と**明示的に書いていた**。ただしそれを**「実装後に目視で確かめること」としてしか使っておらず、「実装時に `.foregroundStyle` を当てること」には変換していなかった**。既知の罠を思い出したら、**チェックリストに足す前に、いま書こうとしているコードがその条件を満たすかを先に判定する**。加えて 2026-08-07 のエントリには実測結果として「②`List` 内 `borderedProminent` + `tint` → こちらもアイコンだけ茶」と**まさにこの組み合わせが記録済み**で、読めば防げた
+  - **もう 1 つ**: 2 画面に同じ CTA を作ったのに、片方（記録一覧）を `Text` のみ、片方（カフェ詳細）を `Label` で書いたため、**アイコンを持つ側だけが壊れて差分レビューでは対称に見えた**。同じ役割の UI を複数箇所に作るときは、まず**構成要素を揃える**
+- **発生源**: 2026-08-31、追加ボタンの視認性改善（`docs/implementation_note.md` 同日）。ユーザーの実機目視で発覚。**ビルドは通っており、型もテストも検出しない**
+- **横展開点検（2026-08-31）**: 危険な組み合わせを **「塗り（`.borderedProminent`）+ `Label` + `List` / `Form` の中」の 3 条件**として定義し、`grep -rn "buttonStyle" iosApp/iosApp --include="*.swift" -B8` で `Label` と同居する全箇所を洗った（`head` 不使用）。
+  - **該当・修正済み**: `CafeDetailView.emptyRecordsView`（本件）
+  - **該当だが対処済み**: `CafeDetailView.saveButton` の 2 状態（2026-08-07 に `.foregroundStyle` 明示済み）
+  - **非該当（`List` の外）**: `CafeDetailView` のツールバー `+`（`ToolbarItem`）/ `ShareCardSheet`「共有する」（`VStack` 内）/ `CafeSelectionCard`（`.safeAreaInset` オーバーレイ）/ `AdPrePromptView` / `DataConsentOnboardingView`
+  - **非該当（塗りではない）**: `CoffeeEditorView+Sections` の 2 箇所（`.bordered` = 背景が塗られないためアイコンが `accentColor` でも同化しない。色の不一致は残るが既存の状態で、本件とは別軸）
+  - **今回追加した `CoffeeListView.emptyView` の CTA は `Text` のみ**でアイコンを持たないため非該当。ただし**将来ここに `Label` でアイコンを足すと同じ条件が揃う**（`ContentUnavailableView` は `List` ではないので現状は安全だが、`.borderedProminent` の背景は `accentColor`）

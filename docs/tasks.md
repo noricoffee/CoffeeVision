@@ -37,6 +37,19 @@
 | [x] | **共有カードの `render` が `pngData()` / ファイル書き込みをメインスレッドで行う**（Swift コードレビュー #6） | SR-3 で body 評価ごとのフルデコードは解消したが、1 回分のデコードと書き込みはメイン上に残っていた。**2026-08-21 完了**（1.0.1） |
 | [x] | **`AccountView` の入れ子 `NavigationStack` を解消し、処理中の「戻る」を封じる** | SR-1 の残務。`interactiveDismissDisabled` が効かず完了ボタンの無効化しか入れられなかった**理由が判明**（入れ子スタックが別 `UINavigationController` を作り、戻るを握るのが外側だった。lessons 2026-08-21）。**2026-08-21 完了**（1.0.1） |
 
+### 追加ボタンの視認性改善（2026-08-31 起票）
+
+> ユーザー指摘「コーヒー記録タブの追加ボタンが分かりづらい」。**FAB へは戻さない**（2026-08-07 / UX-3 で FAB → ナビバー右上 `plus` に統一済み。配置規則は [`ui-ux-guidelines.md`](./ui-ux-guidelines.md)「追加アクションの配置」）。配置は据え置き、**視認性だけを上げる**方針で確定（塗り + 空状態 CTA、2026-08-31 ユーザー決定）。
+>
+> **2026-08-31 実装完了**（フラグ無し `** BUILD SUCCEEDED **` を親側で再検証済み）。判断の経緯は [`implementation_note.md`](./implementation_note.md) 同日。**残るのは目視のみで、項目は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) のパス 1 / 2 / 3 へ移した** — `.borderedProminent` がツールバー内で実際に効くかはコードから判断できない（`List` / `Form` の `tint` 前例。lessons 2026-08-07）ため、**ビルド成功はこの変更の完了条件になっていない**。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [x] | ナビバー右上 `plus` を `.borderedProminent` で塗る（`CoffeeListView` / `CafeDetailView` の**両方**） | 片方だけ変えると 2026-08-07 に解消した分岐が復活する |
+| [x] | 記録一覧の空状態に CTA ボタンを追加し、説明文から位置参照（「右上の + ボタン」）を除去 | ui-ux-guidelines 自身が「位置参照は腐る」と警告している形だった。**実ボタンを出せば位置説明が要らなくなる**という規則を ui-ux-guidelines へ反映 |
+| [x] | カフェ詳細の空状態 CTA も同じスタイルへ統一 | 上の 2 件を入れると同じアクションが画面ごとに別スタイルになるため |
+| [x] | `app-store-metadata` §5 に `04-record-list.png` / `06-cafe-detail.png` の再撮影警告を追記 | 撮り直し自体は次回提出時 |
+
 ### バックログ
 
 #### フェーズ 6（任意 / 後続）

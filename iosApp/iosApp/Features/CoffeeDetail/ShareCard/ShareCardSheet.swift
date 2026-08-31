@@ -5,8 +5,12 @@ import SharedLogic
 
 /// 共有カードのプレビューシート。
 ///
-/// `.task` でカード画像を生成 → 縮小プレビュー + `ShareLink` を提示する。
+/// `.task` でカード画像を生成 → 縮小プレビュー + 共有ボタン（`UIActivityViewController`）を提示する。
 /// 共有前に出ていく内容を目視確認させるのが目的（`docs/requirements.md` §2 2-12）。
+///
+/// 共有は `ShareLink` ではなく `UIActivityViewController`（`ActivityShareSheet` でラップ）を使う。
+/// `ShareLink(items:)` は単一の `Transferable` にしか対応せず、画像ファイルと
+/// App Store 導線テキスト（ASO-7②-a）を同時に渡せないため。
 struct ShareCardSheet: View {
 
     let coffee: CoffeeRecord
@@ -19,6 +23,7 @@ struct ShareCardSheet: View {
     }
 
     @State private var state: RenderState = .generating
+    @State private var isSharePresented = false
 
     var body: some View {
         NavigationStack {
@@ -73,10 +78,9 @@ struct ShareCardSheet: View {
 
             Spacer(minLength: 0)
 
-            ShareLink(
-                item: result.fileURL,
-                preview: SharePreview(shareTitle, image: Image(uiImage: result.image))
-            ) {
+            Button {
+                isSharePresented = true
+            } label: {
                 Label(String(localized: "共有する"), systemImage: "square.and.arrow.up")
                     .frame(maxWidth: .infinity)
             }
@@ -84,6 +88,16 @@ struct ShareCardSheet: View {
             .frame(minHeight: 44)
             .padding(.horizontal)
             .accessibilityLabel(String(localized: "カードを共有する"))
+            .sheet(isPresented: $isSharePresented) {
+                ActivityShareSheet(activityItems: [
+                    ShareCardActivityItemSource(
+                        image: result.image,
+                        fileURL: result.fileURL,
+                        previewTitle: shareTitle
+                    ),
+                    shareText,
+                ])
+            }
         }
         .padding(.vertical, 24)
     }
@@ -102,13 +116,23 @@ struct ShareCardSheet: View {
         String(localized: "\(coffee.name) - CoffeeVision")
     }
 
+    /// App Store への導線を含む共有本文（ASO-7②-a）。
+    ///
+    /// - 1 行目は `shareTitle` と同じ組み立て
+    /// - URL は短縮形を固定で使う（長い URL のスラグはアプリ名から生成される装飾で、
+    ///   ASO でアプリ名を変えるたびに変わるため）
+    /// - カフェ名は含めない（訪問先を投稿本文へ自動掲載しない = 誤共有防止の趣旨、`docs/requirements.md` 2-12）
+    private var shareText: String {
+        "\(shareTitle)\nhttps://apps.apple.com/app/id6788339362"
+    }
+
     // MARK: - レンダリング
 
     @MainActor
     private func generate() async {
         state = .generating
         do {
-            let result = try ShareCardRenderer.render(coffee: coffee)
+            let result = try await ShareCardRenderer.render(coffee: coffee)
             state = .ready(result)
         } catch {
             state = .failed

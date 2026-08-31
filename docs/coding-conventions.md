@@ -103,7 +103,7 @@ data class CoffeeRecord(
     val id: String,
     val cafe: Cafe?,               // null = セルフ抽出
     val visitedOn: LocalDate,
-    val rating: Double?,           // 0.5..5.0（0.5 刻み）。null = 未評価（2026-07-12 B-4 で 0.0 sentinel 廃止）
+    val rating: Double?,           // 0.5..5.0（0.5 刻み）。null = 未評価（0.0 を sentinel にしない）
     val name: String,
     val brewMethod: BrewMethod,
     val roastLevel: RoastLevel?,
@@ -274,7 +274,7 @@ data["brewMethod"] = item.brewMethod.name
 API クライアント / エクスポートの `Json` 設定は **`encodeDefaults = true` + `explicitNulls = false`** を基本にする:
 
 - `encodeDefaults = false`（既定）だとデフォルト値を持つフィールドが JSON から**静かに脱落**する（Places の `includedPrimaryTypes` 欠落・export の `version` 欠落で実証。implementation_note 2026-06-23 / 2026-07-07）
-- `explicitNulls = false` により、省略可能なリクエストフィールドは `val includedType: String? = "cafe"` のように nullable + デフォルト値で表現でき、null 渡しでキーごと省略できる（フェーズ 17-D のパターン）
+- `explicitNulls = false` により、省略可能なリクエストフィールドは `val includedType: String? = "cafe"` のように nullable + デフォルト値で表現でき、null 渡しでキーごと省略できる
 
 ---
 
@@ -398,7 +398,7 @@ Button("追加") {
 
 ## 2.5 並行処理
 
-**`iosApp` は Swift 6 言語モード + 既定 MainActor 分離**（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` / `SWIFT_APPROACHABLE_CONCURRENCY = YES`。設定は `iosApp/Configuration/Base.xcconfig` が正本。2026-08-07 移行）。**宣言に何も書かなければ `@MainActor`** になるのが既定であり、以下は「既定から外れる側」を明示するための規約。
+**`iosApp` は Swift 6 言語モード + 既定 MainActor 分離**（`SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` / `SWIFT_APPROACHABLE_CONCURRENCY = YES`。設定は `iosApp/Configuration/Base.xcconfig` が正本）。**宣言に何も書かなければ `@MainActor`** になるのが既定であり、以下は「既定から外れる側」を明示するための規約。
 
 - Swift Concurrency（`async`/`await`）を使う
 - ViewModel ブリッジは `@MainActor` を付与し、UI 更新を Main で完結させる（既定と同じだが、意図として明示する）

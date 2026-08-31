@@ -1,6 +1,6 @@
 # 分析モデル（派生集計）
 
-`CoffeeRecord` 群から**決定論的に算出する派生モデル**の正本。**いずれも永続化しない**（SQLDelight / Firestore 表現を持たない）ため、永続エンティティの正本である [`data-model.md`](./data-model.md) から分離している（2026-07-25。分離前は data-model.md §1.6 / §1.7 / §1.7a）。
+`CoffeeRecord` 群から**決定論的に算出する派生モデル**の正本。**いずれも永続化しない**（SQLDelight / Firestore 表現を持たない）ため、永続エンティティの正本である [`data-model.md`](./data-model.md) から分離している（分離前は data-model.md §1.6 / §1.7 / §1.7a）。
 
 対象:
 
@@ -36,8 +36,8 @@ data class CoffeeStats(
     val recentHighlights: List<RecordDigest>,  // Q&A 文脈用の代表レコード（高評価・直近）
     val favoriteSignals: FavoriteSignals,      // 階層2: 高評価群に共通する属性
     val tastingAverages: TastingAverages,      // テイスティング 5 要素の平均（設定済みのみ集計）
-    val preferredBeanTraits: PreferredBeanTraits? = null, // 階層2+: 好みの産地 × BeanProfile 突合結果（フェーズ 12-C。BeanProfile 未提供時は null）
-    val unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList(), // 好み合致 × 未記録の BeanProfile 提案（フェーズ 15-E-3。BeanProfile 未提供 / 信号なしは空）
+    val preferredBeanTraits: PreferredBeanTraits? = null, // 階層2+: 好みの産地 × BeanProfile 突合結果（BeanProfile 未提供時は null）
+    val unexploredBeanSuggestions: List<UnexploredBeanSuggestion> = emptyList(), // 好み合致 × 未記録の BeanProfile 提案（要件 9-8。BeanProfile 未提供 / 信号なしは空）
 )
 
 ```
@@ -55,7 +55,7 @@ data class CoffeeStats(
 | `TastingAxis` | enum `Sweetness` / `Body` / `Acidity` / `Flavor` / `Aftertaste` |
 | `TastingAxisCorrelation` | `axis: TastingAxis` / `correlation: Double`（ピアソン r、符号付き）/ `sampleSize: Int` |
 | `FavoriteSignals` | `bestBrewMethod` / `bestOrigin` / `bestRoastLevel` / `bestProcessing`（各 `CategoryStat?`。収縮平均で全体平均を上回った軸のみ）/ `dominantTastingAxis: TastingAxisCorrelation?` / `minSampleSize: Int`（既定 3） |
-| `PreferredBeanTraits` | `matchedProfiles: List<BeanProfile>` / `dominantFlavorNotes`（flavorNotes 頻度 top-5）/ `originHint` / `roastLevelHint` / `dominantTastingAxis`（いずれも信号なしは null）。フェーズ 12-C。`model/PreferredBeanTraits.kt` |
+| `PreferredBeanTraits` | `matchedProfiles: List<BeanProfile>` / `dominantFlavorNotes`（flavorNotes 頻度 top-5）/ `originHint` / `roastLevelHint` / `dominantTastingAxis`（いずれも信号なしは null）。`model/PreferredBeanTraits.kt` |
 
 ### 集計ルール（決定論）
 
@@ -74,7 +74,7 @@ data class CoffeeStats(
   - **交絡（confounding）は計算しない（仕様）**: 「産地が好き」か「その産地を多く出す店が好き」かは個人の観測データでは分離不能。層別すると各層の n が枯れ、有意性検定も前提が崩れる。よって**多変量解析・検定は行わず**、上記の「件数ガード＋収縮＋相関閾値」というヒューリスティックで「弱い傾向」だけを出す。LLM へもこの但し書き付きで渡す（断定させない）。
   - **定数**（`BuildCoffeeStatsUseCase.companion` に公開、将来変更可）: `SHRINKAGE_PRIOR_WEIGHT = 5`（選定キー shrunkMean 用）/ `CORRELATION_MIN_SAMPLE = 5` / `CATEGORY_Z = 2.0`（z ゲート係数 ≈95% 信頼区間。`globalStd == 0` は z ゲートをスキップし δ 下限のみ）/ `CATEGORY_MIN_EFFECT = 0.20` / テイスティング軸の |r| 下限 = `max(CORRELATION_MIN_ABS, CORRELATION_ABS_FLOOR_C / sqrt(n))`（`0.3` と `1.97` の併用。n=30 で実効 ≈0.36）。`minSampleSize` は `FavoriteSignals` 既定 3。
   - **これらの値の根拠（偽陽性率の実測値・不採用案・sweep 条件）は [`implementation_note.md`](./implementation_note.md) 2026-06-22「好み判定の統計設計」が正本**。定数を動かすときは `FavoriteSignalsPersonaTest`（150 シード）で検出力 P1–P4・P7 の維持を確認する。
-- **産地**: 分析が見るのは `origin`（国名）**のみ**。`region`（エリア / 農園）は表示専用で集計に使わない（2026-07-22 分離）。origin は国ドロップダウン（`CoffeeOriginCatalog`。[`data-model.md`](./data-model.md) §1.3a）由来で概ね正規形に揃うが、`BeanProfile.origin` や legacy 自由文字列との名寄せのため引き続き `OriginNormalizer` を通す。グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`、2026-07-08 導入）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
+- **産地**: 分析が見るのは `origin`（国名）**のみ**。`region`（エリア / 農園）は表示専用で集計に使わない。origin は国ドロップダウン（`CoffeeOriginCatalog`。[`data-model.md`](./data-model.md) §1.3a）由来で概ね正規形に揃うが、`BeanProfile.origin` や legacy 自由文字列との名寄せのため引き続き `OriginNormalizer` を通す。グループキーは **`OriginNormalizer.normalize` の正規化値**（trim + lowercase → シノニム辞書の完全キー一致で正規形へ。「Ethiopia」「イルガチェフェ」→「エチオピア」。辞書外は素通し。辞書の正本は `shared/domain/.../OriginNormalizer.kt`）、**表示ラベルはグループ内最初に出現したレコードの元表記（`trim()` のみ）** を採用（ユーザー入力の表記を尊重）。複合文字列（「エチオピア イルガチェフェ」等）は辞書の完全キー一致にヒットせず独立グループのまま（突合側の contains で拾う。既知の限界）。
 - **`recentHighlights`**: 階層3 の Q&A / 要約が具体名に言及できるよう、**`rating >= 4.0`** の高評価かつ直近の代表レコードを少数含める。
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion`。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`（**`HIGHLIGHTS_MIN_RATING` のみ `private`** = UseCase 内部専用。同じ 4.0 を使う §2 の推薦は別定数 `ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING` を持つ）。
@@ -120,8 +120,8 @@ digest で答えられない**個別レコード単位の問い**（「○○カ
 設計上の決め事:
 
 - **単一の柔軟な検索 tool**: 複数の専用 tool に分けず、`searchRecords` 1 本に絞り込み条件を optional で並べる。Foundation Models は引数説明が充実した単一 tool の方が安定し、KMP 照会 API も 1 メソッドで済む。
-- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、未評価（domain の `rating == null`）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。**`CoffeeRecordSummary.rating` はこの境界の例外として `Double` のまま `0.0 = 未評価` を維持**（マッピングは `record.rating ?: 0.0`。domain の nullable 化 = 2026-07-12 B-4 後も、LLM ブリッジは primitive 主義を優先。iOS 側の `>= 0.5` 表示分岐はこの仕様に依存）。
-- **`origin`/`cafeName` はフィールド横断の free-text term**（2026-06-21 横断化）: 各 term が `record.cafe?.name`（カフェ名）/ `record.origin`（産地）/ `record.name`（コーヒー名）/ `record.variety`（品種）のいずれかに部分一致（大小無視）すればマッチ。両方指定時は AND（各 term がそれぞれ union のいずれかにヒット）。どちらも null ならこのテキスト条件は無視。背景: Foundation Models が `cafeName` と `origin` を誤分類しても確実にヒットさせるため（例: "フグレン" を `origin` に入れても cafe 名にマッチ）。トレードオフとして、コーヒー名に地名が含まれる場合の偽陽性が増えるが個人アプリ規模では許容。
+- **filter は全て String/Double/Int（enum を持ち込まない）**: LLM が生成する文字列を KMP 側で寛容にマッチする。`brewMethod`/`roastLevel` は enum `.name` を大小無視 + 部分一致、未評価（domain の `rating == null`）は評価範囲フィルタの対象外として扱う。これでブリッジが単純かつ LLM 出力に頑健になる。**`CoffeeRecordSummary.rating` はこの境界の例外として `Double` のまま `0.0 = 未評価` を維持**（マッピングは `record.rating ?: 0.0`。domain が nullable でも LLM ブリッジは primitive 主義を優先する。iOS 側の `>= 0.5` 表示分岐はこの仕様に依存）。
+- **`origin`/`cafeName` はフィールド横断の free-text term**: 各 term が `record.cafe?.name`（カフェ名）/ `record.origin`（産地）/ `record.name`（コーヒー名）/ `record.variety`（品種）のいずれかに部分一致（大小無視）すればマッチ。両方指定時は AND（各 term がそれぞれ union のいずれかにヒット）。どちらも null ならこのテキスト条件は無視。背景: Foundation Models が `cafeName` と `origin` を誤分類しても確実にヒットさせるため（例: "フグレン" を `origin` に入れても cafe 名にマッチ）。トレードオフとして、コーヒー名に地名が含まれる場合の偽陽性が増えるが個人アプリ規模では許容。
 - **userId は実装（`CoffeeRecordQueryImpl`）が内部で解決**: Swift は filter だけ渡す。全件取得 → インメモリ filter → `visitedOn` 降順 → `limit` 件（個人アプリ規模の数十〜数百件では全件読みで十分）。`CoffeeRepository` + `AuthRepository` の**インターフェースのみに依存**させ（テスト容易）、`AppContainer` が組み立てて公開する。
 - **digest はベース文脈として併用（ハイブリッド）**: tool は digest で足りないときだけ LLM が呼ぶ。プロンプトには引き続き `buildPrompt(stats)` の digest を含める。
 - **既存インターフェース・VM・UI は不変**: `CoffeeInsightProvider.answer(question, stats)` のシグネチャは据え置き、iOS 実装が内部で tool を登録するだけ。`AnalysisViewModel` / Q&A UI は変更しない（変更は純粋に加算的）。ブリッジ方向（Swift→Kotlin calling direction）と配線は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
@@ -150,7 +150,7 @@ sealed interface RecommendationReason {
         val exampleRecordName: String,    // 代表記録のコーヒー名
         val exampleRating: Double,        // その記録の評価
     ) : RecommendationReason
-    // 9-6（協調フィルタ / リモート・設計確定 2026-07-21・未実装）: 味覚が近いユーザーが高評価した未訪問店
+    // 9-6（協調フィルタ / リモート・設計確定・未実装）: 味覚が近いユーザーが高評価した未訪問店
     data class SimilarUsers(
         val similarUserCount: Int,        // 似ているユーザー数（最小 K 未満は推薦を出さない = 個人特定回避）
     ) : RecommendationReason
@@ -187,14 +187,14 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 **`CafeRecommendationProvider` は 2 つの ViewModel が購読する**。マップは「どの店が一致しているか」（一覧）、カフェ詳細は「この店がなぜ一致しているか」（理由）を担い、役割で分かれている。
 
 - `MapViewModel` は `observeRecommendedCafes(userId)` を購読し、`UIState` に `recommendedCafes: List<RecommendedCafe>` と一致 placeId 集合を加える（既存 `visitedCafes` 購読と同パターン）。用途は**ピンの区別と一覧シート**。
-- `CafeDetailViewModel` も同じ provider を購読し、自 `placeId` に一致するエントリの理由を `UIState.matches: List<RecommendationReason>` として公開する（一致なし = 空リスト。nullable にしない）。2026-08-07 に追加。
-- iOS `MapTabView`: 一致カフェを**区別ピン**（pink + ハートバッジ）で示す。**タップは他の概念ピンと同じくカフェ詳細へ直行**する（2026-08-07 に変更。旧実装はピンタップで推薦理由のモーダルシートを挟んでいた）。
+- `CafeDetailViewModel` も同じ provider を購読し、自 `placeId` に一致するエントリの理由を `UIState.matches: List<RecommendationReason>` として公開する（一致なし = 空リスト。nullable にしない）。
+- iOS `MapTabView`: 一致カフェを**区別ピン**（pink + ハートバッジ）で示す。**タップは他の概念ピンと同じくカフェ詳細へ直行**する（推薦理由はカフェ詳細のセクションに出す。モーダルシートを挟まない）。
 - iOS `CafeDetailView`: `matches` が非空なら店名直下に「好み一致」セクションを出し、軸ごとの理由を並べる。理由文言（「好みの産地: Ethiopia」+ 代表記録 ★4.5）は iOS でローカライズ生成。**マップ以外の経路（コーヒー記録一覧など）で開いても表示される**のが移設の主目的。
 - **Foundation Models 連携は将来 9-6 で「推薦理由の自然言語化」一点に限定**（v1 は構造化 reason を iOS が定型文で表示。LLM は使わない）。
 
-> **再計算コストの注記**: `ObserveTasteMatchedCafesUseCase` は全記録を毎回集計する。provider は `AppContainer` のファクトリで**都度生成**するため、マップと詳細が同時にアクティブな間は集計が二重に走る。カフェ詳細は push / pop ごとの生成・破棄で常駐しないこと、個人アプリの記録件数規模から、現状は許容と判断（2026-08-07）。共有化するなら `AppContainer` 側で `shareIn` する設計変更になる。
+> **再計算コストの注記**: `ObserveTasteMatchedCafesUseCase` は全記録を毎回集計する。provider は `AppContainer` のファクトリで**都度生成**するため、マップと詳細が同時にアクティブな間は集計が二重に走る。カフェ詳細は push / pop ごとの生成・破棄で常駐しないこと、個人アプリの記録件数規模から、現状は許容と判断。共有化するなら `AppContainer` 側で `shareIn` する設計変更になる。
 
-### 9-6 協調フィルタリング（リモート実装 / 設計確定 2026-07-21・未実装）
+### 9-6 協調フィルタリング（リモート実装 / 設計確定・未実装）
 
 9-5（ローカル・既訪問の再訪）に**追加**で載る新規開拓推薦。`CafeRecommendationProvider` のリモート実装として差し替える（`MapViewModel` / iOS UI / 理由表示層は不変）。**実装はインフラ選定から段階着手**（tasks 12-D）。
 
@@ -212,7 +212,7 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 ---
 
-## 3. UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8・フェーズ 15-E-3）
+## 3. UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8）
 
 好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計（永続化しない）。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
 

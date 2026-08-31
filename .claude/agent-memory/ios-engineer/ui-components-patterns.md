@@ -88,6 +88,11 @@ metadata:
 - 保存前の新規写真（`pendingData: Data?`）は既に `ImageDownsampler.downsampledJPEG` で長辺 2048px まで縮小済みの JPEG なので、表示用にさらに小さい `maxPixelSize` へ `ImageDownsampler.downsampledImage`（新設、JPEG 再エンコードなしの `Data → UIImage` 版）で縮小デコードしても二重コストは小さい。`.task(id:)` の `id` は `fileName` 1 本で足りる（新規写真も選択時点で `"\(photoId).jpg"` を採番済みなので保存前から一意）。
 - `downsampledJPEG` を同期 → `async` + `@concurrent` 化したら、呼び出し元が既に `async` 関数（`handlePickerSelection`）でも `await` を書き忘れるとコンパイルエラーになるので機械的に検出できる（`@concurrent` 単体の付け忘れとは違い、シグネチャ変更に伴う呼び出し側の型エラーは通常通りコンパイラが守ってくれる）。危険なのは「関数を新設するときに `@concurrent` を付け忘れる」方（規約どおり診断が出ない）。
 
+## タップ不可なシミュレータ環境で「文言変更がバッジ行の幅を超えるか」を検証するには `NSAttributedString.size()` で glyph 幅を実測する（2026-08-21、CafeSelectionCard 営業状態文言統一で確認）
+
+- `CafeSelectionCard`/`CafeDetailView` の営業状態バッジのような「複数の条件付きバッジが `HStack(spacing:)` に並ぶ行」は、文言を数文字伸ばすだけで狭幅端末（iPhone SE 375pt）だと折返し/圧縮に転ぶことがある。タップでカードを表示させないと確認できない画面（マップのピンタップ等）はこのサンドボックスでは自動操作できないため（[[sandbox-no-gui-simulator]]）、`swift` script で `NSFont.systemFont(ofSize: 12, weight: .regular)`（`.caption` の近似）+ `NSAttributedString(string:attributes:).size()` を使い、変更前後の文字列幅を実測してから固定要素（写真サムネイル・ボタン・padding・spacing）を積算した「利用可能幅」と比較する机上検証が有効。iOS 実機フォントと厳密一致はしないが、増分の大小判定には十分な精度。
+- 幅超過が「起こりうる」と判定したときの対処は、別の単語を選ぶのではなく該当行の全 `Text` に `.lineLimit(1)` を付けて折返し由来の行高崩れ・バッジ縦積みを防ぐ（横方向の圧縮/省略記号化はさせるが、複数行化による行の背丈変化だけは避ける）。これは軽微な防御的追加で、文言選定そのものへの介入ではない。
+
 ## 排他的な複数種シート + 「表示中だけ連動する強調状態」は `enum: Identifiable` の単一 `@State item` + `.sheet(item:)` に一本化する（2026-07-24、MapTabView 好み一致/保存済みチップ操作モデル改修で確認）
 
 - 「チップ A/B どちらか一方だけ開ける一覧シート」+「シート表示中だけマップ側の強調（他ピン減光）を ON にする」要件は、`isPresentingA`/`isPresentingB`/`emphasisA`/`emphasisB` の 4 `@State` bool で個別管理すると、閉じ忘れ（下スワイプ dismiss 時に強調 bool だけ残る）や排他性の手動維持（相手を false にし忘れる）が起きやすい。`enum Kind: Identifiable { case a, case b; var id: Self { self } }` + `@State var activeSheet: Kind?` + `.sheet(item: $activeSheet) { kind in switch kind { ... } }` に一本化すると、①排他性（同時に 2 種は開けない）と②下スワイプ dismiss 時の自動リセット（`activeSheet` が自動的に `nil` に戻る）の両方が構造的に保証される。

@@ -1201,4 +1201,5 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
   - **該当だが対処済み**: `CafeDetailView.saveButton` の 2 状態（2026-08-07 に `.foregroundStyle` 明示済み）
   - **非該当（`List` の外）**: `CafeDetailView` のツールバー `+`（`ToolbarItem`）/ `ShareCardSheet`「共有する」（`VStack` 内）/ `CafeSelectionCard`（`.safeAreaInset` オーバーレイ）/ `AdPrePromptView` / `DataConsentOnboardingView`
   - **非該当（塗りではない）**: `CoffeeEditorView+Sections` の 2 箇所（`.bordered` = 背景が塗られないためアイコンが `accentColor` でも同化しない。色の不一致は残るが既存の状態で、本件とは別軸）
-  - **今回追加した `CoffeeListView.emptyView` の CTA は `Text` のみ**でアイコンを持たないため非該当。ただし**将来ここに `Label` でアイコンを足すと同じ条件が揃う**（`ContentUnavailableView` は `List` ではないので現状は安全だが、`.borderedProminent` の背景は `accentColor`）
+  - **非該当（`List` の外）**: `CoffeeListView.emptyView` の CTA。同日中にユーザー依頼でカフェ詳細へ揃えて `Label` + `plus` を足したが、`ContentUnavailableView` は `List` の外なので **`.foregroundStyle` 無しでアイコンが正しく描かれることを目視で確認済み**
+- **条件の精密化（2026-08-31、上の追加確認で判明）**: 罠の成立には **「塗り + `Label` + `List` / `Form` の中」の 3 条件すべて**が要る。塗り + `Label` だけでは起きない。この区別が実務上重要なのは、**カフェ詳細の `.foregroundStyle(.white)` を「揃えるべき見た目」として機械的に写すと負債になる**から — あれは `List` 内でしか必要のない対処で、`List` 外に写すと**将来 tint を変えたときに読めなくなる**。同じ見た目の UI を 2 箇所に作るとき、**片方に付いている modifier が「意匠」なのか「特定コンテナへの対処」なのかを区別してから写す**

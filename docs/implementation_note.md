@@ -215,5 +215,9 @@ App ID は `6788339362`。**バイナリやカード画像に焼くのは `https
 
 この件で**上に書いた「目視未確認のままコミットした」の位置づけが変わった**。目視を verification-checklist に積んだこと自体は機能して発見に繋がったが、**この退行は目視の前に防げた**。罠は `lessons.md` 2026-08-07 続報に「②`List` 内 `borderedProminent` + `tint` → こちらもアイコンだけ茶」と**実測結果まで記録済み**で、対処済みの実例は**同じファイルの 200 行上**にあり、しかも親はプランと dispatch 指示の両方でこの罠に言及していた。**にもかかわらず、それを「実装後に目視で確かめる項目」としてしか使わず、「実装時に `.foregroundStyle` を当てる条件判定」に変換しなかった**。教訓は lessons 2026-08-31 に記録し、`.claude/rules/swift-ios.md` と `docs/ui-ux-guidelines.md`（「追加アクションの配置」）にも昇格させた。
 
-**追記 2（同日）: 目視確認が通り、本件はクローズ。** あわせて **`.buttonStyle(.borderedProminent)` は `ToolbarItem` の中では塗りとして正しく効く**ことが実測で確定した（`ToolbarItem` は `List` / `Form` の外なのでアイコン同化は起きない。lessons 2026-08-07 続報の「③`List` の外 → 文字・アイコンとも揃う」と整合する）。**この doc で 2 度「コードから判断できない」と書いた点への答え**なので、規則側（ui-ux-guidelines「追加アクションの配置」）にも確認済みの旨を明記した。`verification-checklist` の 4 項目は運用ルールどおり削除済み。
+**追記 2（同日）: 目視確認が通った。** あわせて **`.buttonStyle(.borderedProminent)` は `ToolbarItem` の中では塗りとして正しく効く**ことが実測で確定した（`ToolbarItem` は `List` / `Form` の外なのでアイコン同化は起きない。lessons 2026-08-07 続報の「③`List` の外 → 文字・アイコンとも揃う」と整合する）。**この doc で 2 度「コードから判断できない」と書いた点への答え**なので、規則側（ui-ux-guidelines「追加アクションの配置」）にも確認済みの旨を明記した。`verification-checklist` の 4 項目は運用ルールどおり削除済み。
+
+**追記 3（同日）: 2 画面の空状態 CTA を構成要素まで揃えてクローズ**（ユーザー依頼）。記録一覧側を `Text` → `Label(systemImage: "plus")` にし、カフェ詳細と同じアイコン付きに統一。目視確認済み。
+
+ここで **`.foregroundStyle(.white)` は写さなかった**。あれは `List` 内の罠への対処であって意匠ではなく、`CoffeeListView.emptyView` は `ContentUnavailableView` = `List` の外なので条件が成立しない。写していたら**将来 tint を変えたときに読めなくなる負債**になっていた。目視で `.foregroundStyle` 無しでもアイコンが正しく描かれることを確認し、**罠の成立には「塗り + `Label` + `List` / `Form` の中」の 3 条件すべてが要る**ことが確定した（lessons 2026-08-31 / `.claude/rules/swift-ios.md` / ui-ux-guidelines に「逆に `List` 外では付けない」を明記）。**同じ見た目の UI を 2 箇所に作るとき、片方に付いている modifier が意匠なのか特定コンテナへの対処なのかを区別してから写す** — 今回はこれを分けたことで負債を作らずに済んだ。
 

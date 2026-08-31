@@ -104,7 +104,10 @@ struct CoffeeListView: View {
             Button {
                 isPresentingEditor = true
             } label: {
-                Text(String(localized: "コーヒーを記録"))
+                Label(
+                    String(localized: "コーヒーを記録"),
+                    systemImage: "plus"
+                )
             }
             .buttonStyle(.borderedProminent)
             .disabled(appState.uid == nil)
@@ -286,7 +289,10 @@ struct CoffeeRow: View {
             Text(String(localized: "マップのカフェ検索からカフェを選んで記録することもできます"))
         } actions: {
             Button {} label: {
-                Text(String(localized: "コーヒーを記録"))
+                Label(
+                    String(localized: "コーヒーを記録"),
+                    systemImage: "plus"
+                )
             }
             .buttonStyle(.borderedProminent)
         }

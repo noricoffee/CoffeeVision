@@ -240,9 +240,11 @@ VStack(spacing: 11) { ... }
 
 **この `plus` には `.buttonStyle(.borderedProminent)` を付ける**（2026-08-31 追加、**シミュレータ目視で塗りになることを確認済み** — `ToolbarItem` は `List` / `Form` の外なので下記のアイコン同化は起きない）。素の `Button` は iOS 26 では無色の Liquid Glass として描かれ、`.large` タイトル + `.searchable` の検索欄と同居するナビバーの中で埋もれる（ユーザー指摘「追加ボタンが分かりづらい」）。`.tint` は明示しない — ここはブランドのアクセント茶が正しく、下記「マップ概念の色セマンティクス」の対象外（訪問済み / 保存済み等の概念を描くボタンではない）。
 
-画面内に空状態の CTA を別途置くのは構わない。**置くなら `ContentUnavailableView` の `description` に文章で書くのではなく `actions:` に実ボタンを置き**、ツールバー側と同じ `.borderedProminent` + 同じ文言「コーヒーを記録」+ 同じ `.disabled` 条件に揃える（2026-08-31、`CoffeeListView.emptyView` / `CafeDetailView.emptyRecordsView` の 2 箇所が該当）。
+画面内に空状態の CTA を別途置くのは構わない。**置くなら `ContentUnavailableView` の `description` に文章で書くのではなく `actions:` に実ボタンを置き**、ツールバー側と揃える — `.borderedProminent` / 文言「コーヒーを記録」/ `Label(systemImage: "plus")`（**アイコン付き**）/ `.disabled` 条件の 4 点（2026-08-31、`CoffeeListView.emptyView` / `CafeDetailView.emptyRecordsView` の 2 箇所が該当。いずれも目視確認済み）。
 
-> ⚠ **その CTA が `List` / `Form` の中にあり `Label`（アイコン付き）を使うなら、`Label` に `.foregroundStyle(.white)` を必ず当てる。** `List` 内の `Label` はアイコンだけ `tint` / `buttonStyle` を無視して `accentColor` で描かれ、`.borderedProminent` の塗りも `accentColor` なので、**アイコンが背景と同化して消える**（`CafeDetailView.emptyRecordsView` で 2026-08-31 に実際に起きた。対処済みの実例が同じファイルの `saveButton` にある）。詳細は下記「マップ概念の色セマンティクス」と lessons 2026-08-07 続報 / 2026-08-31。
+> ⚠ **その CTA が `List` / `Form` の中にあるなら、`Label` に `.foregroundStyle(.white)` を当てる。** `List` 内の `Label` はアイコンだけ `tint` / `buttonStyle` を無視して `accentColor` で描かれ、`.borderedProminent` の塗りも `accentColor` なので、**アイコンが背景と同化して消える**（`CafeDetailView.emptyRecordsView` で 2026-08-31 に実際に起きた。対処済みの実例が同じファイルの `saveButton` にある）。
+>
+> **逆に `List` の外では付けないこと。** 罠の成立には「塗り + `Label` + `List` / `Form` の中」の**3 条件すべて**が要る（`CoffeeListView.emptyView` は `ContentUnavailableView` = `List` 外で、`.foregroundStyle` 無しでアイコンが正しく描かれることを目視確認済み）。**`.foregroundStyle(.white)` は意匠ではなく特定コンテナへの対処**なので、揃えるつもりで `List` 外へ写すと将来 tint を変えたときに読めなくなる。詳細は lessons 2026-08-07 続報 / 2026-08-31。
 
 **文言が追加ボタンの位置を指す場合、ボタンを動かしたら必ず一緒に直す** — 「右下の + ボタンから」のような位置参照は、配置変更のたびに腐る。位置を書かずに済むなら書かない方が安全（記録一覧の「右上の + ボタンか、〜」は 2026-08-31 に実ボタン CTA へ置き換えて位置参照ごと解消した。**実ボタンを同じ画面に出せるなら、位置を説明する文章は要らなくなる**）。
 

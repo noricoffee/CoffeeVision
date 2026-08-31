@@ -332,6 +332,7 @@ CoffeeVision を初めてリリースしました。
 ### 一度きりの設定（1.0 で完了済み / 変えるときに効いてくる知識）
 
 - **App Store Connect**: 英語(U.S.) ロケールを追加し keywords だけ英語（§4.3）、他フィールドは日本語を転記 / 価格・配信地域（無料・**日本のみ**。EU へ拡大するなら UMP の GDPR フォーム実装が先） / SKU は登録後変更不可
+- **アプリ名 / サブタイトル / キーワードは、新しいバイナリを出さずに編集できる**（2026-08-31 に ASC 実画面で確認）。Apple 公式リファレンスの表は Name を「編集不可」側に置き、実務の定説も「キーワードは version-level なので新バージョンの提出が要る」としており**どちらとも食い違う**ため、ASO の反映計画を立てるときは**推測せず ASC を開いて確かめる**。⚠ ただし**変更の公開に審査が挟まるかは未確認** — 反映のリードタイムを見込む場合はここを先に確かめること
 - **輸出コンプライアンス**: 暗号利用は標準 HTTPS と Sign in with Apple の nonce ハッシュ（CryptoKit SHA256 = Apple 標準・ハッシュは暗号化に非該当）のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を `Info.plist` に設定済みのため、提出のたびの暗号化アンケートは**自動スキップされる**
 - **App Icon がアルファチャンネルを持たないこと**（違反すると `ITMS-90717`）。**検証は Release / Archive で行う。Debug では判定できない** — 派生 PNG は **Debug では常に `hasAlpha: yes`**（actool が RGBA コンテナで書き出すため。ソースのアルファ有無と**無関係**）、**Release では常に `no`**。ローカルの `builtin-validationUtility -validate-for-store` は**アルファをチェックしない**ので、通っても ASC 通過の証明にはならない
 - **App Icon / LaunchLogo に SF Symbols を使わない**（ライセンス条項がアプリアイコン / ロゴでの使用を禁じている）。現在は `iosApp/scripts/generate_app_icon.swift` の自前パス描画で、`grep -rn "systemSymbolName" iosApp/` が 0 件であることが検証手段
@@ -342,6 +343,82 @@ CoffeeVision を初めてリリースしました。
 
 ---
 
+## 11. Featuring Nomination（App Store 掲載推薦の申請）
+
+> ASC の **Featuring → Nominations**。Apple のエディトリアル面（Today / カテゴリ / コレクション）への推薦を自己申請する枠で、**無料・原稿だけ**で出せる。返信は刺さった場合のみ来るので、**無応答を失敗と読まない**（tasks ASO-10）。
+
+### 11.1 制度の要点
+
+| 項目 | 内容 |
+|------|------|
+| 種別 | `App Launch`（新規リリース / 予約注文）/ `App Enhancements`（新機能・大きな UX 改善を伴うアップデート）/ `New Content`（新規のアプリ内コンテンツ・季節キャンペーン・イベント・特典） |
+| **提出後に変更できない** | Nomination ID / **Related Apps** / **Nomination Type** |
+| 必須 | Related Apps（自アプリの Apple ID + 関連 9 本まで）/ Nomination Type / **Nomination Name（60 字）** |
+| 任意（書く） | Nomination Description（1,000 字）/ **Helpful Details（500 字 = 独自性を書く枠）** / Publish Date（YYYY-MM-DD）/ Relevant Countries（ISO 3 文字）/ Platforms / Localization / Related In-App Events（25 件まで）/ Supplemental Materials（URL 5 本まで） |
+| リードタイム | **最低 2 週間、Apple 推奨は 3 週間以上前** |
+| 権限 | Account Holder / Admin / App Manager / Marketing |
+
+出典: [Nominations template](https://developer.apple.com/help/app-store-connect/reference/nominations-template/) / [Nominate your app for featuring](https://developer.apple.com/help/app-store-connect/manage-featuring-nominations/nominate-your-app-for-featuring/)
+
+### 11.2 種別の選び方（未確定 / 提出前に決める）
+
+**種別は提出後に変更できない**ため、次バージョンの中身が固まってから提出する。現時点の候補は 2 つで、性格が違う。
+
+- **`App Launch`** — 初回配信が 2026-08-17 で、リリース直後の窓がまだ残っている。ただしリードタイム（推奨 3 週間前）の考え方からすると本来は**配信前に出す**枠
+- **`App Enhancements`** — 次バージョンに合わせる。**中身のあるアップデートが要る**ので、機能追加を伴わないメタデータ改訂だけの版に付けると訴求が弱い
+
+> **原稿（11.3）は種別によらず共通**。訴求の芯（5 軸テイスティング / オンデバイス Foundation Models / 1 杯 = 1 件の設計）は版に依存しないため、種別だけ差し替えれば出せる。
+
+### 11.3 原稿（`len` 実測済み）
+
+**Nomination Name**（**57 字** / 60）
+
+```
+CoffeeVision: on-device taste analysis for coffee logging
+```
+
+**Nomination Description**（**995 字** / 1,000）
+
+```
+CoffeeVision is a coffee journal built for Japan's specialty coffee scene. Each cup — whether pulled at a cafe or brewed at home — is one record, capturing origin, variety, process, roast level, brew method, a half-star rating, and a five-axis tasting profile: sweetness, body, acidity, flavor, aftertaste.
+
+Those five axes are what the app is built around. As records accumulate, the analysis tab draws the shape of the user's palate as a radar chart, surfaces which origins and roast levels they gravitate toward, and suggests beans they have not tried yet that fit the pattern.
+
+On devices with Apple Intelligence, the Foundation Models framework puts that palate into words and answers questions like "which origins do I like?" — entirely on device. Records never leave the phone to be summarized or queried.
+
+Cafes are searched through Google Places. Visited shops become pins on a map, shops the user wants to try are saved with their own pin, and the map grows into a personal coffee map.
+```
+
+**Helpful Details**（**499 字** / 500）
+
+```
+Three things set CoffeeVision apart. First, the five-axis tasting profile is the primary record rather than an afterthought — the entire analysis layer is built on it. Second, the Apple Intelligence features run through the on-device Foundation Models framework, so coffee records never leave the phone to be summarized or queried. Third, a cafe cup and a home brew are the same unit, so the map and the palate analysis draw on one continuous history. Solo-developed in Japan; free, no subscription.
+```
+
+**その他のフィールド**
+
+| フィールド | 値 |
+|-----------|----|
+| Related Apps | `6788339362`（自アプリのみ。**提出後変更不可**） |
+| Relevant Countries | `JPN` |
+| Platforms | `iOS (iPhone)` |
+| Localization | `ja` |
+| Publish Date (Start) | 次バージョンの配信予定日（**提出はその 3 週間以上前**） |
+
+> **英語で書く理由**: 申請の読み手は Apple のエディトリアルチームで、日本語ロケール限定の配信でも申請自体は英語で通す方が読まれる。ストア掲載原稿（§1〜§4）が日本語であることとは独立している。
+>
+> **オンデバイス処理を前面に出しているのは意図的**。Apple が推している Foundation Models framework を個人開発アプリが実装済み、という点が最も差別化される訴求で、`CoffeeInsightProviderIosImpl` の実装事実に基づく（§2 と同じ条件付きの機能）。
+
+### 11.4 提出履歴
+
+| 提出日 | 種別 | 対象バージョン | 結果 |
+|--------|------|--------------|------|
+| （未提出） | — | — | — |
+
+---
+
 ## 変更履歴
 
 1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。
+
+**2026-08-31**: §11 Featuring Nomination を新設（ASO-10）。§4 のキーワード再配分（ASO-8）は実測待ちのため未反映。

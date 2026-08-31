@@ -238,7 +238,7 @@ VStack(spacing: 11) { ... }
 
 **「新規作成」は必ず `ToolbarItem(placement: .topBarTrailing)` の `plus` に置く。FAB（`overlay(alignment: .bottomTrailing)` の円形ボタン）は使わない。** 同じ「コーヒーを記録」がコーヒー記録一覧では右下 FAB、カフェ詳細では右上 `+` と 2 通りに分かれていたのを統一したもの（2026-08-07、UX-3）。FAB は iOS 標準の語彙ではなく、加えてリスト最下行に重なって内容を隠していた。
 
-**この `plus` には `.buttonStyle(.borderedProminent)` を付ける**（2026-08-31 追加）。素の `Button` は iOS 26 では無色の Liquid Glass として描かれ、`.large` タイトル + `.searchable` の検索欄と同居するナビバーの中で埋もれる（ユーザー指摘「追加ボタンが分かりづらい」）。`.tint` は明示しない — ここはブランドのアクセント茶が正しく、下記「マップ概念の色セマンティクス」の対象外（訪問済み / 保存済み等の概念を描くボタンではない）。
+**この `plus` には `.buttonStyle(.borderedProminent)` を付ける**（2026-08-31 追加、**シミュレータ目視で塗りになることを確認済み** — `ToolbarItem` は `List` / `Form` の外なので下記のアイコン同化は起きない）。素の `Button` は iOS 26 では無色の Liquid Glass として描かれ、`.large` タイトル + `.searchable` の検索欄と同居するナビバーの中で埋もれる（ユーザー指摘「追加ボタンが分かりづらい」）。`.tint` は明示しない — ここはブランドのアクセント茶が正しく、下記「マップ概念の色セマンティクス」の対象外（訪問済み / 保存済み等の概念を描くボタンではない）。
 
 画面内に空状態の CTA を別途置くのは構わない。**置くなら `ContentUnavailableView` の `description` に文章で書くのではなく `actions:` に実ボタンを置き**、ツールバー側と同じ `.borderedProminent` + 同じ文言「コーヒーを記録」+ 同じ `.disabled` 条件に揃える（2026-08-31、`CoffeeListView.emptyView` / `CafeDetailView.emptyRecordsView` の 2 箇所が該当）。
 

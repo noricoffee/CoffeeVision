@@ -41,7 +41,7 @@
 
 > ユーザー指摘「コーヒー記録タブの追加ボタンが分かりづらい」。**FAB へは戻さない**（2026-08-07 / UX-3 で FAB → ナビバー右上 `plus` に統一済み。配置規則は [`ui-ux-guidelines.md`](./ui-ux-guidelines.md)「追加アクションの配置」）。配置は据え置き、**視認性だけを上げる**方針で確定（塗り + 空状態 CTA、2026-08-31 ユーザー決定）。
 >
-> **2026-08-31 実装完了**（フラグ無し `** BUILD SUCCEEDED **` を親側で再検証済み）。判断の経緯は [`implementation_note.md`](./implementation_note.md) 同日。**残るのは目視のみで、項目は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) のパス 1 / 2 / 3 へ移した** — `.borderedProminent` がツールバー内で実際に効くかはコードから判断できない（`List` / `Form` の `tint` 前例。lessons 2026-08-07）ため、**ビルド成功はこの変更の完了条件になっていない**。
+> **2026-08-31 完了**（フラグ無し `** BUILD SUCCEEDED **` を親側で再検証 + **ユーザーによるシミュレータ目視確認済み**）。判断の経緯は [`implementation_note.md`](./implementation_note.md) 同日。途中で **`List` 内の `Label` のアイコンが塗りの背景と同化して消える退行**を 1 件出し、目視で発覚して修正した（lessons 2026-08-31 / `.claude/rules/swift-ios.md` へ昇格済み）。
 
 | 状態 | タスク | 備考 |
 |------|--------|------|

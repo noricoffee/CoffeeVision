@@ -1,0 +1,386 @@
+{
+  "measured_at": "2026-08-31",
+  "self": {
+    "trackName": "CoffeeVision コーヒーマップ＆好み分析",
+    "version": "1.0.1",
+    "currentVersionReleaseDate": "2026-08-21T16:35:33Z",
+    "releaseDate": "2026-08-17T07:00:00Z",
+    "userRatingCount": 0,
+    "averageUserRating": 0
+  },
+  "rows": [
+    {
+      "term": "コーヒー記録",
+      "total": 98,
+      "rank": null,
+      "rival_ratings_median": 11,
+      "top3": [
+        "CoffeeJourney - コーヒー記録アプリ",
+        "コーヒー手帳",
+        "Coffee Palette: スペシャルティコーヒーログ"
+      ]
+    },
+    {
+      "term": "コーヒー 記録",
+      "total": 97,
+      "rank": null,
+      "rival_ratings_median": 11,
+      "top3": [
+        "コーヒー手帳",
+        "「コーヒー抽出レシピ」の記録アプリ - Kopi",
+        "CoffeeJourney - コーヒー記録アプリ"
+      ]
+    },
+    {
+      "term": "カフェ 記録",
+      "total": 92,
+      "rank": null,
+      "rival_ratings_median": 16,
+      "top3": [
+        "カフェ巡り",
+        "RONDO - 行った場所の記録・地図メモ",
+        "caffy"
+      ]
+    },
+    {
+      "term": "カフェ 記録 アプリ",
+      "total": 93,
+      "rank": null,
+      "rival_ratings_median": 16,
+      "top3": [
+        "RONDO - 行った場所の記録・地図メモ",
+        "カフェ巡り",
+        "caffy"
+      ]
+    },
+    {
+      "term": "コーヒー ノート",
+      "total": 97,
+      "rank": null,
+      "rival_ratings_median": 35,
+      "top3": [
+        "コーヒーノート - シンプルで奥深いコーヒー記録アプリ",
+        "コーヒー手帳",
+        "「コーヒー抽出レシピ」の記録アプリ - Kopi"
+      ]
+    },
+    {
+      "term": "テイスティング",
+      "total": 98,
+      "rank": null,
+      "rival_ratings_median": 1,
+      "top3": [
+        "ボトルノート - お酒のテイスティング記録",
+        "WhiskyRecord",
+        "AirBlindTasting"
+      ]
+    },
+    {
+      "term": "テイスティングノート",
+      "total": 94,
+      "rank": null,
+      "rival_ratings_median": 7,
+      "top3": [
+        "ボトルノート - お酒のテイスティング記録",
+        "ボトルコレクション ラベル わいん お酒記録アプリ",
+        "CHALOG 茶 - お茶の記録"
+      ]
+    },
+    {
+      "term": "カフェ巡り",
+      "total": 91,
+      "rank": null,
+      "rival_ratings_median": 7,
+      "top3": [
+        "カフェ巡り",
+        "cafema - カフェ検索・巡り・投稿",
+        "食べログ - おいしいお店を見つけて予約できるグルメアプリ"
+      ]
+    },
+    {
+      "term": "コーヒー",
+      "total": 97,
+      "rank": null,
+      "rival_ratings_median": 8390,
+      "top3": [
+        "Coffee Inc 2",
+        "スターバックス ジャパン公式モバイルアプリ",
+        "グッドコーヒー、グレートコーヒー"
+      ]
+    },
+    {
+      "term": "カフェ",
+      "total": 86,
+      "rank": null,
+      "rival_ratings_median": 1445,
+      "top3": [
+        "グッドコーヒー、グレートコーヒー",
+        "マイカフェ — レストランゲーム",
+        "カフェライフ：コーヒーマニア (Cafe Life)"
+      ]
+    },
+    {
+      "term": "焙煎",
+      "total": 94,
+      "rank": null,
+      "rival_ratings_median": 3,
+      "top3": [
+        "焙煎タイマー",
+        "Roast Lens",
+        "Roasty"
+      ]
+    },
+    {
+      "term": "コーヒー豆 管理",
+      "total": 37,
+      "rank": null,
+      "rival_ratings_median": 3,
+      "top3": [
+        "Mame Log｜コーヒー豆の飲み頃・鮮度管理",
+        "コーヒータイマー - レシピと豆の管理アプリ",
+        "Brew Tech - コーヒー管理アプリ"
+      ]
+    },
+    {
+      "term": "コーヒーログ",
+      "total": 99,
+      "rank": null,
+      "rival_ratings_median": 4,
+      "top3": [
+        "CoffeeLog - ドリンク記録",
+        "Coffee Log - コーヒー記録",
+        "カフェイン記録 - コーヒー日記"
+      ]
+    },
+    {
+      "term": "カフェ ノート",
+      "total": 92,
+      "rank": null,
+      "rival_ratings_median": 2,
+      "top3": [
+        "ホワイトノイズ・タイマー – 自然音 & ASMR",
+        "レポブ - 日常・映画・本・グルメ・推し活・音楽の記録と共有",
+        "カフェノート"
+      ]
+    },
+    {
+      "term": "コーヒー 好み",
+      "total": 9,
+      "rank": 3,
+      "rival_ratings_median": 5,
+      "top3": [
+        "Drippe コーヒータイマー",
+        "Coffee Palette(コーヒーパレット)",
+        "CoffeeVision コーヒーマップ＆好み分析"
+      ]
+    },
+    {
+      "term": "コーヒーマップ",
+      "total": 81,
+      "rank": 6,
+      "rival_ratings_median": 3,
+      "top3": [
+        "カフェマップ - 近くのカフェを探す",
+        "ゴミ箱マップ",
+        "foodpanda: Food & Groceries"
+      ]
+    },
+    {
+      "term": "シングルオリジン",
+      "total": 40,
+      "rank": 13,
+      "rival_ratings_median": 32,
+      "top3": [
+        "Single Origin - Coffee Timer",
+        "WhatsApp Messenger",
+        "CROWD ROASTER"
+      ]
+    },
+    {
+      "term": "喫茶 記録",
+      "total": 21,
+      "rank": 19,
+      "rival_ratings_median": 0,
+      "top3": [
+        "メイドさんのいる喫茶店",
+        "純喫茶ログ",
+        "カフェメモ - カフェ巡り記録"
+      ]
+    },
+    {
+      "term": "コーヒー テイスティング",
+      "total": 97,
+      "rank": 22,
+      "rival_ratings_median": 0,
+      "top3": [
+        "Coffee Palette: スペシャルティコーヒーログ",
+        "Coffee Note - テイスティングジャーナル",
+        "PourLog - コーヒーテイスティングノート"
+      ]
+    },
+    {
+      "term": "カフェ 手帳",
+      "total": 40,
+      "rank": 31,
+      "rival_ratings_median": 6,
+      "top3": [
+        "CafeLog お気に入りカフェ手帳",
+        "めしメモ - 食べ歩き記録＆グルメ手帳",
+        "コーヒー手帳"
+      ]
+    },
+    {
+      "term": "コーヒー手帳",
+      "total": 44,
+      "rank": 33,
+      "rival_ratings_median": 35,
+      "top3": [
+        "コーヒー手帳",
+        "「コーヒー抽出レシピ」の記録アプリ - Kopi",
+        "コーヒーノート - シンプルで奥深いコーヒー記録アプリ"
+      ]
+    },
+    {
+      "term": "コーヒー 日記",
+      "total": 95,
+      "rank": 38,
+      "rival_ratings_median": 6,
+      "top3": [
+        "コーヒー日記・記録 - Kaffe",
+        "ハンドドリップ抽出タイマー・コーヒー日記：Gota",
+        "コーヒーノート - シンプルで奥深いコーヒー記録アプリ"
+      ]
+    },
+    {
+      "term": "珈琲 記録",
+      "total": 99,
+      "rank": 54,
+      "rival_ratings_median": 5,
+      "top3": [
+        "コーヒーノート - シンプルで奥深いコーヒー記録アプリ",
+        "Pourist - コーヒー記録・ハンドドリップ・タイマー",
+        "「コーヒー抽出レシピ」の記録アプリ - Kopi"
+      ]
+    },
+    {
+      "term": "ハンドドリップ",
+      "total": 93,
+      "rank": 51,
+      "rival_ratings_median": 4,
+      "top3": [
+        "コーヒー ハンドドリップ抽出タイマー&記録 バリスタイマー",
+        "ハンドドリップ抽出タイマー・コーヒー日記：Gota",
+        "DripMaster"
+      ]
+    },
+    {
+      "term": "スペシャルティコーヒー",
+      "total": 64,
+      "rank": 40,
+      "rival_ratings_median": 9,
+      "top3": [
+        "Coffee Palette: スペシャルティコーヒーログ",
+        "root C スマートコーヒースタンド | ルートシー",
+        "Specialico / スペシャリコでカフェ探し"
+      ]
+    },
+    {
+      "term": "カフェ 日記",
+      "total": 92,
+      "rank": null,
+      "rival_ratings_median": 3,
+      "top3": [
+        "カフェ巡り",
+        "スイーツ日記 〜カフェ巡り&お菓子記録〜",
+        "コーヒーノート - シンプルで奥深いコーヒー記録アプリ"
+      ]
+    },
+    {
+      "term": "コーヒー レビュー",
+      "total": 79,
+      "rank": null,
+      "rival_ratings_median": 2,
+      "top3": [
+        "コーヒーノート - 大好きな一杯を、書きとめる - 無料アプリ",
+        "Zomato: Food Delivery & Dining",
+        "Coffee Log - コーヒー記録"
+      ]
+    },
+    {
+      "term": "行きたいカフェ",
+      "total": 78,
+      "rank": 64,
+      "rival_ratings_median": 8,
+      "top3": [
+        "たべピン｜行きたい店リスト・飲食店メモ・外食記録・保存アプリ",
+        "Toco-行きたいとこリスト",
+        "PickGo - 行きたい場所をマップにブックマーク保存"
+      ]
+    },
+    {
+      "term": "喫茶店 記録",
+      "total": 21,
+      "rank": 16,
+      "rival_ratings_median": 0,
+      "top3": [
+        "行きたいお店リスト 外食記録グルメマップ",
+        "メイドさんのいる喫茶店",
+        "カフェメモ - カフェ巡り記録"
+      ]
+    },
+    {
+      "term": "コーヒー 管理",
+      "total": 93,
+      "rank": null,
+      "rival_ratings_median": 3,
+      "top3": [
+        "クッキングフィーバー【爽快グルメアクション！】",
+        "Brew Tech - コーヒー管理アプリ",
+        "HiCoffee - カフェイン管理"
+      ]
+    },
+    {
+      "term": "抽出 記録",
+      "total": 98,
+      "rank": 70,
+      "rival_ratings_median": 4,
+      "top3": [
+        "コーヒー ハンドドリップ抽出タイマー&記録 バリスタイマー",
+        "「コーヒー抽出レシピ」の記録アプリ - Kopi",
+        "Drippe コーヒータイマー"
+      ]
+    },
+    {
+      "term": "味覚 記録",
+      "total": 87,
+      "rank": 71,
+      "rival_ratings_median": 4,
+      "top3": [
+        "Somnus/ソムナス-睡眠記録・いびき録音・目覚まし",
+        "もしも貯金 Eeeco | 支出を視覚的に節約記録・計画",
+        "PlaceNote - 場所記録"
+      ]
+    },
+    {
+      "term": "カフェ 保存",
+      "total": 91,
+      "rank": null,
+      "rival_ratings_median": 32,
+      "top3": [
+        "たべピン｜行きたい店リスト・飲食店メモ・外食記録・保存アプリ",
+        "カフェマップ - 近くのカフェを探す",
+        "Whimo（ウィモ）｜SNSの行きたい場所を保存・共有"
+      ]
+    },
+    {
+      "term": "コーヒー 好み 分析",
+      "total": 2,
+      "rank": 1,
+      "rival_ratings_median": 2,
+      "top3": [
+        "CoffeeVision コーヒーマップ＆好み分析",
+        "Paletto - コーヒー記録と好みの味診断"
+      ]
+    }
+  ]
+}

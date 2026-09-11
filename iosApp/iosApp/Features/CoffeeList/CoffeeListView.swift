@@ -75,6 +75,7 @@ struct CoffeeListView: View {
             }
             .accessibilityLabel(String(localized: "コーヒーを記録"))
             .disabled(appState.uid == nil)
+            .buttonStyle(.borderedProminent)
         }
     }
 
@@ -95,13 +96,22 @@ struct CoffeeListView: View {
     }
 
     private var emptyView: some View {
-        ContentUnavailableView(
-            String(localized: "まだコーヒー記録がありません"),
-            systemImage: "cup.and.saucer",
-            description: Text(
-                String(localized: "右上の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
-            )
-        )
+        ContentUnavailableView {
+            Label(String(localized: "まだコーヒー記録がありません"), systemImage: "cup.and.saucer")
+        } description: {
+            Text(String(localized: "マップのカフェ検索からカフェを選んで記録することもできます"))
+        } actions: {
+            Button {
+                isPresentingEditor = true
+            } label: {
+                Label(
+                    String(localized: "コーヒーを記録"),
+                    systemImage: "plus"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(appState.uid == nil)
+        }
     }
 
     private var coffeeList: some View {
@@ -273,13 +283,19 @@ struct CoffeeRow: View {
 
 #Preview("空状態") {
     NavigationStack {
-        ContentUnavailableView(
-            String(localized: "まだコーヒー記録がありません"),
-            systemImage: "cup.and.saucer",
-            description: Text(
-                String(localized: "右上の + ボタンか、マップのカフェ検索からカフェを選んで記録しましょう")
-            )
-        )
+        ContentUnavailableView {
+            Label(String(localized: "まだコーヒー記録がありません"), systemImage: "cup.and.saucer")
+        } description: {
+            Text(String(localized: "マップのカフェ検索からカフェを選んで記録することもできます"))
+        } actions: {
+            Button {} label: {
+                Label(
+                    String(localized: "コーヒーを記録"),
+                    systemImage: "plus"
+                )
+            }
+            .buttonStyle(.borderedProminent)
+        }
         .navigationTitle(String(localized: "コーヒー記録"))
         .navigationBarTitleDisplayMode(.large)
     }

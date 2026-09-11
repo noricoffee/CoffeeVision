@@ -6,7 +6,7 @@
 - [位置情報 / MapKit 実装パターン](location-mapkit.md) — LocationManager 無音取得、MKLocalPointsOfInterestRequest 常時ピン、MKMapItem.location、Places locationBias は範囲制限でないためクライアント側 MKCoordinateRegion 矩形フィルタが要る、ピン目視確認は Dummy Data scheme + simctl + Pillow crop
 - [xcodebuild 検証の落とし穴](xcodebuild-verification.md) — tail で Gradle ログが消える、destination 名確認、-list の Schemes 位置
 - [ビルド検証コマンド（実際に通った具体値）](build_verify_commands.md) — DEVELOPER_DIR / scheme / destination / 成果物パス。落とし穴は上記 xcodebuild-verification.md
-- [サンドボックスに GUI Simulator が無い](sandbox_no_gui_simulator.md) — install / launch / screenshot は可能だがタップ操作は不可能。同意シートより奥の画面は目視確認を親経由でユーザーへ回す
+- [サンドボックスに GUI Simulator が無い](sandbox_no_gui_simulator.md) — install / launch / screenshot は可能だがタップ操作は不可能。同意シートより奥の画面は目視確認を親経由でユーザーへ回す。同意ゲートを一時無効化する diff は Auto Mode 分類器にビルド自体をブロックされる
 - [Firebase SPM pbxproj 手動追加](firebase-spm-pbxproj.md) — 一般手順 + FirebaseAnalyticsWithoutAdIdSupport 廃止
 - [FirebaseRemoteConfig SPM 追加手順](firebase_remote_config_spm.md) — pbxproj 連番規則 + stringValue 非 Optional 注意 + Bool キー「未設定→true」は `.source == .static` で判定（DerivedData checkout の `.m` まで裏取り）
 - [AdMob アダプティブバナー実装パターン](admob-native-ads.md) — ネイティブ→バナー再編の経緯、SPM モジュール名の罠、BannerView/AdSize API、UMP をコードから呼ばない理由、`.task` 発火の罠と GeometryReader 幅計測

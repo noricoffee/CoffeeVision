@@ -18,7 +18,7 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | SKU | `com.noricoffee.coffeevision` | Bundle ID と同値。外部には出ない社内識別子だが**登録後は変更できない** |
 | Apple ID（App ID） | `6788339362` | ASC が採番。ストア URL は `https://apps.apple.com/app/id6788339362` |
 | ストア URL | `https://apps.apple.com/app/id6788339362` | **アプリ内に埋めるのはこの短縮形**。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id...`）の**スラグ部分はアプリ名から生成される装飾**で、リダイレクトにしか使われない。ASO で名前を変えるたびに変わる文字列をバイナリへ焼かない（アプリ名は ASO-2 で一度変更済み） |
-| バージョン | 1.0.1 | `MARKETING_VERSION` |
+| バージョン | 1.0.2 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える） |
 | ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。`release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、`Config.xcconfig` の `1` は Release では使われない。**手入力・手動更新は不要**（詳細は §10） |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
 | デバイス | iPhone | `TARGETED_DEVICE_FAMILY = 1`。iPad は対象外（`"1,2"` のままだと iPad にインストール可能になり、ASC が iPad スクショを必須要求する）|
@@ -113,16 +113,36 @@ CoffeeVision は、飲んだ一杯の記録から、好みの分析、次に行�
 |-----------|-------|-------|
 | アプリ名 | 25 / 30 | `コーヒー` `マップ` `好み` `分析` |
 | サブタイトル | 21 / 30 | `カフェ` `巡り` `記録` `テイスティング` `行きたい` `店` |
-| キーワード（日本語） | 89 / 100 | 下記 19 語 |
+| キーワード（日本語） | 98 / 100 | 下記 24 語 |
 | キーワード（英語 U.S.） | 98 / 100 | 下記 15 語 |
+
+> **アプリ名とサブタイトルは 2026-08-31 の改訂でも据え置いた**。実測上、**順位が付いている語はほぼアプリ名由来**だったため（`コーヒー 好み 分析` 1 位 / `コーヒー 分析` 4 位 / `コーヒーマップ` 6 位）。サブタイトルの `テイスティング` も `コーヒー テイスティング` 22 位（競合の評価数中央値 0）で効いている。**現状で数少ない機能している露出源なので触らない**。空き 5 字 / 9 字は残したままでよい（空きを埋めること自体は目的ではない = tasks「検索フィールドの再配分」）。
 
 ### 4.2 日本語ロケール
 
 ```
-珈琲,喫茶店,焙煎,自家焙煎,ハンドドリップ,スペシャルティ,コーヒー豆,抽出,ラテ,エスプレッソ,カプチーノ,浅煎り,深煎り,シングルオリジン,バリスタ,手帳,風味,味覚,日記
+珈琲,喫茶店,喫茶,浅煎り,深煎り,ハンドドリップ,スペシャルティ,シングルオリジン,エスプレッソ,手帳,日記,ノート,ログ,レビュー,評価,管理,統計,履歴,産地,品種,診断,味覚,抽出,めぐり
 ```
 
-（**19 語・89 字**。`len` 実測。アプリ名 / サブタイトルが拾う語は入れない = §4.1 の配分表）
+（**24 語・98 字**。`len` 実測。アプリ名 / サブタイトルが拾う語は入れない = §4.1 の配分表）
+
+**2026-08-31 改訂（ASO-8）**。旧構成（19 語・89 字）から **7 語を外し 12 語を足した**。判断は iTunes Search API の実測（`.claude/scripts/aso-rank-probe.py` / ベースライン `aso-baseline-2026-08-31.json`）に基づく。
+
+**外した 7 語** — 順位ではなく**検索意図のミスマッチ**で落としている:
+
+| 語 | 実測 | 落とす理由 |
+|----|------|-----------|
+| `バリスタ` | 圏外 / 競合中央値 56 | トップがネスカフェ（評価 159,111）。土俵が違う |
+| `カプチーノ` | 14 位 | 順位は付くがトップ 3 が「AI によるイタリア系ブレインロット」「脱出ゲーム」。**この語を打つ人は記録アプリを探していない** |
+| `自家焙煎` | 40 位 / 中央値 0 | 検索意図は「自家焙煎の店を探す」。**本アプリに焙煎機能はない**ため、取れば ASO-6 で潰した★1 リスクを作り直すことになる |
+| `焙煎` | 圏外 | 上位は焙煎タイマー / ロースト管理アプリの土俵。**焙煎度の検索意図は `浅煎り` 7 位 / `深煎り` 8 位 が拾う**ので重複でもある |
+| `風味` | 15 位 | トップ 3 が「おばあちゃんの漬物工場」「广东风味家常菜」。語が汎用すぎて意図が定まらない |
+| `ラテ` | `ラテアート` で圏外 | — |
+| `コーヒー豆` | 圏外 / 中央値 9 | 5 字を使う価値がない |
+
+**足した 12 語** — いずれも**上位競合の評価数中央値が一桁**かつ実機能に一致する: `統計`（`コーヒー 統計` 21 件・中央値 **0**）/ `履歴`（7 件・中央値 0）/ `めぐり`（`喫茶店めぐり` 中央値 0）/ `ノート`（中央値 2）/ `レビュー`（中央値 2）/ `産地`（中央値 3。`origin` を記録する）/ `評価`（中央値 3。星評価がある）/ `管理`（中央値 3）/ `ログ`（中央値 4）/ `品種` `診断` `喫茶`（保険）
+
+> **機能にない語は、空白地帯でも取らない**。`焙煎 記録` は上位 3 件がすべて評価数 0 の完全な空白地帯だが、本アプリは焙煎度を*記録する*だけで焙煎はしない。**順位を取れることと、取ってよいことは別**。
 
 ### 4.3 英語(U.S.) ロケール
 
@@ -134,9 +154,11 @@ coffee,cafe,journal,diary,log,tracker,tasting,brew,espresso,pourover,beans,roast
 
 > **英語ロケールを「キーワード枠としてのみ」使う理由**: 日本の App Store では日本語ロケールに加えて英語(U.S.) のメタデータもインデックスされるのが ASO の定説で、ロケールを 1 つ足すとキーワード枠が実質倍になる。一方でアプリ本体の UI は日本語のみなので、名前 / サブタイトル / 説明文まで英語にすると「英語アプリだと思って DL したら日本語だった」という★1 レビューを招く。したがって **keywords フィールドだけ英語を入れ、他のフィールドは日本語をそのまま転記する**。将来アプリを英語化して配信国を広げる場合は、EU 向けに UMP の GDPR フォーム実装が先（requirements.md §11 / §10 チェックリスト）。
 
-> **日本語のトークナイズ挙動は Apple 非公開**。「サブタイトルに `カフェ` があれば `カフェ巡り` でも当たる」というクロスマッチ前提は定説ではあるが確証がないため、`喫茶店` `自家焙煎` `コーヒー豆` のような複合語も残して保険をかけている。リリース後に App Store Connect の検索順位・インプレッションを見て調整する。
+> **日本語のトークナイズ挙動は Apple 非公開**。ただし 2026-08-31 の実測で、**フィールドをまたいだ複合クエリのヒットは観測できた** — `喫茶店 記録` 16 位（`喫茶店` はキーワード / `記録` はサブタイトル由来）。したがって複合語を丸ごと入れるより**構成語を単語で置く**方が枠の効率がよい、という前提で 24 語を組んでいる（`シングルオリジン` 13 位 / `ハンドドリップ` 51 位のように、分解できない固有の複合語だけ長いまま残した）。
 >
-> **サブタイトルを旧文言「コーヒー記録・分析・行きたい店」に戻す場合**は、キーワードから `日記` を外し `カフェ` `カフェ巡り` `テイスティング` を戻す（83 字 / 17 語）。名前が `カフェ` を含まないため、この 3 語をどこかで拾う必要がある。
+> **同時に「1 語クエリでは全滅し、2〜3 語の複合クエリでは順位が付く」傾向も出た**（`テイスティング` 単体は圏外なのに `コーヒー テイスティング` は 22 位、`コーヒー` 単体は上位 5 件の評価数中央値が 8390）。**単体の一般名詞で上位を狙わない**こと。
+>
+> ⚠ **いずれも iTunes Search API での観測で、これは App Store アプリ内の検索結果とは別アルゴリズム**。傾向であって確証ではない（経緯と caveat は implementation_note 2026-08-31）。反映後は ASC の検索インプレッションと `.claude/scripts/aso-rank-probe.py --compare` の両方で追う。
 
 ---
 
@@ -156,6 +178,8 @@ coffee,cafe,journal,diary,log,tracker,tasting,brew,espresso,pourover,beans,roast
 | 4 | `04-record-list.png` | コーヒー記録一覧画面 | 月別セクションの振り返り + 検索 + ナビバー右上の追加ボタン | 一杯ずつ、／積み上がっていく |
 | 5 | `05-record-editor.png` | コーヒー記録 作成 / 編集画面 | テイスティング 5 軸のスライダー + 星評価 | 味の記憶を、／5 つの軸で |
 | 6 | `06-cafe-detail.png` | カフェ詳細画面 | 店舗写真・評価・営業状況 + 同じ店の記録の集約 | もちろん／カフェの情報もチェック |
+
+> ⚠️ **`04-record-list.png` と `06-cafe-detail.png` は次回提出時に撮り直しが必要**（2026-08-31 時点）。ナビバー右上の追加ボタンを `.buttonStyle(.borderedProminent)` の塗りに変え、記録一覧の空状態にも CTA ボタンを追加したため、撮影済みの画像は現物と一致しない。04 は訴求ポイント自体が「**ナビバー右上の追加ボタン**」を含み、06 も同じボタンがナビバーに写る。**原本（`screenshots/6.9/`）と焼き込み版（`screenshots/submit/`）の両方**が対象。
 
 > **表示順は「分析サマリ → 分析サジェスト → マップ」で始める**。検索結果のサムネイル実寸（幅 300px 相当）で並べた実測では、マップは訪問済みピンが地図の陰影に沈み、ピンの意匠 3 種の描き分けもフィルタチップも判読できず「地図のスクショ」以上の情報が残らなかった一方、分析サマリは 3 つの数値・評価分布のバー・レーダーの五角形が形として生き残った。限られた上位枠は差別化点（= 分析）に寄せる。**検索結果ではポートレート 3 枚が見える**のでマップが 3 番でも preview には入る。
 >
@@ -332,6 +356,7 @@ CoffeeVision を初めてリリースしました。
 ### 一度きりの設定（1.0 で完了済み / 変えるときに効いてくる知識）
 
 - **App Store Connect**: 英語(U.S.) ロケールを追加し keywords だけ英語（§4.3）、他フィールドは日本語を転記 / 価格・配信地域（無料・**日本のみ**。EU へ拡大するなら UMP の GDPR フォーム実装が先） / SKU は登録後変更不可
+- **アプリ名 / サブタイトル / キーワードは、新しいバイナリを出さずに編集できる**（2026-08-31 に ASC 実画面で確認）。Apple 公式リファレンスの表は Name を「編集不可」側に置き、実務の定説も「キーワードは version-level なので新バージョンの提出が要る」としており**どちらとも食い違う**ため、ASO の反映計画を立てるときは**推測せず ASC を開いて確かめる**。⚠ ただし**変更の公開に審査が挟まるかは未確認** — 反映のリードタイムを見込む場合はここを先に確かめること
 - **輸出コンプライアンス**: 暗号利用は標準 HTTPS と Sign in with Apple の nonce ハッシュ（CryptoKit SHA256 = Apple 標準・ハッシュは暗号化に非該当）のみで免除対象。`ITSAppUsesNonExemptEncryption = NO` を `Info.plist` に設定済みのため、提出のたびの暗号化アンケートは**自動スキップされる**
 - **App Icon がアルファチャンネルを持たないこと**（違反すると `ITMS-90717`）。**検証は Release / Archive で行う。Debug では判定できない** — 派生 PNG は **Debug では常に `hasAlpha: yes`**（actool が RGBA コンテナで書き出すため。ソースのアルファ有無と**無関係**）、**Release では常に `no`**。ローカルの `builtin-validationUtility -validate-for-store` は**アルファをチェックしない**ので、通っても ASC 通過の証明にはならない
 - **App Icon / LaunchLogo に SF Symbols を使わない**（ライセンス条項がアプリアイコン / ロゴでの使用を禁じている）。現在は `iosApp/scripts/generate_app_icon.swift` の自前パス描画で、`grep -rn "systemSymbolName" iosApp/` が 0 件であることが検証手段
@@ -342,6 +367,84 @@ CoffeeVision を初めてリリースしました。
 
 ---
 
+## 11. Featuring Nomination（App Store 掲載推薦の申請）
+
+> ASC の **Featuring → Nominations**。Apple のエディトリアル面（Today / カテゴリ / コレクション）への推薦を自己申請する枠で、**無料・原稿だけ**で出せる。返信は刺さった場合のみ来るので、**無応答を失敗と読まない**（tasks ASO-10）。
+
+### 11.1 制度の要点
+
+| 項目 | 内容 |
+|------|------|
+| 種別 | `App Launch`（新規リリース / 予約注文）/ `App Enhancements`（新機能・大きな UX 改善を伴うアップデート）/ `New Content`（新規のアプリ内コンテンツ・季節キャンペーン・イベント・特典） |
+| **提出後に変更できない** | Nomination ID / **Related Apps** / **Nomination Type** |
+| 必須 | Related Apps（自アプリの Apple ID + 関連 9 本まで）/ Nomination Type / **Nomination Name（60 字）** |
+| 任意（書く） | Nomination Description（1,000 字）/ **Helpful Details（500 字 = 独自性を書く枠）** / Publish Date（YYYY-MM-DD）/ Relevant Countries（ISO 3 文字）/ Platforms / Localization / Related In-App Events（25 件まで）/ Supplemental Materials（URL 5 本まで） |
+| リードタイム | **最低 2 週間、Apple 推奨は 3 週間以上前** |
+| 権限 | Account Holder / Admin / App Manager / Marketing |
+
+出典: [Nominations template](https://developer.apple.com/help/app-store-connect/reference/nominations-template/) / [Nominate your app for featuring](https://developer.apple.com/help/app-store-connect/manage-featuring-nominations/nominate-your-app-for-featuring/)
+
+### 11.2 種別の選び方（未確定 / 提出前に決める）
+
+**種別は提出後に変更できない**ため、次バージョンの中身が固まってから提出する。現時点の候補は 2 つで、性格が違う。
+
+- **`App Launch`** — 初回配信が 2026-08-17 で、リリース直後の窓がまだ残っている。ただしリードタイム（推奨 3 週間前）の考え方からすると本来は**配信前に出す**枠
+- **`App Enhancements`** — 次バージョンに合わせる。**中身のあるアップデートが要る**ので、機能追加を伴わないメタデータ改訂だけの版に付けると訴求が弱い
+
+> **原稿（11.3）は種別によらず共通**。訴求の芯（5 軸テイスティング / オンデバイス Foundation Models / 1 杯 = 1 件の設計）は版に依存しないため、種別だけ差し替えれば出せる。
+
+### 11.3 原稿（`len` 実測済み）
+
+**Nomination Name**（**57 字** / 60）
+
+```
+CoffeeVision: on-device taste analysis for coffee logging
+```
+
+**Nomination Description**（**995 字** / 1,000）
+
+```
+CoffeeVision is a coffee journal built for Japan's specialty coffee scene. Each cup — whether pulled at a cafe or brewed at home — is one record, capturing origin, variety, process, roast level, brew method, a half-star rating, and a five-axis tasting profile: sweetness, body, acidity, flavor, aftertaste.
+
+Those five axes are what the app is built around. As records accumulate, the analysis tab draws the shape of the user's palate as a radar chart, surfaces which origins and roast levels they gravitate toward, and suggests beans they have not tried yet that fit the pattern.
+
+On devices with Apple Intelligence, the Foundation Models framework puts that palate into words and answers questions like "which origins do I like?" — entirely on device. Records never leave the phone to be summarized or queried.
+
+Cafes are searched through Google Places. Visited shops become pins on a map, shops the user wants to try are saved with their own pin, and the map grows into a personal coffee map.
+```
+
+**Helpful Details**（**499 字** / 500）
+
+```
+Three things set CoffeeVision apart. First, the five-axis tasting profile is the primary record rather than an afterthought — the entire analysis layer is built on it. Second, the Apple Intelligence features run through the on-device Foundation Models framework, so coffee records never leave the phone to be summarized or queried. Third, a cafe cup and a home brew are the same unit, so the map and the palate analysis draw on one continuous history. Solo-developed in Japan; free, no subscription.
+```
+
+**その他のフィールド**
+
+| フィールド | 値 |
+|-----------|----|
+| Related Apps | `6788339362`（自アプリのみ。**提出後変更不可**） |
+| Relevant Countries | `JPN` |
+| Platforms | `iOS (iPhone)` |
+| Localization | `ja` |
+| Publish Date (Start) | 次バージョンの配信予定日（**提出はその 3 週間以上前**） |
+
+> **英語で書く理由**: 申請の読み手は Apple のエディトリアルチームで、日本語ロケール限定の配信でも申請自体は英語で通す方が読まれる。ストア掲載原稿（§1〜§4）が日本語であることとは独立している。
+>
+> **オンデバイス処理を前面に出しているのは意図的**。Apple が推している Foundation Models framework を個人開発アプリが実装済み、という点が最も差別化される訴求で、`CoffeeInsightProviderIosImpl` の実装事実に基づく（§2 と同じ条件付きの機能）。
+
+### 11.4 提出履歴
+
+| 提出日 | 種別 | 対象バージョン | 結果 |
+|--------|------|--------------|------|
+| （未提出） | — | — | — |
+
+---
+
 ## 変更履歴
 
 1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。
+
+**2026-08-31（バージョン）**: §1 のバージョンを **1.0.2** に更新（`Config.xcconfig` の `MARKETING_VERSION` / Android の `versionName` も同値。ビルド番号は CI 採番のため据え置き）。**§9 What's New は「バージョン 1.0」のまま未更新**で、1.0.1 でも書き換えられていない — 1.0.2 の原稿を書く際に、この節を版ごとに積むのか最新版だけ置くのかを決めること（tasks 1.0.2 節に起票済み）。**§5 の `04-record-list.png` / `06-cafe-detail.png` は再撮影が必要**（同節の警告を参照）。
+
+**2026-08-31**: §11 Featuring Nomination を新設（ASO-10）。§4 の日本語キーワードを **19 語 89 字 → 24 語 98 字**へ再配分（ASO-8。7 語を外し 12 語を追加、アプリ名 / サブタイトル / 英語キーワードは据え置き）。あわせて §4 末尾の「サブタイトルを旧文言に戻す場合は 83 字 / 17 語」という注記を**削除**した（旧 19 語構成を前提にした字数で、新構成では成立しないため）。

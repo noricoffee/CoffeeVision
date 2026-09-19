@@ -72,13 +72,16 @@ private struct AppRootView: View {
     /// `system` / `dark` を選んだ場合のみそちらに切り替わる）。
     @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.light.rawValue
 
+    /// 全画面下部固定バナー専用のローダー（requirements.md §11-5）。広告の関心は View 層に閉じるため
+    /// `AppState` には持ち込まない。
+    @State private var bottomAdLoader = BannerAdLoader(adUnitID: AdUnitIDs.globalBottom)
+
     var body: some View {
         if appState.uid != nil,
            appState.coffeeListBridge != nil,
            appState.mapBridge != nil,
            appState.accountBridge != nil {
             RootTabView(appState: appState)
-                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .errorToast(message: appState.lastError) {
                     appState.clearLastError()
                 }
@@ -100,6 +103,11 @@ private struct AppRootView: View {
                         .presentationDragIndicator(.visible)
                         .interactiveDismissDisabled()
                 }
+                .bottomAdBanner(
+                    loader: bottomAdLoader,
+                    canLoad: !appState.showConsentOnboarding && appState.isAdConsentResolved
+                )
+                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
         } else {
             loadingView
                 .task {

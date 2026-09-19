@@ -110,9 +110,6 @@ struct MapTabView: View {
         onDismissKeyboard: {}
     )
 
-    /// 検索ドロップダウンのインラインアダプティブバナー用ローダー（requirements.md §11-2）。
-    @State private var searchAdLoader = BannerAdLoader(adUnitID: AdUnitIDs.mapSearchDropdown)
-
     /// 検索バー `TextField` のフォーカス状態。
     @FocusState private var isSearchFieldFocused: Bool
 
@@ -670,7 +667,6 @@ struct MapTabView: View {
             MapSearchResultsSheet(
                 results: searchController.displayedResults,
                 isLoading: sb.isLoading,
-                searchAdLoader: searchAdLoader,
                 currentHeight: searchSheetCurrentHeight,
                 baseHeight: searchSheetBaseHeight,
                 expandedHeight: searchSheetExpandedHeight,

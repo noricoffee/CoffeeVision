@@ -208,7 +208,9 @@ xcrun simctl io <udid> screenshot screenshots/6.9/NN-name.png
 - 機種は **iPhone 17 Pro Max（6.9 インチ / iOS 26.5）**。ネイティブ解像度がそのまま 1320×2868 になる
 - **`SEED_DUMMY_DATA=1` を必ず付ける**。付けずに起動すると `AppState.seedOrClearDummyData` が `clearDummyData` を呼び、ダミー 30 件が消える
 - ダミーデータは**写真と `SavedCafe` を持たない**（`DummyCoffeeData.kt` は `photos = emptyList()`）。カフェも `dummy-place-001` 等の架空 ID で Places に存在しないため、営業時間・店舗写真が要る画面（#6）は**実在の店を検索して記録を作る**必要がある。写真は `xcrun simctl addmedia` でフォトライブラリに投入する
-- **カフェ詳細（#6）には広告が入る**（情報系の後・記録の前）。Debug ビルドは AdMob デモ ID なので、スクロール位置を上げて **"Test Ad" を画面外に出す**こと（1.0 の撮影時に 1 度写り込んで撮り直した）
+- **全スクリーンショットの下端に広告帯が写る**（2026-09-19 の再編で、広告が全画面共通の下部固定帯になったため）。Debug ビルドは AdMob デモ ID なので **"Test Ad" が全カットに入る**。1.0 / 1.0.x の「カフェ詳細だけスクロール位置を上げて画面外に出す」という回避はもう成立しない。
+  - **撮影前に広告帯を消すこと**。`AppRootView` の `.bottomAdBanner(...)` を一時的に外してビルドするのが確実（帯ごと消えるので、タブバーが下端に戻った状態で撮れる）。**撮影後に戻すのを忘れない**
+  - **1.0.2 までの全スクリーンショットは撮り直しが必要**。広告帯の有無でレイアウトが変わるため、旧カットと新ビルドの見た目が一致しない
 - 分析画面（#5 相当）の Foundation Models 要約は Apple Intelligence 有効な実機でのみ表示される（シミュレータ撮影なら統計グラフのみ）
 
 ### 提出物の生成（キャッチコピーの焼き込み）
@@ -261,7 +263,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
 | Firebase Analytics | Google | 製品利用分析（**同意時のみ**） | `screen_view`・自動収集イベント（起動/セッション等）。IDFA なし・クロスアプリ追跡なし |
 | Firebase Remote Config | Google | マップ POI 除外キーワードの設定値配信（**常時**、同意不要） | 設定値取得のためのリクエスト（Firebase Installation ID・アプリバージョン/デバイス構成）。ユーザーデータの送信なし（SDK 同梱マニフェストは Other Diagnostic Data / 非トラッキングを自己申告） |
-| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（**カフェ詳細 / マップ検索結果シートの 2 面のみ** = requirements.md §11。記録タブ・分析タブには置かない） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
+| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（**全画面共通の下部固定帯 1 面のみ** = requirements.md §11。全タブに表示） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
 | UMP SDK（User Messaging Platform） | Google | （コードから未使用） | Google Mobile Ads SDK の内部依存としてリンクされるのみで、API は一切呼ばない（同意 UI は自前プレプロンプト + ATT で完結。requirements.md §11）。EU 配信を始める場合に GDPR フォームとして再導入 |
 
 > Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
@@ -291,7 +293,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | ユーザー生成コンテンツ / SNS 機能 | なし（記録は本人のみ閲覧。**共有カード（2-12）は端末の share sheet に画像を渡すだけ**で、アプリ内に他ユーザーへ公開する経路はない = ガイドライン 1.2 の通報 / ブロック要件は非該当） |
 | 無制限の Web アクセス | なし |
 | 位置情報の共有 | なし（他ユーザーとの共有はしない） |
-| **アプリ内広告** | **あり**（AdMob アダプティブバナー 2 面 = §6.3 / requirements §11。`maxAdContentRating = G`）。ASC 上で申告済み |
+| **アプリ内広告** | **あり**（AdMob アダプティブバナー **下部固定帯 1 面** = §6.3 / requirements §11。`maxAdContentRating = G`）。ASC 上で申告済み。**面数が変わっても「あり」の申告は変わらない**ので ASC 側の再申告は不要 |
 
 → 想定レーティング: **4+**（広告ありでも 4+ は維持できる）。**2026-08-31 に実測で確定** — `lookup` の `contentAdvisoryRating` が `4+`（下記コマンド。§9 の `releaseNotes` と同じ経路で取れる）。つまりこの節はもう「想定」ではなく**実際のレーティングと一致していることが確認済み**。
 

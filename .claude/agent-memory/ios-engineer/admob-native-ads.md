@@ -155,6 +155,119 @@ UIKit レンダリング知見（`NativeAdView` の headlineView 等）は不要
   ときは不要だったが、呼び出し元の View ファイルに処理を持ち上げると新規 import 漏れでビルドエラー
   `cannot find 'inlineAdaptiveBanner' in scope` になる）。
 
+## 全画面下部固定バナー（2026-09-19、requirements.md §11-5 第 1 段）
+
+- **`currentOrientationAnchoredAdaptiveBanner(width:)` は非推奨と分かっていても親から明示指定されることがある**。
+  本メモリの上の項目（v13.6.0 実測）で「実装時は `largeAnchoredAdaptiveBanner(width:)` を使うこと」と
+  結論していたにもかかわらず、dispatch 指示は当初非推奨の `currentOrientationAnchoredAdaptiveBanner`
+  を名指ししていた。**着手前にメモリを見ていても、指示が古い知見と矛盾することがある**。実装は一旦指示に
+  従いつつ、コード doc コメント + レポートの両方に矛盾を明記して親の判断を仰いだところ、
+  親が実ヘッダで裏取りして `largeAnchoredAdaptiveBanner(width:)` への切り替え指示に修正した
+  （2026-09-19、修正後の最終形）。**「指示 vs メモリの矛盾」を握ったまま黙って指示に従うだけでなく、
+  レポートで明示すれば指示自体が正しい方向に修正される**（今回そうなった）。
+- **`isAutoloadEnabled` は常設枠のリフレッシュ手段としては不採用が無難**。理由は実測ではなく公式ヘッダの
+  記述の限界: `GADBannerView.h` は「有効にすると `load(_:)` を呼ばなくてよい」としか書いておらず、SDK が
+  自動生成するリフレッシュリクエストに独自の `Request`（NPA extras 含む）が反映されるかは
+  ドキュメント上確認できない。`developers.google.com/admob/ios/banner` の "Refresh an ad" も
+  「広告ユニット側の設定を SDK が尊重する」としか言わず、リフレッシュ間隔がコード側で完結しない
+  （AdMob コンソール設定に依存）。**ATT 拒否ユーザーへの NPA 徹底が絡む箇所をコンソール設定任せに
+  するリスクを避けるなら、クライアント側タイマー（`load(adSize:forceReload:)` を追加して
+  `scenePhase == .active` 限定で 60 秒間隔ループ）の方が全ロジックがコード内で完結し安全**。
+- **`GADRequestConfiguration.publisherPrivacyPersonalizationState`** は
+  `MobileAds.shared.requestConfiguration` 経由のグローバル設定で、ヘッダに「settings in this class
+  will apply to all ad requests」とあるため per-request の `Extras`(NPA) より広く効く可能性がある候補だが、
+  「autoload のリフレッシュ要求にも適用されるか」を明言した記述が見つからず今回は不採用。将来 autoload を
+  再検討するならまずここを深掘りする価値がある。
+- **`BannerAdLoader.load(adSize:forceReload:)`**: 既存の「同一サイズなら no-op」ガードに
+  `forceReload: Bool = false` を追加するだけで、タイマー駆動の強制リフレッシュと既存 2 面の
+  無限リロード防止を両立できた（呼び出し元を増やすたびに新しいローダーを作るのではなく、
+  1 つのメソッドにオプション引数を足す方が影響範囲が小さい）。
+- **`.safeAreaInset(edge: .bottom)` で常設バーの上にタブバーを「浮かせる」発想は iOS 26 の TabView と噛み合わない**
+  （2026-09-19、ユーザー実機/シミュレータ確認で実際にタブバーが広告帯の裏に隠れて発覚。2 回連続で
+  誤った対処を提案した末に判明した根本原因）。`.safeAreaInset(edge:)` は**ビューのフレームを縮めず、
+  子に報告する safe area の値だけを増やす**。iOS 26 の浮動（floating pill）タブバーは `TabView` 自身の
+  **フレーム基準**で画面下端に描画され、報告された safe area 値を見て位置を調整するタイプの
+  コンポーネントではない。そのため `.safeAreaInset` で包んでも `TabView` のフレームは画面全体のまま
+  変わらず、タブバーは相変わらず物理下端付近に描画され、そこに広告帯の不透明な背景が重なって
+  タブバーを完全に隠してしまう。**フレーム自体を縮める必要がある場面では `VStack(spacing:)` で
+  `content` と広告帯を縦に並べる**（`VStack(spacing: loader.isLoaded ? 8 : 0) { content; AdBar() }`）。
+  これなら `content`（`RootTabView`）に実際に縮んだフレームが渡り、内部の浮動タブバーもその
+  縮んだフレームの下端（= 広告帯の直上）に描画される。**「セーフエリアを操作すれば十分」という判断は
+  対象がセーフエリアを見て自分の位置を決めるタイプのコンポーネントかどうかで成否が変わる**
+  ——今回のような「フレーム基準で自分の位置を決める」コンポーネント（iOS 26 floating TabView）には効かない。
+- **`VStack` に切り替えると、広告ビュー本体の safe area 内配置は自動で満たされ、手動の `GeometryReader`
+  実測 + `padding` は不要になる**（前回このメモリに書いた「2 段構え」の 1 段目は VStack 化で丸ごと
+  不要になった）。`VStack` は `content` に渡すフレームを実際に縮めるため、その下に続く広告バーは
+  もとから safe area 内に収まる位置に配置される。**残るのは「背景だけホームインジケータの裏まで
+  伸ばす」の 1 点だけ**: 広告バーに `.background(Color(.systemBackground).ignoresSafeArea(.container, edges: .bottom))`
+  を付ける（`.ignoresSafeArea` は背景の `Color` 自体に付ける。広告ビュー本体を包む外側の View に
+  付けると本体まで一緒に下端へ落ちる）。`AnchoredBannerAdBar` / `BottomAdBannerModifier`
+  （`iosApp/iosApp/Ads/AnchoredBannerAdView.swift`）に実装例がある。
+- **「未ロード時は高さ 0 に畳み、ロード完了時に実サイズへ広げる」は常設帯には適用できない**
+  （2026-09-19、ユーザー実機確認で発覚。上の項目で書いた「`spacing` を `0`/`8` に出し分ける」も
+  同じ誤りの一部で、結局撤回した）。`AnchoredBannerAdBar` が `VStack` の一員である以上、
+  その高さが変わることは `content`（`RootTabView`）の高さも同時に変える——つまり**タブバーの
+  位置が動く**。`.claude/rules/swift-ios.md`「幅・高さを持つ要素を `if` で条件生成しない」は
+  兄弟がシフトする典型例として`if`分岐を挙げているが、**`.frame(height:)` の値を状態で出し分ける
+  のも同じ症状を起こす**（`if` かどうかは本質ではなく、高さが変わるかどうかが本質）。
+  **常設帯は高さを固定値（`maxAdHeight`）に固定し、受信した広告はその枠内に中央寄せで収める。
+  未ロード時は無地の帯（背景色のみ）を同じ高さで表示する**——「畳む」はインライン枠（コンテンツの
+  流れの中の 1 枠、周囲の行がずれるだけで済む）の作法であり、常設帯には適用しない。
+  `VStack(spacing:)` の `spacing` も同じ理由で固定値（8pt）に統一する。
+- **`largeAnchoredAdaptiveBanner(width:)` は「アンカード用の名前」だが高さの天井（20%/150pt）が
+  常設帯としては大きすぎた**（2026-09-19、ユーザー実機確認で画面の約 15% を占め大きすぎると判断）。
+  **サイズ選択（アンカード用 API を使うか）と高さの見た目（どれだけ大きいか）は別の軸**で、
+  高さの天井が欲しいだけなら非推奨でもない `inlineAdaptiveBanner(width:maxHeight:)`
+  （既存インライン 2 面と同じ関数）に固定の `maxHeight` を渡す方が単純。
+  **「アンカード配置（下部固定）だからアンカード用のサイズ計算を使うべき」という直感に反する組み合わせ**
+  になるため、なぜインライン用の関数を使っているかをコード doc に明記しておかないと、次に触る人が
+  「戻し忘れ」と誤解して `largeAnchoredAdaptiveBanner` 等に戻してしまう。
+- **`maxHeight` の値は 60pt → 50pt へさらに調整された（2026-09-19 同日）。50 が Google 推奨の実質下限
+  なので、これ以上は下げない**。`GADAdSize.h` の `GADInlineAdaptiveBannerAdSizeWithWidthAndMaxHeight`
+  doc コメント: 「`maxHeight` は 32px 以上必須、50px 以上を推奨」。32-49px は機械的には指定可能だが
+  Google 非推奨領域。**「もっと小さく」という要望が今後来ても 50 未満へは下げず、それ以上小さくしたいなら
+  別の手段（帯自体を細くする以外の UI 上の工夫）を検討すべき、という判断の根拠を `maxAdHeight` の
+  doc コメントに明記した**（次に触る人が根拠を知らずに 32 まで下げてしまうのを防ぐため）。
+- **1 つの `.task(id:)` に「幅・scenePhase・追加条件（同意フロー完了等）」をまとめた `Equatable` struct
+  を渡す**と、初回ロードと自動リフレッシュループを 1 本のタスクで管理でき、条件変化時に前タスクを
+  確実にキャンセルしてやり直せる（`ScenePhase` も `Equatable` なので複合キーに含められる）。
+- **iOS 26 の floating TabView の実機/シミュレータ確認は文字列 grep では代替できない**。今回、
+  `.safeAreaInset` 版もビルドは 3 回連続で成功し警告も出なかったが、実際の見た目（タブバー消失）は
+  ビルド成功と無関係な実行時レイアウトの話だった。**レイアウト系の変更は「ビルドが通った」を検証の
+  終着点にせず、シミュレータ目視確認の項目を必ずレポートに列挙する**（このタスクでは自分で
+  シミュレータのタップ操作ができないため、目視確認そのものは親/ユーザーに委ねるほかない）。
+
+## インライン広告 2 面の撤去（2026-09-20、requirements.md §11-5 第 2 段。カフェ詳細 + マップ検索結果一覧の 2 面を撤去し 1 面に集約）
+
+- **`ForEach` 内で「N 番目の要素の後に広告 + 区切り線」を挟む実装は、各行自身が持つ「次行との区切り線」
+  （`row(cafe:isLast:)` が `!isLast` のとき自前で描く `Divider()`）とは別に、広告ブロック側にも
+  専用の `Divider()` を持たせて挟み込む形になっていた**（`row → Divider（行由来）→ 広告 → Divider（広告由来）→
+  次の row` という並び）。撤去するときは**広告ブロックの `if index == N { ... }` を丸ごと消すだけで、
+  行由来の `Divider()` がそのまま隣接行間の区切りを引き継ぐ**（`MapSearchResultsSheet.swift`）。
+  区切り線を個別に足し引きする必要はない — 広告が無くなった後の「普通の行送り」は元々 `row()` 自身が
+  担保していたため。
+- **`List` の `Section` ベースの広告枠（`CafeDetailView.adSection`）は撤去しても周辺レイアウトへの
+  波及がない**。`Section` は独立した境界を持つため、間に挟まっていた `Section` を 1 つ消しても
+  前後の `Section` 同士の区切りは `List` が自動で処理する（`MapSearchResultsSheet` の自前 `VStack` +
+  手書き `Divider()` とは対照的 — `List`/`Section` を使っている画面は削除が単純、素の `VStack` で
+  行を手組みしている画面は「区切り線を誰が描いているか」を先に特定してから削除する）。
+- **削除順序**: 呼び出し元（View 側の宣言・組み込み箇所・`@State` ローダー・パラメータ受け渡し）を
+  先に消してから、共有コンポーネントファイル（`InlineBannerAdView.swift`）を `rm`。`AdUnitIDs.swift` の
+  定数削除・`Info.plist` の対応キー削除・`Base.xcconfig` のフォールバック宣言削除は 3 点セット
+  （1 つでも残すとダングリング参照になる。2026-07-16 の 2 面撤去時と同じ手順）。
+- **doc コメント中の「撤去済みの型」への言及は、型名を裸の識別子（バッククォート付き）で残すと
+  `grep -rn "<型名>"` の残骸チェックに引っかかり続ける**。「撤去済みの旧インライン広告」のように
+  型名を使わない説明に置き換える（親から明示的に「残骸ゼロを grep で確認しレポートに貼ること」を
+  求められた場合、識別子の**文字列としての存在**まで気にする必要がある — コード上は完全に無害な
+  コメントでも、検証コマンドの結果には出てしまう）。
+- **`grep` によるパターン一致は部分文字列にもヒットする**ため、`cafeDetail` のような短い検索語は
+  無関係な既存識別子（`cafeDetailList` / `CafeDetailView` 等）にもマッチする。レポートでは「これは
+  既存の無関係な識別子で、削除対象の残骸ではない」と明示しないと、grep 結果だけを見た人に
+  誤解を与える。
+- **`Configuration/Secrets.xcconfig` はユーザーローカルのコミット対象外ファイル**。撤去したキーの
+  コメントアウト済み残骸がこのファイルに残っていても触らない（gitignore 済みで実害なし、かつ
+  親から明示的に「触らないこと」と指示されている）。
+
 ## xcodebuild 検証中に DerivedData の `rm -rf` を中断すると SPM checkout が壊れる
 
 - `rm -rf DerivedData/iosApp-*` の途中で `Directory not empty` エラーが出て中断されると、

@@ -16,6 +16,7 @@
 - [Xcode developmentRegion と実効ロケール](xcode-development-region.md) — `.lproj` 無しでも `developmentRegion`/`CFBundleLocalizations` が DatePicker 等の OS 書式言語を左右する、`plutil -extract` での検証コマンド、`.app` 名は `PRODUCT_NAME` 由来
 - [Swift 6 移行の診断採取・実装](swift6-migration-diagnostics.md) — pbxproj buildSettings が xcconfig より優先される罠、`SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor` が消す警告/増やす警告、`@preconcurrency import SharedLogic` vs `nonisolated(unsafe)`（ストアドプロパティ限定なら後者が筋良い）の使い分け、`isolated deinit` vs `nonisolated final class` の判定軸、Kotlin interface 実装の `nonisolated` 化に伴うヘルパ型の連鎖対応・`OSAllocatedUnfairLock`+`@unchecked Sendable`でのキャッシュ保護、`@concurrent` と `NonisolatedNonsendingByDefault`
 - [NavigationStack の入れ子検出 / 戻る封じ](navigation-back-control.md) — push 先は自身で NavigationStack を包まない、`.navigationBarBackButtonHidden` はボタンのみでエッジスワイプは別途 `interactivePopGestureRecognizer` を操作する UIViewControllerRepresentable ブリッジが要る（`InteractivePopGestureLock`）
+- [Task クロージャの生存確認番兵パターン](task-closure-lifetime-sentinel.md) — `Task { }` に強参照キャプチャさせた番兵の `deinit` 有無で「クロージャごと解放されたか」を切り分ける（B-11 observation task 検証で確立）
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 

@@ -136,11 +136,11 @@
 | [x] | `MARKETING_VERSION` / Android `versionName` を 1.0.3 へ | 2026-09-20（`248c4c3`）。ビルド番号は据え置き |
 | [x] | **CI の AdMob 本番 ID 供給を下部固定帯のキーへ追随させる** | 2026-09-20。`release-testflight.yml` が旧 2 面のキー（`_CAFE_DETAIL` / `_MAP_SEARCH`）のままで、**`_GLOBAL_BOTTOM` を供給していなかった** = リリースビルドがデモ ID のまま出荷される状態だった。2026-07-22 と同型の再発（lessons 2026-09-20） |
 | [ ] | **AdMob コンソールで下部固定帯用の広告ユニットを発行**し、GitHub Secrets に `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` を登録する（**ユーザー作業 / 提出のブロッカー**） | **発行時にユニットの自動更新をオフ（手動更新）にすること**。未登録のままリリースビルドを回すと CI が fail-fast で落ちる（デモ ID のまま出荷されるよりは良い挙動）。旧 2 ユニットは使わない |
-| [ ] | **What's New の文言を決める**（§9 未記載） | パッチ版は「軽微な〜」1 行の運用が 1.0.1 / 1.0.2 で定着。今回は中身がユーザー不可視の内部修正 |
+| [x] | **What's New の文言を決める** | 2026-09-20、**「軽微な修正を行いました」**（1.0.2 と同一文言。ユーザー確定）。app-store-metadata §9 に記録済み |
 | [ ] | **スクリーンショットの全面再撮影** | **今回のスコープ外**（ユーザー判断）。2026-09-19 の広告帯再編以降、1.0.2 までの全カットが現物と不一致。§10 の「スクショが現物と一致するか」は**不合格のまま**。撮影手順は app-store-metadata §5 |
 | [ ] | 審査提出（ユーザー作業） | 上記ブロッカーの解消後 |
 
-### 1.0.2 リリース（2026-08-31 起票 / **提出済み・審査待ち**）
+### 1.0.2 リリース（2026-08-31 起票 / **リリース済み**）
 
 > **`MARKETING_VERSION` を 1.0.2 に上げた**（`iosApp/Configuration/Config.xcconfig`。Android の `versionName` も同値に揃えた）。**ビルド番号（`CURRENT_PROJECT_VERSION`）は据え置きで正しい** — `release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、xcconfig の `1` は Release では使われない（app-store-metadata §1 / §10）。
 >

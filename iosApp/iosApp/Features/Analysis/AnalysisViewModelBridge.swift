@@ -121,16 +121,47 @@ final class AnalysisViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: AnalysisViewModel.UIState) {
-        self.stats = state.stats
-        self.isLoading = state.isLoading
-        self.readiness = state.readiness
-        self.insight = state.insight
-        self.insightStatus = state.insightStatus
-        self.beanTraitsInsight = state.beanTraitsInsight
-        self.beanTraitsInsightStatus = state.beanTraitsInsightStatus
-        self.qaStatus = state.qaStatus
-        self.qaQuestion = state.qaQuestion
-        self.qaAnswer = state.qaAnswer
-        self.error = state.error
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知する。
+        // Kotlin の StateFlow は 1 フィールドだけ変わった state も丸ごと emit するため、
+        // 無条件代入だと無関係な body まで再評価される（SL-3）。
+        //
+        // Kotlin の `data class`（`CoffeeStats` / `CoffeeInsight` / `AnalysisReadiness`）は
+        // Obj-C 側で `equals()` 由来の `isEqual:` を持つため `==` が値比較になる。
+        // `InsightStatus` / `QaStatus` は SKIE が Obj-C プロトコルとして生成するので
+        // `Equatable` 非準拠。実体は Kotlin の `data object`（シングルトン。ヘッダの
+        // `@property (class, readonly, getter=shared)` で確認）なので参照比較で同値判定できる。
+        if stats != state.stats {
+            stats = state.stats
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if readiness != state.readiness {
+            readiness = state.readiness
+        }
+        if insight != state.insight {
+            insight = state.insight
+        }
+        if insightStatus !== state.insightStatus {
+            insightStatus = state.insightStatus
+        }
+        if beanTraitsInsight != state.beanTraitsInsight {
+            beanTraitsInsight = state.beanTraitsInsight
+        }
+        if beanTraitsInsightStatus !== state.beanTraitsInsightStatus {
+            beanTraitsInsightStatus = state.beanTraitsInsightStatus
+        }
+        if qaStatus !== state.qaStatus {
+            qaStatus = state.qaStatus
+        }
+        if qaQuestion != state.qaQuestion {
+            qaQuestion = state.qaQuestion
+        }
+        if qaAnswer != state.qaAnswer {
+            qaAnswer = state.qaAnswer
+        }
+        if error != state.error {
+            error = state.error
+        }
     }
 }

@@ -7,6 +7,10 @@ import FirebaseFirestore
 // `container.authRepository`（`any AuthRepository`）を受け手にして await すると、受け手を別の
 // 分離ドメインへ「送る」ことになり data race エラーになる（リリース CI run 31203044578）。
 @preconcurrency import SharedLogic
+import os
+
+/// 起動シーケンス・同意状態まわりのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "AppState")
 
 /// マップタブのカメラ中心を検索タブへ共有するための値型。
 ///
@@ -286,11 +290,11 @@ final class AppState {
             // 状態の公開はここで最後に行う（uid != nil が RootTabView への切り替えトリガーのため）
             self.uid = uid
             self.status = .ready
-            print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
+            log.info("startInitialSync succeeded uid=\(uid, privacy: .private)")
         } catch {
             self.lastError = error.localizedDescription
             self.status = .failed
-            print("[CoffeeVision] startInitialSync failed: \(error)")
+            log.error("startInitialSync failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -318,7 +322,7 @@ final class AppState {
                 showConsentOnboarding = true
             }
         } catch {
-            print("[CoffeeVision] checkConsentOnboarding failed (ignored): \(error)")
+            log.notice("checkConsentOnboarding failed (ignored): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -328,7 +332,7 @@ final class AppState {
         do {
             try await container.authRepository.updateAnalyticsConsent(consent: consent)
         } catch {
-            print("[CoffeeVision] updateAnalyticsConsent failed: \(error)")
+            log.error("updateAnalyticsConsent failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -344,16 +348,16 @@ final class AppState {
         if ProcessInfo.processInfo.environment["SEED_DUMMY_DATA"] == "1" {
             do {
                 try await container.seedDummyData(userId: userId)
-                print("[CoffeeVision] seedDummyData succeeded uid=\(userId)")
+                log.debug("seedDummyData succeeded uid=\(userId, privacy: .private)")
             } catch {
-                print("[CoffeeVision] seedDummyData failed (ignored): \(error)")
+                log.debug("seedDummyData failed (ignored): \(String(describing: error), privacy: .public)")
             }
         } else {
             do {
                 try await container.clearDummyData(userId: userId)
-                print("[CoffeeVision] clearDummyData succeeded uid=\(userId)")
+                log.debug("clearDummyData succeeded uid=\(userId, privacy: .private)")
             } catch {
-                print("[CoffeeVision] clearDummyData failed (ignored): \(error)")
+                log.debug("clearDummyData failed (ignored): \(String(describing: error), privacy: .public)")
             }
         }
     }

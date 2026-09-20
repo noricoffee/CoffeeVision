@@ -68,10 +68,22 @@ final class CoffeeDetailViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CoffeeDetailViewModel.UIState) {
-        self.coffee = state.coffee
-        self.isLoading = state.isLoading
-        self.error = state.error
-        self.isDeleted = state.isDeleted
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `CoffeeRecord` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        if coffee != state.coffee {
+            coffee = state.coffee
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if error != state.error {
+            error = state.error
+        }
+        if isDeleted != state.isDeleted {
+            isDeleted = state.isDeleted
+        }
 
         if state.isDeleted, let fileNames = pendingPhotoFileNames {
             for fileName in fileNames {

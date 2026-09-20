@@ -277,3 +277,50 @@ docs の冗長排除中に `kmp-bridge.md`「メモリ管理の注意」の記�
 - 検証: `Info.plist` が `$(...)` で要求する変数集合と、CI が `Secrets.xcconfig` へ書き出す変数集合を比較。修正後は `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` / `PLACES_API_KEY` の 3 つで過不足なく一致
 - 残るブロッカー: **下部固定帯用の広告ユニットがまだ未発行**（ユーザー作業）。CI を直したので、未登録のままリリースビルドを回すと fail-fast で落ちる。**デモ ID のまま静かに出荷されるより良い挙動**になった
 - 経緯の注記: これは 2026-07-22 と**同型の再発**。あのときは「CI が `PLACES_API_KEY` しか書き出していない」問題で、キーを足して直した。今回は「キー名が変わった」ケースで、当時の修正では一般化できていなかった
+
+### 2026-09-20: SL-1 / SL-2 — `@unchecked Sendable` の適用範囲を縮めた
+
+- 関連: `iosApp/iosApp/FirebaseRepositories/FlowBridge.swift` / `AuthRepositoryIosImpl.swift` / `RemoteCoffeeDataSourceIosImpl.swift` / `RemoteSavedCafeDataSourceIosImpl.swift` / `iosApp/iosApp/Features/Analysis/CoffeeInsightProviderIosImpl.swift` / [`kmp-bridge.md`](./kmp-bridge.md) / tasks SL-1・SL-2
+
+`CallbackFlow` / `CallbackFlowOptional` の `onStart` / `onCancel` を `@Sendable` 化し、両クラスを `@unchecked Sendable` から**素の `Sendable`** へ。狙いは挙動ではなく**コンパイラに検査させる範囲を戻すこと**で、クラス全体の `@unchecked` が利用側の捕捉まで検査から外していた。
+
+利用側は起票時に数えた 4 箇所ではなく **5 箇所**だった（`AuthRepositoryIosImpl.observeAnalyticsConsent` も同型で、`permission-denied` 系でリスナが残る）。5 箇所すべてでリスナハンドルを `OSAllocatedUnfairLock` 保護へ移し、取り出しと無効化をロック内でアトミックに、解除呼び出しはロックの外で行う形に揃えた（`FlowCompletionGate.finish` と同型）。
+
+保護対象が非 Sendable な OS ハンドル（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle`）なので `init(uncheckedState:)` + `withLockUnchecked` を使う。`init(initialState:)` は `extension OSAllocatedUnfairLock where State : Sendable` の中にあり、`withLock` は `body: @Sendable` と `R : Sendable` を要求するため、この用途では原理的に使えない（SDK の `.swiftinterface` L2430-2439 / L2538-2539 で親が実読み確認）。
+
+- 影響: Firestore の 2 データソースは `Firestore` インスタンスの捕捉をやめ、`CollectionReference` を外で組み立てて捕捉する形に変えた。`FIRFirestore.h` に `NS_SWIFT_SENDABLE` が無く、`FIRCollectionReference` / `FIRDocumentReference` / `FIRQuery` には付いているため（親がヘッダを実読み確認）。副産物としてクロージャ内のパス手組みと既存 private ヘルパの二重定義が解消された
+- トレードオフ: 唯一塞げなかったのが `__collect` の `collector`（SKIE 生成の非 Sendable existential）を `@Sendable` な `emit` へ捕捉する箇所。`FlowBridge.swift` に `@preconcurrency import SharedLogic` を付けて解いた。**これは新しい穴ではない** — collector を別スレッドから触ること自体はブリッジ成立以前からの前提で、既存の前提をファイルスコープで明示しただけ。代案の `extension ...FlowCollector: @retroactive Sendable` は全適合型に効くので採らなかった。**この import は利用側 5 ファイルの検査には影響しない**（`@Sendable` は `onStart` / `onCancel` の型の一部なので、利用側は自分のファイルの通常 import の下で検査される）
+- トレードオフ: 「`onStart` がリスナ登録を終える前に `onCancel` が走る」競合窓は**意図的に残した**。`__collect` 実行中は Kotlin 側が Flow オブジェクトへの強参照を保持するため `deinit` が並行して走ることは構造的に起きない。塞ぐなら 3 状態（pending / registered / cancelled）を 5 箇所に入れることになるので、必要になったら共通ヘルパへ切り出す
+- SL-2: `CoffeeInsightProviderIosImpl.tasteExtractor` を `private init` 引数の `let` にした。「公開前に 1 回だけ設定」というコメントでの正当化が構文的に不要になり、同クラスも素の `Sendable` へ落ちた
+- 残務: `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` の `@unchecked Sendable` は残る（`private let db = Firestore.firestore()` が非 Sendable。外すには `db` を持たない設計変更が要る）。判定基準は kmp-bridge の表に明文化したので、外すかは費用対効果で別途判断する
+
+### 2026-09-20: SL-4 — マップのピン競合解決を `MapTabView` の body から `MapViewModelBridge` へ移した
+
+- 関連: `iosApp/iosApp/Features/Map/MapViewModelBridge.swift` / `MapTabView.swift` / `MapTabView+PinResolution.swift` / `AppleNearbyCafeLoader.swift` / [`coding-conventions.md`](./coding-conventions.md) §2.5 / tasks SL-3・SL-4・SL-5
+
+`displayedSavedCafes` / `displayedSearchResultPlaces` / `displayedCuratedCafes` / `existingPinCoordinates` は `MapTabView` extension の関数として body から毎回呼ばれており、body 評価のたびに Set 3 本の構築と最大 421 件の `CLLocation` 測地距離計算が走っていた。入力が実際に変わったときだけ計算する形にするため `MapViewModelBridge` の `private(set) var` へ移した。Apple 周辺ピンの重複排除も同様に `AppleNearbyCafeLoader.displayedCafes` へ。`MapTabView+PinResolution.swift` は `minimalCafe(from:)` だけの 37 行になった。
+
+**ブリッジの責務が「Kotlin state のミラー」から一段広がる**のが代償。代替案は「`@Observable` な resolver を View の `@State` に置き `.onChange` 4 本で駆動」だったが、これは body 評価のたびに Kotlin 配列 4 本の `==`（要素ごとに Obj-C 越しの `isEqual:`、curated は 421 件）を走らせることになり、**解こうとしている問題を別の形で作る**ため採らなかった。「Kotlin state から一意に決まる派生値は emit のタイミングで計算する」= ブリッジが正しい場所、という判断。
+
+- 影響: **body から `appState.mapSearchCenter` を読む依存が消滅した**。`displayedCuratedCafes(bridge)` がその唯一の経路だった。2026-08-09 のウォッチドッグ障害（カメラ → ピン表示数 → カメラの循環）に対して、`MapTabView+PinResolution.swift` の旧 doc コメントが守ろうとしていた「依存方向を増やさない」より**一段強い状態**になっている。親が全 `appState.mapSearchCenter` 参照を確認し、残るのはすべて action closure 内（Button action / `.onChange` ハンドラ / `.task` / `.onSubmit` / `.onMapCameraChange`）で body 評価時に評価される式はゼロであることを確認済み
+- 指示からの逸脱（採用）: 親の dispatch は「カメラ依存分は `.onChange(of:)` から更新する」と指示したが、**これは誤りだった**。`.onChange` の `of:` 式は body 評価時に評価されるため、`appState.mapSearchCenter` を `of:` に書くと消したはずの body 依存が復活する。実装は既存の `.onMapCameraChange` ハンドラから `bridge.updateMapSearchCenter(_:)` を直接呼ぶ形になっている。**`.onChange` は「SwiftUI が値比較してくれる」利点と「body 依存を作る」代償がセット**で、既に body が読んでいる値なら前者だけ得られるが、読んでいない値に使うと後者を払う。この区別を `coding-conventions.md` §2.5 に書き分けた
+- トレードオフ: 同値判定を `AppState.mapSearchCenter` 側の既存ガードに**相乗りさせず**ブリッジ側に持たせた。サインアウト → `resetAndRebootstrap()` は `mapBridge` だけを作り直して `appState.mapSearchCenter` は残すため、相乗りすると新ブリッジが「同値だから渡されない」でカメラ中心を永久に受け取れず、curated ピンがユーザーが地図を動かすまで出なくなる。あわせて `MapTabView` の `.task` で現在値を 1 回流し込んでいる
+- トレードオフ（残存）: Apple ピンの重複排除が `bridge.existingPinCoordinates` → `.onChange` → loader の経路になったため **1 フレーム遅れる**。新しい訪問済み / 保存済み / curated ピンが出た直後の 1 パスだけ、40m 以内に Apple ピンが重なって見えうる（次のパスで消える）。データ投入は起動直後に集中するため実害は小さいと判断。目視確認項目に入れた
+- SL-3: ブリッジ 8 本の `apply(_:)` に同値ガード。判定基準は [`kmp-bridge.md`](./kmp-bridge.md)「Swift 側での等価性」へ。`AnalysisViewModelBridge` の 3 status は `!==`（全 case が `data object` = シングルトン）、`CafeDetailViewModelBridge.matches` のみガード不可
+- SL-5: `ApplePoiNegativeCache.snapshot()` を追加し、`AppleNearbyCafeLoader.fetch` の `compactMap` 前で 1 回だけ `UserDefaults` 読み + JSON デコード（POI 1 件ごと最大 50 回 → 1 回）。`add(name:coordinate:)` のシグネチャは不変
+
+### 2026-09-20: SL-6〜SL-10 — 書き方を stdlib / SE の先例へ揃えた
+
+- 関連: `iosApp/iosApp/Utilities/AppLog.swift`（新規）/ `Features/Map/MapRegionFitting.swift`（新規）/ `Features/Analysis/AnalysisView+Statistics.swift` / `Utilities/LocationManager.swift` / [`coding-conventions.md`](./coding-conventions.md) §2.3・§2.5 / tasks SL-6〜SL-10
+
+`AnyView` 14 箇所 → `@ViewBuilder`、`Task.sleep(nanoseconds:)` 3 箇所 → `Task.sleep(for:)`、`print` 28 箇所 → `os.Logger`、bounding box 計算の重複解消（force unwrap 8 個を除去）、`@Observable` 同値ガードの残り 2 件。規約への昇格は `coding-conventions.md` §2.3 / §2.5 へ済み。以下は判断の経緯だけ残す。
+
+**`LocationManager.lastLocation` の同値ガードを誤差比較にしなかった理由。** `MapSearchCenter.isEquivalent`（1m 許容）は「MapKit のカメラが再適用のたびに浮動小数の下位桁を揺らす」ことへの対処で、位置バイアス用途では 1m 未満の差が無意味だという前提に立つ。対して `LocationManager` は継続監視を使わず `requestLocation()` のワンショット取得しかしておらず、抑止したい重複は「短時間に複数回呼んだとき CoreLocation が同じキャッシュ fix を返す」ケース = **ビット完全一致**。誤差比較にすると近距離の実移動まで握り潰す副作用の方が大きい。**同じ「座標の同値判定」でも、揺れの出どころが違えば比較方法も違う。**
+
+型を `MapPinCoordinate`（SL-4 で新設）に置き換えなかったのは、消費側 4 箇所（`CoffeeEditorView` / `MapTabView` / `MapTabView+Location` ×2）がいずれも `CLLocationCoordinate2D` のまま MapKit / KMP へ渡しており、変換が全箇所に要るうえ `Utilities/` → `Features/Map/` の依存逆転になるため。
+
+**`AppLog` を `nonisolated enum` + `private nonisolated let` にした理由。** 既定 MainActor 分離下では、`nonisolated final class`（Kotlin interface 実装）から共有ロガーを参照する形にすると分離の不整合が出る。`Logger` は `Sendable` なので `nonisolated` を明示するだけで済み、SL-1 でせっかく外した `@unchecked Sendable` を復活させずに解決できた。
+
+- 影響: `print` の `[CoffeeVision]` 等の手書きプレフィックスは subsystem / category へ移した。開発時は `xcrun simctl spawn <udid> log stream --level debug --predicate 'subsystem == "com.noricoffee.coffeevision"'` で見る（`--level debug` を省くと `.info` / `.debug` が出ない）
+- 未確認: **`privacy: .private` の redaction はシミュレータでは実証できない**（デバッガ配下では private データが表示される Apple の挙動）。コード上 `.private` が付いていることまでは確定だが、「本番端末のログに uid が出ない」の実証は実機 / TestFlight ビルドでの確認が要る
+- SL-9: 単一件数時のズーム距離が用途ごとに違った（訪問済み 2000m / 検索結果 800m）ため `singleCoordinateMeters` 引数で受ける形にした。0 件は `nil` 返しで、訪問済み側は東京駅 5km デフォルト、検索結果側は no-op という従来の差を呼び出し側に残してある（0 / 1 / 複数件の 3 ケースとも挙動不変）

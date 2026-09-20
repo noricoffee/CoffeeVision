@@ -95,12 +95,27 @@ final class CoffeeListViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CoffeeListViewModel.UIState) {
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `MonthSection` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        //
         // SKIE 環境では state.sections は既に [CoffeeListViewModel.MonthSection] として型付けされている
-        self.sections = state.sections
-        self._searchQuery = state.searchQuery
-        self.isLoading = state.isLoading
-        self.error = state.error
+        if sections != state.sections {
+            sections = state.sections
+        }
+        if _searchQuery != state.searchQuery {
+            _searchQuery = state.searchQuery
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if error != state.error {
+            error = state.error
+        }
 
+        // 写真の物理削除は `sections` の変化有無に関わらず判定する
+        // （`onCoffeeDeleted` で pending に積まれた分を取りこぼさないため）。
         resolvePendingPhotoDeletions()
     }
 

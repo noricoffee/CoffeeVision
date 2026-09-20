@@ -27,8 +27,23 @@ final class AppleNearbyCafeLoader {
 
     /// `MKLocalPointsOfInterestRequest` で取得した周辺カフェ（低強調ピン用）。
     ///
-    /// dedup（既存ピンとの座標近接除外）前の生データ。表示用の一覧は `displayed(excluding:)` を使う。
+    /// dedup（既存ピンとの座標近接除外）前の生データ。表示用の一覧は `displayedCafes` を使う。
     private(set) var cafes: [ApplePoiCafe] = []
+
+    /// 表示対象の Apple 検索由来カフェ（既存ピンとの重複排除済み）。
+    ///
+    /// 既存ピン（訪問済み / 保存済み / 検索結果 / おすすめ（curated））のいずれかと座標近接
+    /// （約 40m 以内）のものを除外したもの（優先順位: 訪問済み > 保存済み > 検索結果 >
+    /// おすすめ（curated）> Apple 検索由来。名前一致はローカライズで不安定なため使わない）。
+    ///
+    /// 以前は `displayed(excluding:)` として `MapTabView` の body から毎回呼んでおり、
+    /// body 評価のたびに既存ピン全件の `CLLocation` 生成 + O(n×m) の測地距離計算が走っていた。
+    /// 入力（`cafes` / 既存ピン座標）が実際に変わったときだけ再計算する（SL-4）。
+    private(set) var displayedCafes: [ApplePoiCafe] = []
+
+    /// 既存ピンの座標（`MapViewModelBridge.existingPinCoordinates` を `MapTabView` が
+    /// `.onChange(of:)` で検知して渡す）。UI が直接読む値ではないため観測対象から外す。
+    @ObservationIgnored private var existingLocations: [CLLocation] = []
 
     /// 直近の Apple 検索 fetch Task（デバウンス / キャンセル用）。
     private var fetchTask: Task<Void, Never>? = nil
@@ -41,11 +56,11 @@ final class AppleNearbyCafeLoader {
     func schedule(center: MapSearchCenter) {
         fetchTask?.cancel()
         guard center.radiusMeters <= Self.zoomGateRadiusMeters else {
-            cafes = []
+            setCafes([])
             return
         }
         fetchTask = Task {
-            try? await Task.sleep(nanoseconds: 300_000_000)
+            try? await Task.sleep(for: .milliseconds(300))
             guard !Task.isCancelled else { return }
             await fetch(center: center)
         }
@@ -56,23 +71,41 @@ final class AppleNearbyCafeLoader {
     /// `poiLookupError`（「該当なし」）を受けた呼び出し元が、`ApplePoiNegativeCache.add` と
     /// セットで呼ぶ（周辺カフェピンのノイズ除去、2026-07-13）。
     func removeCafe(id: String) {
-        cafes.removeAll { $0.id == id }
+        setCafes(cafes.filter { $0.id != id })
     }
 
-    /// 表示対象の Apple 検索由来カフェ。
+    /// 既存ピンの座標一覧を差し替える（`MapTabView` の `.onChange(of:)` から呼ぶ）。
     ///
-    /// 既存ピン（訪問済み / 保存済み / 検索結果 / おすすめ（curated））のいずれかと座標近接
-    /// （約 40m 以内）のものを除外する（優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）
-    /// > Apple 検索由来。名前一致はローカライズで不安定なため使わない）。既存ピンの座標一覧は
-    /// 呼び出し元（`MapTabView`）が `bridge` から構築して渡す。
-    func displayed(excluding existingLocations: [CLLocationCoordinate2D]) -> [ApplePoiCafe] {
-        let proximityThresholdMeters: CLLocationDistance = 40
-        let existing = existingLocations.map {
+    /// 呼び出し側の `.onChange(of:)` が SwiftUI の値比較で変化時のみ発火するため、
+    /// ここでは同値ガードを持たない（`displayedCafes` の代入側にガードがある）。
+    func updateExistingPinCoordinates(_ coordinates: [MapPinCoordinate]) {
+        existingLocations = coordinates.map {
             CLLocation(latitude: $0.latitude, longitude: $0.longitude)
         }
-        return cafes.filter { cafe in
+        recomputeDisplayedCafes()
+    }
+
+    // MARK: - Private
+
+    /// `cafes` を更新し、表示用の重複排除済み一覧を作り直す。
+    private func setCafes(_ newCafes: [ApplePoiCafe]) {
+        // 差分がないときは代入しない（`@Observable` は値を比較せず代入だけで変更を通知する
+        // ため、同一内容の再代入は無駄な body 再評価になる）。
+        guard cafes != newCafes else { return }
+        cafes = newCafes
+        recomputeDisplayedCafes()
+    }
+
+    /// 既存ピンと座標近接（約 40m 以内）の Apple POI を落とした表示用一覧を作り直す。
+    private func recomputeDisplayedCafes() {
+        let proximityThresholdMeters: CLLocationDistance = 40
+        let newDisplayed = cafes.filter { cafe in
             let location = CLLocation(latitude: cafe.coordinate.latitude, longitude: cafe.coordinate.longitude)
-            return !existing.contains { $0.distance(from: location) <= proximityThresholdMeters }
+            return !existingLocations.contains { $0.distance(from: location) <= proximityThresholdMeters }
+        }
+        // `@Observable` は値を比較せず代入だけで変更を通知するため、同一内容なら代入しない。
+        if displayedCafes != newDisplayed {
+            displayedCafes = newDisplayed
         }
     }
 
@@ -104,29 +137,29 @@ final class AppleNearbyCafeLoader {
         do {
             let response = try await MKLocalSearch(request: request).start()
             guard !Task.isCancelled else { return }
+            // ネガティブキャッシュは POI 1 件ごとではなくここで 1 回だけ読む
+            // （`MKLocalSearch` は最大 50 件返すため、呼び出しごとの `UserDefaults` 読み出し +
+            // JSON デコードがメインスレッドで最大 50 回走っていた。SL-5）。
+            let negativeCache = ApplePoiNegativeCache.snapshot()
             let newCafes = response.mapItems.compactMap { item -> ApplePoiCafe? in
                 let coordinate = item.location.coordinate
                 let name = item.name ?? String(localized: "カフェ")
                 guard !isExcludedByNameHeuristic(name) else { return nil }
-                guard !ApplePoiNegativeCache.contains(name: name, coordinate: coordinate) else { return nil }
+                guard !negativeCache.contains(name: name, coordinate: coordinate) else { return nil }
                 return ApplePoiCafe(
                     id: "\(coordinate.latitude)_\(coordinate.longitude)",
                     name: name,
                     coordinate: coordinate
                 )
             }
-            // 差分がないときは代入しない（`@Observable` は値を比較せず代入だけで変更を通知する
-            // ため、同一内容の再代入は無駄な body 再評価になる）。
-            if newCafes != cafes {
-                cafes = newCafes
-            }
+            setCafes(newCafes)
         } catch {
             guard !Task.isCancelled else { return }
             if let mkError = error as? MKError, mkError.code == .loadingThrottled {
                 // 一時的なスロットリング: 次の fetch で回復するため既存ピンを保持する。
                 return
             }
-            cafes = []
+            setCafes([])
         }
     }
 }

@@ -39,7 +39,7 @@ struct MapTabView: View {
     /// **`.automatic` を使ってはいけない。** `.automatic` は「コンテンツと現在地に基づいて MapKit が
     /// カメラを自動決定する」モードで、**Map のコンテンツが変わるたびにカメラを再計算する**
     /// （`-[MKMapView _updateFramingUsingSetRegionBlock:]`）。このアプリではピンの表示数がカメラの
-    /// 可視半径に依存する（`displayedCuratedCafes` のズームゲート）ため、
+    /// 可視半径に依存する（`MapViewModelBridge.displayedCuratedCafes` のズームゲート）ため、
     ///
     ///   ズームイン → ズームゲート通過 → curated ピン 210 個が出る → コンテンツに合わせて
     ///   全国（curated 421 件を含む領域）へズームアウト → ズームゲート不通過 → ピンが消える
@@ -284,6 +284,13 @@ struct MapTabView: View {
                             appleLoader.removeCafe(id: tapped.id)
                             lastTappedApplePoi = nil
                         }
+                        // Apple 周辺ピンの重複排除に使う既存ピン座標を、変化したときだけ渡す。
+                        // `.onChange(of:)` は SwiftUI が値比較して変化時のみ発火するため、
+                        // `@Observable` の「値を比較せず通知する」問題が起きない（SL-4）。
+                        // `initial: true` は表示時点で既にピンが揃っているケース（タブ再表示）用。
+                        .onChange(of: bridge.existingPinCoordinates, initial: true) { _, coordinates in
+                            appleLoader.updateExistingPinCoordinates(coordinates)
+                        }
                         // 好み一致カフェが 0 件になった（チップ消滅）ら開いている一覧シートを閉じる
                         // （強調は `activeCafeListSheet` に連動して自動的に OFF になる）。
                         .onChange(of: bridge.recommendedCafes.count) { _, count in
@@ -315,7 +322,14 @@ struct MapTabView: View {
                             }
                         }
                         .task {
+                            // ブリッジ再生成（サインアウト → 再ブートストラップ）直後は、
+                            // カメラが動くまで `.onMapCameraChange` が来ず curated ピンの
+                            // ズームゲートが開かないため、直近のカメラ中心を先に渡しておく。
+                            if let center = appState.mapSearchCenter {
+                                bridge.updateMapSearchCenter(center)
+                            }
                             // マップの state 購読を開始する（構造化 `Task`。B-11）。
+                            // `observe()` はキャンセルされるまで返らないので、この後に処理を足さない。
                             await bridge.observe()
                         }
                         .task {
@@ -386,8 +400,8 @@ struct MapTabView: View {
 
                 // 周辺カフェ（Apple 検索由来 / 低強調）ピン。既存ピン（訪問済み / 保存済み / 検索結果 /
                 // おすすめ（curated））と座標近接（約 40m 以内）のものは重複排除済み
-                // （`appleLoader.displayed(excluding:)`）。最初に描画して他ピンの背面に回す。
-                ForEach(appleLoader.displayed(excluding: existingPinCoordinates(bridge))) { cafe in
+                // （`appleLoader.displayedCafes`）。最初に描画して他ピンの背面に回す。
+                ForEach(appleLoader.displayedCafes) { cafe in
                     Annotation(cafe.name, coordinate: cafe.coordinate) {
                         Button {
                             lastTappedApplePoi = cafe
@@ -449,8 +463,9 @@ struct MapTabView: View {
                 // 保存済みピン（indigo / カップ + bookmark.fill バッジ。フェーズ 15-A / 16 で常時表示に変更、
                 // 2026-08-07 に本体をカップへ統一しバッジ化）
                 // 同一 placeId が訪問済みピンと競合する場合は訪問済みを優先するため、
-                // visitedPlaceIds(bridge) に含まれるものは除外する（優先順位: 訪問済み > 保存済み > 検索結果）。
-                ForEach(displayedSavedCafes(bridge), id: \.cafe.placeId) { savedCafe in
+                // 訪問済みの placeId を持つものは除外済み（優先順位: 訪問済み > 保存済み > 検索結果。
+                // 競合解決は `MapViewModelBridge.displayedSavedCafes` が担う）。
+                ForEach(bridge.displayedSavedCafes, id: \.cafe.placeId) { savedCafe in
                     if let lat = savedCafe.cafe.latitude?.doubleValue,
                        let lng = savedCafe.cafe.longitude?.doubleValue {
                         Annotation(
@@ -474,27 +489,26 @@ struct MapTabView: View {
 
                 // 検索結果ピン（青 / mappin.and.ellipse）
                 // タップで下部カードを表示し、NavigationLink ではなく selectSearchResult を呼ぶ
-                // 同一 placeId が訪問済み / 保存済みピンと競合する場合はそちらを優先して除外する
-                // （優先順位: 訪問済み > 保存済み > 検索結果。表示切替チップの状態に関わらず適用する）
-                if !bridge.searchResultPlaces.isEmpty {
-                    ForEach(displayedSearchResultPlaces(bridge), id: \.placeId) { cafe in
-                        if let lat = cafe.latitude?.doubleValue,
-                           let lng = cafe.longitude?.doubleValue {
-                            Annotation(
-                                cafe.name,
-                                coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng)
-                            ) {
-                                Button {
-                                    searchController.selectResult(cafe)
-                                } label: {
-                                    SearchResultPin(
-                                        cafe: cafe,
-                                        isHighlighted: cafe.placeId == searchController.highlightedPlaceId
-                                    )
-                                }
-                                .buttonStyle(.plain)
-                                .opacity((savedEmphasisActive || recommendedEmphasisActive) ? 0.4 : 1.0)
+                // 同一 placeId が訪問済み / 保存済みピンと競合する場合はそちらを優先して除外済み
+                // （優先順位: 訪問済み > 保存済み > 検索結果。表示切替チップの状態に関わらず適用する。
+                // 競合解決は `MapViewModelBridge.displayedSearchResultPlaces` が担う）
+                ForEach(bridge.displayedSearchResultPlaces, id: \.placeId) { cafe in
+                    if let lat = cafe.latitude?.doubleValue,
+                       let lng = cafe.longitude?.doubleValue {
+                        Annotation(
+                            cafe.name,
+                            coordinate: CLLocationCoordinate2D(latitude: lat, longitude: lng)
+                        ) {
+                            Button {
+                                searchController.selectResult(cafe)
+                            } label: {
+                                SearchResultPin(
+                                    cafe: cafe,
+                                    isHighlighted: cafe.placeId == searchController.highlightedPlaceId
+                                )
                             }
+                            .buttonStyle(.plain)
+                            .opacity((savedEmphasisActive || recommendedEmphasisActive) ? 0.4 : 1.0)
                         }
                     }
                 }
@@ -502,11 +516,11 @@ struct MapTabView: View {
                 // おすすめカフェ（curated / system orange + cup.and.saucer.fill）ピン（フェーズ 19）。
                 // Google Maps の POI 強調のように表示切替チップの対象外（トグルなし）だが、
                 // Apple 周辺ピンと同じズームゲートでズームアウト時は非表示にする
-                // （`displayedCuratedCafes` 参照）。
-                // 同一 placeId が訪問済み / 保存済み / 検索結果ピンと競合する場合はそちらを優先して除外する
+                // （`MapViewModelBridge.displayedCuratedCafes` 参照）。
+                // 同一 placeId が訪問済み / 保存済み / 検索結果ピンと競合する場合はそちらを優先して除外済み
                 // （優先順位: 訪問済み > 保存済み > 検索結果 > おすすめ（curated）。表示切替チップの状態に
                 // 関わらず適用する）。タップで直接カフェ詳細へ push する（保存済みピンと同型）。
-                ForEach(displayedCuratedCafes(bridge), id: \.placeId) { curated in
+                ForEach(bridge.displayedCuratedCafes, id: \.placeId) { curated in
                     Annotation(
                         curated.name,
                         coordinate: CLLocationCoordinate2D(latitude: curated.latitude, longitude: curated.longitude)
@@ -560,6 +574,13 @@ struct MapTabView: View {
                 if appState.mapSearchCenter?.isEquivalent(to: newCenter) != true {
                     appState.mapSearchCenter = newCenter
                 }
+
+                // curated ピンのズームゲート / 可視範囲フィルタもカメラ依存のため、ここから
+                // ブリッジへ渡して再計算させる（同値判定はブリッジ側が持つ。上の `AppState` の
+                // ガードに相乗りしない理由は `updateMapSearchCenter` の doc コメント参照）。
+                // **body から `mapSearchCenter` を読む依存は作らない** — 2026-08-09 のウォッチドッグ
+                // 障害は「カメラ → ピン表示数 → カメラ」の循環が原因（lessons 2026-08-09）。
+                bridge.updateMapSearchCenter(newCenter)
 
                 // 「このエリアを検索」ボタンの出現判定。
                 // アンカー未設定（初回カメラ確定時）はボタンを出さず、静かにベースラインとして採用する。
@@ -768,33 +789,6 @@ struct MapTabView: View {
     }
 
     // MARK: - 周辺カフェ（Apple 検索由来）関連ヘルパ（フェーズ 17 / fetch 本体は M-2 で `AppleNearbyCafeLoader` へ移設）
-
-    /// 既存ピンの座標一覧（訪問済み / 保存済み / 検索結果 / おすすめ（curated）。表示トグルの状態に
-    /// 関わらず全件。Apple ピンの重複排除に使う。フェーズ 19 で curated を追加）。
-    private func existingPinCoordinates(_ bridge: MapViewModelBridge) -> [CLLocationCoordinate2D] {
-        let visited = bridge.visitedCafes.compactMap { vc -> CLLocationCoordinate2D? in
-            guard let lat = vc.cafe.latitude?.doubleValue, let lng = vc.cafe.longitude?.doubleValue else {
-                return nil
-            }
-            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
-        }
-        let saved = bridge.savedCafes.compactMap { sc -> CLLocationCoordinate2D? in
-            guard let lat = sc.cafe.latitude?.doubleValue, let lng = sc.cafe.longitude?.doubleValue else {
-                return nil
-            }
-            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
-        }
-        let searched = bridge.searchResultPlaces.compactMap { cafe -> CLLocationCoordinate2D? in
-            guard let lat = cafe.latitude?.doubleValue, let lng = cafe.longitude?.doubleValue else {
-                return nil
-            }
-            return CLLocationCoordinate2D(latitude: lat, longitude: lng)
-        }
-        let curated = bridge.curatedCafes.map {
-            CLLocationCoordinate2D(latitude: $0.latitude, longitude: $0.longitude)
-        }
-        return visited + saved + searched + curated
-    }
 
     /// Apple 検索由来ピンの不透明度。
     ///

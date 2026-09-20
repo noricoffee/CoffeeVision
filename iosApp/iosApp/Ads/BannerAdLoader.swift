@@ -1,5 +1,9 @@
 import GoogleMobileAds
 import Observation
+import os
+
+/// バナー広告のロード状況ロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Ads")
 
 /// アダプティブバナー広告ローダー（requirements.md §11）。
 ///
@@ -129,7 +133,7 @@ extension BannerAdLoader: BannerViewDelegate {
         loadedAdSize = bannerView.adSize.size
         // 受信広告の実サイズをログに残す（`inlineAdaptiveBanner` は Google 側の最適化ロジックで
         // `maxHeight` 以下の高さが返るため、目視確認時に実測値を追いたい。requirements.md §11-5）。
-        print("[CoffeeVision] BannerAdLoader did receive ad (adUnitID=\(adUnitID)): size=\(bannerView.adSize.size)")
+        log.info("did receive ad (adUnitID=\(self.adUnitID, privacy: .public)): size=\(String(describing: bannerView.adSize.size), privacy: .public)")
         loadPendingIfNeeded()
     }
 
@@ -140,7 +144,7 @@ extension BannerAdLoader: BannerViewDelegate {
         if !hasEverReceivedAd {
             isLoaded = false
         }
-        print("[CoffeeVision] BannerAdLoader load failed (adUnitID=\(adUnitID)): \(error)")
+        log.notice("load failed (adUnitID=\(self.adUnitID, privacy: .public)): \(String(describing: error), privacy: .public)")
         loadPendingIfNeeded()
     }
 }

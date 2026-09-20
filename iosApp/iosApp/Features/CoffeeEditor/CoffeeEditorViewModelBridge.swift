@@ -231,14 +231,36 @@ final class CoffeeEditorViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CoffeeEditorViewModel.UIState) {
-        self.draft = state.draft
-        self.isLoading = state.isLoading
-        self.isSaving = state.isSaving
-        self.error = state.error
-        self.savedCoffeeId = state.savedCoffeeId
-        self.tags = state.draft.tags
-        self.suggestedCafes = state.suggestedCafes
-        self.tagInput = state.tagInput
-        self.suggestedTags = state.suggestedTags
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `CoffeeDraft` / `Cafe` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の
+        // `isEqual:` を持つため `==` が値比較になる。
+        if draft != state.draft {
+            draft = state.draft
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if isSaving != state.isSaving {
+            isSaving = state.isSaving
+        }
+        if error != state.error {
+            error = state.error
+        }
+        if savedCoffeeId != state.savedCoffeeId {
+            savedCoffeeId = state.savedCoffeeId
+        }
+        if tags != state.draft.tags {
+            tags = state.draft.tags
+        }
+        if suggestedCafes != state.suggestedCafes {
+            suggestedCafes = state.suggestedCafes
+        }
+        if tagInput != state.tagInput {
+            tagInput = state.tagInput
+        }
+        if suggestedTags != state.suggestedTags {
+            suggestedTags = state.suggestedTags
+        }
     }
 }

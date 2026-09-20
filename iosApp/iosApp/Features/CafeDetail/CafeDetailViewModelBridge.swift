@@ -62,11 +62,29 @@ final class CafeDetailViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CafeDetailViewModel.UIState) {
-        self.cafe = state.cafe
-        self.coffees = state.coffees
-        self.isLoading = state.isLoading
-        self.isSaved = state.isSaved
-        self.matches = state.matches
-        self.error = state.error
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `Cafe` / `CoffeeRecord` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の
+        // `isEqual:` を持つため `==` が値比較になる。
+        if cafe != state.cafe {
+            cafe = state.cafe
+        }
+        if coffees != state.coffees {
+            coffees = state.coffees
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if isSaved != state.isSaved {
+            isSaved = state.isSaved
+        }
+        // `matches` は同値ガードを入れられない: 要素の `RecommendationReason` は SKIE が
+        // Obj-C プロトコルとして生成するため `[any RecommendationReason]` になり `Equatable`
+        // 非準拠。実体（`TasteProfileMatch`）は算出のたびに新インスタンスになるので参照比較も
+        // 効かない。KMP 側で `matches` を `Equatable` な形にしない限り無条件代入のままにする。
+        matches = state.matches
+        if error != state.error {
+            error = state.error
+        }
     }
 }

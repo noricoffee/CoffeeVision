@@ -4,6 +4,10 @@ import FirebaseCrashlytics
 import FirebaseFirestore
 import GoogleMobileAds
 import SharedLogic
+import os
+
+/// 起動時の Firebase 初期化まわりのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Startup")
 
 @main
 struct iOSApp: App {
@@ -25,7 +29,7 @@ struct iOSApp: App {
             sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited)
         )
         Firestore.firestore().settings = settings
-        print("[CoffeeVision] Firestore persistent cache enabled")
+        log.info("Firestore persistent cache enabled")
 
         // Remote Config の fetch + activate（POI 名前フィルタ・レビュー依頼キルスイッチ等、
         // 全キー共通）。同意フローとは無関係に取得してよく、失敗・未取得時は各機能側の

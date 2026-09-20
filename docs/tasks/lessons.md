@@ -1331,3 +1331,56 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
 - **見つけ方の教訓**: 発見は「1.0.3 の提出準備」でチェックリストを上から潰していた過程。**リリース前チェックリストが機能した実例**で、`app-store-metadata.md` §10 の「本番環境の設定（アプリが動くかでは検出できないもの）」という節の存在理由そのものだった
 - **横展開点検（2026-09-20 実施）**: 上記の集合比較を実行 → `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` / `PLACES_API_KEY` の 3 つで**過不足なく一致**。`Base.xcconfig` が宣言する残り 3 つ（`SWIFT_VERSION` / `SWIFT_DEFAULT_ACTOR_ISOLATION` / `SWIFT_APPROACHABLE_CONCURRENCY`）は秘匿値ではなくビルド設定なので対象外。**該当は本件 1 件のみ、修正済み**
 - **発生源**: 1.0.3 提出準備（`chore/release-1.0.3-prep`）。旧キーの撤去は 2026-09-19 の広告再編（`2449ece` / `32967ca`）で漏れていた
+
+### クラス全体の `@unchecked Sendable` は、そのクラスの**利用側の捕捉**まで検査から外す
+
+- **症状**: 何も起きない。ビルドも型検査も通り、警告も 0。UI も正常。**サインアウト → 再サインインのたびに Firestore / Auth のリスナが 1 組ずつ残り続ける**。壊れ方が「壊れる」ではなく「**解放されずに残る**」形なので、目視でもテストでも検出できない
+- **原因の構造**: `FlowBridge.swift` の `CallbackFlow` は「クラスに `@unchecked Sendable`、`onStart` / `onCancel` は非 `@Sendable`」という組み合わせだった。この 2 つが噛み合うと:
+  1. クラスが `@unchecked Sendable` なので、格納している非 `@Sendable` クロージャの中身は**何も検査されない**
+  2. その結果、利用側は「2 つのエスケープクロージャで同じローカル `var` を共有捕捉する」形を**無警告で書ける**
+  3. 実際に利用側 **5 箇所すべて**がそう書いていた（`var handle: AuthStateDidChangeListenerHandle?` / `var listener: ListenerRegistration?`）
+  4. 書き込みは `onStart`（= `__collect` 経由、Kotlin/Native の任意スレッド）、読み書きは `onCancel`（= `deinit`、これも任意スレッド）。同期プリミティブが一切ない共有可変状態で、**`onStart` の代入が `deinit` から見えなければ `removeStateDidChangeListener` / `listener.remove()` が飛ばない**
+- **見分け方**: **エスケープクロージャを 2 つ以上受け取る API で、その 2 つが同じローカル `var` を読み書きしていないか。** さらに「**その 2 つが別々の実行文脈から駆動されるか**」を見る。片方が `deinit` 起点だと、症状がリークになって表に出ない
+- **修正パターン**: `@unchecked` をクラスから外し、クロージャを `@Sendable` にして**コンパイラに利用側を検査させる**。状態はロックへ入れる
+
+  ```swift
+  // Before: クラスに @unchecked、クロージャは非 @Sendable → 利用側の捕捉が無検査
+  nonisolated final class CallbackFlow<T: AnyObject>: NSObject, ..., @unchecked Sendable {
+      private let onStart: (@escaping (T) -> Void, @escaping (any Error) -> Void) -> Void
+
+  // After: クロージャを @Sendable にすると、クラスは素の Sendable で足りる
+  nonisolated final class CallbackFlow<T: AnyObject>: NSObject, ..., Sendable {
+      private let onStart: @Sendable (@escaping @Sendable (T) -> Void, @escaping @Sendable (any Error) -> Void) -> Void
+  ```
+
+  根拠は SE-0302（Sendable）の設計 — `@unchecked` は「不変条件を人間が保証した**最小の箱**」に付けるもの。**クラスに付けるのは箱が大きすぎる**
+- **既出の原則の別の形**: `.claude/rules/swift-ios.md` の「検査を外す手段は**穴の広さで選ぶ**」（`nonisolated(unsafe)` vs `@preconcurrency import`、lessons 2026-08-07）とまったく同じ軸だった。あちらは「どの手段を選ぶか」、こちらは「**選んだ手段をどのスコープに置くか**」。穴の広さは手段だけでなく**貼る位置**でも決まる
+- **副産物**: `@Sendable` 化で「`@Sendable` なクロージャに `Firestore` インスタンスを持ち込めない」ことも表に出た（`FIRFirestore.h` に `NS_SWIFT_SENDABLE` が無い / `FIRCollectionReference` / `FIRDocumentReference` / `FIRQuery` には有る）。**型検査を戻すと、隠れていた別の前提も一緒に表に出る**
+- **横展開点検（2026-09-20 実施）**:
+  - `grep -rn '@unchecked Sendable' iosApp/iosApp` → 修正後に残るのは `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` の 2 件のみ。どちらも `private let db = Firestore.firestore()`（非 Sendable な `FIRFirestore`）を**格納プロパティに直接持つ**ため素の `Sendable` には落とせない。**判定基準どおりの正当な残存**（外すには `db` を持たない設計変更が要る。費用対効果で見送り）
+  - エスケープクロージャを 2 つ受け取る自作 API の全数調査 → `CallbackFlow` / `CallbackFlowOptional` のほかに `MapSearchController`（`onRequestCamera` / `onDismissKeyboard`）が 1 件。**こちらは問題なし** — `@MainActor @Observable` で両クロージャとも MainActor からのみ駆動されるため、今回の危険条件（2 つが別々の実行文脈から駆動される）を満たさない。**この「見つかったが該当しない」も判定基準が効いていることの確認になる**
+  - 判定基準は [`kmp-bridge.md`](../kmp-bridge.md)「Kotlin interface の実装クラスは `nonisolated` にする」節の表と `.claude/rules/swift-ios.md` へ昇格済み
+
+### `@Observable` の同値ガードは「値比較が入らない経路」すべてに要る。`StateFlow` → ブリッジの `apply()` がその経路だった
+
+- **症状**: 何も壊れない。ビルドも目視も通る。マップタブで `isLookingUpPoi` が切り替わっただけの emit でも、`curatedCafes`（実データ 421 件）を読む body が丸ごと再評価され、Set 構築と測地距離計算が走る
+- **原因の構造**: Kotlin の `StateFlow` は **1 フィールドだけ変わった `UIState` も丸ごと emit する**。ブリッジの `apply(_:)` がそれを全プロパティへ無条件代入していると、**実際に変わっていないプロパティの observer まで発火する**。`ObservationRegistrar.withMutation`（`stdlib/public/Observation/Sources/Observation/ObservationRegistrar.swift:301-309`）は旧値と新値を比較せず `willSet` / `didSet` をそのまま呼ぶため。**ブリッジ 8 本すべてが同型だった**
+- **取りこぼしの原因**: 2026-08-09 に同じ性質を「`@Observable` は値を比較せず代入だけで通知する」として記録し、判定基準も「**その経路に値比較が入るか**」で正しく書いていた。**にもかかわらず、点検した経路が `.onChange` / `.onMapCameraChange` という SwiftUI の modifier に閉じていた**。判定基準は正しくても、**適用先の列挙が狭いと取りこぼす**。次に同じ問いを立てるときは「`@Observable` プロパティへ代入している場所」を全部並べる（modifier / Flow 購読 / delegate コールバック / completion handler）
+- **`==` が通ることを値比較の根拠にしない**（Kotlin 型の場合）: `data class` も素の `class` も生成 Obj-C 側で `SharedLogicBase : NSObject` を継承するため、Foundation の `extension NSObject: Equatable` 経由で**どちらも `==` がコンパイルを通る**。違いは `isEqual:` のオーバーライドの有無だけで、無い型は参照比較になり**ガードが恒久的に不成立**になる（毎回「変わった」と判定され、書いた意味が消える。コンパイルも実行も通るので気づけない）。判定は生成ヘッダ `SharedLogic.h` の `@interface` ブロックに `- (BOOL)isEqual:(id)other` があるかを見る。`data class` にだけ出る（対照: `CoffeeRecordQueryImpl` / `AppContainer` には無い）
+- **`.onChange(of:)` は同値ガードの万能薬ではない**: 「SwiftUI が値比較してくれる」利点と「**`of:` の式が body 評価時に評価される = その値を body で読む依存が生まれる**」代償はセット。既に body が読んでいる値なら利点だけ得られるが、読んでいない値に使うと依存を増やす。SL-4 でカメラ中心を body から追い出す際、親が `.onChange(of: appState.mapSearchCenter)` を指示したのはこの点で誤りだった（実装は `.onMapCameraChange` から直接呼ぶ形に修正された）
+- **横展開点検（2026-09-20 実施）**: `iosApp/iosApp` の `@Observable` クラス**全 13 件**を列挙して 1 件ずつ確認
+  - ブリッジ 8 本（`Map` / `Analysis` / `Account` / `CafeDetail` / `CoffeeEditor` / `CoffeeDetail` / `CafeSearch` / `CoffeeList`）→ **本件で修正**
+  - `AppleNearbyCafeLoader.cafes` / `AppState.mapSearchCenter` / `MapSearchController.showAreaSearchButton` → 2026-08-09 で対処済み
+  - **未対処 2 件を SL-10 として起票**: `LocationManager.lastLocation`（`CLLocationCoordinate2D` が `Equatable` 非準拠）/ `MapSearchController.displayedResults`。どちらも低頻度（前者は `requestLocation()` の一回限り取得、後者は検索完了ごと 1 回）
+  - `BannerAdLoader` → **「該当なし」ではなく「パターンはあるが頻度が低い」**。`loadFailed = false`（`:82` / `:127`）等が無条件代入だが、発火はロード 1 回ごと（自動リフレッシュは 60 秒間隔）なので実害なし。**この区別を「該当なし」と丸めない** — 同じコードを次に読む人が「ここは対象外」と誤読する
+
+### scratch の `swiftc -typecheck` は、このプロジェクトの分離まわりの可否を判定できない
+
+- **経緯**: SL-8 で共有ロガーをファイルスコープの `let` に持たせたところ、プロジェクトの `xcodebuild` が分離の診断を出した（実装は `private nonisolated let` + `nonisolated enum AppLog` で解決）。サブエージェントは原因を「`SWIFT_APPROACHABLE_CONCURRENCY = YES` が束ねる upcoming feature 群が scratch では揃わないため」と報告してきた
+- **検証（2026-09-20、親）**: **その説明は裏が取れなかった。** 3 構成を試したが**どれも再現しない**
+  1. `-swift-version 6 -default-isolation MainActor` のみ → 通過
+  2. 上記 + `-enable-upcoming-feature NonisolatedNonsendingByDefault -enable-upcoming-feature InferIsolatedConformances` → 通過
+  3. `AppLog` を `nonisolated` 無し（= 既定 MainActor）にして、その static func をグローバル `let` の初期化式に使う形 → 通過
+- **したがって記録するのは事実だけ**: **scratch の単発 typecheck が通ることは、プロジェクトのビルドが通ることを意味しない。** 原因は未特定（ホールモジュール vs 単一ファイル、実際の初期化式の差、その他）。**分離まわりの可否は `xcodebuild` で確かめる**。再現条件を突き止めたくなったら、まず実際に落ちたコードを最小化するところから始めること（今回は解決済みコードからの逆算で作ったため、落ちる形そのものを手元に持っていない）
+- **同じ穴に親も落ちていた**: 今回のレビューで「`OSAllocatedUnfairLock` に揃えろ」と dispatch する前に、親は scratch の typecheck でパターンの成立を確認した。**しかし実際に probe したのは `Mutex` で、指示したのは `OSAllocatedUnfairLock` だった。** その結果、`OSAllocatedUnfairLock.withLock` が非 Sendable な State に使えない（`init(initialState:)` が `where State : Sendable` 拡張内、`withLock` が `body: @Sendable` と `R : Sendable` を要求する）ことは probe をすり抜け、実装側が `.swiftinterface` を読んで気づいた。**検証は「勧める API そのもの」で行う。似た API で代用した検証は何も証明しない**
+- **判定基準**: コンパイルの可否を根拠に何か書くとき、「私が実際にコンパイルしたコードは、私が主張している対象と同一か」を 1 回問う。①API が同じか ②ビルド構成が同じか ③そのファイルだけか / プロジェクト全体か

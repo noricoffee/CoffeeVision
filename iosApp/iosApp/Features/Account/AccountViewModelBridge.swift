@@ -148,8 +148,18 @@ final class AccountViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: AccountViewModel.UIState) {
-        self.account = state.account
-        self.isKmpProcessing = state.isProcessing
-        self.error = state.error
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `AuthAccount` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        if account != state.account {
+            account = state.account
+        }
+        if isKmpProcessing != state.isProcessing {
+            isKmpProcessing = state.isProcessing
+        }
+        if error != state.error {
+            error = state.error
+        }
     }
 }

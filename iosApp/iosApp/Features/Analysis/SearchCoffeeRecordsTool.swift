@@ -1,6 +1,10 @@
 import Foundation
 @preconcurrency import FoundationModels
 @preconcurrency import SharedLogic
+import os
+
+/// LLM ツール呼び出し（記録検索）のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "InsightTools")
 
 // MARK: - SearchCoffeeRecordsTool
 
@@ -108,11 +112,19 @@ struct SearchCoffeeRecordsTool: Tool {
             limit: Int32(arguments.limit ?? 10)
         )
 
-        print("[CoffeeVision] SearchCoffeeRecordsTool.call: origin=\(arguments.origin ?? "nil"), cafeName=\(arguments.cafeName ?? "nil"), brewMethod=\(arguments.brewMethod ?? "nil"), roastLevel=\(arguments.roastLevel ?? "nil"), from=\(arguments.fromYearMonth ?? "nil"), to=\(arguments.toYearMonth ?? "nil")")
+        log.debug("""
+            SearchCoffeeRecordsTool.call: \
+            origin=\(arguments.origin ?? "nil", privacy: .private), \
+            cafeName=\(arguments.cafeName ?? "nil", privacy: .private), \
+            brewMethod=\(arguments.brewMethod ?? "nil", privacy: .private), \
+            roastLevel=\(arguments.roastLevel ?? "nil", privacy: .private), \
+            from=\(arguments.fromYearMonth ?? "nil", privacy: .private), \
+            to=\(arguments.toYearMonth ?? "nil", privacy: .private)
+            """)
 
         let summaries = try await recordQuery.searchRecords(filter: filter)
 
-        print("[CoffeeVision] SearchCoffeeRecordsTool.call: 取得件数=\(summaries.count)")
+        log.debug("SearchCoffeeRecordsTool.call: 取得件数=\(summaries.count, privacy: .public)")
 
         guard !summaries.isEmpty else {
             return "該当するコーヒー記録は見つかりませんでした。"

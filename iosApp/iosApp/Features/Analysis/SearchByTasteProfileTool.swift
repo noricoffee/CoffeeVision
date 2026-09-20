@@ -1,6 +1,10 @@
 import Foundation
 @preconcurrency import FoundationModels
 @preconcurrency import SharedLogic
+import os
+
+/// LLM ツール呼び出し（味わい検索）のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "InsightTools")
 
 // MARK: - SearchByTasteProfileTool
 
@@ -54,13 +58,13 @@ struct SearchByTasteProfileTool: Tool {
     /// → `[CoffeeRecordSummary]` → コンパクトな日本語行形式
     func call(arguments: Arguments) async throws -> String {
         let desc = arguments.tasteDescription
-        print("[CoffeeVision] SearchByTasteProfileTool: 味わい説明='\(desc)'")
+        log.debug("SearchByTasteProfileTool: 味わい説明='\(desc, privacy: .private)'")
 
         let preference = try await extractor.extract(from: desc)
         let filter = preference.toCoffeeRecordFilter()
         let summaries = try await recordQuery.searchRecords(filter: filter)
 
-        print("[CoffeeVision] SearchByTasteProfileTool: 取得件数=\(summaries.count)")
+        log.debug("SearchByTasteProfileTool: 取得件数=\(summaries.count, privacy: .public)")
 
         if summaries.isEmpty {
             return "指定の味わい特徴（甘味:\(preference.sweetness) ボディ:\(preference.body) 酸味:\(preference.acidity) 風味:\(preference.flavor) 後味:\(preference.aftertaste)）±2 の範囲に一致するテイスティング記録はありませんでした。テイスティングを入力していない記録は対象外です。"

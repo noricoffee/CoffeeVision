@@ -117,6 +117,31 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 **`fail` に渡した `NSError` は Kotlin 側で `NSError-based exception` になり、`catch (e: Exception)` で捕まえられる（fatal ではない）** — シミュレータで実測済み（2026-08-09）。生成ヘッダの `collect` に付く `Other uncaught Kotlin exceptions are fatal.` は **Kotlin → Obj-C 方向**の注意書きで、Swift 実装 → Kotlin 呼び出しのこちら側には効かない。`localizedDescription` も保たれる。
 
+**`onStart` / `onCancel` は `@Sendable`。この 2 つから共有するリスナハンドルは必ずロックで保護する**（SL-1、2026-09-20）。2 つは別経路（`onStart` = `__collect` 経由 / `onCancel` = `deinit`）から、いずれも Kotlin ランタイムの任意スレッドで呼ばれる。`@Sendable` にする前は**利用側 5 箇所すべて**が素のローカル `var` を両クロージャで共有捕捉しており、`CallbackFlow` 側の `@unchecked Sendable` によって**利用側の捕捉まで検査から外れていた**。症状は「壊れる」ではなく「**解放されずに残る**」形で出る（`onStart` の代入が `deinit` から見えないとリスナが残り、再サインインのたびに 1 組ずつ積み上がる）。
+
+```swift
+// 保護対象（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle`）は非 Sendable なので
+// `uncheckedState:` / `withLockUnchecked` 側の API を使う（後述）
+let listenerLock = OSAllocatedUnfairLock<(any ListenerRegistration)?>(uncheckedState: nil)
+let flow = CallbackFlow<NSArray>(
+    onStart: { emit, fail in
+        let registration = collection.addSnapshotListener { ... }
+        listenerLock.withLockUnchecked { $0 = registration }
+    },
+    onCancel: {
+        // 取り出しと無効化はロック内、解除呼び出しはロックの外（`FlowCompletionGate.finish` と同型）
+        let pending = listenerLock.withLockUnchecked { c -> (any ListenerRegistration)? in
+            let taken = c; c = nil; return taken
+        }
+        pending?.remove()
+    }
+)
+```
+
+**`@Sendable` な `onStart` に `Firestore` インスタンスは持ち込めない。** `FIRFirestore.h` に `NS_SWIFT_SENDABLE` は無い一方、`FIRCollectionReference` / `FIRDocumentReference` / `FIRQuery` には付いている（SPM checkout のヘッダで確認）。**参照の組み立てだけクロージャの外で済ませて捕捉する**。
+
+**残る競合窓（意図的に塞いでいない）**: 「`onStart` がリスナ登録を終える前に `onCancel` が走る」と取り出しが nil になりリスナが残る。`__collect` 実行中は Kotlin 側が Flow オブジェクトへの強参照を保持しているため `deinit` が並行して走ることは構造的に起きない、と判断して 3 状態（pending / registered / cancelled）の導入を見送った。塞ぐなら 5 箇所に同じ enum を入れることになるので、共通ヘルパへ切り出すこと。
+
 なお `completionHandler` は「正常終了」「例外終了」のどちらか一方で**ちょうど 1 回**呼ぶ契約。Firestore リスナは解除まで何度でもコールバックしうるため、`FlowBridge.swift` の `FlowCompletionGate`（`OSAllocatedUnfairLock` で取り出しと無効化をアトミックに行う）を必ず経由する。
 
 ---
@@ -134,16 +159,37 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 **`nonisolated` は「Kotlin から見える型」だけの話ではない。** それらが内部で使う `private` なヘルパ型にも同じ指定が要る（`FlowBridge.swift` の `FlowCompletionGate` が実例。付け忘れると `nonisolated` な `__collect` から呼べず `call to main actor-isolated instance method ... in a synchronous nonisolated context` になる）。同じファイルに `nonisolated` の宣言が並んでいても**継承されない**。
 
-**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** 可変状態は `OSAllocatedUnfairLock` で包む（メモリキャッシュを持つ `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl` と、`FlowBridge.swift` の `FlowCompletionGate`）。**`@unchecked Sendable` が要るかはクラス単位で変わる**: 格納プロパティが**ロックだけ**なら `Sendable` に素で適合する（`FlowCompletionGate` がこれ）。Kotlin 由来の非 Sendable 型を他に持つクラスは `@unchecked Sendable` を明示して「ロックが唯一のアクセス経路である」ことを手動で保証する。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
+**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** 可変状態は `OSAllocatedUnfairLock` で包む。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
+
+**`@unchecked Sendable` が要るかはクラス単位で変わる。** 判定基準は「**非 Sendable な参照そのものを格納プロパティに持つか**」の 1 点（SL-1 / SL-2 で整理、2026-09-20）:
+
+| 格納プロパティ | 適合 | 例 |
+|---|---|---|
+| ロックと `Sendable` な `let` だけ | **素の `Sendable`**（`NSObject` 継承でも `final` なら可） | `FlowCompletionGate` / `CallbackFlow` / `CallbackFlowOptional` / `CoffeeInsightProviderIosImpl` |
+| 非 Sendable な参照を直接持つ | `@unchecked Sendable` を明示 | `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl`（`private let db = Firestore.firestore()` = 非 Sendable な `FIRFirestore`） |
+
+**`@unchecked` はクラスに付けると箱が大きすぎる。** SE-0302 の設計上これは「不変条件を人間が保証した**最小の箱**」に付けるもので、クラスに付けると**そのクラスの利用側の捕捉まで検査から外れる**（SL-1 で実際に 5 箇所の共有捕捉を見逃していた）。素の `Sendable` に落とせないか先に確かめること。
+
+**`OSAllocatedUnfairLock` の API は State の Sendable 性で 2 系統に分かれる**（`.swiftinterface` で確認）:
+
+| State | 初期化 | アクセス |
+|---|---|---|
+| Sendable | `init(initialState:)`（`extension ... where State : Sendable` 内） | `withLock`（`body: @Sendable`、`R : Sendable` を要求） |
+| **非 Sendable**（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle` 等の OS ハンドル） | `init(uncheckedState:)` | `withLockUnchecked`（どちらの要求も無し） |
+
+`withLockUnchecked` の "unchecked" が外すのは**クロージャと戻り値の Sendable 検査だけ**で、相互排他そのものは変わらない（`OSAllocatedUnfairLock` は State に関わらず `@unchecked Sendable` な struct）。ただし**非 Sendable な値をロックの外へ持ち出せてしまう**ので、「ロックが唯一のアクセス経路」を保つのは書き手の責任になる（上の `onCancel` は取り出しと無効化をアトミックに行っているので、持ち出した時点で他から到達できない）。
 
 ```swift
 nonisolated final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository, @unchecked Sendable {
-    private let cache = OSAllocatedUnfairLock<[BeanProfile]?>(initialState: nil)
+    private let cache = OSAllocatedUnfairLock<[BeanProfile]?>(initialState: nil)   // State が Sendable
 ```
 
 ### `@preconcurrency import SharedLogic` を使ってよい条件
 
-**`@Sendable` クロージャの引数型に Kotlin 型が直接現れる場合だけ。** Kotlin interface の `completionHandler` がこれに当たり、関数シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない。
+**`@Sendable` クロージャの引数型に Kotlin 型が直接現れる場合か、protocol 要件のパラメータを `@Sendable` クロージャへ捕捉せざるを得ない場合だけ。** どちらも関数シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない。
+
+- **引数型に現れる例**: Kotlin interface の `completionHandler`
+- **捕捉せざるを得ない例**: `FlowBridge.swift`（SL-1、2026-09-20）。`__collect` が protocol 要件として受け取る `any Kotlinx_coroutines_coreFlowCollector` を、`@Sendable` にした `emit` / `emitSome` / `emitNone` から捕捉する。`extension ...FlowCollector: @retroactive Sendable` は全適合型に効く極端に広い穴なので採らない。**このファイルが参照する SharedLogic 型が `Kotlinx_coroutines_coreFlow` / `...FlowCollector` の 2 つに閉じていることが許容の根拠**（ファイル単位で効く以上、参照型が増えたら再判断する）。なお `collector` を別スレッドから触ること自体はブリッジ成立以前からの前提で、この import が**新しい穴を開けたわけではない** — 既存の穴をファイルスコープで明示しただけ。**重要なのは、この import が利用側 5 ファイルの検査には一切影響しないこと**（`@Sendable` は `onStart` / `onCancel` の型の一部なので、利用側は自分のファイルの通常 import の下で検査される）
 
 プロパティ 1 個が非 Sendable なだけなら **`nonisolated(unsafe)` を優先する**（`AppState.container` / `PlacePhotoLoader.repository`）。`@preconcurrency import` はファイル内の SharedLogic 由来の型すべてについて検査を外すため、そのファイルはその後の変更でデータ競合を持ち込んでもコンパイラが黙る。
 
@@ -417,6 +463,25 @@ let other = CoffeeOriginCatalog.shared.OTHER               // "その他"
 iOS 側でリストを二重管理しないこと（正規化 `OriginNormalizer` とのカバレッジ整合は KMP のテストで担保する）。
 
 ---
+
+## Swift 側での等価性
+
+`@Observable` の同値ガード（[`coding-conventions.md`](./coding-conventions.md) §2.5）を書くときに要る判定基準。
+
+**`==` がコンパイルを通ることは値比較の根拠にならない。** Kotlin の `data class` も素の `class` も生成 Obj-C 側では `SharedLogicBase : NSObject` を継承するため、Foundation の `extension NSObject: Equatable`（`==` が `isEqual:` を呼ぶ）で**どちらも `==` が通る**。違いは `isEqual:` をオーバーライドしているかだけで、していない型は `NSObject` 既定の実装 = **参照比較**になり、同値ガードが恒久的に不成立になる（毎回「変わった」と判定され、ガードを書いた意味が消える — しかもコンパイルも実行も通るので気づけない）。
+
+**判定は生成ヘッダを見る。** `shared/framework/build/bin/.../SharedLogic.framework/Headers/SharedLogic.h` の `@interface` ブロックに `- (BOOL)isEqual:(id)other` があるかどうか。`data class` にだけ出る:
+
+| 型 | `isEqual:` | 同値ガード |
+|---|---|---|
+| `Cafe` / `CoffeeRecord` / `VisitedCafe` / `SavedCafe` / `CuratedCafe` / `RecommendedCafe` / `CoffeeStats` / `CoffeeInsight` / `AuthAccount` ほか `data class` 全般 | override あり | **`!=` で書ける** |
+| `CoffeeRecordQueryImpl` / `AppContainer` ほか素の `class` | なし（参照比較） | 書いても無意味 |
+
+**SKIE の sealed interface は Obj-C プロトコルになり `Equatable` に載らない。** Swift 側は `any P` の existential になるため `!=` が書けない。対処は 2 通り:
+
+- **全ケースが Kotlin の `data object`** なら `!==`（参照比較）でガードできる。Kotlin/Native は Kotlin オブジェクトに対する Obj-C ラッパを同一性で対応付けるので、Swift 側も常に同一インスタンスになる（見分け方はヘッダの `@property (class, readonly, getter=shared)`）。`AnalysisViewModel.InsightStatus` / `QaStatus` がこれ
+- **ペイロード付き case を含む**ならガードを諦める。算出のたびに新インスタンスになるので参照比較も効かない（`CafeDetailViewModel.UIState.matches: [any RecommendationReason]`）。Kotlin 側で具象型（`List<RecommendationReason.TasteProfileMatch>`）に絞れればガードできるようになるが、case を増やす前提の設計なら無理に絞らない
+
 
 ## Identifiable 化
 

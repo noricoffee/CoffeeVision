@@ -2,6 +2,10 @@ import AuthenticationServices
 import SharedLogic
 import SwiftUI
 import UIKit
+import os
+
+/// アカウント画面（サインイン）のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Account")
 
 // MARK: - AccountView
 
@@ -265,7 +269,7 @@ struct AccountView: View {
                    nsError.code == ASAuthorizationError.canceled.rawValue {
                     return
                 }
-                print("[AccountView] Apple sign-in error: \(error.localizedDescription)")
+                log.error("Apple sign-in error: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

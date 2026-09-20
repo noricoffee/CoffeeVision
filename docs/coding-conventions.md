@@ -362,6 +362,7 @@ struct CoffeeListView: View {
 - `@State` は View 内に閉じる値のみ。共有状態は ViewModel に寄せる
 - 例外: 高頻度テキスト入力（検索欄等）の表示値は Kotlin `StateFlow` に直結せず、**View ローカル `@State` を表示の真実の源**にして `.onChange` で Kotlin へ一方向転送する（`set → Kotlin → SKIE emit → 再描画` の非同期ラウンドトリップによる入力ラグ防止）
 - 各 View にプレビューを実装する（ダミー Demo 方式。下記「プレビュー」参照）
+- **条件付きで「何も描かない」View を `AnyView` で表現しない。`@ViewBuilder` + `if` を使う**（SL-6、2026-09-20）。`AnyView` は静的型を消すため SwiftUI が構造的 View identity で差分更新できず、条件が切り替わるたびにサブツリーが作り直される。`guard 条件 else { return AnyView(EmptyView()) }` は `@ViewBuilder func` にして `if 条件 { ... }` と書けば同じ意味になり、複数の optional binding も `if let a = ..., let b = ... { }` で畳める（result builder の本体では `let` 宣言が使えるので中間変数もそのまま中へ入る）。`AnalysisView+Statistics.swift` の 14 箇所はすべてこの形で消えた。**`iosApp/**` に `AnyView` は 0 件**なので、増やすときは理由を書くこと
 - **`MapCameraPosition.automatic` を使わない。** `.automatic` は「コンテンツと現在地に基づいて MapKit がカメラを自動決定する」モードで、`Map` のコンテンツが変わるたびにカメラを再計算する。本アプリはピンの表示数がカメラの可視半径に依存する（`displayedCuratedCafes` のズームゲート）ため、**カメラ → 表示数 → カメラ の循環になり自己駆動ループに入る**（実測 10fps で往復、毎秒 2100 回のピン構築でメインスレッドが飽和し、Background 遷移時に scene-update ウォッチドッグで SIGKILL された）。初期値は明示的な `.region(...)` にする。一般則として、**フレームワークが「中身に合わせて外枠を決める」自動モードを持つとき、その中身が外枠に依存していないかを必ず確認する**（`.automatic` / `.fit` / `sizeToFit` 系に共通。lessons 2026-08-09）
 
 ```swift
@@ -429,6 +430,17 @@ CoffeeListView(...)
 - 外部からのリセットが必要なプロパティは `private(set)` + リセットメソッド公開（例: `resetLastLocation()` / `clearError()`）。View からの直接代入はさせない
 - `@MainActor` クラスを CoreLocation 等の delegate に準拠させる場合、delegate メソッドは**すべて `nonisolated` 宣言**し、内部の `@MainActor` プロパティ更新は `Task { @MainActor in ... }` で戻す。**`MainActor.assumeIsolated` に置き換えてはいけない** — `assumeIsolated` は「今メインスレッドである」という仮定が外れた瞬間に precondition failure でクラッシュする。CoreLocation のコールバックは実際には manager を生成したスレッドの RunLoop で呼ばれるので通常はメインだが、**その保証に賭ける必要がない**（`Task { @MainActor in }` はどのスレッドから呼ばれても安全）。非 Sendable な引数（`CLLocationManager` 等）を closure に渡さないよう、Sendable な値だけ取り出すか、MainActor 側の同一インスタンス（`self.manager`）を使えば Swift 6 でも警告は出ない。Swift 6 移行（SW6-1）で 3 メソッドが `assumeIsolated` に置き換えられていたのを `761e9a0` で是正した
 - **`@Observable` は値を比較せず、代入するだけで変更を通知する。** フレームワーク側のイベントを直接受けるハンドラ（`.onMapCameraChange` 等）から同じ値を再代入すると、無駄な body 再評価が走り続ける。**ハンドラ内の代入は同値ガードで囲む**。座標・半径のような浮動小数は下位桁が揺れて完全一致では止まらないため、許容誤差付きの比較を用意する（`MapSearchCenter.isEquivalent` は 1m 未満を同値扱い）。対して **`.onChange(of:)` は SwiftUI が値を比較して変化時のみ発火する**のでこの問題は起きない。危険なのは「値比較が入らない経路」だけ（lessons 2026-08-09）
+  - **同じ問題が `StateFlow` → `@Observable` ブリッジの `apply(_:)` にもある**（SL-3、2026-09-20）。Kotlin の `StateFlow` は 1 フィールドだけ変わった `UIState` も丸ごと emit するため、`apply(_:)` が全プロパティを無条件代入していると、`isLookingUpPoi` が切り替わっただけの emit でも `curatedCafes` を読む body まで再評価される。**`apply(_:)` の各代入も同値ガードで囲む**（ブリッジ 8 本すべてに適用済み）。2026-08-09 の記述が `.onMapCameraChange` 等の **SwiftUI modifier に閉じていた**のが取りこぼしの原因で、点検すべきは「`@Observable` プロパティへ代入している場所」全部（modifier / Flow 購読 / delegate コールバック / completion handler）
+  - **Kotlin 型で `==` が通ることを値比較の根拠にしない。** 判定方法は [`kmp-bridge.md`](./kmp-bridge.md)「Swift 側での等価性」節が正本
+- **`body` の中で派生コレクションを毎回作らない**（SL-4、2026-09-20）。`@Observable` は「body が読んでいるプロパティのどれか 1 つ」が変われば body を丸ごと作り直すため、body 内の `func displayedXxx(bridge)` は無関係な state 変化のたびに Set 構築・測地距離計算を繰り返す。**入力が Kotlin state だけで決まる派生値はブリッジの `private(set) var` にし、`apply(_:)` で更新する**。View 側の state（カメラ等）が入力に混ざる場合はブリッジに `func updateXxx(_:)` を生やし、**既存のイベントハンドラから呼ぶ** — **`.onChange(of:)` を新設してはいけない。`of:` の式は body 評価時に評価されるので、その値を body で読む依存が生まれる**（`@Observable` の同値ガードとして `.onChange` に触れた上の項目とは別の話。あちらは「既に body が読んでいる値」が前提）。同値判定はブリッジ側に持たせる — 呼び出し側のガードに相乗りすると、ブリッジだけが作り直されたとき（`AppState.resetAndRebootstrap()`）に値を受け取れなくなる
+
+- **待機は `Task.sleep(for:)`（`Duration`）で書く**（SL-7、2026-09-20）。`Task.sleep(nanoseconds:)` は SE-0329（Clock / Instant / Duration、Implemented in Swift 5.7）以前の API。定数として持つ場合も `UInt64` のナノ秒ではなく `Duration` 型で持ち、単位の取り違えを型で防ぐ（`ReviewPrompt.presentationDelay`）。`try?` でキャンセルを飲み込む場合に `guard !Task.isCancelled` を置く規約は従来どおり
+- **ログは `print` ではなく `os.Logger` を使う**（SL-8、2026-09-20）。ファクトリは `Utilities/AppLog.swift` の `AppLog.logger(category:)`（`subsystem` はここで一元化。各ファイルに文字列を散らかさない）。**`print` は Release でも stdout に出る**ため、uid のような個人に紐づく値が端末のコンソールに残る。`os.Logger` は文字列補間を既定で `private` に伏せるので `#if DEBUG` なしで漏洩を防げる
+  - **個人に紐づく値（uid / ユーザー入力 / LLM の入出力）は `privacy: .private` を明示し、公開してよい定型文・エラー文字列・件数にだけ `.public` を付ける**
+  - レベルは内容で選ぶ: `.info`（起動時の成功系）/ `.notice`（失敗するが無視して続行）/ `.error`（機能が落ちる失敗）/ `.debug`（開発支援・診断）。全部 `.info` にしない
+  - **ファイルスコープに持つときは `private nonisolated let log = ...`**。`nonisolated final class`（Kotlin interface 実装）から参照するため。`Logger` は `Sendable` なので格納プロパティに持たせても `Sendable` 適合は壊れない（`@unchecked Sendable` を復活させないこと）
+  - 補間引数は `@autoclosure` なのでクラスのメソッド内では `self.` が要る。`Error` は直接補間できないので `String(describing:)` を挟む
+  - **`log stream` は既定で `.info` / `.debug` を出さない**（`--level debug` が要る）。`print` の頃と開発時の見え方が変わる
 
 ---
 

@@ -17,6 +17,7 @@
 - [Swift 6 移行の診断採取・実装](swift6-migration-diagnostics.md) — pbxproj buildSettings が xcconfig より優先される罠、`SWIFT_DEFAULT_ACTOR_ISOLATION=MainActor` が消す警告/増やす警告、`@preconcurrency import SharedLogic` vs `nonisolated(unsafe)`（ストアドプロパティ限定なら後者が筋良い）の使い分け、`isolated deinit` vs `nonisolated final class` の判定軸、Kotlin interface 実装の `nonisolated` 化に伴うヘルパ型の連鎖対応・`OSAllocatedUnfairLock`+`@unchecked Sendable`でのキャッシュ保護、`@concurrent` と `NonisolatedNonsendingByDefault`
 - [NavigationStack の入れ子検出 / 戻る封じ](navigation-back-control.md) — push 先は自身で NavigationStack を包まない、`.navigationBarBackButtonHidden` はボタンのみでエッジスワイプは別途 `interactivePopGestureRecognizer` を操作する UIViewControllerRepresentable ブリッジが要る（`InteractivePopGestureLock`）
 - [Task クロージャの生存確認番兵パターン](task-closure-lifetime-sentinel.md) — `Task { }` に強参照キャプチャさせた番兵の `deinit` 有無で「クロージャごと解放されたか」を切り分ける（B-11 observation task 検証で確立）
+- [observationTask → 構造化 Task 移行パターン](observation-task-structured-concurrency.md) — 全 8 ブリッジの `observe() async` 化、onAppear 後に同期処理が挟まる例外(CoffeeEditor)、1 View 複数 `.task` で無限ループ衝突回避(MapTabView)、View でない長寿命コントローラの生成+observe 一体化(MapSearchController)、push 画面のブリッジ生成+observe 同一 `.task` 化(CafeDetail)（B-11、2026-09-20）
 
 ## 単発の確認事項（トピック化するほどでない小ネタ）
 

@@ -16,10 +16,10 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | サブタイトル（Subtitle） | カフェ巡り記録・テイスティング・行きたい店 | 30 字以内（**21 字**）。**アプリ名と 1 語も重複させない**方針 — `コーヒー` / `分析` はアプリ名側が拾うため、サブタイトルは `カフェ` / `巡り` / `記録` / `テイスティング` / `行きたい` / `店` に充てる |
 | Bundle ID | `com.noricoffee.coffeevision` | `Config.xcconfig`（`$(TEAM_ID)` を除いた本体） |
 | SKU | `com.noricoffee.coffeevision` | Bundle ID と同値。外部には出ない社内識別子だが**登録後は変更できない** |
-| Apple ID（App ID） | `6788339362` | ASC が採番。ストア URL は `https://apps.apple.com/app/id6788339362` |
+| Apple ID（App ID） | `6788339362` | ASC が採番 |
 | ストア URL | `https://apps.apple.com/app/id6788339362` | **アプリ内に埋めるのはこの短縮形**。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id...`）の**スラグ部分はアプリ名から生成される装飾**で、リダイレクトにしか使われない。ASO で名前を変えるたびに変わる文字列をバイナリへ焼かない（アプリ名は ASO-2 で一度変更済み） |
 | バージョン | 1.0.2 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える）。**配信済みの版は `lookup` の `version` で実測できる**（§9 のコマンド参照） |
-| ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。`release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、`Config.xcconfig` の `1` は Release では使われない。**手入力・手動更新は不要**（詳細は §10） |
+| ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。**手入力・手動更新は不要**（仕組みと注意点は §10） |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
 | デバイス | iPhone | `TARGETED_DEVICE_FAMILY = 1`。iPad は対象外（`"1,2"` のままだと iPad にインストール可能になり、ASC が iPad スクショを必須要求する）|
 | プライマリカテゴリ | フード/ドリンク（Food & Drink） | |
@@ -266,7 +266,7 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（**全画面共通の下部固定帯 1 面のみ** = requirements.md §11。全タブに表示） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
 | UMP SDK（User Messaging Platform） | Google | （コードから未使用） | Google Mobile Ads SDK の内部依存としてリンクされるのみで、API は一切呼ばない（同意 UI は自前プレプロンプト + ATT で完結。requirements.md §11）。EU 配信を始める場合に GDPR フォームとして再導入 |
 
-> Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
+> Analytics の `FirebaseAnalytics` プロダクトは、現行 firebase-ios-sdk 12.14.0 では既定で IDFA 非依存（旧 `WithoutAdIdSupport` は廃止され、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` を足す反転構成）。クロスアプリ追跡は行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
 
 > **`PrivacyInfo.xcprivacy`（アプリ側 manifest）と App Privacy 申告（§6.1）は別物**。privacy manifest は**そのバイナリ自身のコードが**収集・アクセスするものを宣言する枠組みで、SDK 側の収集は SDK 同梱の manifest が宣言する。`iosApp` のコードは `AdConsentCoordinator` で `ATTrackingManager` の状態確認 / 許可要求を行うだけで、`AdSupport` を import せず IDFA を直接読まない（広告 ID を扱うのは Google Mobile Ads SDK）。したがってアプリ側 manifest は現状の `NSPrivacyTracking = false` / トラッキングドメイン空 / 収集データ 3 種（Crash / Performance / ProductInteraction）**のままで整合**し、追加宣言は不要。一方 **App Store Connect の App Privacy 申告では §6.1 の IDFA 行を「トラッキングする」で申告する**（アプリが埋め込む SDK の挙動も申告対象のため）。
 
@@ -490,7 +490,7 @@ Three things set CoffeeVision apart. First, the five-axis tasting profile is the
 
 **この版は積み残しを 2 件抱えたまま出している**（どちらも次バージョンへ持ち越し。tasks 1.0.2 節に起票済み）:
 
-- **§5 のスクショ 2 枚（`04-record-list.png` / `06-cafe-detail.png`）が現物と不一致**。撮り直さず既存のまま提出したため、§10 のチェックリスト「スクショが現物と一致するか」は**不合格のまま通した**状態。警告は撮り直すまで消さない
+- **§5 のスクショ 2 枚が現物と不一致**（詳細と解消条件は §5 の ⚠ ブロック）
 - ~~§9 What's New は 1.0 の文言をそのまま提出~~ → **誤り。同日中に訂正した**。実際は版ごとに書き下ろされており、1.0.1 =「軽微な不具合を修正しました」（`releaseNotes` で実測）/ 1.0.2 =「軽微な修正を行いました」。§9 を版ごとの記録に組み直し、**実測コマンドと「口頭申告ではなく実測を正とする」旨**を前文に追加した（lessons 2026-08-31）
 
 **2026-08-31**: §11 Featuring Nomination を新設（ASO-10）。§4 の日本語キーワードを **19 語 89 字 → 24 語 98 字**へ再配分（ASO-8。7 語を外し 12 語を追加、アプリ名 / サブタイトル / 英語キーワードは据え置き）。あわせて §4 末尾の「サブタイトルを旧文言に戻す場合は 83 字 / 17 語」という注記を**削除**した（旧 19 語構成を前提にした字数で、新構成では成立しないため）。

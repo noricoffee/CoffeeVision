@@ -4,9 +4,13 @@ import SharedLogic
 /// `CafeSearchViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `init` 時に観測タスクを起動し、`cancel()` / deinit で終了する
+/// - `init` 時に観測タスクを起動する。破棄フックは `deinit` の `kotlin.clear()` のみで、
+///   observation の明示キャンセルはしていない（`observationTask` を止める処理は無い）。
+///   このタスクが `deinit` 後にどう終了するか（あるいは残り続けるか）は未検証（tasks B-11）
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - `CafeSearchView` 内の `@State` で保持する（sheet 起動ごとに新規生成・破棄）
+/// - 生成箇所は 2 つ: `CafeSearchView` の `@State`（sheet 起動ごとに新規生成・破棄）と
+///   `MapSearchController.searchBridge`（`MapTabView` の `.task` で遅延生成。以後
+///   `MapSearchController` 自体が破棄されるまで保持され続け、`nil` に戻す経路は現状ない）
 @MainActor
 @Observable
 final class CafeSearchViewModelBridge {
@@ -34,14 +38,6 @@ final class CafeSearchViewModelBridge {
 
     isolated deinit {
         kotlin.clear()
-    }
-
-    // MARK: - ライフサイクル
-
-    /// 観測タスクを明示的にキャンセルする。`onDisappear` から呼ぶ。
-    func cancel() {
-        observationTask?.cancel()
-        observationTask = nil
     }
 
     // MARK: - ユーザーアクション

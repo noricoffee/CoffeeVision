@@ -429,7 +429,8 @@ extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型
 - Swift 側で Kotlin オブジェクトを `weak` に保持できないケースがあるため、**ブリッジは Kotlin ViewModel を強参照で持つ**
 - **破棄フックは `isolated deinit` 一本**。Kotlin の所有 `viewModelScope` を畳む `kotlin.clear()` はここからだけ呼ぶ（`Features/<Name>/<Name>ViewModelBridge.swift` の全本がこの形）。`.onDisappear` は遷移アニメ中にも発火し、タブ常駐 View では再 init もされないため、破棄フックとして成立しない
 - **Swift 側の observation task も原則 `deinit` まで生かす**（上記「observation の停止タイミングに注意」）。`.onDisappear` で止めてよいのは、**再表示時に `onAppear()` を呼び直す経路が View 側にあるときだけ**。経路が無いまま止めると状態が凍結して戻らない（`CafeSearchView` = lessons 2026-06-25 / `CafeDetailView` = 同 2026-07-03 の実例）
-  - タブ常駐ブリッジが持つ `cancel()` は **`AppState.resetAndRebootstrap()` 専用**（サインアウト時に旧 uid の購読を落とす）。View の `.onDisappear` から呼ぶものではない
+  - **observation だけを外部から止める public API を作らない。** 畳むならブリッジごと破棄する（`= nil`）。タブ常駐ブリッジが持つ `cancel()` は `AppState.resetAndRebootstrap()` が**直後に `= nil` するのとセットで呼ぶ前処理**であって、単独で観測を止めるための API ではない（`cancel()` だけ呼ぶと Kotlin の `viewModelScope` が畳まれないまま observation だけ死に、既知の凍結バグと同じ形になる）
+  - ⚠ **`deinit` 後に observation task が残るかは未検証**。全ブリッジの `deinit` は `kotlin.clear()` のみで `observationTask` を明示キャンセルしていない。`kotlin.state` は `StateFlow`（完了しない）で、Task は `let flow = kotlin.state` を強参照キャプチャし、ループを抜けるのは `guard let self else { break }` = **次の emit が来たとき**。実際に task が解放されるかは SKIE の `SkieSwiftFlow` の挙動次第で、リポジトリ内に一次情報がない。明示キャンセルを入れるかの判断は tasks B-11 に合流させる
   - **現状 `CoffeeListView` / `AnalysisView` は `.onDisappear` で止めて再表示時に張り直す型**で、自己回復はするが規約からは外れている（`onAppear()` の先頭が `observationTask?.cancel()` なので張り替えは冪等）。deinit まで生かす型への統一は未着手（tasks B-11 / 経緯は lessons 2026-07-03）
 - `Task` の中で `self` をキャプチャするときは `[weak self]` を忘れない
 

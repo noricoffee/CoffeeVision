@@ -264,3 +264,16 @@ docs の冗長排除中に `kmp-bridge.md`「メモリ管理の注意」の記�
 - 検証: 番兵オブジェクトによる実測を移行の前後で実施。移行前は 2 サイクルとも解放されず、移行後は `CafeSearch` / `CafeDetail` の全インスタンスで `loop exited` → `sentinel deinit` → `deinit` が揃った。収支も一致（未解放の 1 件は計測終了時に画面を開いたままだったインスタンスで、スクリーンショットで確認済み）
 - 実機確認: **ユーザーによる実機確認で OK**（2026-09-20）。見た対象は、過去 2 回凍結バグを出したマップ検索の「他タブへ行って戻る → もう一度検索」、タブ往復での凍結、カフェ詳細の pop → 再 push、そして `resetAndRebootstrap()` の手動キャンセル 4 行を削除した影響が出るサインアウト / アカウント削除後の再起動
 - 経緯の注記: **`MapSearchController.searchBridge` は View が持たないブリッジ**で、当初は「そこだけ現状維持でよい」と指示していた。`setupAndObserve(makeViewModel:) async` に統合して `MapTabView` の `.task` から駆動する形で解決し、結果として長寿命ブリッジにも再購読経路ができた
+
+### 2026-09-20: 1.0.3 の提出準備で、リリースビルドがデモ広告のまま出荷される状態を見つけた
+
+- 関連: `.github/workflows/release-testflight.yml` / `iosApp/Configuration/Base.xcconfig` / `docs/app-store-metadata.md` §10 / tasks 1.0.3 節 / 教訓は lessons 2026-09-20
+
+`app-store-metadata.md` §10 のチェックリストを上から潰す過程で発見した。2026-09-19 の広告再編でビルド変数名を `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `_MAP_SEARCH` から `_GLOBAL_BOTTOM` へ変えたのに、**CI の「Restore secret files」が旧キー名のまま**だった。fail-fast のガードは存在しないキーを見張り、実際に必要な `_GLOBAL_BOTTOM` は書き出されないので、`Base.xcconfig` のフォールバック = Google デモ ID が採用される。
+
+**ワークフロー自身のコメントが「未設定のまま出荷すると Base.xcconfig のデモ AdMob ID で広告が載る（収益ゼロ）」と警告しているのに、その状態になっていた。** ガードがキー名に依存していたため、名前が変わった瞬間に無言で無効化されていた。
+
+- 影響: 1.0.3 を**この状態で出荷していたら収益がゼロ**だった。ビルドは通り、実機でも広告は出る（デモ広告が出る）ので、目視でも気づけない
+- 検証: `Info.plist` が `$(...)` で要求する変数集合と、CI が `Secrets.xcconfig` へ書き出す変数集合を比較。修正後は `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` / `PLACES_API_KEY` の 3 つで過不足なく一致
+- 残るブロッカー: **下部固定帯用の広告ユニットがまだ未発行**（ユーザー作業）。CI を直したので、未登録のままリリースビルドを回すと fail-fast で落ちる。**デモ ID のまま静かに出荷されるより良い挙動**になった
+- 経緯の注記: これは 2026-07-22 と**同型の再発**。あのときは「CI が `PLACES_API_KEY` しか書き出していない」問題で、キーを足して直した。今回は「キー名が変わった」ケースで、当時の修正では一般化できていなかった

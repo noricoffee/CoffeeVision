@@ -18,7 +18,7 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | SKU | `com.noricoffee.coffeevision` | Bundle ID と同値。外部には出ない社内識別子だが**登録後は変更できない** |
 | Apple ID（App ID） | `6788339362` | ASC が採番 |
 | ストア URL | `https://apps.apple.com/app/id6788339362` | **アプリ内に埋めるのはこの短縮形**。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id...`）の**スラグ部分はアプリ名から生成される装飾**で、リダイレクトにしか使われない。ASO で名前を変えるたびに変わる文字列をバイナリへ焼かない（アプリ名は ASO-2 で一度変更済み） |
-| バージョン | 1.0.2 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える）。**配信済みの版は `lookup` の `version` で実測できる**（§9 のコマンド参照） |
+| バージョン | 1.0.3 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える）。**配信済みの版は `lookup` の `version` で実測できる**（§9 のコマンド参照） |
 | ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。**手入力・手動更新は不要**（仕組みと注意点は §10） |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
 | デバイス | iPhone | `TARGETED_DEVICE_FAMILY = 1`。iPad は対象外（`"1,2"` のままだと iPad にインストール可能になり、ASC が iPad スクショを必須要求する）|
@@ -483,6 +483,8 @@ Three things set CoffeeVision apart. First, the five-axis tasting profile is the
 ---
 
 ## 変更履歴
+
+**2026-09-20（1.0.3 へ）**: `MARKETING_VERSION` / Android の `versionName` を **1.0.3** に更新（ビルド番号は CI 採番のため据え置き）。**提出はまだしていない** — B-11（observation を構造化並行性へ移す変更）を実機で確認するためのバージョン。What's New は §9 未記載で、提出時に書き下ろす。
 
 1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。
 

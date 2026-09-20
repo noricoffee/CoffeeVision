@@ -318,12 +318,7 @@ iosApp/iosApp/FirebaseRepositories/
 
 ### Repository 合成パターン
 
-`CoffeeRepository` は `commonMain` で **2 段構成** にします：
-
-1. `RemoteCoffeeDataSource`（interface, `commonMain`） — Firestore リスナを `Flow` で公開し、`upload(record)` / `remove(userId, id)` を持つ薄いアダプタ
-2. `CoffeeRepositoryImpl`（class, `shared/core`） — `LocalCoffeeRepository`（SQLDelight）と `RemoteCoffeeDataSource` を合成し、UI には `CoffeeRepository` 1 本だけを見せる
-
-各プラットフォームが書くのは `RemoteCoffeeDataSource` の実装のみ。合成ロジック（ローカル → リモートの書き込み順序、`startSync(userId, scope)` でリモート変更をローカル DB へ反映）は共通層で 1 度だけ書きます。
+`CoffeeRepository` は `commonMain` で **2 段構成**（層の内訳は [`data-model.md`](./data-model.md) §4 が正本）。ブリッジを書く側にとって効いてくるのは、**各プラットフォームが実装するのは `RemoteCoffeeDataSource` だけ**という点です。合成ロジックは共通層に 1 度だけ書かれています。
 
 ```
 iOS Swift / Android Kotlin

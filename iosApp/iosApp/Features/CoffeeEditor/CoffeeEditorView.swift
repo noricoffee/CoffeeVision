@@ -95,6 +95,8 @@ struct CoffeeEditorView: View {
                         break
                     }
                 }
+                // state 購読を開始する（構造化 `Task`。この `.task` がキャンセルされるまで戻らない）。
+                await viewModel.observe()
             }
             .onDisappear {
                 viewModel.onDisappear()

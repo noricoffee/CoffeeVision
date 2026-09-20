@@ -74,7 +74,7 @@ data class CoffeeRecord(
 )
 ```
 
-> **`tasting` の統合**: Blue Bottle「Elements of Coffee Tasting」に基づくテイスティング 5 要素（甘味 / ボディ / 酸味 / 風味 / 後味）を `TastingScores`（§1.1a）として持つ。各要素は **1〜10 の強度**。**テイスティングは任意だが、付ける場合は 5 要素すべて必須**（all-or-nothing）。「付けない」は `tasting = null`。総合評価 `rating`（0.5 刻みハーフスター）とは別軸の **強度スケール**であることに注意。
+> **`tasting` の出自**: Blue Bottle「Elements of Coffee Tasting」に基づく 5 要素（甘味 / ボディ / 酸味 / 風味 / 後味）を `TastingScores`（§1.1a）として持つ。
 
 ## 1.1a TastingScores
 
@@ -291,7 +291,7 @@ interface CuratedCafeRepository {
 }
 ```
 
-`getAll()` はメモリキャッシュ前提（Firestore への one-shot get、snapshotListener 不要 = BeanProfile と同じパターン）。全県分を flatten した 1 本のリストを返す。`MapViewModel` が init で一括ロードし、失敗時はサイレントに空のまま（おすすめは付加情報でありマップ本体を阻害しない）。
+`getAll()` は全県分を flatten した 1 本のリストを返す（取得方式は §1.8 `BeanProfileRepository` と同じ）。`MapViewModel` が init で一括ロードし、失敗時はサイレントに空のまま（おすすめは付加情報でありマップ本体を阻害しない）。
 
 > **将来課題**: 47 県フル展開時（約 1,400 件）は iOS 側 Annotation の可視領域フィルタ導入を検討する。
 
@@ -489,8 +489,6 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 **`users/{uid}` 配下にサブコレクションを追加したら、この一覧と `DeleteAccountUseCase` の両方を更新する**（`savedCafes` は追加時に削除経路へ追随せず、リリース前の実機検証で消し残りとして発見された。経緯は [`implementation_note.md`](./implementation_note.md) 2026-08-06）。`beanProfiles` / `curatedCafes` はサービス管理のグローバルコレクションなので削除対象外。
 
-写真本体は Firestore / Storage に同期せず、端末の Documents 配下にのみ保存します（[`requirements.md`](./requirements.md) §7-2）。
-
 ### なぜ photos を埋め込み配列にしたか
 
 - `CoffeeRecord` は 1 杯単位なので photos は数枚程度。Firestore の 1MB ドキュメント上限に十分収まる（photo はメタデータのみ、画像本体は端末ローカル）
@@ -624,7 +622,7 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
 
 # 4. Repository 設計
 
-`commonMain` から Firestore SDK は直接呼べない（公式 SDK はプラットフォーム別 = iOS Swift / Android Kotlin）。そこで **2 段構成** にして、合成ロジックを共通層に 1 度だけ書く（詳細は [`kmp-bridge.md`](./kmp-bridge.md) §Repository 合成パターン）。
+`commonMain` から Firestore SDK は直接呼べない（公式 SDK はプラットフォーム別 = iOS Swift / Android Kotlin）。そこで **2 段構成** にして、合成ロジックを共通層に 1 度だけ書く。
 
 - `CoffeeRepository`（interface, `shared/domain`） — UI から見える唯一の API
 - `RemoteCoffeeDataSource`（interface, `shared/domain`） — Firestore リスナを `Flow` で公開し、`upload(record)` / `remove(userId, id)` を持つ**薄いアダプタ**。実装はプラットフォーム別（Android = `shared/data-firebase/androidMain`、iOS = `iosApp` 側 Swift）
@@ -648,8 +646,8 @@ curatedCafes/{prefectureCode}             # 都道府県別おすすめカフェ
     - **既知の許容トレードオフ**: `save`（ローカル書き込み）から `upload` 完了までの間に「新規レコードを含まないスナップショット」が届くと、そのレコードが一瞬ローカルから消えて upload 後のリスナ echo で復活しうる。Firestore リスナは pending writes を含むため窓は極小であり、MVP では許容する（競合解決の本格化は backlog B-1）
 - **書き込み** は **ローカル（SQLDelight）→ リモート（Firestore）の順** で実施
   - ローカル書き込み完了で即座に UI 更新
-  - リモート書き込みの失敗扱いは `WritePolicy` で切り替え可能（既定 `PropagateRemoteFailure` = 呼び出し元に伝播 / `IgnoreRemoteFailure` = SDK のオフライン永続化の再送に委ねる）
-- **写真** は端末ローカル（Documents 配下）にのみ保存する。Firestore の `coffees/{id}.photos` 配列には `fileName` / `width` / `height` / `createdAt` などメタデータのみを書き出し、`remoteUrl` は常に null（Storage 採用見送りのため）
+  - リモート書き込みの失敗扱いは `WritePolicy` で切り替える（[`architecture.md`](./architecture.md)「データフロー（書き込み）」が正本）
+- **写真** は端末ローカル（Documents 配下）にのみ保存する（Firestore に書くメタデータは §3.2 の `photos` 行）
 
 実装は `shared/core/.../repository/CoffeeRepositoryImpl.kt`（ここにコードを複製しない）。`WritePolicy` はその nested enum。`runRemote` が `IgnoreRemoteFailure` 時に `CancellationException` を先行 catch で再スローする点は [`coding-conventions.md`](./coding-conventions.md) §1.7 の要請。
 

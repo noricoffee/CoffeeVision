@@ -103,7 +103,29 @@ nonisolated final class XxxRepositoryIosImpl: NSObject, XxxRepository, @unchecke
 }
 ```
 
-`OSAllocatedUnfairLock<State>`（`import os`、iOS 16+）は `State: Sendable` を要求せず、ロックが唯一のアクセス経路であることをコンパイラに伝える（`@unchecked Sendable` はクラス全体に必要 — `NSObject` は自動 Sendable にならないため）。`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl`（`recordQuery` フィールド）で採用。**構築後に一度も再代入されないフィールド**（`CoffeeInsightProviderIosImpl.tasteExtractor` — `makeIfAvailable()` 内でインスタンス公開前に 1 度だけ設定）はロック不要（safe publication）。
+`OSAllocatedUnfairLock<State>`（`import os`、iOS 16+）はロックが唯一のアクセス経路であることをコンパイラに伝える。`BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl`（`recordQuery` フィールド）で採用。**構築後に一度も再代入されないフィールドは `let` + `init` 引数にする**（`CoffeeInsightProviderIosImpl.tasteExtractor` は SL-2 で `var` + 後付け代入から `private init(tasteExtractor:)` へ移行。`NSObject` 継承なので `super.init()` が要る）。
+
+### `@unchecked Sendable` はクラス単位で本当に要るか毎回確認する（SL-1 / SL-2, 2026-09-20）
+
+`NSObject` を継承していても、**final + 格納プロパティが全部 Sendable な `let`** なら素の `Sendable` に適合できる（Swift は NSObject 継承を特例扱いする）。`OSAllocatedUnfairLock<State>` は `.swiftinterface` 上 `@frozen public struct OSAllocatedUnfairLock<State> : @unchecked Sendable`（State 無関係に無条件 Sendable）なので、ロックしか持たないクラスは素の `Sendable` で通る。実績: `CallbackFlow` / `CallbackFlowOptional` / `CoffeeInsightProviderIosImpl` の 3 クラスから `@unchecked` を外した。
+
+### `OSAllocatedUnfairLock` の API は State / 戻り値の Sendable 要件で 2 系統ある（`.swiftinterface` で確認済み）
+
+- `init(initialState:)` は `extension ... where State: Sendable` の中にある。`withLock<R>(_ body: @Sendable (inout State) throws -> R) where R: Sendable`
+- 非 Sendable な State（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle` = `any NSObjectProtocol`）を守るときは **`init(uncheckedState:)` + `withLockUnchecked`** を使う（body が `@Sendable` でなくてよく、R の Sendable 制約も無い）。これは `@unchecked Sendable` 適合の追加ではなく、非 Sendable 状態を守るために stdlib が用意している正規 API
+
+### Firebase の型のうち `@Sendable` クロージャへ持ち込めるもの / 持ち込めないもの
+
+SPM checkout（`~/Library/Developer/Xcode/DerivedData/iosApp-*/SourcePackages/checkouts/firebase-ios-sdk`）のヘッダを `grep -n NS_SWIFT_SENDABLE` で確認した実測:
+
+- **Sendable**: `FIRQuery` / `FIRCollectionReference` / `FIRDocumentReference`
+- **非 Sendable**: `FIRFirestore` / `FIRListenerRegistration` / `Auth`（`@objc(FIRAuth) open class Auth: NSObject`）
+
+そのため `@Sendable` なクロージャの中で Firestore を使うときは、**`Firestore` インスタンスを捕捉せず `CollectionReference` / `DocumentReference` を外で組み立てて捕捉する**（`RemoteCoffeeDataSourceIosImpl.observeChanges` がこの形）。`Auth.auth()` は static 呼び出しなので捕捉にならず問題ない。Firestore のリスナクロージャ（`addSnapshotListener { }`）自体は `NS_SWIFT_SENDABLE` が付いていない = 非 `@Sendable` なので、その内側で `@Sendable` な `emit` を呼ぶのは自由。
+
+### `FlowBridge.swift` の `emit` を `@Sendable` にすると `collector` の捕捉で詰まる → `@preconcurrency import SharedLogic` が唯一の出口
+
+`__collect(collector: any Kotlinx_coroutines_coreFlowCollector, ...)` の `collector` を `@Sendable` な `emit` クロージャへ捕捉すると `capture of 'collector' with non-Sendable type ... in a '@Sendable' closure [#SendableClosureCaptures]`。protocol 要件のシグネチャ由来なのでプロパティ単位の対処（`nonisolated(unsafe)`）が構造的に効かず、`docs/kmp-bridge.md` の条件に合致する `@preconcurrency import SharedLogic` で解く。このファイルが参照する SharedLogic 型は 2 つの Flow プロトコルだけなので影響範囲は閉じている。
 
 ## `@concurrent` は「nonisolated async が呼び出し元アクターで走ってしまう」問題の直接的な解決策（SW6-3, 2026-08-07）
 

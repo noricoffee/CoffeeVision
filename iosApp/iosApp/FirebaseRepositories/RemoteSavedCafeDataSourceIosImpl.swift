@@ -1,6 +1,10 @@
 import Foundation
 import FirebaseFirestore
 import SharedLogic
+import os
+
+/// 保存カフェの Firestore リスナのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Firestore")
 
 /// `com.noricoffee.repository.RemoteSavedCafeDataSource` の iOS 実装。
 ///
@@ -17,8 +21,8 @@ import SharedLogic
 ///   Obj-C プレフィックス付きシグネチャで実装する（`upload`/`remove` という素の名前は
 ///   SKIE が生成する `async throws` 版と衝突するため）
 ///
-/// `nonisolated` である理由は `RemoteCoffeeDataSourceIosImpl` と同じ
-/// （Kotlin ランタイムが任意スレッドから呼び出す Kotlin interface 実装。可変状態を保持しない。SW6-2）。
+/// `nonisolated` である理由・`observeChanges` のリスナ登録をロックで保護する理由は
+/// `RemoteCoffeeDataSourceIosImpl` と同じ（SW6-2 / SL-1）。
 nonisolated final class RemoteSavedCafeDataSourceIosImpl: NSObject, RemoteSavedCafeDataSource {
 
     private let firestore: Firestore
@@ -45,20 +49,19 @@ nonisolated final class RemoteSavedCafeDataSourceIosImpl: NSObject, RemoteSavedC
     /// `users/{uid}/savedCafes` の全件スナップショットを Flow として公開する。
     /// SKIE の要求により `SkieSwiftFlow<[SavedCafe]>` を返す。
     func observeChanges(userId: String) -> SkieSwiftFlow<[SavedCafe]> {
-        var listener: ListenerRegistration?
-        let firestore = self.firestore
+        // 保護の理由・`CollectionReference` を外で組み立てる理由は
+        // `RemoteCoffeeDataSourceIosImpl.observeChanges` と同じ（SL-1）。
+        let listenerLock = OSAllocatedUnfairLock<(any ListenerRegistration)?>(uncheckedState: nil)
+        let collection = savedCafesCollection(userId: userId)
 
         let callbackFlow = CallbackFlow<NSArray>(
-            onStart: { [firestore] emit, fail in
-                listener = firestore
-                    .collection("users")
-                    .document(userId)
-                    .collection("savedCafes")
+            onStart: { emit, fail in
+                let registration = collection
                     .addSnapshotListener { snapshot, error in
                         if let error {
                             // 握り潰さず Flow を例外終了させる（`RemoteSavedCafeDataSource.observeChanges`
                             // のエラー契約。理由は `RemoteCoffeeDataSourceIosImpl` の同じ箇所を参照）。
-                            print("[RemoteSavedCafeDataSourceIosImpl] snapshot error: \(error)")
+                            log.error("RemoteSavedCafeDataSourceIosImpl snapshot error: \(String(describing: error), privacy: .public)")
                             fail(error)
                             return
                         }
@@ -69,10 +72,15 @@ nonisolated final class RemoteSavedCafeDataSourceIosImpl: NSObject, RemoteSavedC
                         }
                         emit(savedCafes as NSArray)
                     }
+                listenerLock.withLockUnchecked { $0 = registration }
             },
             onCancel: {
-                listener?.remove()
-                listener = nil
+                let pending = listenerLock.withLockUnchecked { current -> (any ListenerRegistration)? in
+                    let taken = current
+                    current = nil
+                    return taken
+                }
+                pending?.remove()
             }
         )
 

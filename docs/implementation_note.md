@@ -35,7 +35,7 @@
 
 ### アーカイブ（過去分の切り出し）
 
-**2026-06 / 2026-07 / 2026-08 のエントリ（= 1.0 リリースまでの全 139 件）は [`implementation-note-archive.md`](./archive/1.0/implementation-note-archive.md) に凍結移送済み**（2026-08 分は 1.0 リリース時の docs 整理で移送）。他 doc・コードコメントからの「implementation_note 2026-0X-XX エントリ」という参照は**アーカイブ側を指す**（参照は日付で引く運用で、行き先もアーカイブ 1 ファイルに固定しているので、参照側の書き換えは不要）。**本 doc に残っているのは 1.0 リリース後の新規分**。
+**2026-06 / 2026-07 / 2026-08 のエントリ（= 1.0 リリースまでの全 139 件）は [`implementation-note-archive.md`](./archive/1.0/implementation-note-archive.md) に凍結移送済み**（2026-08 分は 1.0 リリース時の docs 整理で移送）。他 doc・コードコメントからの「implementation_note 2026-0X-XX エントリ」という参照は**アーカイブ側を指す**。**本 doc に残っているのは 1.0 リリース後の新規分**。
 
 - **切り出しの単位は月**。作業ログは append-only 気味に伸びるので、行数の閾値（フロー型 1200 行 = `curate-doc` skill）で縮約しきるのは構造的に無理がある。**フェーズが完了して追記が止まった月**を凍結してアーカイブへ送る運用にする
 - **月別ファイルには分けず、アーカイブ 1 本に月見出しで積む**（2026-08-11 確定）。日付参照の行き先が 1 ファイルに固定され、参照側の書き換えも「月 → ファイル」の索引維持も不要になるため。アーカイブ側に行数閾値は適用しない（凍結 doc は通読されず日付 grep で引かれる）
@@ -88,7 +88,7 @@
 - iOS のルートは **4 タブ（マップ / コーヒー / 分析 / 設定）**。**検索タブは作らない**（iOS 27 で `Tab(role: .search)` の右端固定挙動が変わったため）— 検索は**マップ上部の埋め込み検索バー**（テキスト検索はマップ中心の位置バイアス付き）+「このエリアを検索」ボタン + 検索モードに移行。コーヒー記録の作成は**コーヒータブとカフェ詳細のいずれもナビバー右上の `+`**（FAB は使わない。ui-ux-guidelines「追加アクションの配置」）
 - Places API は **New v1** + `X-Goog-FieldMask` で取得フィールド明示。API キーは `AppContainer` コンストラクタ注入（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Nearby は `includedPrimaryTypes = [cafe, coffee_shop]`・1 回最大 20 件。Places 写真は永続キャッシュ禁止（規約）で都度取得
 - iOS の xcconfig は `Base.xcconfig`（base）→ 先頭 `#include "Config.xcconfig"`（必須）+ `#include? "Secrets.xcconfig"`（任意・gitignore 済）の 3 段構造。**フォールバック宣言（`PLACES_API_KEY =` 等）は `#include?` より前に置く**（後ろだと実キーを空で上書き）
-- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ。**この 3 点（予算アラート / クォータ上限 / API 制限の Places 限定）は設定済み**（設定状況の正本は paid-services §1「コスト抑制の現状」で、**実値は Cloud Console が正本**）
+- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ。**この 3 点はいずれも設定済み**（設定状況の正本は paid-services §1「コスト抑制の現状」で、**実値は Cloud Console が正本**）
 - 分析は 3 階層分離: 階層1・2 は KMP で決定論（`CoffeeStats` / `FavoriteSignals`。収縮平均 + n 連動 z ゲート `CATEGORY_Z = 2.0` + 相関 floor で「弱い傾向」だけを信号化、断定しない）、階層3 は iOS Foundation Models（`CoffeeInsightProvider`。可否は注入時判定、null = 非対応端末で graceful degradation）。Q&A は v1 = `CoffeeStats` digest 注入（単発・ステートレス）/ v2 = `Tool` から `CoffeeRecordQuery.searchRecords`（計算は KMP・LLM は解釈と整形のみ）
 - `BeanProfile`（12-B）はサーバ管理 read-only の豆ナレッジ。`CoffeeRecord` と ID 紐付けせず origin / processings のファジーマッチ。取得は one-shot get + メモリキャッシュ。12-C で `FavoriteSignals` と突合した `preferredBeanTraits` を `CoffeeStats` に付加し、Foundation Models で言語化
 - 味覚一致カフェ推薦: **9-5（コンテンツベース v1）は 1.0 で実装済み**（`ObserveTasteMatchedCafesUseCase` / `RecommendedCafe` / `CafeRecommendationProvider`、産地/焙煎/抽出/精製の 4 軸マッチ、マップの好み一致ピン + 理由表示 + 分析タブ連携。テイスティング 5 軸の一致はスコープ外）。**9-6（協調フィルタ / 他ユーザー横断 v2）は設計確定・未実装**（`sharedTasteProfiles/{uid}` + Cloud Function 特権 read。閾値定数 / Function 内実装 / インフラ選定は未決。tasks 12-D で段階 dispatch）。詳細は analysis-model §2
@@ -99,7 +99,7 @@
 
 ## エントリ形式
 
-タイトル + 本文だけで十分。`影響` / `トレードオフ` / `経緯` は必要なときだけ書く。
+タイトル + 本文だけで十分。
 
 > **`- 領域:` は廃止**（2026-07-25 の棚卸し。103 エントリで 60 種類以上の自由記述に散っていて分類・検索に使えていなかった）。所在はタイトルと `- 関連:` のファイルパスで足りる。
 
@@ -221,3 +221,106 @@ App ID は `6788339362`。**バイナリやカード画像に焼くのは `https
 
 ここで **`.foregroundStyle(.white)` は写さなかった**。あれは `List` 内の罠への対処であって意匠ではなく、`CoffeeListView.emptyView` は `ContentUnavailableView` = `List` の外なので条件が成立しない。写していたら**将来 tint を変えたときに読めなくなる負債**になっていた。目視で `.foregroundStyle` 無しでもアイコンが正しく描かれることを確認し、**罠の成立には「塗り + `Label` + `List` / `Form` の中」の 3 条件すべてが要る**ことが確定した（lessons 2026-08-31 / `.claude/rules/swift-ios.md` / ui-ux-guidelines に「逆に `List` 外では付けない」を明記）。**同じ見た目の UI を 2 箇所に作るとき、片方に付いている modifier が意匠なのか特定コンテナへの対処なのかを区別してから写す** — 今回はこれを分けたことで負債を作らずに済んだ。
 
+
+### 2026-09-19: 広告をインライン 2 面から全画面下部固定帯 1 面へ再編
+
+- 関連: `iosApp/iosApp/Ads/AnchoredBannerAdView.swift` / `iosApp/iosApp/iOSApp.swift` / `iosApp/iosApp/AppState.swift` / `docs/requirements.md` §11 / `docs/ui-ux-guidelines.md`「下部固定広告帯」/ 計画は `.claude/plans/mutable-skipping-pizza.md`
+
+ユーザー指示「一番下に広告のエリアを設けてタブバーとコンテンツすべてその上に表示する」（Pixiv 等と同じ構成）。インライン 2 面（カフェ詳細 / マップ検索結果シート）を撤去し、全タブ常設の下部固定帯 1 面に集約した。
+
+**動機はインプレッションの構造的な不足**。インライン枠は「その画面を開いて、かつそこまでスクロールした人」にしか露出せず、Places 従量コストの回収という §11 の目的に届いていなかった。
+
+**2026-07-16 の「記録タブ・分析タブには置かない」を撤回したが、根拠は書き分けた。** リテンション懸念が消えたのではなく**枠の性質が変わった** — コンテンツの流れに割り込むインライン枠と、タブバーの外側に固定されコンテンツを一切押しのけない常設帯では、可処分注意への侵襲度が違う。**インライン枠を記録・分析タブへ再導入する判断は今も無効**である旨を requirements に明記した（ここを曖昧にすると 2026-07-16 の判断ごと無効化されて読まれる）。
+
+**自動リフレッシュはクライアント側 60 秒タイマー**（`scenePhase == .active` 限定）。`BannerView.isAutoloadEnabled` を検討したが、SDK が自動生成するリフレッシュ用リクエストに `makeRequest()` の NPA extras が反映されるかを公式ドキュメントで確認できなかった。**ATT 拒否ユーザーへの NPA 徹底は規約遵守の要点**なので、コード側で完全制御できない経路に委ねられない。doc には「**調べたが分からなかった**のであって、反映されないと確認したわけではない」と書き分けた（SDK 側に保証が出れば再検討できる）。AdMob コンソール側のユニット自動更新は**オフにする必要がある**（二重リフレッシュ防止。`paid-services.md` §2b に運用注意として記載）。
+
+**サイズは `inlineAdaptiveBanner(width:maxHeight: 50)`。配置はアンカードなのにインライン用の関数を使っている。** アンカード用の関数は高さを指定できず、`currentOrientationAnchoredAdaptiveBanner` は SDK で非推奨、置換先の `largeAnchoredAdaptiveBanner` は上限 150pt で実機では画面の約 15% を占めた。**常設帯には高さの天井が要る**という要件が先にあるため、天井を指定できる関数を選んだ。50 は `GADAdSize.h` が推奨する `maxHeight` の下限ちょうどで、これ以上は下げない。
+
+**実装で 2 回作り直した。どちらも親の設計・指示の誤りで、ビルドも型検査も通り、実機の目視でしか出なかった。**
+
+1. **`.safeAreaInset(edge: .bottom)` ではタブバーが広告の裏に隠れた**。`safeAreaInset` はフレームを縮めずセーフエリアの報告値だけを書き換えるため、フレーム基準で位置決めする iOS 26 の浮動タブバーには効かない。フレームごと縮める `VStack` が必要だった。プラン段階で「`VStack` と結果は同じ」と**根拠なく**判断したのが起点（lessons 2026-09-19）
+2. **「未受信・失敗時は高さ 0 に畳む」でロード完了時にタブバーごと跳ねた**。これは §11 に既にあった確定仕様だが、**インライン枠（消えても周囲が詰まるだけ）のための作法**で、レイアウトの土台になる常設帯には当てはまらなかった。`.claude/rules/swift-ios.md` に「幅・高さを持つ要素を `if` で条件生成しない」と**自分で書いてある規約に反する指示を親が出していた**。高さ常時確保に修正し、doc 側も「帯は畳まない / インライン枠は畳む」と作法を書き分けた（lessons 2026-09-19）
+
+**`canLoad` のゲートにも設計の穴があった**。「同意フローが閉じるまでロードしない」を `!showAdConsentFlow` で書いたが、これはシートの表示状態でしかなく、`onAdPrePromptContinue()` はシートを閉じた**後**に ATT ダイアログを非同期で開始する。ATT ダイアログ表示中にリクエストが飛び、避けたかった「初回インプレッションが必ず NPA」がそのまま起きていた。`AppState.isAdConsentResolved`（`await AdConsentCoordinator.run()` 完了後に立てる）を追加して解決（lessons 2026-09-19）。
+
+- 影響: **スクリーンショットの全面撮り直しが必要**。全カットの下端に広告帯が入り、「カフェ詳細だけ Test Ad に注意」という 1.0 系の回避が成立しない（`app-store-metadata.md` §5 に撮影手順ごと記載）。**広告ユニットは未発行**で、下部固定帯用の本番 ID を AdMob で発行して `Secrets.xcconfig` / GitHub Secrets へ登録する作業が残る
+
+### 2026-09-20: observation の所有を Swift の構造化並行性へ移した
+
+- 関連: `iosApp/iosApp/Features/<Name>/<Name>ViewModelBridge.swift`（8 本）/ `iosApp/iosApp/AppState.swift` / `docs/kmp-bridge.md`「ViewModel ブリッジパターン」/ tasks B-11 / 教訓は lessons 2026-09-20
+
+docs の冗長排除中に `kmp-bridge.md`「メモリ管理の注意」の記述が同 doc 内の別の記述と矛盾していることに気づいたのが発端。調べると**規約と実装がどちらも正しくなく**、さらにその下に実際のリークが埋まっていた。
+
+**判断の分かれ目は「どこで畳むか」ではなく「誰が持つか」だった。** 最初は `.onDisappear` か `deinit` かの二択で議論していたが、Swift の一次情報を引いて前提が崩れた。
+
+- 非構造化 `Task` は参照を手放しても止まらない（`Task.swift:26-31`）。つまり `deinit` の到達性は問題ではなく、Task がブリッジより長生きすること自体が問題
+- キャンセルは**協調的**で、`cancel()` は依頼にすぎない（`Task.swift` の `cancel()` doc / `AsyncIteratorProtocol` は iterator が応答することを **should** としか定めていない）。だから「どこで cancel を呼ぶか」を決めても、**呼べば止まる保証がそもそも無い**
+- SE-0304 は「`cancel()` を持つトークンを同期的に返す API 設計は複雑さを持ち込む」と明言している。保持していた `observationTask` はそのトークンだった
+
+**そこで `deinit` に `cancel()` を足す案（A）を採らず、所有をスコープへ移した（C）。** ただし A も 1 本だけ実装して実測している。目的は止血ではなく、**C の前提（SKIE が協調キャンセルに応答するか）を先に確かめる**ため。応答しなければ `.task` に移しても同じリークが残り、C の形自体が変わっていた。
+
+- 影響: `cancel()` / `onDisappear()`（observation 用）が全廃され、正味 53 行減った。`AppState.resetAndRebootstrap()` の手動キャンセル 4 行も不要になった（`AppRootView` がブリッジ nil で `RootTabView` ごと畳むため）
+- トレードオフ: `CoffeeEditorViewModelBridge` だけ `onAppear(mode:userId:)`（同期）+ `observe()`（非同期）の 2 メソッドに分かれる。エディタの `.task` は「Kotlin 初期化 → カフェ pre-fill → 現在地サジェスト → 購読開始」の順序依存があり、`observe()` が戻らないため 1 本に畳むと pre-fill とサジェスト（要件 2-8）が実行されない。**シグネチャの不揃いより機能の維持を採った**
+- 検証: 番兵オブジェクトによる実測を移行の前後で実施。移行前は 2 サイクルとも解放されず、移行後は `CafeSearch` / `CafeDetail` の全インスタンスで `loop exited` → `sentinel deinit` → `deinit` が揃った。収支も一致（未解放の 1 件は計測終了時に画面を開いたままだったインスタンスで、スクリーンショットで確認済み）
+- 実機確認: **ユーザーによる実機確認で OK**（2026-09-20）。見た対象は、過去 2 回凍結バグを出したマップ検索の「他タブへ行って戻る → もう一度検索」、タブ往復での凍結、カフェ詳細の pop → 再 push、そして `resetAndRebootstrap()` の手動キャンセル 4 行を削除した影響が出るサインアウト / アカウント削除後の再起動
+- 経緯の注記: **`MapSearchController.searchBridge` は View が持たないブリッジ**で、当初は「そこだけ現状維持でよい」と指示していた。`setupAndObserve(makeViewModel:) async` に統合して `MapTabView` の `.task` から駆動する形で解決し、結果として長寿命ブリッジにも再購読経路ができた
+
+### 2026-09-20: 1.0.3 の提出準備で、リリースビルドがデモ広告のまま出荷される状態を見つけた
+
+- 関連: `.github/workflows/release-testflight.yml` / `iosApp/Configuration/Base.xcconfig` / `docs/app-store-metadata.md` §10 / tasks 1.0.3 節 / 教訓は lessons 2026-09-20
+
+`app-store-metadata.md` §10 のチェックリストを上から潰す過程で発見した。2026-09-19 の広告再編でビルド変数名を `ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `_MAP_SEARCH` から `_GLOBAL_BOTTOM` へ変えたのに、**CI の「Restore secret files」が旧キー名のまま**だった。fail-fast のガードは存在しないキーを見張り、実際に必要な `_GLOBAL_BOTTOM` は書き出されないので、`Base.xcconfig` のフォールバック = Google デモ ID が採用される。
+
+**ワークフロー自身のコメントが「未設定のまま出荷すると Base.xcconfig のデモ AdMob ID で広告が載る（収益ゼロ）」と警告しているのに、その状態になっていた。** ガードがキー名に依存していたため、名前が変わった瞬間に無言で無効化されていた。
+
+- 影響: 1.0.3 を**この状態で出荷していたら収益がゼロ**だった。ビルドは通り、実機でも広告は出る（デモ広告が出る）ので、目視でも気づけない
+- 検証: `Info.plist` が `$(...)` で要求する変数集合と、CI が `Secrets.xcconfig` へ書き出す変数集合を比較。修正後は `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` / `PLACES_API_KEY` の 3 つで過不足なく一致
+- 残るブロッカー: **下部固定帯用の広告ユニットがまだ未発行**（ユーザー作業）。CI を直したので、未登録のままリリースビルドを回すと fail-fast で落ちる。**デモ ID のまま静かに出荷されるより良い挙動**になった
+- 経緯の注記: これは 2026-07-22 と**同型の再発**。あのときは「CI が `PLACES_API_KEY` しか書き出していない」問題で、キーを足して直した。今回は「キー名が変わった」ケースで、当時の修正では一般化できていなかった
+
+### 2026-09-20: SL-1 / SL-2 — `@unchecked Sendable` の適用範囲を縮めた
+
+- 関連: `iosApp/iosApp/FirebaseRepositories/FlowBridge.swift` / `AuthRepositoryIosImpl.swift` / `RemoteCoffeeDataSourceIosImpl.swift` / `RemoteSavedCafeDataSourceIosImpl.swift` / `iosApp/iosApp/Features/Analysis/CoffeeInsightProviderIosImpl.swift` / [`kmp-bridge.md`](./kmp-bridge.md) / tasks SL-1・SL-2
+
+`CallbackFlow` / `CallbackFlowOptional` の `onStart` / `onCancel` を `@Sendable` 化し、両クラスを `@unchecked Sendable` から**素の `Sendable`** へ。狙いは挙動ではなく**コンパイラに検査させる範囲を戻すこと**で、クラス全体の `@unchecked` が利用側の捕捉まで検査から外していた。
+
+利用側は起票時に数えた 4 箇所ではなく **5 箇所**だった（`AuthRepositoryIosImpl.observeAnalyticsConsent` も同型で、`permission-denied` 系でリスナが残る）。5 箇所すべてでリスナハンドルを `OSAllocatedUnfairLock` 保護へ移し、取り出しと無効化をロック内でアトミックに、解除呼び出しはロックの外で行う形に揃えた（`FlowCompletionGate.finish` と同型）。
+
+保護対象が非 Sendable な OS ハンドル（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle`）なので `init(uncheckedState:)` + `withLockUnchecked` を使う。`init(initialState:)` は `extension OSAllocatedUnfairLock where State : Sendable` の中にあり、`withLock` は `body: @Sendable` と `R : Sendable` を要求するため、この用途では原理的に使えない（SDK の `.swiftinterface` L2430-2439 / L2538-2539 で親が実読み確認）。
+
+- 影響: Firestore の 2 データソースは `Firestore` インスタンスの捕捉をやめ、`CollectionReference` を外で組み立てて捕捉する形に変えた。`FIRFirestore.h` に `NS_SWIFT_SENDABLE` が無く、`FIRCollectionReference` / `FIRDocumentReference` / `FIRQuery` には付いているため（親がヘッダを実読み確認）。副産物としてクロージャ内のパス手組みと既存 private ヘルパの二重定義が解消された
+- トレードオフ: 唯一塞げなかったのが `__collect` の `collector`（SKIE 生成の非 Sendable existential）を `@Sendable` な `emit` へ捕捉する箇所。`FlowBridge.swift` に `@preconcurrency import SharedLogic` を付けて解いた。**これは新しい穴ではない** — collector を別スレッドから触ること自体はブリッジ成立以前からの前提で、既存の前提をファイルスコープで明示しただけ。代案の `extension ...FlowCollector: @retroactive Sendable` は全適合型に効くので採らなかった。**この import は利用側 5 ファイルの検査には影響しない**（`@Sendable` は `onStart` / `onCancel` の型の一部なので、利用側は自分のファイルの通常 import の下で検査される）
+- トレードオフ: 「`onStart` がリスナ登録を終える前に `onCancel` が走る」競合窓は**意図的に残した**。`__collect` 実行中は Kotlin 側が Flow オブジェクトへの強参照を保持するため `deinit` が並行して走ることは構造的に起きない。塞ぐなら 3 状態（pending / registered / cancelled）を 5 箇所に入れることになるので、必要になったら共通ヘルパへ切り出す
+- SL-2: `CoffeeInsightProviderIosImpl.tasteExtractor` を `private init` 引数の `let` にした。「公開前に 1 回だけ設定」というコメントでの正当化が構文的に不要になり、同クラスも素の `Sendable` へ落ちた
+- 残務: `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` の `@unchecked Sendable` は残る（`private let db = Firestore.firestore()` が非 Sendable。外すには `db` を持たない設計変更が要る）。判定基準は kmp-bridge の表に明文化したので、外すかは費用対効果で別途判断する
+
+### 2026-09-20: SL-4 — マップのピン競合解決を `MapTabView` の body から `MapViewModelBridge` へ移した
+
+- 関連: `iosApp/iosApp/Features/Map/MapViewModelBridge.swift` / `MapTabView.swift` / `MapTabView+PinResolution.swift` / `AppleNearbyCafeLoader.swift` / [`coding-conventions.md`](./coding-conventions.md) §2.5 / tasks SL-3・SL-4・SL-5
+
+`displayedSavedCafes` / `displayedSearchResultPlaces` / `displayedCuratedCafes` / `existingPinCoordinates` は `MapTabView` extension の関数として body から毎回呼ばれており、body 評価のたびに Set 3 本の構築と最大 421 件の `CLLocation` 測地距離計算が走っていた。入力が実際に変わったときだけ計算する形にするため `MapViewModelBridge` の `private(set) var` へ移した。Apple 周辺ピンの重複排除も同様に `AppleNearbyCafeLoader.displayedCafes` へ。`MapTabView+PinResolution.swift` は `minimalCafe(from:)` だけの 37 行になった。
+
+**ブリッジの責務が「Kotlin state のミラー」から一段広がる**のが代償。代替案は「`@Observable` な resolver を View の `@State` に置き `.onChange` 4 本で駆動」だったが、これは body 評価のたびに Kotlin 配列 4 本の `==`（要素ごとに Obj-C 越しの `isEqual:`、curated は 421 件）を走らせることになり、**解こうとしている問題を別の形で作る**ため採らなかった。「Kotlin state から一意に決まる派生値は emit のタイミングで計算する」= ブリッジが正しい場所、という判断。
+
+- 影響: **body から `appState.mapSearchCenter` を読む依存が消滅した**。`displayedCuratedCafes(bridge)` がその唯一の経路だった。2026-08-09 のウォッチドッグ障害（カメラ → ピン表示数 → カメラの循環）に対して、`MapTabView+PinResolution.swift` の旧 doc コメントが守ろうとしていた「依存方向を増やさない」より**一段強い状態**になっている。親が全 `appState.mapSearchCenter` 参照を確認し、残るのはすべて action closure 内（Button action / `.onChange` ハンドラ / `.task` / `.onSubmit` / `.onMapCameraChange`）で body 評価時に評価される式はゼロであることを確認済み
+- 指示からの逸脱（採用）: 親の dispatch は「カメラ依存分は `.onChange(of:)` から更新する」と指示したが、**これは誤りだった**。`.onChange` の `of:` 式は body 評価時に評価されるため、`appState.mapSearchCenter` を `of:` に書くと消したはずの body 依存が復活する。実装は既存の `.onMapCameraChange` ハンドラから `bridge.updateMapSearchCenter(_:)` を直接呼ぶ形になっている。**`.onChange` は「SwiftUI が値比較してくれる」利点と「body 依存を作る」代償がセット**で、既に body が読んでいる値なら前者だけ得られるが、読んでいない値に使うと後者を払う。この区別を `coding-conventions.md` §2.5 に書き分けた
+- トレードオフ: 同値判定を `AppState.mapSearchCenter` 側の既存ガードに**相乗りさせず**ブリッジ側に持たせた。サインアウト → `resetAndRebootstrap()` は `mapBridge` だけを作り直して `appState.mapSearchCenter` は残すため、相乗りすると新ブリッジが「同値だから渡されない」でカメラ中心を永久に受け取れず、curated ピンがユーザーが地図を動かすまで出なくなる。あわせて `MapTabView` の `.task` で現在値を 1 回流し込んでいる
+- トレードオフ（残存）: Apple ピンの重複排除が `bridge.existingPinCoordinates` → `.onChange` → loader の経路になったため **1 フレーム遅れる**。新しい訪問済み / 保存済み / curated ピンが出た直後の 1 パスだけ、40m 以内に Apple ピンが重なって見えうる（次のパスで消える）。データ投入は起動直後に集中するため実害は小さいと判断。目視確認項目に入れた
+- SL-3: ブリッジ 8 本の `apply(_:)` に同値ガード。判定基準は [`kmp-bridge.md`](./kmp-bridge.md)「Swift 側での等価性」へ。`AnalysisViewModelBridge` の 3 status は `!==`（全 case が `data object` = シングルトン）、`CafeDetailViewModelBridge.matches` のみガード不可
+- SL-5: `ApplePoiNegativeCache.snapshot()` を追加し、`AppleNearbyCafeLoader.fetch` の `compactMap` 前で 1 回だけ `UserDefaults` 読み + JSON デコード（POI 1 件ごと最大 50 回 → 1 回）。`add(name:coordinate:)` のシグネチャは不変
+
+### 2026-09-20: SL-6〜SL-10 — 書き方を stdlib / SE の先例へ揃えた
+
+- 関連: `iosApp/iosApp/Utilities/AppLog.swift`（新規）/ `Features/Map/MapRegionFitting.swift`（新規）/ `Features/Analysis/AnalysisView+Statistics.swift` / `Utilities/LocationManager.swift` / [`coding-conventions.md`](./coding-conventions.md) §2.3・§2.5 / tasks SL-6〜SL-10
+
+`AnyView` 14 箇所 → `@ViewBuilder`、`Task.sleep(nanoseconds:)` 3 箇所 → `Task.sleep(for:)`、`print` 28 箇所 → `os.Logger`、bounding box 計算の重複解消（force unwrap 8 個を除去）、`@Observable` 同値ガードの残り 2 件。規約への昇格は `coding-conventions.md` §2.3 / §2.5 へ済み。以下は判断の経緯だけ残す。
+
+**`LocationManager.lastLocation` の同値ガードを誤差比較にしなかった理由。** `MapSearchCenter.isEquivalent`（1m 許容）は「MapKit のカメラが再適用のたびに浮動小数の下位桁を揺らす」ことへの対処で、位置バイアス用途では 1m 未満の差が無意味だという前提に立つ。対して `LocationManager` は継続監視を使わず `requestLocation()` のワンショット取得しかしておらず、抑止したい重複は「短時間に複数回呼んだとき CoreLocation が同じキャッシュ fix を返す」ケース = **ビット完全一致**。誤差比較にすると近距離の実移動まで握り潰す副作用の方が大きい。**同じ「座標の同値判定」でも、揺れの出どころが違えば比較方法も違う。**
+
+型を `MapPinCoordinate`（SL-4 で新設）に置き換えなかったのは、消費側 4 箇所（`CoffeeEditorView` / `MapTabView` / `MapTabView+Location` ×2）がいずれも `CLLocationCoordinate2D` のまま MapKit / KMP へ渡しており、変換が全箇所に要るうえ `Utilities/` → `Features/Map/` の依存逆転になるため。
+
+**`AppLog` を `nonisolated enum` + `private nonisolated let` にした理由。** 既定 MainActor 分離下では、`nonisolated final class`（Kotlin interface 実装）から共有ロガーを参照する形にすると分離の不整合が出る。`Logger` は `Sendable` なので `nonisolated` を明示するだけで済み、SL-1 でせっかく外した `@unchecked Sendable` を復活させずに解決できた。
+
+- 影響: `print` の `[CoffeeVision]` 等の手書きプレフィックスは subsystem / category へ移した。開発時は `xcrun simctl spawn <udid> log stream --level debug --predicate 'subsystem == "com.noricoffee.coffeevision"'` で見る（`--level debug` を省くと `.info` / `.debug` が出ない）
+- 未確認: **`privacy: .private` の redaction はシミュレータでは実証できない**（デバッガ配下では private データが表示される Apple の挙動）。コード上 `.private` が付いていることまでは確定だが、「本番端末のログに uid が出ない」の実証は実機 / TestFlight ビルドでの確認が要る
+- SL-9: 単一件数時のズーム距離が用途ごとに違った（訪問済み 2000m / 検索結果 800m）ため `singleCoordinateMeters` 引数で受ける形にした。0 件は `nil` 返しで、訪問済み側は東京駅 5km デフォルト、検索結果側は no-op という従来の差を呼び出し側に残してある（0 / 1 / 複数件の 3 ケースとも挙動不変）

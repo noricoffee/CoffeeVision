@@ -1,6 +1,5 @@
 import SwiftUI
 import SharedLogic
-import GoogleMobileAds
 
 // MARK: - SearchSheetDetent
 
@@ -23,12 +22,6 @@ enum SearchSheetDetent {
 ///   この結合を壊さないよう、detent の状態オーナーはあえて本 View 側へ移していない）
 /// - 2 detent を `DragGesture` + スナップで実装。ドラッグはハンドル行のみに付け、リスト本体の
 ///   `ScrollView` とジェスチャーが競合しないようにする
-/// - インラインアダプティブバナー（`InlineBannerAdView`、3 件目の後）は既定の peek detent では
-///   `LazyVStack` の fold 下に隠れて実体化されず、`.task` によるロードトリガーが発火しない
-///   （2026-07-22 回帰で確認）。そのため `CafeDetailView.cafeDetailList` と同じパターンで、
-///   常に実体化されるルート `VStack` 自身の `.background(GeometryReader)` から
-///   `searchAdLoader.load(...)` を先読みトリガーする（`InlineBannerAdView` 側の `.task` は
-///   そのまま残し、行が実体化された瞬間に `isLoaded` 済みなら即描画される）
 struct MapSearchResultsSheet: View {
 
     /// peek detent の固定高さ。
@@ -42,7 +35,6 @@ struct MapSearchResultsSheet: View {
     let results: [Cafe]
     /// 検索実行中フラグ（`CafeSearchViewModelBridge.isLoading`）。
     let isLoading: Bool
-    let searchAdLoader: BannerAdLoader
 
     /// ドラッグ追従を反映した実際の表示高さ（呼び出し元が算出済み）。
     let currentHeight: CGFloat
@@ -72,18 +64,8 @@ struct MapSearchResultsSheet: View {
                         }
                         .padding(.vertical, 24)
                     } else {
-                        ForEach(Array(results.enumerated()), id: \.element.placeId) { index, cafe in
+                        ForEach(Array(results.enumerated()), id: \.element.placeId) { _, cafe in
                             row(cafe: cafe, isLast: cafe.placeId == results.last?.placeId)
-                            // 3 件目の後にインラインアダプティブバナー 1 枠（結果 3 件未満のときは
-                            // 到達しないため非表示。requirements.md §11-2）。
-                            if index == 2 {
-                                InlineBannerAdView(loader: searchAdLoader, maxHeight: 100)
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 8)
-                                if cafe.placeId != results.last?.placeId {
-                                    Divider().padding(.leading, 52)
-                                }
-                            }
                         }
                     }
                 }
@@ -92,22 +74,6 @@ struct MapSearchResultsSheet: View {
         .frame(height: currentHeight)
         .frame(maxWidth: .infinity)
         .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-        .background(
-            // 結果 3 件以上になった時点で、広告スロットが fold 下でも先読みロードする
-            // （`InlineBannerAdView` 自身の `.task` は `LazyVStack` の遅延実体化に依存するため、
-            // peek detent では発火しない。ルート VStack は常に実体化されるため確実に発火する）。
-            GeometryReader { proxy in
-                Color.clear
-                    .task(id: "\(Int(proxy.size.width))-\(results.count >= 3)") {
-                        guard results.count >= 3 else { return }
-                        let width = proxy.size.width - 32
-                        // レイアウト測定の過渡状態（ゴミ幅・負値）でリクエストしない
-                        // （`BannerAdLoader.minimumRequestableWidth` 参照。2026-07-14 実機診断で確認）。
-                        guard width >= BannerAdLoader.minimumRequestableWidth else { return }
-                        searchAdLoader.load(adSize: inlineAdaptiveBanner(width: width, maxHeight: 100))
-                    }
-            }
-        )
         .shadow(color: .black.opacity(0.15), radius: 12, x: 0, y: -4)
         .transition(.move(edge: .bottom).combined(with: .opacity))
     }

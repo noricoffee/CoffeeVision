@@ -117,6 +117,31 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 **`fail` に渡した `NSError` は Kotlin 側で `NSError-based exception` になり、`catch (e: Exception)` で捕まえられる（fatal ではない）** — シミュレータで実測済み（2026-08-09）。生成ヘッダの `collect` に付く `Other uncaught Kotlin exceptions are fatal.` は **Kotlin → Obj-C 方向**の注意書きで、Swift 実装 → Kotlin 呼び出しのこちら側には効かない。`localizedDescription` も保たれる。
 
+**`onStart` / `onCancel` は `@Sendable`。この 2 つから共有するリスナハンドルは必ずロックで保護する**（SL-1、2026-09-20）。2 つは別経路（`onStart` = `__collect` 経由 / `onCancel` = `deinit`）から、いずれも Kotlin ランタイムの任意スレッドで呼ばれる。`@Sendable` にする前は**利用側 5 箇所すべて**が素のローカル `var` を両クロージャで共有捕捉しており、`CallbackFlow` 側の `@unchecked Sendable` によって**利用側の捕捉まで検査から外れていた**。症状は「壊れる」ではなく「**解放されずに残る**」形で出る（`onStart` の代入が `deinit` から見えないとリスナが残り、再サインインのたびに 1 組ずつ積み上がる）。
+
+```swift
+// 保護対象（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle`）は非 Sendable なので
+// `uncheckedState:` / `withLockUnchecked` 側の API を使う（後述）
+let listenerLock = OSAllocatedUnfairLock<(any ListenerRegistration)?>(uncheckedState: nil)
+let flow = CallbackFlow<NSArray>(
+    onStart: { emit, fail in
+        let registration = collection.addSnapshotListener { ... }
+        listenerLock.withLockUnchecked { $0 = registration }
+    },
+    onCancel: {
+        // 取り出しと無効化はロック内、解除呼び出しはロックの外（`FlowCompletionGate.finish` と同型）
+        let pending = listenerLock.withLockUnchecked { c -> (any ListenerRegistration)? in
+            let taken = c; c = nil; return taken
+        }
+        pending?.remove()
+    }
+)
+```
+
+**`@Sendable` な `onStart` に `Firestore` インスタンスは持ち込めない。** `FIRFirestore.h` に `NS_SWIFT_SENDABLE` は無い一方、`FIRCollectionReference` / `FIRDocumentReference` / `FIRQuery` には付いている（SPM checkout のヘッダで確認）。**参照の組み立てだけクロージャの外で済ませて捕捉する**。
+
+**残る競合窓（意図的に塞いでいない）**: 「`onStart` がリスナ登録を終える前に `onCancel` が走る」と取り出しが nil になりリスナが残る。`__collect` 実行中は Kotlin 側が Flow オブジェクトへの強参照を保持しているため `deinit` が並行して走ることは構造的に起きない、と判断して 3 状態（pending / registered / cancelled）の導入を見送った。塞ぐなら 5 箇所に同じ enum を入れることになるので、共通ヘルパへ切り出すこと。
+
 なお `completionHandler` は「正常終了」「例外終了」のどちらか一方で**ちょうど 1 回**呼ぶ契約。Firestore リスナは解除まで何度でもコールバックしうるため、`FlowBridge.swift` の `FlowCompletionGate`（`OSAllocatedUnfairLock` で取り出しと無効化をアトミックに行う）を必ず経由する。
 
 ---
@@ -134,16 +159,37 @@ SKIE の SuspendInterop / FlowInterop は **Swift から Kotlin の `suspend` �
 
 **`nonisolated` は「Kotlin から見える型」だけの話ではない。** それらが内部で使う `private` なヘルパ型にも同じ指定が要る（`FlowBridge.swift` の `FlowCompletionGate` が実例。付け忘れると `nonisolated` な `__collect` から呼べず `call to main actor-isolated instance method ... in a synchronous nonisolated context` になる）。同じファイルに `nonisolated` の宣言が並んでいても**継承されない**。
 
-**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** 可変状態は `OSAllocatedUnfairLock` で包む（メモリキャッシュを持つ `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` / `CoffeeInsightProviderIosImpl` と、`FlowBridge.swift` の `FlowCompletionGate`）。**`@unchecked Sendable` が要るかはクラス単位で変わる**: 格納プロパティが**ロックだけ**なら `Sendable` に素で適合する（`FlowCompletionGate` がこれ）。Kotlin 由来の非 Sendable 型を他に持つクラスは `@unchecked Sendable` を明示して「ロックが唯一のアクセス経路である」ことを手動で保証する。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
+**`nonisolated` にすると、そのクラスの可変状態は無保護の共有可変状態になる。** 可変状態は `OSAllocatedUnfairLock` で包む。**ロック内から Kotlin ブリッジを呼ばない**（`FlowCompletionGate.finish` は handler の取り出しだけロック内で行い、呼び出しは外に出す。Kotlin 側から同期的に `deinit` まで走りうるため）。
+
+**`@unchecked Sendable` が要るかはクラス単位で変わる。** 判定基準は「**非 Sendable な参照そのものを格納プロパティに持つか**」の 1 点（SL-1 / SL-2 で整理、2026-09-20）:
+
+| 格納プロパティ | 適合 | 例 |
+|---|---|---|
+| ロックと `Sendable` な `let` だけ | **素の `Sendable`**（`NSObject` 継承でも `final` なら可） | `FlowCompletionGate` / `CallbackFlow` / `CallbackFlowOptional` / `CoffeeInsightProviderIosImpl` |
+| 非 Sendable な参照を直接持つ | `@unchecked Sendable` を明示 | `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl`（`private let db = Firestore.firestore()` = 非 Sendable な `FIRFirestore`） |
+
+**`@unchecked` はクラスに付けると箱が大きすぎる。** SE-0302 の設計上これは「不変条件を人間が保証した**最小の箱**」に付けるもので、クラスに付けると**そのクラスの利用側の捕捉まで検査から外れる**（SL-1 で実際に 5 箇所の共有捕捉を見逃していた）。素の `Sendable` に落とせないか先に確かめること。
+
+**`OSAllocatedUnfairLock` の API は State の Sendable 性で 2 系統に分かれる**（`.swiftinterface` で確認）:
+
+| State | 初期化 | アクセス |
+|---|---|---|
+| Sendable | `init(initialState:)`（`extension ... where State : Sendable` 内） | `withLock`（`body: @Sendable`、`R : Sendable` を要求） |
+| **非 Sendable**（`any ListenerRegistration` / `AuthStateDidChangeListenerHandle` 等の OS ハンドル） | `init(uncheckedState:)` | `withLockUnchecked`（どちらの要求も無し） |
+
+`withLockUnchecked` の "unchecked" が外すのは**クロージャと戻り値の Sendable 検査だけ**で、相互排他そのものは変わらない（`OSAllocatedUnfairLock` は State に関わらず `@unchecked Sendable` な struct）。ただし**非 Sendable な値をロックの外へ持ち出せてしまう**ので、「ロックが唯一のアクセス経路」を保つのは書き手の責任になる（上の `onCancel` は取り出しと無効化をアトミックに行っているので、持ち出した時点で他から到達できない）。
 
 ```swift
 nonisolated final class BeanProfileRepositoryIosImpl: NSObject, BeanProfileRepository, @unchecked Sendable {
-    private let cache = OSAllocatedUnfairLock<[BeanProfile]?>(initialState: nil)
+    private let cache = OSAllocatedUnfairLock<[BeanProfile]?>(initialState: nil)   // State が Sendable
 ```
 
 ### `@preconcurrency import SharedLogic` を使ってよい条件
 
-**`@Sendable` クロージャの引数型に Kotlin 型が直接現れる場合だけ。** Kotlin interface の `completionHandler` がこれに当たり、関数シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない。
+**`@Sendable` クロージャの引数型に Kotlin 型が直接現れる場合か、protocol 要件のパラメータを `@Sendable` クロージャへ捕捉せざるを得ない場合だけ。** どちらも関数シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない。
+
+- **引数型に現れる例**: Kotlin interface の `completionHandler`
+- **捕捉せざるを得ない例**: `FlowBridge.swift`（SL-1、2026-09-20）。`__collect` が protocol 要件として受け取る `any Kotlinx_coroutines_coreFlowCollector` を、`@Sendable` にした `emit` / `emitSome` / `emitNone` から捕捉する。`extension ...FlowCollector: @retroactive Sendable` は全適合型に効く極端に広い穴なので採らない。**このファイルが参照する SharedLogic 型が `Kotlinx_coroutines_coreFlow` / `...FlowCollector` の 2 つに閉じていることが許容の根拠**（ファイル単位で効く以上、参照型が増えたら再判断する）。なお `collector` を別スレッドから触ること自体はブリッジ成立以前からの前提で、この import が**新しい穴を開けたわけではない** — 既存の穴をファイルスコープで明示しただけ。**重要なのは、この import が利用側 5 ファイルの検査には一切影響しないこと**（`@Sendable` は `onStart` / `onCancel` の型の一部なので、利用側は自分のファイルの通常 import の下で検査される）
 
 プロパティ 1 個が非 Sendable なだけなら **`nonisolated(unsafe)` を優先する**（`AppState.container` / `PlacePhotoLoader.repository`）。`@preconcurrency import` はファイル内の SharedLogic 由来の型すべてについて検査を外すため、そのファイルはその後の変更でデータ競合を持ち込んでもコンパイラが黙る。
 
@@ -155,6 +201,8 @@ Kotlin の ViewModel（`StateFlow` を公開）を SwiftUI から扱うには、
 
 ### 推奨パターン（SKIE 利用 + @MainActor）
 
+**ブリッジは `Task` を保持しない。** observation は `observe()` という async メソッドとして公開し、**View の `.task` が所有する構造化 `Task`** として回す。
+
 ```swift
 import Observation
 import SharedLogic
@@ -164,7 +212,6 @@ import SharedLogic
 final class CoffeeListViewModelBridge {
 
     private let kotlin: CoffeeListViewModel
-    private var observationTask: Task<Void, Never>?
 
     // SwiftUI が観測するプロパティ
     private(set) var records: [CoffeeRecord] = []
@@ -176,8 +223,8 @@ final class CoffeeListViewModelBridge {
     }
 
     isolated deinit {
-        // Kotlin 側の所有 viewModelScope を畳む（スレッドセーフ。
-        // 遷移アニメ中にも発火する onDisappear ではなく必ず deinit で呼ぶ）
+        // Kotlin 側の所有 viewModelScope を畳む。**Swift 側の後始末はここには要らない**
+        // （observation は呼び出し元のスコープが畳む）。
         //
         // `isolated`（SE-0371）: 既定 MainActor 分離下でも deinit だけは nonisolated に
         // なるため、MainActor 分離された非 Sendable プロパティ（kotlin）に触れない。
@@ -186,15 +233,11 @@ final class CoffeeListViewModelBridge {
         kotlin.clear()
     }
 
-    func onAppear() {
-        kotlin.onAppear()
-        observationTask?.cancel()
-        observationTask = Task { [weak self] in
-            // SKIE により Flow が AsyncSequence 化されている前提
-            for await state in kotlin.state {
-                self?.apply(state)
-            }
-        }
+    /// state の購読。**呼び出し元のスコープが所有する**（View の `.task` から呼ぶ）。
+    /// キャンセルされるまで戻らない。
+    func observe(userId: String) async {
+        kotlin.onAppear(userId: userId)
+        for await state in kotlin.state { apply(state) }
     }
 
     func onRecordDeleted(id: String) {
@@ -209,19 +252,28 @@ final class CoffeeListViewModelBridge {
 }
 ```
 
-> **observation の停止タイミングに注意**: タブ常駐画面の View で `.onDisappear { observationTask?.cancel() }` をすると、タブ往復や push → 戻る で observation が止まったまま再開されないバグになる（2026-06-25 の実例）。observation は Bridge の `deinit`（= View 破棄）まで生かすのが基本。
+> **なぜブリッジに `Task` を持たせないか**（2026-09-20 に実測して移行）。
+>
+> 非構造化 `Task` は**参照を手放しても止まらない**（`stdlib/public/Concurrency/Task.swift:26-31`「A task runs regardless of whether you keep a reference to it」）。`deinit` で `kotlin.clear()` を呼んでも `StateFlow` は完了しないため、`for await` で停まった Task がブリッジより長生きして Kotlin の ViewModel を掴み続ける。**`CafeSearch` / `CafeDetail` で実際にリークしていた**（シート開閉・push/pop のたびに 1 組ずつ蓄積）。
+>
+> `deinit` に `cancel()` を足せば解放されることも実測したが、それは対症療法にあたる。SE-0304「Structured concurrency」は、まさにこの形を否定している。
+>
+> > Asynchronous interfaces that support this often do so by synchronously returning a token object that provides some sort of `cancel()` method. **This significantly complicates the design of an API** ... Under structured concurrency, cancellation naturally propagates
+>
+> 保持していた `observationTask` はこの「cancel トークン」そのものだった。**所有をスコープへ移せば、畳む場所を書く必要がなくなる。**
 
 ### View 側の使い方
 
-View は Bridge を `@State` で保持し、**`.task { viewModel.onAppear() }` で observation を起こす**。エラーは `viewModel.error != nil` を `isPresented` に束ねた `.alert` で出し、閉じるときに `onErrorDismissed()` を呼び返す（UIState 側の error をクリアする）。
+View は Bridge を `@State` で保持し、**`.task { await viewModel.observe(...) }` で購読を起こす**。エラーは `viewModel.error != nil` を `isPresented` に束ねた `.alert` で出し、閉じるときに `onErrorDismissed()` を呼び返す（UIState 側の error をクリアする）。
 
-- **`.onAppear` ではなく `.task`** を使う（Bridge の `onAppear()` が Task を張るため、View のライフサイクルに合わせて自動キャンセルされる方が安全）
+- **`.onDisappear` で購読を止めるコードを書かない。** 止めるのは `.task` の仕事で、View が消えれば SwiftUI がキャンセルし、再表示で張り直す
+- **戻らない処理を 1 つの `.task` に並べない。** `observe()` はキャンセルされるまで return しないので、後ろに続けて書いた処理は実行されない。並行させたいなら `.task` を複数付ける（`MapTabView` が 3 本持つのはこのため）
 - Bridge の生存スコープは 2 系統: **タブ常駐画面 = `AppState` で 1 つ保持** / **push・sheet 画面 = View 内 `@State` で遷移ごと生成**（`.claude/rules/swift-ios.md`）
+- **長寿命ブリッジでも購読は張り直される。** `MapSearchController.searchBridge` はブリッジ自体を使い回すが、`MapTabView` の `.task` が再実行されるたびに `observe()` を呼び直す
 
 ## CoroutineScope の橋渡し
 
-Kotlin の ViewModel は `CoroutineScope` を外部から受け取る設計（[`architecture.md`](./architecture.md) 参照）。
-iOS では `MainScope()` を Kotlin 側で生成して渡すか、`AppContainer` 内で隠蔽します。
+Kotlin の ViewModel は `CoroutineScope` を外部から受け取る設計（[`architecture.md`](./architecture.md) 参照）で、iOS からは `AppContainer` がそれを隠蔽します。
 
 ```kotlin
 // shared/framework/AppContainerViewModelFactory.kt（拡張関数。core → feature の循環依存回避）
@@ -231,7 +283,7 @@ fun AppContainer.makeCoffeeListViewModel(): CoffeeListViewModel =
 
 `userId` はファクトリ引数ではなく `onAppear(userId:)` で渡す（サインイン完了のタイミングと画面生成を切り離すため）。
 
-Swift 側はこの `AppContainer` のファクトリ拡張関数を呼ぶだけで、`CoroutineScope` を意識しないで済みます（各 ViewModel は渡された scope を親に所有 `viewModelScope` を内部生成する）。
+Swift はこのファクトリ拡張関数を呼ぶだけで済みます（各 ViewModel は渡された scope を親に所有 `viewModelScope` を内部生成する）。
 
 ```swift
 let viewModel = appContainer.makeCoffeeListViewModel()
@@ -319,12 +371,7 @@ iosApp/iosApp/FirebaseRepositories/
 
 ### Repository 合成パターン
 
-`CoffeeRepository` は `commonMain` で **2 段構成** にします：
-
-1. `RemoteCoffeeDataSource`（interface, `commonMain`） — Firestore リスナを `Flow` で公開し、`upload(record)` / `remove(userId, id)` を持つ薄いアダプタ
-2. `CoffeeRepositoryImpl`（class, `shared/core`） — `LocalCoffeeRepository`（SQLDelight）と `RemoteCoffeeDataSource` を合成し、UI には `CoffeeRepository` 1 本だけを見せる
-
-各プラットフォームが書くのは `RemoteCoffeeDataSource` の実装のみ。合成ロジック（ローカル → リモートの書き込み順序、`startSync(userId, scope)` でリモート変更をローカル DB へ反映）は共通層で 1 度だけ書きます。
+`CoffeeRepository` は `commonMain` で **2 段構成**（層の内訳は [`data-model.md`](./data-model.md) §4 が正本）。ブリッジを書く側にとって効いてくるのは、**各プラットフォームが実装するのは `RemoteCoffeeDataSource` だけ**という点です。合成ロジックは共通層に 1 度だけ書かれています。
 
 ```
 iOS Swift / Android Kotlin
@@ -339,9 +386,7 @@ RemoteCoffeeDataSource (commonMain interface)
     CoffeeRepository (UI から見える唯一の API)
 ```
 
-書き込み時のリモート失敗扱いは `WritePolicy.PropagateRemoteFailure`（既定）と `WritePolicy.IgnoreRemoteFailure` で切り替え可能。後者は Firestore のオフライン永続化による再送に委ねる選択肢です。
-
-詳細仕様と判断経緯は [`implementation_note.md`](./implementation_note.md) を参照してください。
+書き込み時のリモート失敗の扱い（`WritePolicy`）と読み取り側の終了契約は [`architecture.md`](./architecture.md)「データフロー（書き込み）」が正本です。
 
 iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kotlin → Swift で interface はプロトコル相当として見えるため）。iosApp 起動時（`AppState`）に、Swift 実装（`RemoteCoffeeDataSourceIosImpl` / `RemoteSavedCafeDataSourceIosImpl` / `AuthRepositoryIosImpl` / `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl`、および非対応端末で nil になる `CoffeeInsightProviderIosImpl.makeIfAvailable()`）を Kotlin の `AppContainer` **セカンダリコンストラクタ**にまとめて渡します。Android も同じ形を Kotlin 実装（`*AndroidImpl`）で埋めるだけ（`coffeeInsightProvider` のみ省略 = null）。
 
@@ -419,6 +464,25 @@ iOS 側でリストを二重管理しないこと（正規化 `OriginNormalizer`
 
 ---
 
+## Swift 側での等価性
+
+`@Observable` の同値ガード（[`coding-conventions.md`](./coding-conventions.md) §2.5）を書くときに要る判定基準。
+
+**`==` がコンパイルを通ることは値比較の根拠にならない。** Kotlin の `data class` も素の `class` も生成 Obj-C 側では `SharedLogicBase : NSObject` を継承するため、Foundation の `extension NSObject: Equatable`（`==` が `isEqual:` を呼ぶ）で**どちらも `==` が通る**。違いは `isEqual:` をオーバーライドしているかだけで、していない型は `NSObject` 既定の実装 = **参照比較**になり、同値ガードが恒久的に不成立になる（毎回「変わった」と判定され、ガードを書いた意味が消える — しかもコンパイルも実行も通るので気づけない）。
+
+**判定は生成ヘッダを見る。** `shared/framework/build/bin/.../SharedLogic.framework/Headers/SharedLogic.h` の `@interface` ブロックに `- (BOOL)isEqual:(id)other` があるかどうか。`data class` にだけ出る:
+
+| 型 | `isEqual:` | 同値ガード |
+|---|---|---|
+| `Cafe` / `CoffeeRecord` / `VisitedCafe` / `SavedCafe` / `CuratedCafe` / `RecommendedCafe` / `CoffeeStats` / `CoffeeInsight` / `AuthAccount` ほか `data class` 全般 | override あり | **`!=` で書ける** |
+| `CoffeeRecordQueryImpl` / `AppContainer` ほか素の `class` | なし（参照比較） | 書いても無意味 |
+
+**SKIE の sealed interface は Obj-C プロトコルになり `Equatable` に載らない。** Swift 側は `any P` の existential になるため `!=` が書けない。対処は 2 通り:
+
+- **全ケースが Kotlin の `data object`** なら `!==`（参照比較）でガードできる。Kotlin/Native は Kotlin オブジェクトに対する Obj-C ラッパを同一性で対応付けるので、Swift 側も常に同一インスタンスになる（見分け方はヘッダの `@property (class, readonly, getter=shared)`）。`AnalysisViewModel.InsightStatus` / `QaStatus` がこれ
+- **ペイロード付き case を含む**ならガードを諦める。算出のたびに新インスタンスになるので参照比較も効かない（`CafeDetailViewModel.UIState.matches: [any RecommendationReason]`）。Kotlin 側で具象型（`List<RecommendationReason.TasteProfileMatch>`）に絞れればガードできるようになるが、case を増やす前提の設計なら無理に絞らない
+
+
 ## Identifiable 化
 
 Kotlin の `data class` は `id` プロパティを持っていても、Swift の `Identifiable` には自動準拠しません。
@@ -434,7 +498,10 @@ extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型
 ## メモリ管理の注意
 
 - Kotlin/Native のオブジェクトは ARC ではなくランタイム独自の参照カウントで管理される（New Memory Model 前提）
-- Swift 側で Kotlin オブジェクトを `weak` に保持できないケースがあるため、ブリッジでは強参照を基本とし、ライフサイクルは `onAppear`/`onDisappear` で明示的に管理する
+- Swift 側で Kotlin オブジェクトを `weak` に保持できないケースがあるため、**ブリッジは Kotlin ViewModel を強参照で持つ**
+- **ブリッジは `Task` を保持しない**（上記「ViewModel ブリッジパターン」）。したがって Swift 側の後始末を書く場所は無く、`deinit` に残るのは Kotlin 側を畳む `kotlin.clear()` だけ
+- **observation だけを外部から止める public API を作らない。** 畳むならブリッジごと破棄する。`cancel()` や `onDisappear()` のような「観測だけ止める口」は、呼ばれた先で再購読できずに凍結する（lessons 2026-06-25 / 2026-07-03）
+- `Task` を自前で張る箇所が新しく出たら、**そのキャンセルを誰が持つか**を先に決める。持ち主がスコープでないなら設計を疑う
 - `Task` の中で `self` をキャプチャするときは `[weak self]` を忘れない
 
 ---
@@ -470,8 +537,6 @@ extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型
 
 ## 参考リンク
 
-- [SKIE — Touchlab](https://skie.touchlab.co/)
 - [Kotlin/Native Interop with Swift/Objective-C](https://kotlinlang.org/docs/native-objc-interop.html)
 - [Firebase for iOS（公式 / Swift Package Manager）](https://firebase.google.com/docs/ios/setup)
 - [Firebase for Android（公式 / firebase-bom）](https://firebase.google.com/docs/android/setup)
-- [アーキテクチャ方針](./architecture.md)

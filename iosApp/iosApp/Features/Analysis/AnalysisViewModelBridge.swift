@@ -4,7 +4,8 @@ import SharedLogic
 /// `AnalysisViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `onAppear` / `onDisappear` でライフサイクルを管理し、観測タスクのリーク防止する
+/// - 観測は `observe()`（構造化 `Task`。`AnalysisView` の `.task` から呼ぶ）が担う。
+///   ブリッジ自身は `Task` を保持しない（B-11）
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
 /// - 分析タブは TabBar 常時生存のため `AppState` で 1 つだけ保持する（`mapBridge` と同等のライフサイクル）
 @MainActor
@@ -12,7 +13,6 @@ import SharedLogic
 final class AnalysisViewModelBridge {
 
     private let kotlin: AnalysisViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ（階層1 統計）
 
@@ -79,33 +79,15 @@ final class AnalysisViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    /// 画面表示時に呼ぶ。統計購読を開始する。
+    /// 統計購読を開始する。`AnalysisView` の `.task` から呼ぶ（構造化 `Task`）。
     ///
-    /// 前回の観測タスクをキャンセルしてから再スタートするため、
-    /// タブ切り替えなどで複数回呼ばれても二重購読しない。
-    func onAppear() {
+    /// タブ切り替えで View が再表示されるたびに `.task` が再実行されるため、
+    /// 複数回呼ばれても構わない（都度新しい購読に張り替わる）。
+    func observe() async {
         kotlin.onAppear()
-        observationTask?.cancel()
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
+        for await state in kotlin.state {
+            apply(state)
         }
-    }
-
-    /// 画面非表示時に呼ぶ。観測タスクをキャンセルする。
-    func onDisappear() {
-        observationTask?.cancel()
-        observationTask = nil
-    }
-
-    /// TabBar 常時生存 Bridge の明示的なキャンセル。AppState が破棄されるときに呼ぶ。
-    func cancel() {
-        observationTask?.cancel()
-        observationTask = nil
     }
 
     // MARK: - ユーザーアクション
@@ -139,16 +121,47 @@ final class AnalysisViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: AnalysisViewModel.UIState) {
-        self.stats = state.stats
-        self.isLoading = state.isLoading
-        self.readiness = state.readiness
-        self.insight = state.insight
-        self.insightStatus = state.insightStatus
-        self.beanTraitsInsight = state.beanTraitsInsight
-        self.beanTraitsInsightStatus = state.beanTraitsInsightStatus
-        self.qaStatus = state.qaStatus
-        self.qaQuestion = state.qaQuestion
-        self.qaAnswer = state.qaAnswer
-        self.error = state.error
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知する。
+        // Kotlin の StateFlow は 1 フィールドだけ変わった state も丸ごと emit するため、
+        // 無条件代入だと無関係な body まで再評価される（SL-3）。
+        //
+        // Kotlin の `data class`（`CoffeeStats` / `CoffeeInsight` / `AnalysisReadiness`）は
+        // Obj-C 側で `equals()` 由来の `isEqual:` を持つため `==` が値比較になる。
+        // `InsightStatus` / `QaStatus` は SKIE が Obj-C プロトコルとして生成するので
+        // `Equatable` 非準拠。実体は Kotlin の `data object`（シングルトン。ヘッダの
+        // `@property (class, readonly, getter=shared)` で確認）なので参照比較で同値判定できる。
+        if stats != state.stats {
+            stats = state.stats
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if readiness != state.readiness {
+            readiness = state.readiness
+        }
+        if insight != state.insight {
+            insight = state.insight
+        }
+        if insightStatus !== state.insightStatus {
+            insightStatus = state.insightStatus
+        }
+        if beanTraitsInsight != state.beanTraitsInsight {
+            beanTraitsInsight = state.beanTraitsInsight
+        }
+        if beanTraitsInsightStatus !== state.beanTraitsInsightStatus {
+            beanTraitsInsightStatus = state.beanTraitsInsightStatus
+        }
+        if qaStatus !== state.qaStatus {
+            qaStatus = state.qaStatus
+        }
+        if qaQuestion != state.qaQuestion {
+            qaQuestion = state.qaQuestion
+        }
+        if qaAnswer != state.qaAnswer {
+            qaAnswer = state.qaAnswer
+        }
+        if error != state.error {
+            error = state.error
+        }
     }
 }

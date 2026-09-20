@@ -6,7 +6,7 @@
 > **1.0 リリース（2026-08-21）までに完了したタスクは [`tasks-archive.md`](./archive/1.0/tasks-archive.md) へ凍結移送済み**。フェーズ番号（1〜19）やサブ ID（15-A / 17-D / B-4 / SR-1 / UX-1 / MP-1 / SW6-A / M-0 / ASO-1 等）を他 doc・コードコメントから名指しで引くときはアーカイブ側を見ること。本ファイルに残るのは**未完・バックログと 1.0 時点の既知の残務**のみ。
 >
 > 細かい WIP メモは [`tasks/lessons.md`](./tasks/lessons.md)（自己改善ループ用）に書き出します。
-> **実機 / シミュレータの目視・手動検証（プロダクト QA）は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) に集約する**。**tasks.md に「ユーザー: シミュレータで目視」行を作らない** — 実装が終わって残るのが目視だけになったら、その時点で checklist へ 1 項目として移し、こちらはフェーズサマリで触れるだけにする。完了した目視行を `[x]` で残すのも禁止（確認済みの事実だけが溜まって読み飛ばす行が増える。記録が要る内容は implementation_note へ）。
+> **実機 / シミュレータの目視・手動検証（プロダクト QA）は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) に集約する**。**tasks.md に目視行を作らない**（完了した目視行を `[x]` で残すのも同様）。運用の詳細は checklist の前文。
 > **フェーズが完了したら、セクションの中身は「完了サマリ（数行）+ 未完行のみの表」に縮約する**（行単位の作業記録は git 履歴、設計判断は [`implementation_note.md`](./implementation_note.md) が正）。
 > **フェーズ番号の採番は終了**（2026-07-09、フェーズ 18 が最後）: 新規セクションは番号を振らず「テーマ名（起票日）」とする。既存のフェーズ番号・サブ ID は docs・コードコメント・commit メッセージから 270 箇所以上参照されている**不変の参照 ID** として維持する（並び順の意味はもう持たない）。
 > カテゴリは「①アプリ機能 / ②設計・アーキテクチャ・コード品質 / ③開発プロセス・ツーリング / ④リリース準備・ストア運用」の 4 つ。新規セクションは該当カテゴリへ追加する。
@@ -50,6 +50,17 @@
 | [x] | カフェ詳細の空状態 CTA も同じスタイルへ統一 | 上の 2 件を入れると同じアクションが画面ごとに別スタイルになるため |
 | [x] | `app-store-metadata` §5 に `04-record-list.png` / `06-cafe-detail.png` の再撮影警告を追記 | 撮り直し自体は次回提出時 |
 
+### 広告レイアウト再編: 全画面下部固定バナー（2026-09-19 起票）
+
+> ユーザー指示「一番下に広告のエリアを設けてタブバーとコンテンツすべてその上に表示する」（Pixiv 等と同じ構成）。インライン 2 面（カフェ詳細 / マップ検索シート）を撤去し、**全タブ常設の下部固定帯 1 面**（高さ 50pt 常時確保）へ集約した。露出が「その画面を開いて、かつそこまでスクロールした人」に構造的に限られていた問題の解消が目的。
+>
+> **2026-09-20 実装完了**（本番スキーム `iosApp` をフラグ無し `** BUILD SUCCEEDED **` で親側再検証 + **ユーザーによるシミュレータ目視確認済み**）。`requirements.md` §11 の確定仕様 2 件（「広告は 2 面のみ・記録 / 分析タブには置かない」「クライアント側の自動リフレッシュはしない」）を覆しており、**撤回の根拠は §11 に書き分けてある**。設計判断と 2 度の作り直しの経緯は [`implementation_note.md`](./implementation_note.md) 2026-09-19、教訓 3 件は [`tasks/lessons.md`](./tasks/lessons.md) 同日（うち 2 件は `.claude/rules/swift-ios.md` へ昇格済み）。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [ ] | **AdMob コンソールで下部固定帯用の広告ユニットを発行**し、`Secrets.xcconfig` / GitHub Secrets に `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` を登録する（ユーザー作業） | **発行時にユニットの自動更新をオフ（手動更新）にすること** — クライアント側 60 秒タイマーと二重に走る。未登録の間はデモ ID にフォールバックして動作する。旧 2 ユニットは使わない |
+| [ ] | **スクリーンショットの全面再撮影**（次回提出時） | 全カットの下端に広告帯が入り、1.0 系の「カフェ詳細だけ Test Ad を画面外へ」という回避が成立しない。撮影手順（`.bottomAdBanner` を一時的に外す）は [`app-store-metadata.md`](./app-store-metadata.md) §9 |
+
 ### バックログ
 
 #### フェーズ 6（任意 / 後続）
@@ -89,6 +100,42 @@
 |------|----|------|----------------|
 | [ ] | B-1 | マルチデバイス書き込みの競合解決方針を明文化（`updatedAt` での last-writer-wins 等）。現状 remote→local は `INSERT OR REPLACE` で世代比較なし | 複数端末同期（要件 7-3）を実装・検証する段階。単一端末では実害なし |
 | [ ] | B-10 | **`TastePreferenceConversionView` の入れ子 `NavigationStack` を解消**。`AnalysisView` の `NavigationLink` で push されるのに自身の `body` で `NavigationStack` を作っている | `AccountView` と**同型**（lessons 2026-08-21 の横展開点検で検出）。修正は同じパターンで小さいはずだが、あちらと違い「処理中の戻る封じ」要件が無いため**実害は見た目に留まる見込みで未検証**。1.0.1 のスコープ外とした。着手時はまず二重ナビゲーションバー等の実害の有無を目視で確認する |
+| [x] | B-11 | **observation を View スコープ所有の構造化 `Task` へ移した**（当初「`deinit` 起点への統一」として起票したが、調査の結果ブリッジが非構造化 `Task` を保持していること自体が原因と判明し、所有をスコープへ移す形に変更） | **2026-09-20 完了**（`b5c071c`）。`CafeSearch` / `CafeDetail` の実リークを番兵オブジェクトで実測し、移行後に解消することを再計測で確認済み。`cancel()` / observation 用 `onDisappear()` は全廃。経緯は [`implementation_note.md`](./implementation_note.md) 2026-09-20、教訓と横断点検は [`tasks/lessons.md`](./tasks/lessons.md) 同日、規約は `kmp-bridge.md` と `.claude/rules/swift-ios.md` へ昇格済み。**実機確認まで完了**（2026-09-20、ユーザー）|
+
+### Swift 言語設計レビュー（2026-09-20 起票）
+
+> `swift-language-design` skill による `iosApp/**` 全体レビュー（93 ファイル・16,921 行）。一次情報は `swift-evolution`（2026-09-16 時点）/ `swift`（2026-09-19 時点）を参照した。**2026-08-08 のレビュー（SR-1〜SR-5）とは観点が違う** — あちらはリーク・メインスレッド・ナビゲーション構造、今回は「Swift 6 の型システムに仕事をさせているか」「stdlib / SE の先例に沿っているか」。
+>
+> Swift 6 移行（SW6-1〜6）自体は正しく終わっていることを確認した。`@concurrent` の使い分け（SE-0461 `NonisolatedNonsendingByDefault` 下で素の `nonisolated async` が呼び出し元アクター上で走ることを踏まえた明示）、`assumeIsolated` の線引き（同期で値を返す必要があるかで分ける）、`isolated deinit`（SE-0371、`Features.def` で `BASELINE_LANGUAGE_FEATURE`）はいずれも一次情報と整合している。**以下は残った 3 系統**。
+>
+> 今回は **SR-1〜5 のときと違い A〜C 全件を実施する**（2026-09-20 ユーザー決定）。
+>
+> **2026-09-20 実装完了**（SL-1〜SL-10 の全 10 件）。親がフラグ無し `** BUILD SUCCEEDED **`（error 0 / 新規 warning 0）で再検証済み。**残るのは目視 QA のみで、項目は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) のパス 2 / 3 / 4 / 6 に移してある**（このファイルに目視行は置かない）。設計判断は [`implementation_note.md`](./implementation_note.md) 同日 3 件、教訓と横断点検は [`tasks/lessons.md`](./tasks/lessons.md) 同日 3 件、規約は `coding-conventions.md` §2.3・§2.5 / `kmp-bridge.md` / `.claude/rules/swift-ios.md` へ昇格済み。
+
+#### A. 並行性 — `@unchecked Sendable` の適用範囲
+
+| 状態 | ID | タスク | 備考 |
+|------|----|------|------|
+| [x] | SL-1 | **`CallbackFlow` / `CallbackFlowOptional` の `@unchecked Sendable` をクラスから外す**。`onStart` / `onCancel` を `@Sendable` にし、利用側 4 箇所（`AuthRepositoryIosImpl.swift:50` / `:83`、`RemoteCoffeeDataSourceIosImpl.swift:51`、`RemoteSavedCafeDataSourceIosImpl.swift:48`）の捕捉ローカル `var` をロックで保護する | **最優先**。現状はクラス全体の `@unchecked` が利用側の捕捉まで検査対象から外しており、`handle` / `listener` が同期プリミティブなしで `__collect`（Kotlin 任意スレッド）と `deinit`（同）から読み書きされている。実害の想定は競合よりリスナリーク（`AppState.resetAndRebootstrap` のコメントが警戒している症状そのもの）。SE-0302 の設計上 `@unchecked` は「不変条件を人間が保証した最小の箱」に付けるもの。**2026-09-20 実装完了・親がフラグ無し `** BUILD SUCCEEDED **` で再検証済み**: 対象は 4 箇所ではなく **5 箇所**だった（`AuthRepositoryIosImpl.observeAnalyticsConsent` も同型）。`CallbackFlow` / `CallbackFlowOptional` は素の `Sendable` へ落ちた。保護対象が非 Sendable なので `init(uncheckedState:)` + `withLockUnchecked` を使う（`.swiftinterface` で親が実読み確認）。Firestore 2 本は `Firestore` 捕捉をやめ `CollectionReference` 捕捉へ（`FIRFirestore.h` に `NS_SWIFT_SENDABLE` が無い。親がヘッダ確認）。残った `collector` 捕捉のみ `@preconcurrency import` で解決（利用側 5 ファイルの検査には非影響）。経緯は [`implementation_note.md`](./implementation_note.md) 同日、教訓と横断点検は [`tasks/lessons.md`](./tasks/lessons.md) 同日、規約は `kmp-bridge.md` と `.claude/rules/swift-ios.md` へ昇格済み |
+| [x] | SL-2 | **`CoffeeInsightProviderIosImpl.tasteExtractor`（`:60`）を `let` にする**。`init` 引数化して `makeIfAvailable()`（`:78`）の後付け代入をやめる | `@unchecked Sendable` クラス上の非ロック `var`。同じクラスの `recordQuery` はロックを掛けており不整合。`init` 引数にすれば「公開前に 1 回だけ」というコメントでの正当化自体が不要になる。**2026-09-20 実装完了・親がフラグ無し `** BUILD SUCCEEDED **` で再検証済み**（`CoffeeInsightProviderIosImpl` も素の `Sendable` へ落ちた） |
+
+#### B. 性能 — `@Observable` と `body`
+
+| 状態 | ID | タスク | 備考 |
+|------|----|------|------|
+| [x] | SL-3 | **ブリッジ 8 本の `apply(_:)` に同値ガードを入れる** | **Observation は値を比較しない**（一次情報: `stdlib/public/Observation/.../ObservationRegistrar.swift:301-309` の `withMutation` は `willSet` / `didSet` を無条件に呼ぶ）。`MapViewModelBridge.swift:136` は emit ごとに 16 プロパティすべてへ代入するため、`isLookingUpPoi` が変わっただけで `curatedCafes` を読む `mapContent` まで再評価される。**`coding-conventions.md` L431 の規約（lessons 2026-08-09）はハンドラ内の代入しか対象にしておらず、ブリッジの `apply()` という別経路を取りこぼしていた** — 規約の適用範囲を「値比較が入らない経路すべて」へ広げる（親が反映）。**2026-09-20 実装完了・目視確認待ち**。判定は「`==` が通るか」では不可（Kotlin の `data class` も素の `class` も `SharedLogicBase : NSObject` 継承で `extension NSObject: Equatable` 経由で両方 `==` が通る）。生成ヘッダの `- (BOOL)isEqual:` の有無で弁別し、親も `SharedLogic.h` で再確認済み。`InsightStatus` / `QaStatus` は Obj-C プロトコル化で `Equatable` 非準拠のため `!==`（全 case が `data object` = シングルトン）。`CafeDetailViewModelBridge.matches` のみガード見送り |
+| [x] | SL-4 | **`body` 内の派生コレクション再計算を追い出す**。`MapTabView.swift:390` の `appleLoader.displayed(excluding: existingPinCoordinates(bridge))` と `MapTabView+PinResolution.swift:79` の `displayedCuratedCafes` | 前者は `existingPinCoordinates`（`:774`、3 配列走査）+ O(n×m) の `CLLocation` 距離計算、後者は Set 3 本 + 最大 421 件の距離計算を **body 評価ごとに**回している。SL-3 と掛け算になる。`MapTabView.swift:38-57` の `.automatic` 禁止コメントが記録する `0x8BADF00D` は依存の循環を絶って解消したが、**1 回の評価コストは絶っていない**。設計変更を含むため着手前に親と方針合わせ。**2026-09-20 実装完了・目視確認待ち**。派生 4 本を `MapViewModelBridge` の `private(set) var` へ、Apple ピンの重複排除を `AppleNearbyCafeLoader.displayedCafes` へ移設。**body からカメラ依存が完全に消えた**（親が全 `appState.mapSearchCenter` 参照を確認し、残るのはすべて action closure 内）。`.onChange(of:)` は `of:` 式が body 評価時に評価されるため使わず `.onMapCameraChange` から直接呼ぶ形に変更（親の指示からの正当な逸脱）。`MapTabView+PinResolution.swift` は 115 → 37 行 |
+| [x] | SL-5 | **`ApplePoiNegativeCache.contains`（`:32`）の呼び出しごとの UserDefaults 読み + JSON デコードをやめる** | `AppleNearbyCafeLoader.swift:111` の `compactMap` から **POI 1 件につき 1 回**、MainActor 上で最大 300 件のデコードが走る。`fetch` の頭で 1 回だけスナップショットを取る形にする。**2026-09-20 実装完了**。`snapshot()` を導入し `fetch` の `compactMap` 前で 1 回だけデコード（最大 50 回 → 1 回）。`add(name:coordinate:)` のシグネチャは不変 |
+
+#### C. Swift の書き方（stdlib / SE の先例）
+
+| 状態 | ID | タスク | 備考 |
+|------|----|------|------|
+| [x] | SL-6 | **`AnalysisView+Statistics.swift` の `AnyView` 14 箇所を `@ViewBuilder` へ置換** | すべて「`guard ... else { return AnyView(EmptyView()) }` で早期脱出したい」だけの用途。`AnyView` は静的型を消すので SwiftUI の構造的 View identity による差分更新が効かなくなる。`tastingAveragesSection`（`:107`）の 5 連 optional binding も `if let a = ..., let b = ...` で書ける（result builder 本体で `let` 宣言は許される）。**2026-09-20 完了**。7 メソッドを `@ViewBuilder` + `if` へ。`iosApp/**` の `AnyView` は 0 件（親が grep 確認） |
+| [x] | SL-7 | **`Task.sleep(nanoseconds:)` 3 箇所を `Task.sleep(for:)` へ統一** | `MapTabView+Location.swift:131` / `AppleNearbyCafeLoader.swift:48` / `ReviewPrompt.swift:43`。SE-0329（Clock/Instant/Duration、Implemented in Swift 5.7）以降は `sleep<C: Clock>(for:tolerance:clock:)` が正。**既に `AnchoredBannerAdView.swift:124` / `ErrorToast.swift:88` は新 API に移行済み**で、2 世代が混在している。`ReviewPrompt.presentationDelayNanoseconds: UInt64` も `Duration` 化する。**2026-09-20 完了**。`ReviewPrompt` の定数も `Duration` 型へ。`nanoseconds` は 0 件 |
+| [x] | SL-8 | **`print` 28 箇所を `os.Logger` へ置換** | `os.Logger` 使用箇所は現状 0。特に `AppState.swift` の `print("... uid=\(uid)")` は **Firebase uid をリリースビルドの stdout に出している**。`Logger` は既定で文字列補間を `private` として伏せるため `#if DEBUG` が不要になる（`log.info("... uid=\(uid, privacy: .private)")`）。`FlowBridge.swift` が既に `import os` 済み。**2026-09-20 完了**。`Utilities/AppLog.swift` を新設して `subsystem` を一元化。`print` は 0 件。uid / ユーザー入力 / LLM 入出力の 5 系統に `privacy: .private` を付与（一覧は implementation_note 同日）。**実機での redaction 実証のみ未了**（シミュレータではデバッガ配下のため private データが表示される） |
+| [x] | SL-9 | **bounding box 計算の重複を関数 1 本へ括り出し、force unwrap 8 個を消す** | `MapTabView+Location.swift:170-186` と `MapSearchController.swift:245-260` が padding 係数 1.3 / 下限 0.01 まで含めて同一コード。`[CLLocationCoordinate2D] -> MKCoordinateRegion?` の関数にすれば `lats.min()!` 等 4 個 × 2 箇所が `guard let` 1 回で消える。動作はしているが、係数を片方だけ直す事故が起きる形。**2026-09-20 完了**。`Features/Map/MapRegionFitting.swift` を新設。単一件数のズーム距離差（2000m / 800m）は引数化、0 件のフォールバック差は呼び出し側に残し、0 / 1 / 複数件の 3 ケースとも挙動不変（親がコード確認）。force unwrap は 0 件 |
+| [x] | SL-10 | **`@Observable` の同値ガード未対処 2 件**（SL-3 の横断点検で検出）。`Utilities/LocationManager.swift:159` の `lastLocation` と `Features/Map/MapSearchController.swift:180` の `displayedResults` | どちらも低頻度（前者は `requestLocation()` の一回限り取得、後者は検索完了ごと 1 回）なので SL-3 の本体からは外した。`CLLocationCoordinate2D` は `Equatable` 非準拠なので `MapPinCoordinate`（SL-4 で新設）か許容誤差付き比較を使う。SL-9 が同じ 2 ファイルを触るので同便で処理する。**2026-09-20 完了**。`lastLocation` は型を変えず完全一致で比較（ワンショット取得なので抑止対象はキャッシュ fix の再配信 = ビット一致。誤差比較にすると近距離の実移動を握り潰す。理由は implementation_note 同日） |
 
 ### コードレビューの未起票分
 
@@ -111,18 +158,38 @@
 
 > 提出用の原稿・プライバシー申告・提出前チェックリストは [`app-store-metadata.md`](./app-store-metadata.md) が正。1.0 は 2026-08-11 に提出し、審査通過後リリース済み。
 
-### 1.0.2 リリース（2026-08-31 起票 / **未提出**）
+### 1.0.3 リリース（2026-09-20 起票 / **提出準備中**）
+
+> **中身は B-11**（observation を View スコープ所有の構造化 `Task` へ移す）**1 件**。実在したメモリリークの修正で、カフェ検索シートの開閉・カフェ詳細の push/pop のたびに Kotlin の ViewModel が 1 つずつ残っていた。ユーザー可視の症状は無かったが、長時間利用で積み上がる。詳細は [`implementation_note.md`](./implementation_note.md) 2026-09-20 / PR #12。
+>
+> **`MARKETING_VERSION` / Android `versionName` は 1.0.3 に更新済み**（`248c4c3`。ビルド番号は CI 採番のため据え置き）。
+>
+> **提出前チェックリスト（[`app-store-metadata.md`](./app-store-metadata.md) §10）の消化状況**: 原稿の文字数は全項目実測して上限内（名前 25/30・サブタイトル 21/30・プロモ 148/170・説明文 1013/4000・キーワード ja 98/100・en 98/100）。App Privacy（§6.1 / §6.3）は 1.0.2 から収集内容の変更なし（`PrivacyInfo.xcprivacy` も無変更）。年齢制限（§7）も変更なし。Firestore Rules は 2026-07-17 以降変更がなく反映済み。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [x] | `MARKETING_VERSION` / Android `versionName` を 1.0.3 へ | 2026-09-20（`248c4c3`）。ビルド番号は据え置き |
+| [x] | **CI の AdMob 本番 ID 供給を下部固定帯のキーへ追随させる** | 2026-09-20。`release-testflight.yml` が旧 2 面のキー（`_CAFE_DETAIL` / `_MAP_SEARCH`）のままで、**`_GLOBAL_BOTTOM` を供給していなかった** = リリースビルドがデモ ID のまま出荷される状態だった。2026-07-22 と同型の再発（lessons 2026-09-20） |
+| [x] | **AdMob コンソールで下部固定帯用の広告ユニットを発行**し、GitHub Secrets に `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` を登録する | 2026-09-20 完了（ユーザー作業）。**コンソール側のユニット自動更新はオフ（手動更新）**である前提 — クライアントが 60 秒タイマーでリフレッシュするため、有効だと二重に走る |
+| [ ] | 旧 GitHub Secrets（`ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `_MAP_SEARCH`）と AdMob コンソールの旧ユニット 2 つを整理する | CI はもう参照しないので**害は無い**が、残すと次に触る人が用途を追う時間が発生する。レポート上も死んだ行が残る |
+| [x] | **What's New の文言を決める** | 2026-09-20、**「軽微な修正を行いました」**（1.0.2 と同一文言。ユーザー確定）。app-store-metadata §9 に記録済み |
+| [ ] | **スクリーンショットの全面再撮影** | **今回のスコープ外**（ユーザー判断）。2026-09-19 の広告帯再編以降、1.0.2 までの全カットが現物と不一致。§10 の「スクショが現物と一致するか」は**不合格のまま**。撮影手順は app-store-metadata §5 |
+| [ ] | 審査提出（ユーザー作業） | 上記ブロッカーの解消後 |
+
+### 1.0.2 リリース（2026-08-31 起票 / **リリース済み**）
 
 > **`MARKETING_VERSION` を 1.0.2 に上げた**（`iosApp/Configuration/Config.xcconfig`。Android の `versionName` も同値に揃えた）。**ビルド番号（`CURRENT_PROJECT_VERSION`）は据え置きで正しい** — `release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、xcconfig の `1` は Release では使われない（app-store-metadata §1 / §10）。
 >
 > **中身は UI 改善 1 件のみ**（カテゴリ 1「追加ボタンの視認性改善」が正本。ここには複製しない）。
+>
+> **2026-08-31 に審査提出**（ユーザー実施）。**積み残しはスクショ 1 件**（下表参照）。審査通過後は `itunes.apple.com/lookup` で `version` / `currentVersionReleaseDate` / `releaseNotes` を確認する（1.0.1 と同じ手順）。
 
 | 状態 | タスク | 備考 |
 |------|--------|------|
 | [x] | `MARKETING_VERSION` / Android `versionName` を 1.0.2 へ | 2026-08-31。前例は `181329f`（1.0 → 1.0.1）。ビルド番号は据え置き |
-| [ ] | **スクリーンショット `04-record-list.png` / `06-cafe-detail.png` の再撮影** | 追加ボタンの見た目が変わり現物と一致しない。**原本と焼き込み版の両方**が対象（app-store-metadata §5 の警告） |
-| [ ] | **What's New（リリースノート）の原稿** | app-store-metadata §9 は**タイトルが「バージョン 1.0」のまま**で、1.0.1 でも更新されていない。1.0.2 の原稿を書く際にこの節の版管理の仕方ごと決める |
-| [ ] | 提出前チェックリストの消化 → 提出 | app-store-metadata §10 |
+| [x] | 審査提出 | 2026-08-31。以下 2 件を未解消のまま提出した（ユーザー判断） |
+| [ ] | **スクリーンショット `04-record-list.png` / `06-cafe-detail.png` の再撮影** | **1.0.2 では撮り直さず既存のまま提出 → 次バージョンへ持ち越し**。追加ボタンの見た目が変わり現物と不一致（原本と焼き込み版の両方）。§10 のチェックリスト「スクショが現物と一致するか」は**不合格のまま通した**状態。app-store-metadata §5 の警告は撮り直すまで消さない |
+| [x] | **What's New の版管理** | 「1.0 の文言を使い回している」と書いたのは**誤り**で、実際は版ごとに書き下ろされていた（1.0.1 =「軽微な不具合を修正しました」を `releaseNotes` で実測 / 1.0.2 =「軽微な修正を行いました」）。app-store-metadata §9 を版ごとの記録に組み直し、実測コマンドを添えて解決。**パッチ版は「軽微な〜」1 行**の運用が定着 |
 
 ### 1.0.1 リリース（2026-08-21 起票 / **リリース済み**）
 
@@ -138,8 +205,6 @@
 | [x] | 共有カード `render` のメインスレッド書き出し解消 | 2026-08-21 実装。PNG エンコード + 書き込みを `@concurrent` な `writeToTemporaryFile` へ分離（`ImageDownsampler.downsampledJPEG` と同型）。**`@concurrent` の効果は単体再現で実測済み**（`isMainThread=false`） |
 | [x] | `AccountView` の入れ子 `NavigationStack` 解消 | 2026-08-21 実装。**原因は入れ子スタックが別 `UINavigationController` を作り、戻るを握るのが外側だったこと**。あわせて `InteractivePopGestureLock`（新規）でエッジスワイプも封じた。目視は verification-checklist パス 2 へ |
 | [x] | **ASO-7②-a: 共有テキストに App Store URL を載せる** | 2026-08-21 実装。`ShareLink` → `UIActivityViewController`（`ActivityShareSheet` 新規）。share sheet 上部のプレビューは `LPLinkMetadata` で再現。目視は verification-checklist パス 2 へ |
-
-> 目視の記録は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md)。
 
 **共有テキストの文言（2026-08-21 確定）**:
 
@@ -160,9 +225,9 @@ https://apps.apple.com/app/id6788339362
 >
 > 狙う土俵は**カテゴリ総合ではなく検索キーワードでの上位**（フード/ドリンク総合は大手チェーン・デリバリーの枠）。
 >
-> **露出が出ない原因は 2 層ある**（2026-08-31 の実測）:
-> - **評価 0 件がランキングシグナルを殺している** — 評価 0 → どの語でも上位に出ない → インプレッション 0 → DL 0 → 評価 0 の自己強化ループ。**キーワードの並べ替えだけではこのループは破れない**（→ ASO-9）
-> - **キーワードがヘッドターム偏重** — `コーヒー` / `カフェ` は上位 5 件の評価数中央値が 8390 / 1445 で、構造的に取れない枠に文字数を使っている。一方 `コーヒー テイスティング`（中央値 0）`喫茶店 記録`（全 21 件・中央値 0）のように**上位が評価数一桁で埋まっている語が多数実在する**（→ ASO-8）
+> **露出が出ない原因は 2 層ある**（数値と診断は implementation_note 2026-08-31）:
+> - **評価 0 件がランキングシグナルを殺している** — 評価 0 → どの語でも上位に出ない → インプレッション 0 → DL 0 → 評価 0 の自己強化ループ。**キーワードの並べ替えではこのループは破れない**（→ ASO-9）
+> - **キーワードがヘッドターム偏重** — `コーヒー` / `カフェ` は構造的に取れない枠に文字数を使っている。一方 `コーヒー テイスティング` `喫茶店 記録` のように**上位が評価数一桁で埋まっている語が多数実在する**（→ ASO-8）
 >
 > **この局面で優先度が下がるもの**（2026-08-21 の判断を維持）:
 > - **ASO-5 はリテンション施策**。加えて Widget / App Intents / Spotlight は**端末内の露出面で、App Store のインプレッションは増えない**。分母が小さい今は効果の絶対値も小さい
@@ -176,12 +241,12 @@ https://apps.apple.com/app/id6788339362
 | [ ] | ASO-5 | **リテンションのフック**: App Intents（「コーヒーを記録」の Siri / Shortcuts / Spotlight 露出）+ ホーム画面 Widget（今月の杯数 → タップで記録）。既存方針「記録の摩擦を削る」（要件 2-8 / 2-9 / 2-10）の延長で、機能追加ではなく入口の追加 | 旧「フェーズ 6」の Widget 行を引き継ぐ。CoreSpotlight への記録インデックス / 週次ふりかえり通知は後続候補（通知は 4 つ目の許諾になる点に注意） |
 | [ ] | ASO-7 | 低コストで拾えるもの: ① In-App Events（「今月のコーヒーふりかえり」で検索結果・カテゴリにイベントカードを露出）② 共有の App Store 導線（下記のとおり 2 段に分割）③ 小刻みなアップデート | ② の分割は 2026-08-21。**① はディープリンク必須でバイナリが要る**（2026-08-31 訂正。前文の ⚠ 参照）。③ もバイナリ提出 |
 | [ ] | **ASO-8** | **検索フィールドの再配分**。2026-08-31 に**原稿確定・doc 反映済み**（app-store-metadata §4.1 / §4.2）— 日本語キーワードを **19 語 89 字 → 24 語 98 字**へ、7 語を外し 12 語を追加。**アプリ名 / サブタイトル / 英語キーワードは据え置き**（順位が付いている語がほぼアプリ名由来のため、触ると数少ない露出源を失う） | ⚠ **残るは ASC への転記のみ**（バイナリ提出は不要 = §10 で確認済み）。転記日を記録すること（検証の起点になる）。**需要の実測（実機の検索サジェスト）は未実施** — 済んだら 24 語を微調整する |
-| [ ] | **ASO-9** | **最初のレビューを 5〜10 件集める**。評価 0 が順位の直接の足枷（前文の原因 1）。ASO-1 のレビュー依頼導線は実装済みだが **DL が無いため発火しない**ので、初速は外から作る | 2026-08-31 起票。⚠ **レビュー内容の指定・見返りの提供はしない**（App Review ガイドライン 3.1 / 1.1.5）|
+| [ ] | **ASO-9** | **最初のレビューを 5〜10 件集める**。評価 0 が順位の直接の足枷（前文の原因 1）。ASO-1 のレビュー依頼導線は実装済みだが **DL が無いため発火しない**ので、初速は外から作る | 2026-08-31 起票。依頼文と守るべき線は下記 |
 | [ ] | **ASO-10** | **Featuring Nomination の提出**（ASC の Featuring → Nominations）。Apple のエディトリアル面への推薦申請で、コストは原稿だけ。種別は `App Enhancements`、訴求はオンデバイス Foundation Models による好み分析 | 2026-08-31 起票。**リードタイムは最低 2 週間 / Apple 推奨 3 週間以上前**。提出後は Related Apps と種別を変更できない。原稿は app-store-metadata §11 |
 
 > **ASO-7② の分割（2026-08-21）**: 起票時は「共有カード footer の導線」と 1 つに見ていたが、実コードを読むと**穴が 2 箇所にあり、難易度が違う**ため分けた。共有はアプリ唯一の自然流入ループで、現状**貼られた投稿を見た人がアプリへ辿り着く経路が無い**。
 >
-> - **②-a（1.0.1 スコープ）**: 共有される実体が **PNG ファイル 1 つだけ**で、テキストが投稿先に渡っていない。`ShareCardSheet.swift` の `shareTitle` は `SharePreview` に渡っており、**これは share sheet の表示用メタデータで投稿先アプリには届かない**（`ShareLink` を `UIActivityViewController` へ置き換えて `activityItems: [fileURL, text]` にする必要がある。当初「文字列に 1 行足すだけ」と見積もったのは誤り。implementation_note 2026-08-21）。**カード画像の意匠には触れない**。要件 2-12 が縛るのは「カード画像に何を載せるか」（メモ・タグ非掲載 = 誤共有防止 / 簡潔性）で、**テキスト payload は 2-12 の管轄外**のため仕様改訂は不要
+> - **②-a（1.0.1 スコープ）**: 共有される実体が **PNG ファイル 1 つだけ**で、テキストが投稿先に渡っていない（`shareTitle` は `SharePreview` 止まり。機序と見積もりを誤った経緯は implementation_note 2026-08-21）。`ShareLink` を `UIActivityViewController` へ置き換えて `activityItems: [fileURL, text]` にする。**カード画像の意匠には触れない**。要件 2-12 が縛るのは「カード画像に何を載せるか」（メモ・タグ非掲載 = 誤共有防止 / 簡潔性）で、**テキスト payload は 2-12 の管轄外**のため仕様改訂は不要
 > - **②-b（保留）**: `CoffeeShareCardView.swift` の footer が `Text("CoffeeVision")` のみで URL / QR なし。**画像自体への焼き込みは要件 2-12 の改訂が前提**で、1080×1350 のレイアウトにも手が入る。画像がスクショ転載されても追える利点はあるが、**②-a を出して共有経由の流入が観測できてから判断する**
 >
 > 埋める URL は**短縮形**（`/app/id6788339362`）。ASC がコピーさせる長い URL のスラグはアプリ名から生成される装飾で、ASO で名前を変えるたびに変わる（app-store-metadata §1）。
@@ -204,7 +269,7 @@ https://apps.apple.com/app/id6788339362
 
 ### 検索フィールドの再配分（2026-08-31 更新 / 旧「検索インデックスの空き枠」）
 
-> インデックス対象フィールドには合計 25 字の空きがある（アプリ名 5 / サブタイトル 9 / キーワード日本語 11 / 英語 2）。ただし **2026-08-31 の実測で、問題は「空きが埋まっていないこと」ではなく「埋まっている 175 字が取れない語に使われていること」だと分かった**（ASO-8）。空き枠だけ足しても、現行の語が全滅している事実は変わらない。
+> インデックス対象フィールドには合計 25 字の空きがある（アプリ名 5 / サブタイトル 9 / キーワード日本語 11 / 英語 2）。ただし **2026-08-31 の実測で、問題は「空きが埋まっていないこと」ではなく「埋まっている 175 字が取れない語に使われていること」だと分かった**（ASO-8）。
 >
 > プロモーションテキストは検索インデックスの対象外なので埋めても効かない（app-store-metadata §2）。
 >

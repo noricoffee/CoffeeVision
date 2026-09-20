@@ -52,15 +52,14 @@ jobs:
 
       # gitignore 済みの秘匿ファイルを Secrets から復元する。
       # GoogleService-Info.plist（Firebase）と Secrets.xcconfig（Places API キー +
-      # 本番 AdMob App ID / バナーユニット ID 2 面）が無いと、ビルドは通っても実機で
+      # 本番 AdMob App ID / 下部固定バナーのユニット ID）が無いと、ビルドは通っても実機で
       # Firebase / Places が動かない、または広告が Base.xcconfig のデモ ID のまま出荷される。
       - name: Restore secret files
         env:
           GOOGLE_SERVICE_INFO_PLIST_BASE64: ${{ secrets.GOOGLE_SERVICE_INFO_PLIST_BASE64 }}
           PLACES_API_KEY: ${{ secrets.PLACES_API_KEY }}
           ADMOB_APP_ID: ${{ secrets.ADMOB_APP_ID }}
-          ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL: ${{ secrets.ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL }}
-          ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH: ${{ secrets.ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH }}
+          ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM: ${{ secrets.ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM }}
         run: |
           echo "$GOOGLE_SERVICE_INFO_PLIST_BASE64" | base64 --decode > iosApp/iosApp/GoogleService-Info.plist
           plutil -lint iosApp/iosApp/GoogleService-Info.plist
@@ -71,8 +70,7 @@ jobs:
           # 上書きし、GADApplicationIdentifier 空クラッシュや Places 403 を招く
           # （Base.xcconfig の重要コメント参照）。よって非空を担保してから書き出す。
           missing=""
-          for key in PLACES_API_KEY ADMOB_APP_ID \
-                     ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH; do
+          for key in PLACES_API_KEY ADMOB_APP_ID ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM; do
             if [ -z "${!key}" ]; then missing="$missing $key"; fi
           done
           if [ -n "$missing" ]; then
@@ -83,8 +81,7 @@ jobs:
           {
             printf 'PLACES_API_KEY = %s\n' "$PLACES_API_KEY"
             printf 'ADMOB_APP_ID = %s\n' "$ADMOB_APP_ID"
-            printf 'ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL = %s\n' "$ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL"
-            printf 'ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH = %s\n' "$ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH"
+            printf 'ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM = %s\n' "$ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM"
           } > iosApp/Configuration/Secrets.xcconfig
 
       - name: Write ASC API key

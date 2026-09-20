@@ -81,3 +81,25 @@ Kotlin `data class Cafe(placeId, name, address, latitude, longitude, photoRefere
 - 「Edit モードで catalog に無い legacy 値でも壊れない」要件は、**Menu で自前ラベルを出す**より、**Picker の選択肢配列に legacy 値を動的追加する**方が既存の Picker パターン（`brewMethod`/`processing` 等）と統一でき、アクセシビリティも native のまま乗る。`options = ["", ...countries, BLEND] + (legacy値があれば追加) + [OTHER]` を組み、`selection: Binding<String>` の `set` で `newValue == OTHER` のときだけ「その他モード」用の別 `@State` フラグを立てて自由入力 `TextField` を出す（Picker の `get` はフラグが立っている間 `OTHER` を固定で返す）。
 - 「その他」選択時は literal を保存しない仕様のため、フラグを立てるのと同時に `onXxxChanged("")` で一旦空にしてから自由入力に委ねると、選択直後に前の値が誤って保存される事故を防げる。
 - `CoffeeRecord` に `origin` + `region`（表示専用の別フィールド）が両方あるケースの表示結合は、`CoffeeRecord` に `extension` で computed property（`originDisplayText`）を生やして複数 View（詳細画面 / シェアカード）から共有するのが最小实装（`iosApp/iosApp/Utilities/` 配下に新規ファイルを置くパターン）。
+
+## Kotlin 型が Swift の `==` で「値比較になるか参照比較になるか」は Obj-C ヘッダの `isEqual:` の有無で機械判定できる（2026-09-20、SL-3 ブリッジ同値ガードで確立）
+
+Kotlin/Native は `data class` にだけ `equals()` 由来の `- (BOOL)isEqual:(id)other` を生成する。素の `class`（`CoffeeRecordQueryImpl` / `AppContainer` 等）には出さない。すべて `SharedLogicBase : NSObject` を継承しており、Foundation の `extension NSObject: Equatable`（`==` が `isEqual:` を呼ぶ）が効くので **`==` はどちらの型でもコンパイルが通ってしまう**。参照比較になる型に同値ガードを入れると毎回不一致で無意味になるため、着手前に `@interface` ブロック単位で判定する:
+
+```bash
+H=shared/framework/build/bin/iosSimulatorArm64/debugFramework/SharedLogic.framework/Headers/SharedLogic.h
+python3 - "$H" <<'PY'
+import re,sys
+src=open(sys.argv[1],encoding='utf-8').read()
+for name,body in re.findall(r'@interface (\w+)[^\n]*\n(.*?)\n@end', src, re.S):
+    if name in {"SharedLogicCafe","SharedLogicVisitedCafe"}:   # 調べたい型
+        print(name, 'isEqual あり(値比較)' if 'isEqual:' in body else 'isEqual なし(参照比較)')
+PY
+```
+
+ヘッダが古いと誤判定するので `./gradlew :shared:framework:linkDebugFrameworkIosSimulatorArm64` で最新化してから読む。
+
+### SKIE の sealed interface は Swift の `Equatable` に載らない
+
+- `sealed interface X` は Obj-C **プロトコル**（`@protocol SharedLogicX`、`NSObject` プロトコルを継承しない）になる。よって `any X` に `isEqual` メンバは無く、`[any X]` は `Equatable` 非準拠で `!=` が書けない（`CafeDetailViewModel.UIState.matches` = `[any RecommendationReason]` が該当。同値ガードを諦めた）。
+- ただし全ケースが Kotlin の **`data object`（シングルトン）**なら、ヘッダに `@property (class, readonly, getter=shared)` と `+ (instancetype)xxx __attribute__((swift_name("init()")))` が出る。この場合 Swift 側は常に同一インスタンスなので **`!==` で同値ガードを書ける**（`AnalysisViewModel.InsightStatus` / `QaStatus` が該当）。ObjC プロトコルの existential は class-constrained なので `!==` はそのままコンパイルが通る。

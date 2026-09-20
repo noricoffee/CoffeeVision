@@ -68,9 +68,9 @@ extension AnalysisView {
 
     // MARK: - 評価ヒストグラム
 
+    @ViewBuilder
     func ratingHistogramSection(stats: CoffeeStats) -> some View {
-        guard !stats.ratingHistogram.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
+        if !stats.ratingHistogram.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "評価の分布"))
                 Chart(stats.ratingHistogram, id: \.rating) { bucket in
@@ -95,7 +95,7 @@ extension AnalysisView {
                 }
                 .accessibilityLabel(String(localized: "評価の分布グラフ"))
             }
-        )
+        }
     }
 
     // MARK: - テイスティング平均
@@ -104,48 +104,46 @@ extension AnalysisView {
     ///
     /// 1 件も設定のない要素（nil）はグラフに含めない。
     /// 全要素 nil なら（記録なし）セクション自体を非表示にする。
+    @ViewBuilder
     func tastingAveragesSection(stats: CoffeeStats) -> some View {
         let avgs = stats.tastingAverages
         let ratedCount = avgs.ratedCount
 
         // all-or-nothing のため 5 要素は同一件数。件数 0 ならセクション非表示
-        guard ratedCount > 0,
-              let sweetness = avgs.sweetness?.doubleValue,
-              let body = avgs.body?.doubleValue,
-              let acidity = avgs.acidity?.doubleValue,
-              let flavor = avgs.flavor?.doubleValue,
-              let aftertaste = avgs.aftertaste?.doubleValue
-        else { return AnyView(EmptyView()) }
+        if ratedCount > 0,
+           let sweetness = avgs.sweetness?.doubleValue,
+           let body = avgs.body?.doubleValue,
+           let acidity = avgs.acidity?.doubleValue,
+           let flavor = avgs.flavor?.doubleValue,
+           let aftertaste = avgs.aftertaste?.doubleValue {
+            let axes: [RadarChartAxis] = [
+                RadarChartAxis(
+                    id: "甘味", label: String(localized: "甘味"), value: sweetness,
+                    accessibilityLabel: tastingAccessibilityLabel(String(localized: "甘味"), avg: sweetness, count: ratedCount)
+                ),
+                RadarChartAxis(
+                    id: "ボディ", label: String(localized: "ボディ"), value: body,
+                    accessibilityLabel: tastingAccessibilityLabel(String(localized: "ボディ"), avg: body, count: ratedCount)
+                ),
+                RadarChartAxis(
+                    id: "酸味", label: String(localized: "酸味"), value: acidity,
+                    accessibilityLabel: tastingAccessibilityLabel(String(localized: "酸味"), avg: acidity, count: ratedCount)
+                ),
+                RadarChartAxis(
+                    id: "風味", label: String(localized: "風味"), value: flavor,
+                    accessibilityLabel: tastingAccessibilityLabel(String(localized: "風味"), avg: flavor, count: ratedCount)
+                ),
+                RadarChartAxis(
+                    id: "後味", label: String(localized: "後味"), value: aftertaste,
+                    accessibilityLabel: tastingAccessibilityLabel(String(localized: "後味"), avg: aftertaste, count: ratedCount)
+                ),
+            ]
 
-        let axes: [RadarChartAxis] = [
-            RadarChartAxis(
-                id: "甘味", label: String(localized: "甘味"), value: sweetness,
-                accessibilityLabel: tastingAccessibilityLabel(String(localized: "甘味"), avg: sweetness, count: ratedCount)
-            ),
-            RadarChartAxis(
-                id: "ボディ", label: String(localized: "ボディ"), value: body,
-                accessibilityLabel: tastingAccessibilityLabel(String(localized: "ボディ"), avg: body, count: ratedCount)
-            ),
-            RadarChartAxis(
-                id: "酸味", label: String(localized: "酸味"), value: acidity,
-                accessibilityLabel: tastingAccessibilityLabel(String(localized: "酸味"), avg: acidity, count: ratedCount)
-            ),
-            RadarChartAxis(
-                id: "風味", label: String(localized: "風味"), value: flavor,
-                accessibilityLabel: tastingAccessibilityLabel(String(localized: "風味"), avg: flavor, count: ratedCount)
-            ),
-            RadarChartAxis(
-                id: "後味", label: String(localized: "後味"), value: aftertaste,
-                accessibilityLabel: tastingAccessibilityLabel(String(localized: "後味"), avg: aftertaste, count: ratedCount)
-            ),
-        ]
-
-        return AnyView(
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "テイスティング平均（強度 1〜10）"))
                 TastingRadarChart(axes: axes, maxValue: 10)
             }
-        )
+        }
     }
 
     private func tastingAccessibilityLabel(_ label: String, avg: Double, count: Int32) -> String {
@@ -154,9 +152,9 @@ extension AnalysisView {
 
     // MARK: - 産地ランキング
 
+    @ViewBuilder
     func originRankingSection(stats: CoffeeStats) -> some View {
-        guard !stats.originRanking.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
+        if !stats.originRanking.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "産地の内訳（上位 \(stats.originRanking.count) 件）"))
                 Chart(stats.originRanking, id: \.label) { item in
@@ -184,7 +182,7 @@ extension AnalysisView {
                 }
                 .accessibilityLabel(String(localized: "産地の内訳グラフ"))
             }
-        )
+        }
     }
 
     // MARK: - 焙煎度分布
@@ -244,10 +242,10 @@ extension AnalysisView {
         return label
     }
 
+    @ViewBuilder
     func roastLevelSection(stats: CoffeeStats) -> some View {
-        guard !stats.byRoastLevel.isEmpty else { return AnyView(EmptyView()) }
-        let items = fullRoastLevelStats(stats)
-        return AnyView(
+        if !stats.byRoastLevel.isEmpty {
+            let items = fullRoastLevelStats(stats)
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "焙煎度の内訳（浅 → 深）"))
                 Chart(items) { item in
@@ -273,14 +271,14 @@ extension AnalysisView {
                 }
                 .accessibilityLabel(String(localized: "焙煎度の内訳グラフ（浅い順）"))
             }
-        )
+        }
     }
 
     // MARK: - 抽出方法分布
 
+    @ViewBuilder
     func brewMethodSection(stats: CoffeeStats) -> some View {
-        guard !stats.byBrewMethod.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
+        if !stats.byBrewMethod.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "抽出方法の内訳"))
                 Chart(stats.byBrewMethod, id: \.label) { item in
@@ -308,14 +306,14 @@ extension AnalysisView {
                 }
                 .accessibilityLabel(String(localized: "抽出方法の内訳グラフ"))
             }
-        )
+        }
     }
 
     // MARK: - 月次推移
 
+    @ViewBuilder
     func monthlyTrendSection(stats: CoffeeStats) -> some View {
-        guard !stats.monthlyTrend.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
+        if !stats.monthlyTrend.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "月別の記録数"))
                 Chart(stats.monthlyTrend, id: \.yearMonth) { item in
@@ -344,14 +342,14 @@ extension AnalysisView {
                 }
                 .accessibilityLabel(String(localized: "月別の記録数グラフ"))
             }
-        )
+        }
     }
 
     // MARK: - よく行く店
 
+    @ViewBuilder
     func topCafesSection(stats: CoffeeStats) -> some View {
-        guard !stats.topCafes.isEmpty else { return AnyView(EmptyView()) }
-        return AnyView(
+        if !stats.topCafes.isEmpty {
             VStack(alignment: .leading, spacing: 8) {
                 sectionHeader(String(localized: "よく行くカフェ（上位 \(stats.topCafes.count) 件）"))
                 VStack(spacing: 0) {
@@ -365,7 +363,7 @@ extension AnalysisView {
                 }
                 .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 12))
             }
-        )
+        }
     }
 
     // MARK: - ヘルパ

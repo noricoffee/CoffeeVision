@@ -6,6 +6,9 @@ import FoundationModels
 @preconcurrency import SharedLogic
 import os
 
+/// オンデバイス LLM（Foundation Models）呼び出しのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Insight")
+
 // MARK: - CoffeeInsightProviderIosImpl
 
 /// `CoffeeInsightProvider`（Kotlin interface）の iOS 実装。
@@ -38,10 +41,9 @@ import os
 /// LLM 推論をバックグラウンドで実行させる（`PhotoFileStore.loadThumbnail` と同じ問題意識。SW6-3 参照）。
 ///
 /// `recordQuery` は `attachRecordQuery(_:)` により構築後に再代入されるため
-/// `OSAllocatedUnfairLock` で保護し `@unchecked Sendable` にする。
-/// `tasteExtractor` は `makeIfAvailable()` 内でインスタンスが外部に公開される前に 1 度だけ
-/// 設定され、以降は再代入されないため、ロック不要（`TastePreferenceExtractor` 自体も `Sendable`）。
-nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider, @unchecked Sendable {
+/// `OSAllocatedUnfairLock` で保護する。`tasteExtractor` は `init` で確定する `let` なので保護不要。
+/// 格納プロパティがロックと `Sendable` な `let` だけになったため、クラスは素の `Sendable` で足りる（SL-2）。
+nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightProvider, Sendable {
 
     // MARK: - State
 
@@ -54,10 +56,15 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
 
     /// テイスティングスコア範囲検索 Tool 用の `TastePreferenceExtractor`。
     ///
-    /// `makeIfAvailable()` で `CoffeeInsightProviderIosImpl` と同時に生成する。
+    /// `makeIfAvailable()` で `CoffeeInsightProviderIosImpl` と同時に生成し、`init` で確定する。
     /// `recordQuery` がアタッチ済みかつ `tasteExtractor` が非 nil のとき、
     /// `SearchByTasteProfileTool` を tools 配列に追加する。
-    private var tasteExtractor: TastePreferenceExtractor?
+    private let tasteExtractor: TastePreferenceExtractor?
+
+    private init(tasteExtractor: TastePreferenceExtractor?) {
+        self.tasteExtractor = tasteExtractor
+        super.init()
+    }
 
     // MARK: - Factory
 
@@ -70,13 +77,11 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
     ///   `AppState` が `attachRecordQuery` を呼べるよう具象型を返す。
     static func makeIfAvailable() -> CoffeeInsightProviderIosImpl? {
         guard SystemLanguageModel.default.availability == .available else {
-            print("[CoffeeVision] Foundation Models unavailable: \(SystemLanguageModel.default.availability)")
+            log.notice("Foundation Models unavailable: \(String(describing: SystemLanguageModel.default.availability), privacy: .public)")
             return nil
         }
-        print("[CoffeeVision] Foundation Models available — creating CoffeeInsightProviderIosImpl")
-        let instance = CoffeeInsightProviderIosImpl()
-        instance.tasteExtractor = TastePreferenceExtractor()
-        return instance
+        log.info("Foundation Models available — creating CoffeeInsightProviderIosImpl")
+        return CoffeeInsightProviderIosImpl(tasteExtractor: TastePreferenceExtractor())
     }
 
     // MARK: - 遅延アタッチ（依存サイクル解消）
@@ -112,7 +117,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
                 let insight = try await self.generateInsight(from: stats)
                 completionHandler(insight, nil)
             } catch {
-                print("[CoffeeVision] Foundation Models generation failed: \(error)")
+                log.error("Foundation Models generation failed: \(String(describing: error), privacy: .public)")
                 completionHandler(nil, error)
             }
         }
@@ -141,7 +146,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
                 let insight = try await self.generateBeanTraitsInsight(from: traits)
                 completionHandler(insight, nil)
             } catch {
-                print("[CoffeeVision] Foundation Models BeanTraits generation failed: \(error)")
+                log.error("Foundation Models BeanTraits generation failed: \(String(describing: error), privacy: .public)")
                 completionHandler(nil, error)
             }
         }
@@ -166,7 +171,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
                 let answer = try await self.generateAnswer(question: question, stats: stats)
                 completionHandler(answer, nil)
             } catch {
-                print("[CoffeeVision] Foundation Models Q&A failed: \(error)")
+                log.error("Foundation Models Q&A failed: \(String(describing: error), privacy: .public)")
                 completionHandler(nil, error)
             }
         }
@@ -215,7 +220,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
             if let extractor = tasteExtractor {
                 tools.append(SearchByTasteProfileTool(recordQuery: rq, extractor: extractor))
             }
-            print("[CoffeeVision] generateAnswer: tool-calling セッション（ツール数=\(tools.count)）で応答します")
+            log.debug("generateAnswer: tool-calling セッション（ツール数=\(tools.count, privacy: .public)）で応答します")
             let session = LanguageModelSession(
                 tools: tools,
                 instructions: instructions
@@ -224,7 +229,7 @@ nonisolated final class CoffeeInsightProviderIosImpl: NSObject, CoffeeInsightPro
             return response.content
         } else {
             // digest-only セッション（v1 フォールバック：recordQuery 未アタッチ）
-            print("[CoffeeVision] generateAnswer: digest-only セッション（recordQuery 未アタッチ）で応答します")
+            log.debug("generateAnswer: digest-only セッション（recordQuery 未アタッチ）で応答します")
             let session = LanguageModelSession(instructions: instructions)
             let response = try await session.respond(to: prompt)
             return response.content

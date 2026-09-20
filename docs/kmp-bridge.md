@@ -220,8 +220,7 @@ View は Bridge を `@State` で保持し、**`.task { viewModel.onAppear() }` �
 
 ## CoroutineScope の橋渡し
 
-Kotlin の ViewModel は `CoroutineScope` を外部から受け取る設計（[`architecture.md`](./architecture.md) 参照）。
-iOS では `MainScope()` を Kotlin 側で生成して渡すか、`AppContainer` 内で隠蔽します。
+Kotlin の ViewModel は `CoroutineScope` を外部から受け取る設計（[`architecture.md`](./architecture.md) 参照）で、iOS からは `AppContainer` がそれを隠蔽します。
 
 ```kotlin
 // shared/framework/AppContainerViewModelFactory.kt（拡張関数。core → feature の循環依存回避）
@@ -231,7 +230,7 @@ fun AppContainer.makeCoffeeListViewModel(): CoffeeListViewModel =
 
 `userId` はファクトリ引数ではなく `onAppear(userId:)` で渡す（サインイン完了のタイミングと画面生成を切り離すため）。
 
-Swift 側はこの `AppContainer` のファクトリ拡張関数を呼ぶだけで、`CoroutineScope` を意識しないで済みます（各 ViewModel は渡された scope を親に所有 `viewModelScope` を内部生成する）。
+Swift はこのファクトリ拡張関数を呼ぶだけで済みます（各 ViewModel は渡された scope を親に所有 `viewModelScope` を内部生成する）。
 
 ```swift
 let viewModel = appContainer.makeCoffeeListViewModel()
@@ -339,9 +338,7 @@ RemoteCoffeeDataSource (commonMain interface)
     CoffeeRepository (UI から見える唯一の API)
 ```
 
-書き込み時のリモート失敗扱いは `WritePolicy.PropagateRemoteFailure`（既定）と `WritePolicy.IgnoreRemoteFailure` で切り替え可能。後者は Firestore のオフライン永続化による再送に委ねる選択肢です。
-
-詳細仕様と判断経緯は [`implementation_note.md`](./implementation_note.md) を参照してください。
+書き込み時のリモート失敗の扱い（`WritePolicy`）と読み取り側の終了契約は [`architecture.md`](./architecture.md)「データフロー（書き込み）」が正本です。
 
 iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kotlin → Swift で interface はプロトコル相当として見えるため）。iosApp 起動時（`AppState`）に、Swift 実装（`RemoteCoffeeDataSourceIosImpl` / `RemoteSavedCafeDataSourceIosImpl` / `AuthRepositoryIosImpl` / `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl`、および非対応端末で nil になる `CoffeeInsightProviderIosImpl.makeIfAvailable()`）を Kotlin の `AppContainer` **セカンダリコンストラクタ**にまとめて渡します。Android も同じ形を Kotlin 実装（`*AndroidImpl`）で埋めるだけ（`coffeeInsightProvider` のみ省略 = null）。
 
@@ -470,8 +467,6 @@ extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型
 
 ## 参考リンク
 
-- [SKIE — Touchlab](https://skie.touchlab.co/)
 - [Kotlin/Native Interop with Swift/Objective-C](https://kotlinlang.org/docs/native-objc-interop.html)
 - [Firebase for iOS（公式 / Swift Package Manager）](https://firebase.google.com/docs/ios/setup)
 - [Firebase for Android（公式 / firebase-bom）](https://firebase.google.com/docs/android/setup)
-- [アーキテクチャ方針](./architecture.md)

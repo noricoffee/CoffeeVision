@@ -127,7 +127,7 @@ app (iosApp / androidApp)
 - **feature 同士は依存禁止**：画面遷移は `iosApp` / `androidApp` の Navigation 層で繋ぐ
 - feature は `core` と `domain` の**両方に直接依存**する（`kmp.feature` Convention Plugin が自動配線。図は代表経路のみ）
 - **domain はインターフェースのみ**：`data-*` モジュールが実装し、`AppContainer` が注入する
-- **data-firebase の iOS 実装は `iosApp` 側 Swift**：domain の Firebase 系インターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository` / `CuratedCafeRepository`）準拠の Swift クラスを書く（[`kmp-bridge.md`](./kmp-bridge.md) 参照）
+- **data-firebase の iOS 実装は `iosApp` 側 Swift**：domain の Firebase 系インターフェース準拠の Swift クラスを書く（[`kmp-bridge.md`](./kmp-bridge.md) 参照）
 
 ---
 
@@ -138,7 +138,7 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 
 設定の実体は `shared/framework/build.gradle.kts`（ここに複製しない）。要点は 4 つ:
 
-- `XCFramework("SharedLogic")` + `baseName = "SharedLogic"`（**両者を揃える**。揃えないと「Framework Renaming is not supported yet」warning）
+- `XCFramework("SharedLogic")` + `baseName = "SharedLogic"`
 - `isStatic = true` / `linkerOpts("-lsqlite3")`（sqliter が iOS システム SQLite に動的リンクするため）
 - 全 shared モジュールを **`api(...)` と `framework { export(...) }` の両方**に書く
 - ターゲットは `iosArm64()` / `iosSimulatorArm64()`
@@ -147,8 +147,8 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 - 配布形態は **XCFramework**（`./gradlew :shared:framework:assembleSharedLogicXCFramework`）
 - `iosApp` は SPM 経由でも直接参照でも可。**`iosApp` から個別の shared モジュールを参照しない**（依存が複雑化するため）
 - `data-firebase` は Android 実装専用だが、`commonMain` の Repository インターフェース再公開のため `export` 対象に含める
-- **XCFramework 名と `baseName` は揃える**：揃えないと「Framework Renaming is not supported yet」warning が出る。Swift 側の `import` 名は `baseName` 側に固定されるため、既存命名を維持する方を優先して XCFramework 名側を合わせている
-- **`api(...)` だけでは Obj-C ヘッダに class が出ない**：klib 取り込みは保証されるが Swift 側で「Cannot find type in scope」になる。`framework { ... export(...) }` の **追加の明示が必須**（Phase 2.5 PR2 で確認した知見、`docs/tasks/lessons.md` 参照）
+- **XCFramework 名と `baseName` を揃える**理由：揃えないと「Framework Renaming is not supported yet」warning が出る。Swift 側の `import` 名は `baseName` 側に固定されるため、既存命名を維持する方を優先して XCFramework 名側を合わせている
+- **`api(...)` と `export(...)` の両方が要る**理由：`api` だけでは klib 取り込みは保証されるが Obj-C ヘッダに class が出ず、Swift 側で「Cannot find type in scope」になる（Phase 2.5 PR2 で確認した知見、`docs/tasks/lessons.md` 参照）
 
 ---
 
@@ -178,8 +178,7 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 
 ### アーキテクチャ検証ルール（Android ターゲットの維持方針）
 
-本プロジェクトは iOS のみリリースを想定していますが、KMP のモジュール分割アーキテクチャが両プラットフォームで成立することを実証するため、
-Android ターゲットを **「常にビルドが通り、共通 ViewModel を最小 UI で動かせる状態」** で維持します。
+検証ターゲットとして維持する水準は **「常にビルドが通り、共通 ViewModel を最小 UI で動かせる状態」**。
 
 - **CI**: PR 単位で iOS / Android 両方のビルドを実行。`./gradlew :shared:framework:assembleSharedLogicXCFramework`（iOS ジョブ）と `./gradlew testAndroidHostTest :androidApp:assembleDebug`（Android ジョブ）を必須チェックにする。**テストはモジュールを個別列挙せず `testAndroidHostTest` のタスク名のみで指定する**（列挙すると新規 feature のテストが CI から静かに漏れるため）。iOS ジョブは Kotlin/Native リンクまでで、`xcodebuild`（Swift 側）と `iosSimulatorArm64Test` は CI 対象外＝親のローカル検証（`verify-kmp-ios` skill）が担保する
 - **Android UI スコープ**: `feature/coffee-list` を Compose で表示する 1 画面のみ。編集・検索・写真撮影は実装しない
@@ -246,13 +245,12 @@ Android ターゲットを **「常にビルドが通り、共通 ViewModel を�
 ### ViewModel + StateFlow
 
 ViewModel は 1 つの `UIState`（`data class`）を `StateFlow` として公開します。
-複数の `StateFlow` を画面ごとに増やさず、**1 画面 = 1 UIState** を原則とします。
 
 骨格（所有 `viewModelScope` / ネストした `UIState` / `on○○` ハンドラ / `clear()`）は [`coding-conventions.md`](./coding-conventions.md) §1.2「ViewModel ファイルの構造」が正本。アーキテクチャ上の決め事は次の 3 点:
 
 - **1 画面 = 1 `UIState`**。`StateFlow` を画面ごとに増やさない
 - **購読は張り替える**: 再表示時の二重購読を避けるため `observeJob?.cancel()` してから `launch` する
-- **失敗は `UIState.error` に載せて View へ渡す**（例外を Bridge まで投げない）。`CancellationException` は先行 catch で再スローする（同 §1.7）
+- **失敗は `UIState.error` に載せて View へ渡す**（例外を Bridge まで投げない）
 
 ### iOS（SwiftUI + @Observable）
 
@@ -322,7 +320,7 @@ ViewModel が UIState を更新 → View が再描画
 
 - **書き込みは常に「ローカル → リモート」の順序**（ローカルが Source of Truth。リモートの結果を待たずに UI へ反映される）
 - **リモート失敗の扱いは `CoffeeRepositoryImpl.WritePolicy`**: 既定 `PropagateRemoteFailure`（例外を呼び出し元へ伝播し ViewModel がエラー表示）/ `IgnoreRemoteFailure`（Firestore SDK のオフライン永続化・リトライに委譲して握りつぶす）
-- オフライン時の再送は Firestore SDK のオフライン永続化が引き受ける（独自の同期キューは書かない）
+- オフライン時の再送は Firestore SDK のオフライン永続化が引き受ける
 - **読み取り側（`observeChanges`）の失敗の扱いは `WritePolicy` とは別**: 回復不能な失敗では **Flow を例外で終了させる**のが両プラットフォーム共通の契約（インターフェースの KDoc が正本）。`startSync` はそれを catch して**同期だけ止め、リトライしない**（`permission-denied` は非一時的）。ローカル DB が Source of Truth なので閲覧・記録は動き続ける
 - 削除・更新も同じパターンで、UI は常にローカルの最新状態を見る
 - **`SavedCafe` も同型の合成**: `SavedCafeRepositoryImpl`（`shared/core`）が local + `RemoteSavedCafeDataSource` を合成し、読み取り・書き込み・reconciliation とも本節と同じパターン（`WritePolicy` も `CoffeeRepositoryImpl` と共用）
@@ -346,9 +344,7 @@ ViewModel が UIState を更新 → View が再描画
 - **ViewModel ファクトリは `shared/framework` の拡張関数**（`core → feature` の循環依存を避けるため）
 
 - `SqlDriver` などプラットフォーム依存の値は `expect`/`actual` で取得します。詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照。
-- Firebase を扱うインターフェース（`RemoteCoffeeDataSource` / `RemoteSavedCafeDataSource` / `AuthRepository` / `BeanProfileRepository` / `CuratedCafeRepository`）は **`commonMain` で定義のみ**し、実装は以下のように分けます。
-    - **Android**: `shared/data-firebase/androidMain` に Firebase Android SDK を使った実装を置き、`AppContainer` 生成時に Application から渡す
-    - **iOS**: `iosApp` 側の Swift コードで `FirebaseFirestore`（SPM 配信）を使った実装クラスを書き、Kotlin のインターフェースに準拠させて `AppContainer` 構築時に渡す
+- Firebase 系インターフェースの実装は Android / iOS とも `AppContainer` 構築時に外から渡す（配置は「レイヤー構成」の Remote (Firebase) 行）
 
 ---
 
@@ -381,7 +377,7 @@ ViewModel が UIState を更新 → View が再描画
 - `kotlinx.coroutines` を使う
 - ViewModel は外部から `CoroutineScope`（`AppContainer` の `MainScope`）を受け取り、その Job を親にした**所有 `viewModelScope`** で `launch` して `clear()` で畳む（[`coding-conventions.md`](./coding-conventions.md) §1.2）
 - `commonMain` では `Dispatchers.Default` を使う（`Dispatchers.IO` は JVM / Android 専用で commonMain から参照不可）。UI 更新は `Dispatchers.Main` 上で行う
-- `Flow` のキャンセルは購読側スコープのキャンセルに任せる。コルーチン内で `runCatching` は使わない（同 §1.7）
+- `Flow` のキャンセルは購読側スコープのキャンセルに任せる
 - iOS への `suspend` / `Flow` のブリッジは [`kmp-bridge.md`](./kmp-bridge.md) を参照
 
 ---
@@ -435,7 +431,4 @@ ViewModel が UIState を更新 → View が再描画
 - [Firebase for iOS（公式 / Swift Package Manager）](https://firebase.google.com/docs/ios/setup)
 - [Firebase for Android（公式 / firebase-bom）](https://firebase.google.com/docs/android/setup)
 - [Google Places API](https://developers.google.com/maps/documentation/places/web-service)
-- [コーディング規約](./coding-conventions.md)
-- [データモデル（永続エンティティ）](./data-model.md)
 - [分析モデル（派生集計）](./analysis-model.md)
-- [KMP ブリッジ](./kmp-bridge.md)

@@ -3,7 +3,6 @@
 ## 概要
 
 本ドキュメントは CoffeeVision プロジェクトにおける **Kotlin（KMP 共通層）** と **Swift（iOS）** のコーディング規約を定めます。
-一貫したコードスタイルを維持し、可読性・保守性・テスタビリティを高めることを目的とします。
 
 参照: [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html) / [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/)
 
@@ -392,7 +391,6 @@ Button("追加") {
 - **Swift の実装が Kotlin へ `Flow` を「返す」方向は SKIE が効かない**。`FirebaseRepositories/FlowBridge.swift` の `CallbackFlow<T>` / `CallbackFlowOptional<T>` を使う（詳細は [`kmp-bridge.md`](./kmp-bridge.md)）
 - Kotlin で投げる例外は Swift では `NSError` として届く。受け側で型を見て分岐する
 - Firebase Repository の iOS 実装は `FirebaseRepositories/` 配下に置き、`shared/domain` のインターフェースに準拠させる
-- 詳細は [`kmp-bridge.md`](./kmp-bridge.md) を参照
 
 ---
 
@@ -475,7 +473,4 @@ Kotlin 側と同じ方針。**WHY** のみ書き、WHAT は書かない。
 
 ## 参考リンク
 
-- [Kotlin Coding Conventions](https://kotlinlang.org/docs/coding-conventions.html)
-- [Swift API Design Guidelines](https://www.swift.org/documentation/api-design-guidelines/)
 - [アーキテクチャ方針](./architecture.md)
-- [KMP ブリッジ](./kmp-bridge.md)

@@ -244,3 +244,22 @@ App ID は `6788339362`。**バイナリやカード画像に焼くのは `https
 **`canLoad` のゲートにも設計の穴があった**。「同意フローが閉じるまでロードしない」を `!showAdConsentFlow` で書いたが、これはシートの表示状態でしかなく、`onAdPrePromptContinue()` はシートを閉じた**後**に ATT ダイアログを非同期で開始する。ATT ダイアログ表示中にリクエストが飛び、避けたかった「初回インプレッションが必ず NPA」がそのまま起きていた。`AppState.isAdConsentResolved`（`await AdConsentCoordinator.run()` 完了後に立てる）を追加して解決（lessons 2026-09-19）。
 
 - 影響: **スクリーンショットの全面撮り直しが必要**。全カットの下端に広告帯が入り、「カフェ詳細だけ Test Ad に注意」という 1.0 系の回避が成立しない（`app-store-metadata.md` §5 に撮影手順ごと記載）。**広告ユニットは未発行**で、下部固定帯用の本番 ID を AdMob で発行して `Secrets.xcconfig` / GitHub Secrets へ登録する作業が残る
+
+### 2026-09-20: observation の所有を Swift の構造化並行性へ移した
+
+- 関連: `iosApp/iosApp/Features/<Name>/<Name>ViewModelBridge.swift`（8 本）/ `iosApp/iosApp/AppState.swift` / `docs/kmp-bridge.md`「ViewModel ブリッジパターン」/ tasks B-11 / 教訓は lessons 2026-09-20
+
+docs の冗長排除中に `kmp-bridge.md`「メモリ管理の注意」の記述が同 doc 内の別の記述と矛盾していることに気づいたのが発端。調べると**規約と実装がどちらも正しくなく**、さらにその下に実際のリークが埋まっていた。
+
+**判断の分かれ目は「どこで畳むか」ではなく「誰が持つか」だった。** 最初は `.onDisappear` か `deinit` かの二択で議論していたが、Swift の一次情報を引いて前提が崩れた。
+
+- 非構造化 `Task` は参照を手放しても止まらない（`Task.swift:26-31`）。つまり `deinit` の到達性は問題ではなく、Task がブリッジより長生きすること自体が問題
+- キャンセルは**協調的**で、`cancel()` は依頼にすぎない（`Task.swift` の `cancel()` doc / `AsyncIteratorProtocol` は iterator が応答することを **should** としか定めていない）。だから「どこで cancel を呼ぶか」を決めても、**呼べば止まる保証がそもそも無い**
+- SE-0304 は「`cancel()` を持つトークンを同期的に返す API 設計は複雑さを持ち込む」と明言している。保持していた `observationTask` はそのトークンだった
+
+**そこで `deinit` に `cancel()` を足す案（A）を採らず、所有をスコープへ移した（C）。** ただし A も 1 本だけ実装して実測している。目的は止血ではなく、**C の前提（SKIE が協調キャンセルに応答するか）を先に確かめる**ため。応答しなければ `.task` に移しても同じリークが残り、C の形自体が変わっていた。
+
+- 影響: `cancel()` / `onDisappear()`（observation 用）が全廃され、正味 53 行減った。`AppState.resetAndRebootstrap()` の手動キャンセル 4 行も不要になった（`AppRootView` がブリッジ nil で `RootTabView` ごと畳むため）
+- トレードオフ: `CoffeeEditorViewModelBridge` だけ `onAppear(mode:userId:)`（同期）+ `observe()`（非同期）の 2 メソッドに分かれる。エディタの `.task` は「Kotlin 初期化 → カフェ pre-fill → 現在地サジェスト → 購読開始」の順序依存があり、`observe()` が戻らないため 1 本に畳むと pre-fill とサジェスト（要件 2-8）が実行されない。**シグネチャの不揃いより機能の維持を採った**
+- 検証: 番兵オブジェクトによる実測を移行の前後で実施。移行前は 2 サイクルとも解放されず、移行後は `CafeSearch` / `CafeDetail` の全インスタンスで `loop exited` → `sentinel deinit` → `deinit` が揃った。収支も一致（未解放の 1 件は計測終了時に画面を開いたままだったインスタンスで、スクリーンショットで確認済み）
+- 経緯の注記: **`MapSearchController.searchBridge` は View が持たないブリッジ**で、当初は「そこだけ現状維持でよい」と指示していた。`setupAndObserve(makeViewModel:) async` に統合して `MapTabView` の `.task` から駆動する形で解決し、結果として長寿命ブリッジにも再購読経路ができた

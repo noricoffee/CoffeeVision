@@ -256,9 +256,9 @@ ViewModel は 1 つの `UIState`（`data class`）を `StateFlow` として公�
 
 iOS では `@Observable` の薄い ViewModel ラッパが `shared/feature/*` の Kotlin ViewModel を内包し、`StateFlow` を Swift の `@Published` 相当の値へブリッジします。
 
-実装パターン（`StateFlow` の購読 = `Task { for await ... }`、`deinit { kotlin.clear() }`）は [`kmp-bridge.md`](./kmp-bridge.md) が正本。
+実装パターン（`StateFlow` の購読 = `func observe() async` を View の `.task` が回す、`deinit { kotlin.clear() }`）は [`kmp-bridge.md`](./kmp-bridge.md) が正本。**ブリッジは `Task` を保持しない**。
 
-Bridge の生存スコープは、タブ常駐画面 = `AppState` で 1 つ保持 / push・sheet 画面 = View 内 `@State` で遷移ごと生成、の 2 系統（**タブ常駐 View の `onDisappear` で observation を止めない**。詳細は `.claude/rules/swift-ios.md` と `tasks/lessons.md` 2026-06-25 エントリ）。
+Bridge の生存スコープは、タブ常駐画面 = `AppState` で 1 つ保持 / push・sheet 画面 = View 内 `@State` で遷移ごと生成、の 2 系統（`.claude/rules/swift-ios.md`）。**購読の停止は書かない** — `.task` の所有なので View 消滅で自動的に畳まれ、再表示で張り直される。
 
 SwiftUI View は ViewModel を `@State` または `@Bindable` で保持し、状態の読み出しのみを行います。
 

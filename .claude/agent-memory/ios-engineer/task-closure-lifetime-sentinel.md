@@ -45,3 +45,23 @@ private func startObservation() {
 - 呼ぶ順序は **`observationTask?.cancel()` が先、`kotlin.clear()` が後**（消費側を止めてから生産側を畳む）
 - `Task.cancel()` はロックを取り得るため、**呼び出し元がロックを保持していないか事前確認**する（`OSAllocatedUnfairLock` 等を持つブリッジでは deinit 内で呼ぶ位置に注意）。`CafeSearchViewModelBridge` はロックを持たないクラスだったため今回は無条件で追加できた
 - キャンセルが `for await` ループを実際に抜けさせるかどうかは Swift の協調的キャンセル仕様（`AsyncIteratorProtocol` はキャンセル応答を **should** としているだけで必須ではない）次第で、**コードを読むだけでは分からず実機ログでしか判定できない**（番兵の `deinit` ログの有無で判定する）
+
+## 構造化並行性移行後（`observe() async` 版、2026-09-20）
+
+[[observation-task-structured-concurrency]] で `observationTask`（非構造化 `Task`）を廃し `observe() async` を View の `.task` に直接委ねる形へ移した後の再計測では、番兵を **`Task { }` クロージャではなく `observe()` 自身のローカル `let`** として持たせる（`Task` クロージャそのものが存在しなくなったため）。
+
+```swift
+func observe() async {
+    let sentinel = B11ObservationSentinel(bridgeId: instanceId)
+    print("[B11] ... loop entered sentinel=\(sentinel.bridgeId)")
+    for await state in kotlin.state {
+        print("[B11] ... state received sentinel=\(sentinel.bridgeId)")  // ループ内で参照し続けて最適化除去を防ぐ
+        apply(state)
+    }
+    print("[B11] ... loop exited sentinel=\(sentinel.bridgeId)")  // ここへ到達 = for await が return した
+}
+```
+
+- 判定はクロージャ版と同じ理屈: `observe()` が return してこの async 関数の実行フレームが解放されれば、ローカル `sentinel` も一緒に `deinit` される。**「loop exited」ログが出ているのに sentinel の `deinit` ログが出ない**なら、フレームのどこかがまだ生きている（クロージャ版と違って `[weak self]` は存在しないので、疑うべきは `for await` の `AsyncIteratorProtocol` 側が内部で継続を保持していないか）
+- 番兵クラス自体は `@MainActor` 既定分離のままで問題ない（`observe()` がブリッジの `@MainActor` 分離を継承して呼ばれるため、番兵の `init` もその文脈で呼ばれる。`deinit` は Swift の既定仕様で自動的に `nonisolated` になるので `isolated deinit` は不要 — `Int` プロパティを print するだけなら nonisolated から触っても安全）
+- ブリッジ本体側にも `instanceId`（`static var nextInstanceId` から採番）と `init` / `isolated deinit` の入口・出口ログを足し、`observe()` の loop entered/exited と時系列で突き合わせられるようにする

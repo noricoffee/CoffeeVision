@@ -35,7 +35,7 @@
 
 ### アーカイブ（過去分の切り出し）
 
-**2026-06 / 2026-07 / 2026-08 のエントリ（= 1.0 リリースまでの全 139 件）は [`implementation-note-archive.md`](./archive/1.0/implementation-note-archive.md) に凍結移送済み**（2026-08 分は 1.0 リリース時の docs 整理で移送）。他 doc・コードコメントからの「implementation_note 2026-0X-XX エントリ」という参照は**アーカイブ側を指す**（参照は日付で引く運用で、行き先もアーカイブ 1 ファイルに固定しているので、参照側の書き換えは不要）。**本 doc に残っているのは 1.0 リリース後の新規分**。
+**2026-06 / 2026-07 / 2026-08 のエントリ（= 1.0 リリースまでの全 139 件）は [`implementation-note-archive.md`](./archive/1.0/implementation-note-archive.md) に凍結移送済み**（2026-08 分は 1.0 リリース時の docs 整理で移送）。他 doc・コードコメントからの「implementation_note 2026-0X-XX エントリ」という参照は**アーカイブ側を指す**。**本 doc に残っているのは 1.0 リリース後の新規分**。
 
 - **切り出しの単位は月**。作業ログは append-only 気味に伸びるので、行数の閾値（フロー型 1200 行 = `curate-doc` skill）で縮約しきるのは構造的に無理がある。**フェーズが完了して追記が止まった月**を凍結してアーカイブへ送る運用にする
 - **月別ファイルには分けず、アーカイブ 1 本に月見出しで積む**（2026-08-11 確定）。日付参照の行き先が 1 ファイルに固定され、参照側の書き換えも「月 → ファイル」の索引維持も不要になるため。アーカイブ側に行数閾値は適用しない（凍結 doc は通読されず日付 grep で引かれる）
@@ -88,7 +88,7 @@
 - iOS のルートは **4 タブ（マップ / コーヒー / 分析 / 設定）**。**検索タブは作らない**（iOS 27 で `Tab(role: .search)` の右端固定挙動が変わったため）— 検索は**マップ上部の埋め込み検索バー**（テキスト検索はマップ中心の位置バイアス付き）+「このエリアを検索」ボタン + 検索モードに移行。コーヒー記録の作成は**コーヒータブとカフェ詳細のいずれもナビバー右上の `+`**（FAB は使わない。ui-ux-guidelines「追加アクションの配置」）
 - Places API は **New v1** + `X-Goog-FieldMask` で取得フィールド明示。API キーは `AppContainer` コンストラクタ注入（Android = local.properties → BuildConfig、iOS = xcconfig → Info.plist → Bundle.main）。Nearby は `includedPrimaryTypes = [cafe, coffee_shop]`・1 回最大 20 件。Places 写真は永続キャッシュ禁止（規約）で都度取得
 - iOS の xcconfig は `Base.xcconfig`（base）→ 先頭 `#include "Config.xcconfig"`（必須）+ `#include? "Secrets.xcconfig"`（任意・gitignore 済）の 3 段構造。**フォールバック宣言（`PLACES_API_KEY =` 等）は `#include?` より前に置く**（後ろだと実キーを空で上書き）
-- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ。**この 3 点（予算アラート / クォータ上限 / API 制限の Places 限定）は設定済み**（設定状況の正本は paid-services §1「コスト抑制の現状」で、**実値は Cloud Console が正本**）
+- Places API キーはクライアント埋め込みで**抽出不可避**。`X-Ios-Bundle-Identifier` によるバンドル ID 制限は生 REST 呼び出しでは**ヘッダなりすましで突破可能**（暗号検証なし）＝事故防止レベルで実効的防御ではない。現実的な守りは Google Cloud の**予算アラート + クォータ上限**（被害額に天井）+ API 制限の Places 限定。本命はバックエンドプロキシ + App Attest（規模拡大時に検討）。詳細は 2026-07-08 エントリ。**この 3 点はいずれも設定済み**（設定状況の正本は paid-services §1「コスト抑制の現状」で、**実値は Cloud Console が正本**）
 - 分析は 3 階層分離: 階層1・2 は KMP で決定論（`CoffeeStats` / `FavoriteSignals`。収縮平均 + n 連動 z ゲート `CATEGORY_Z = 2.0` + 相関 floor で「弱い傾向」だけを信号化、断定しない）、階層3 は iOS Foundation Models（`CoffeeInsightProvider`。可否は注入時判定、null = 非対応端末で graceful degradation）。Q&A は v1 = `CoffeeStats` digest 注入（単発・ステートレス）/ v2 = `Tool` から `CoffeeRecordQuery.searchRecords`（計算は KMP・LLM は解釈と整形のみ）
 - `BeanProfile`（12-B）はサーバ管理 read-only の豆ナレッジ。`CoffeeRecord` と ID 紐付けせず origin / processings のファジーマッチ。取得は one-shot get + メモリキャッシュ。12-C で `FavoriteSignals` と突合した `preferredBeanTraits` を `CoffeeStats` に付加し、Foundation Models で言語化
 - 味覚一致カフェ推薦: **9-5（コンテンツベース v1）は 1.0 で実装済み**（`ObserveTasteMatchedCafesUseCase` / `RecommendedCafe` / `CafeRecommendationProvider`、産地/焙煎/抽出/精製の 4 軸マッチ、マップの好み一致ピン + 理由表示 + 分析タブ連携。テイスティング 5 軸の一致はスコープ外）。**9-6（協調フィルタ / 他ユーザー横断 v2）は設計確定・未実装**（`sharedTasteProfiles/{uid}` + Cloud Function 特権 read。閾値定数 / Function 内実装 / インフラ選定は未決。tasks 12-D で段階 dispatch）。詳細は analysis-model §2
@@ -99,7 +99,7 @@
 
 ## エントリ形式
 
-タイトル + 本文だけで十分。`影響` / `トレードオフ` / `経緯` は必要なときだけ書く。
+タイトル + 本文だけで十分。
 
 > **`- 領域:` は廃止**（2026-07-25 の棚卸し。103 エントリで 60 種類以上の自由記述に散っていて分類・検索に使えていなかった）。所在はタイトルと `- 関連:` のファイルパスで足りる。
 

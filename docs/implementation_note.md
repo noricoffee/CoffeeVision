@@ -262,4 +262,5 @@ docs の冗長排除中に `kmp-bridge.md`「メモリ管理の注意」の記�
 - 影響: `cancel()` / `onDisappear()`（observation 用）が全廃され、正味 53 行減った。`AppState.resetAndRebootstrap()` の手動キャンセル 4 行も不要になった（`AppRootView` がブリッジ nil で `RootTabView` ごと畳むため）
 - トレードオフ: `CoffeeEditorViewModelBridge` だけ `onAppear(mode:userId:)`（同期）+ `observe()`（非同期）の 2 メソッドに分かれる。エディタの `.task` は「Kotlin 初期化 → カフェ pre-fill → 現在地サジェスト → 購読開始」の順序依存があり、`observe()` が戻らないため 1 本に畳むと pre-fill とサジェスト（要件 2-8）が実行されない。**シグネチャの不揃いより機能の維持を採った**
 - 検証: 番兵オブジェクトによる実測を移行の前後で実施。移行前は 2 サイクルとも解放されず、移行後は `CafeSearch` / `CafeDetail` の全インスタンスで `loop exited` → `sentinel deinit` → `deinit` が揃った。収支も一致（未解放の 1 件は計測終了時に画面を開いたままだったインスタンスで、スクリーンショットで確認済み）
+- 実機確認: **ユーザーによる実機確認で OK**（2026-09-20）。見た対象は、過去 2 回凍結バグを出したマップ検索の「他タブへ行って戻る → もう一度検索」、タブ往復での凍結、カフェ詳細の pop → 再 push、そして `resetAndRebootstrap()` の手動キャンセル 4 行を削除した影響が出るサインアウト / アカウント削除後の再起動
 - 経緯の注記: **`MapSearchController.searchBridge` は View が持たないブリッジ**で、当初は「そこだけ現状維持でよい」と指示していた。`setupAndObserve(makeViewModel:) async` に統合して `MapTabView` の `.task` から駆動する形で解決し、結果として長寿命ブリッジにも再購読経路ができた

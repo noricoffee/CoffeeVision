@@ -100,7 +100,7 @@
 |------|----|------|----------------|
 | [ ] | B-1 | マルチデバイス書き込みの競合解決方針を明文化（`updatedAt` での last-writer-wins 等）。現状 remote→local は `INSERT OR REPLACE` で世代比較なし | 複数端末同期（要件 7-3）を実装・検証する段階。単一端末では実害なし |
 | [ ] | B-10 | **`TastePreferenceConversionView` の入れ子 `NavigationStack` を解消**。`AnalysisView` の `NavigationLink` で push されるのに自身の `body` で `NavigationStack` を作っている | `AccountView` と**同型**（lessons 2026-08-21 の横展開点検で検出）。修正は同じパターンで小さいはずだが、あちらと違い「処理中の戻る封じ」要件が無いため**実害は見た目に留まる見込みで未検証**。1.0.1 のスコープ外とした。着手時はまず二重ナビゲーションバー等の実害の有無を目視で確認する |
-| [x] | B-11 | **observation を View スコープ所有の構造化 `Task` へ移した**（当初「`deinit` 起点への統一」として起票したが、調査の結果ブリッジが非構造化 `Task` を保持していること自体が原因と判明し、所有をスコープへ移す形に変更） | **2026-09-20 完了**（`b5c071c`）。`CafeSearch` / `CafeDetail` の実リークを番兵オブジェクトで実測し、移行後に解消することを再計測で確認済み。`cancel()` / observation 用 `onDisappear()` は全廃。経緯は [`implementation_note.md`](./implementation_note.md) 2026-09-20、教訓と横断点検は [`tasks/lessons.md`](./tasks/lessons.md) 同日、規約は `kmp-bridge.md` と `.claude/rules/swift-ios.md` へ昇格済み。**残る目視は verification-checklist へ移送** |
+| [x] | B-11 | **observation を View スコープ所有の構造化 `Task` へ移した**（当初「`deinit` 起点への統一」として起票したが、調査の結果ブリッジが非構造化 `Task` を保持していること自体が原因と判明し、所有をスコープへ移す形に変更） | **2026-09-20 完了**（`b5c071c`）。`CafeSearch` / `CafeDetail` の実リークを番兵オブジェクトで実測し、移行後に解消することを再計測で確認済み。`cancel()` / observation 用 `onDisappear()` は全廃。経緯は [`implementation_note.md`](./implementation_note.md) 2026-09-20、教訓と横断点検は [`tasks/lessons.md`](./tasks/lessons.md) 同日、規約は `kmp-bridge.md` と `.claude/rules/swift-ios.md` へ昇格済み。**実機確認まで完了**（2026-09-20、ユーザー）|
 
 ### コードレビューの未起票分
 

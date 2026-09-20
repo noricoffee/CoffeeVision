@@ -426,7 +426,11 @@ extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型
 ## メモリ管理の注意
 
 - Kotlin/Native のオブジェクトは ARC ではなくランタイム独自の参照カウントで管理される（New Memory Model 前提）
-- Swift 側で Kotlin オブジェクトを `weak` に保持できないケースがあるため、ブリッジでは強参照を基本とし、ライフサイクルは `onAppear`/`onDisappear` で明示的に管理する
+- Swift 側で Kotlin オブジェクトを `weak` に保持できないケースがあるため、**ブリッジは Kotlin ViewModel を強参照で持つ**
+- **破棄フックは `isolated deinit` 一本**。Kotlin の所有 `viewModelScope` を畳む `kotlin.clear()` はここからだけ呼ぶ（`Features/<Name>/<Name>ViewModelBridge.swift` の全本がこの形）。`.onDisappear` は遷移アニメ中にも発火し、タブ常駐 View では再 init もされないため、破棄フックとして成立しない
+- **Swift 側の observation task も原則 `deinit` まで生かす**（上記「observation の停止タイミングに注意」）。`.onDisappear` で止めてよいのは、**再表示時に `onAppear()` を呼び直す経路が View 側にあるときだけ**。経路が無いまま止めると状態が凍結して戻らない（`CafeSearchView` = lessons 2026-06-25 / `CafeDetailView` = 同 2026-07-03 の実例）
+  - タブ常駐ブリッジが持つ `cancel()` は **`AppState.resetAndRebootstrap()` 専用**（サインアウト時に旧 uid の購読を落とす）。View の `.onDisappear` から呼ぶものではない
+  - **現状 `CoffeeListView` / `AnalysisView` は `.onDisappear` で止めて再表示時に張り直す型**で、自己回復はするが規約からは外れている（`onAppear()` の先頭が `observationTask?.cancel()` なので張り替えは冪等）。deinit まで生かす型への統一は未着手（lessons 2026-07-03）
 - `Task` の中で `self` をキャプチャするときは `[weak self]` を忘れない
 
 ---

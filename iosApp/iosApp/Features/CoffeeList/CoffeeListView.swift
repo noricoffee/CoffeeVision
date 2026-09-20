@@ -36,10 +36,7 @@ struct CoffeeListView: View {
         )
         .task {
             guard let uid = appState.uid else { return }
-            viewModel.onAppear(userId: uid)
-        }
-        .onDisappear {
-            viewModel.onDisappear()
+            await viewModel.observe(userId: uid)
         }
         .errorToast(message: viewModel.error) {
             viewModel.onErrorDismissed()

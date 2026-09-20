@@ -5,15 +5,14 @@ import SharedLogic
 /// `MapViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `VisitListViewModelBridge` と同じ `@MainActor @Observable` + init 時購読開始パターン
+/// - 観測は `observe()`（構造化 `Task`。`MapTabView` の `.task` から呼ぶ）が担う。
+///   ブリッジ自身は `Task` を保持しない（B-11）
 /// - マップタブは TabBar 常時生存のため `AppState` で 1 つだけ保持する
-///   （`visitListBridge` と同等のライフサイクル）
 @MainActor
 @Observable
 final class MapViewModelBridge {
 
     private let kotlin: MapViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -51,7 +50,6 @@ final class MapViewModelBridge {
 
     init(viewModel: MapViewModel) {
         self.kotlin = viewModel
-        startObservation()
     }
 
     isolated deinit {
@@ -60,10 +58,11 @@ final class MapViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    /// 観測タスクを明示的にキャンセルする。AppState が破棄されるときに呼ぶ。
-    func cancel() {
-        observationTask?.cancel()
-        observationTask = nil
+    /// state 購読を開始する。`MapTabView` の `.task` から呼ぶ（構造化 `Task`）。
+    func observe() async {
+        for await state in kotlin.state {
+            apply(state)
+        }
     }
 
     // MARK: - ユーザーアクション
@@ -133,17 +132,6 @@ final class MapViewModelBridge {
     }
 
     // MARK: - Private
-
-    private func startObservation() {
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
-        }
-    }
 
     private func apply(_ state: MapViewModel.UIState) {
         self.visitedCafes = state.visitedCafes

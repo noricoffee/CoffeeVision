@@ -4,19 +4,18 @@ import SharedLogic
 /// `CafeSearchViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `init` 時に観測タスクを起動する。破棄フックは `deinit` の `kotlin.clear()` のみで、
-///   observation の明示キャンセルはしていない（`observationTask` を止める処理は無い）。
-///   このタスクが `deinit` 後にどう終了するか（あるいは残り続けるか）は未検証（tasks B-11）
+/// - 観測は `observe()`（構造化 `Task`）が担う。ブリッジ自身は `Task` を保持しない（B-11）
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - 生成箇所は 2 つ: `CafeSearchView` の `@State`（sheet 起動ごとに新規生成・破棄）と
-///   `MapSearchController.searchBridge`（`MapTabView` の `.task` で遅延生成。以後
-///   `MapSearchController` 自体が破棄されるまで保持され続け、`nil` に戻す経路は現状ない）
+/// - 生成箇所は 2 つ: `CafeSearchView` の `@State`（sheet 起動ごとに新規生成・破棄。
+///   `.task { await bridge.observe() }` で観測開始）と `MapSearchController.searchBridge`
+///   （`MapTabView` の `.task` から `MapSearchController.setupAndObserve(makeViewModel:)`
+///   経由で生成・観測開始。`MapTabView` の `.task` が再実行されるたびに `observe()` が
+///   再購読される）
 @MainActor
 @Observable
 final class CafeSearchViewModelBridge {
 
     private let kotlin: CafeSearchViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -33,11 +32,19 @@ final class CafeSearchViewModelBridge {
 
     init(kotlin: CafeSearchViewModel) {
         self.kotlin = kotlin
-        startObservation()
     }
 
     isolated deinit {
         kotlin.clear()
+    }
+
+    // MARK: - ライフサイクル
+
+    /// state 購読を開始する。呼び出し元の `.task` から呼ぶ（構造化 `Task`）。
+    func observe() async {
+        for await state in kotlin.state {
+            apply(state)
+        }
     }
 
     // MARK: - ユーザーアクション
@@ -90,17 +97,6 @@ final class CafeSearchViewModelBridge {
     }
 
     // MARK: - Private
-
-    private func startObservation() {
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
-        }
-    }
 
     private func apply(_ state: CafeSearchViewModel.UIState) {
         self.query = state.query

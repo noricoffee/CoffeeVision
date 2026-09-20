@@ -85,9 +85,8 @@ struct CoffeeDetailView: View {
             }
             .task {
                 guard let uid = appState.uid else { return }
-                viewModel.onAppear(coffeeId: coffeeId, userId: uid)
+                await viewModel.observe(coffeeId: coffeeId, userId: uid)
             }
-            .onDisappear { viewModel.onDisappear() }
             .onChange(of: viewModel.isDeleted) { _, isDeleted in
                 if isDeleted { dismiss() }
             }

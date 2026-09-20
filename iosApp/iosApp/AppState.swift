@@ -370,11 +370,10 @@ final class AppState {
         // `permission-denied` を受け続け、サインアウトのたびに 1 組ずつ積み上がる。
         container.stopSync()
 
-        coffeeListBridge?.onDisappear()
-        mapBridge?.cancel()
-        accountBridge?.cancel()
-        analysisBridge?.cancel()
-
+        // ブリッジの observation（`.task` が回す構造化 `Task`）は、ここで nil にすることで
+        // `AppRootView` の分岐が `RootTabView` からローディング表示へ切り替わり、
+        // 各画面の `.task` が SwiftUI によって自動キャンセルされる（B-11。旧 `onDisappear()` /
+        // `cancel()` の手動キャンセルは不要になった）。
         coffeeListBridge = nil
         mapBridge = nil
         accountBridge = nil

@@ -1273,3 +1273,41 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
   - `MapSearchResultsSheet`: 高さは `mapContainerSize` 由来の計算値で、ロード状態に依存しない（`isLoading` 中は `ProgressView` を同じ枠内に出す = **既に正しい形**）。**該当なし**
   - `CoffeeListView` / `CafeDetailView` の空状態 `ContentUnavailableView`: データ取得で入れ替わるが、画面全体を占める排他表示で兄弟を持たない。**該当なし**
   - **結論: 該当は本件 1 件のみ、修正済み**
+
+---
+
+## 2026-09-20
+
+### ViewModel ブリッジに非構造化 `Task` を保持させると、購読がブリッジより長生きしてリークする
+
+- **症状**: 何も壊れて見えない。ビルドも型検査も通り、画面も正常に動く。カフェ検索シートを開閉する、カフェ詳細を push/pop する、そのたびに Kotlin の ViewModel が 1 つずつ端末に残り続ける。**目視でもテストでも検出できない**
+- **原因の構造**: 全 8 ブリッジが `private var observationTask: Task<Void, Never>?` を保持し、`Task { for await state in flow { ... } }` を自前で回していた。ここに 3 つの事実が重なる
+  1. **非構造化 `Task` は参照を手放しても止まらない** — `stdlib/public/Concurrency/Task.swift:26-31`「It's not a programming error to discard a reference to a task ... **A task runs regardless of whether you keep a reference to it**」
+  2. **`StateFlow` は完了しない** — `deinit` で `kotlin.clear()` を呼んでも `viewModelScope` が畳まれるだけで、`_state` は終わらない
+  3. **ループを抜ける条件が `guard let self else { break }` = 次の emit 時だけ** — ViewModel は既に clear 済みなので emit は来ない
+  結果、Task は `for await` で停まったまま `flow`（= Kotlin の ViewModel）を強参照し続ける。`[weak self]` はブリッジを弱めるだけで、**捕まっているのは Kotlin オブジェクトのほう**
+- **実測**: 番兵オブジェクトを `Task` クロージャに強参照キャプチャさせ、シミュレータで計測。`deinit` は走るのに番兵の `deinit` が 1 件も出ず、45 秒待っても解放されなかった。`deinit` に `observationTask?.cancel()` を足すと解放されることも確認（**SKIE は協調キャンセルに応答する**）
+- **修正パターン**: `cancel()` を足すのは対症療法。**所有をスコープへ移す**
+
+  ```swift
+  // Before: ブリッジが Task を持つ
+  private var observationTask: Task<Void, Never>?
+  func onAppear() { observationTask = Task { [weak self] in for await s in flow { self?.apply(s) } } }
+  func onDisappear() { observationTask?.cancel() }
+
+  // After: View の .task が所有する構造化 Task
+  func observe() async { for await state in kotlin.state { apply(state) } }
+  // View 側: .task { await viewModel.observe() }
+  ```
+
+  根拠は SE-0304「Structured concurrency」115-117 行 — 「cancel メソッドを持つトークンを同期的に返す API 設計は**複雑さを持ち込む** / 構造化ならキャンセルは自然に伝播する」。`observationTask` はそのトークンそのものだった
+- **副次効果**: observation の開始が `init` のみで**再購読の口が無かった** `CafeDetail` / `CafeSearch` / `Map` が、`.task` で自動的に張り直されるようになった。**2026-06-25 / 2026-07-03 の凍結バグが構造的に消えた** — あの 2 件は「`.onDisappear` で止めると再開できない」問題で、所有を移せば止める場所も再開する場所も書かなくてよくなる
+- **教訓**: **`Task` を書いたら「キャンセルを誰が持つか」を先に決める。持ち主がスコープでないなら設計を疑う。** この原則はリポジトリに既にあった — `.claude/rules/swift-ios.md` の「`.onChange(of:) { Task { } }` を書かない。非構造化タスクはビューのライフサイクルに紐づかない」（lessons 2026-08-01）がそれで、**あちらは起こし方、こちらは持ち方**という違いだけだった。**既存の規約を「別の形をした同じ問題」に適用できていなかった**のが本件の根
+- **もう 1 つの教訓**: **`.onDisappear` は破棄を意味しない**ことを 2 回踏んで規約化したのに（2026-06-25 / 2026-07-03）、その規約が「では `deinit` で畳む」という結論に留まり、**そもそも自分で畳む必要がない形**に行き着かなかった。規約が「どう対処するか」で止まっていると、対処が要らない設計を見落とす
+- **横展開点検（2026-09-20 実施）**: `grep -rn "for await" iosApp/iosApp` で無限購読の全 10 箇所を列挙し、所有者を 1 件ずつ確認
+  - 8 ブリッジの `kotlin.state` 購読 → すべて `observe()` に移し `.task` 所有へ。**修正済み**
+  - `MapTabView+Location.swift:104`（`for await location in locationStream()`）→ `setupLocation` 経由で `.task` 所有。**該当なし**
+  - `AccountViewModelBridge.swift:108`（`awaitProcessingCompletion`）→ 最初の `isProcessing == false` で `return` する**有界ループ**。呼び出し元が `await` で所有。**該当なし**（SR-1 の中核なので今回も無変更）
+  - `grep -rn ": Task<" iosApp/iosApp` で保持 Task を点検 → `AppleNearbyCafeLoader.fetchTask` 1 件。**デバウンス用の有界タスク**（300ms sleep → fetch → 終了。`schedule()` の冒頭で毎回 cancel）で、無限購読ではない。**該当なし**
+  - **結論: 該当は 8 ブリッジのみ、すべて修正済み**
+- **発生源**: B-11 / `fix/observation-task-structured-concurrency`（`b5c071c`）。設計判断の経緯は implementation_note 2026-09-20、規約は `.claude/rules/swift-ios.md` と `docs/kmp-bridge.md` へ昇格済み

@@ -78,10 +78,17 @@ final class MapSearchController {
         self.onDismissKeyboard = onDismissKeyboard
     }
 
-    /// 検索ブリッジを 1 度だけ生成する。`MapTabView` の `.task` から呼ぶ。
-    func setup(makeViewModel: () -> CafeSearchViewModel) {
-        guard searchBridge == nil else { return }
-        searchBridge = CafeSearchViewModelBridge(kotlin: makeViewModel())
+    /// 検索ブリッジを 1 度だけ生成し、state 購読を開始する。`MapTabView` の `.task` から呼ぶ
+    /// （構造化 `Task`。B-11）。
+    ///
+    /// `searchBridge` は `MapSearchController` 自体が破棄されるまで使い回されるため、
+    /// この `.task` が再実行される（`MapTabView` が再表示される）たびに `observe()` を
+    /// 呼び直し、既存のブリッジに対して再購読する。ブリッジ自身は `Task` を保持しない。
+    func setupAndObserve(makeViewModel: () -> CafeSearchViewModel) async {
+        if searchBridge == nil {
+            searchBridge = CafeSearchViewModelBridge(kotlin: makeViewModel())
+        }
+        await searchBridge?.observe()
     }
 
     /// `.task` で View 生成後にカメラ / キーボードのコールバックを差し替える。

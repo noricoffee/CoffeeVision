@@ -315,20 +315,25 @@ struct MapTabView: View {
                             }
                         }
                         .task {
-                            // 検索ブリッジとカメラ / キーボードのコールバックを 1 度だけ配線する。
-                            // `@State` の初期値式は `self` を参照できないため、初回の `.task` で
-                            // `cameraPosition` / `isSearchFieldFocused` を捕捉したクロージャに差し替える。
-                            if searchController.searchBridge == nil {
-                                searchController.setup {
-                                    appState.container.makeCafeSearchViewModel()
-                                }
-                                searchController.configureCallbacks(
-                                    onRequestCamera: { region in
-                                        withAnimation { cameraPosition = .region(region) }
-                                    },
-                                    onDismissKeyboard: { isSearchFieldFocused = false }
-                                )
+                            // マップの state 購読を開始する（構造化 `Task`。B-11）。
+                            await bridge.observe()
+                        }
+                        .task {
+                            // 検索ブリッジの生成・state 購読とカメラ / キーボードのコールバックの
+                            // 配線を行う。`@State` の初期値式は `self` を参照できないため、
+                            // `cameraPosition` / `isSearchFieldFocused` を捕捉したクロージャは
+                            // ここで差し替える（`configureCallbacks` は冪等なので毎回呼んでよい）。
+                            searchController.configureCallbacks(
+                                onRequestCamera: { region in
+                                    withAnimation { cameraPosition = .region(region) }
+                                },
+                                onDismissKeyboard: { isSearchFieldFocused = false }
+                            )
+                            await searchController.setupAndObserve {
+                                appState.container.makeCafeSearchViewModel()
                             }
+                        }
+                        .task {
                             await setupLocation(bridge: bridge)
                         }
                 } else {

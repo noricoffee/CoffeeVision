@@ -155,6 +155,8 @@ Kotlin の ViewModel（`StateFlow` を公開）を SwiftUI から扱うには、
 
 ### 推奨パターン（SKIE 利用 + @MainActor）
 
+**ブリッジは `Task` を保持しない。** observation は `observe()` という async メソッドとして公開し、**View の `.task` が所有する構造化 `Task`** として回す。
+
 ```swift
 import Observation
 import SharedLogic
@@ -164,7 +166,6 @@ import SharedLogic
 final class CoffeeListViewModelBridge {
 
     private let kotlin: CoffeeListViewModel
-    private var observationTask: Task<Void, Never>?
 
     // SwiftUI が観測するプロパティ
     private(set) var records: [CoffeeRecord] = []
@@ -176,8 +177,8 @@ final class CoffeeListViewModelBridge {
     }
 
     isolated deinit {
-        // Kotlin 側の所有 viewModelScope を畳む（スレッドセーフ。
-        // 遷移アニメ中にも発火する onDisappear ではなく必ず deinit で呼ぶ）
+        // Kotlin 側の所有 viewModelScope を畳む。**Swift 側の後始末はここには要らない**
+        // （observation は呼び出し元のスコープが畳む）。
         //
         // `isolated`（SE-0371）: 既定 MainActor 分離下でも deinit だけは nonisolated に
         // なるため、MainActor 分離された非 Sendable プロパティ（kotlin）に触れない。
@@ -186,15 +187,11 @@ final class CoffeeListViewModelBridge {
         kotlin.clear()
     }
 
-    func onAppear() {
-        kotlin.onAppear()
-        observationTask?.cancel()
-        observationTask = Task { [weak self] in
-            // SKIE により Flow が AsyncSequence 化されている前提
-            for await state in kotlin.state {
-                self?.apply(state)
-            }
-        }
+    /// state の購読。**呼び出し元のスコープが所有する**（View の `.task` から呼ぶ）。
+    /// キャンセルされるまで戻らない。
+    func observe(userId: String) async {
+        kotlin.onAppear(userId: userId)
+        for await state in kotlin.state { apply(state) }
     }
 
     func onRecordDeleted(id: String) {
@@ -209,14 +206,24 @@ final class CoffeeListViewModelBridge {
 }
 ```
 
-> **observation の停止タイミングに注意**: タブ常駐画面の View で `.onDisappear { observationTask?.cancel() }` をすると、タブ往復や push → 戻る で observation が止まったまま再開されないバグになる（2026-06-25 の実例）。observation は Bridge の `deinit`（= View 破棄）まで生かすのが基本。
+> **なぜブリッジに `Task` を持たせないか**（2026-09-20 に実測して移行）。
+>
+> 非構造化 `Task` は**参照を手放しても止まらない**（`stdlib/public/Concurrency/Task.swift:26-31`「A task runs regardless of whether you keep a reference to it」）。`deinit` で `kotlin.clear()` を呼んでも `StateFlow` は完了しないため、`for await` で停まった Task がブリッジより長生きして Kotlin の ViewModel を掴み続ける。**`CafeSearch` / `CafeDetail` で実際にリークしていた**（シート開閉・push/pop のたびに 1 組ずつ蓄積）。
+>
+> `deinit` に `cancel()` を足せば解放されることも実測したが、それは対症療法にあたる。SE-0304「Structured concurrency」は、まさにこの形を否定している。
+>
+> > Asynchronous interfaces that support this often do so by synchronously returning a token object that provides some sort of `cancel()` method. **This significantly complicates the design of an API** ... Under structured concurrency, cancellation naturally propagates
+>
+> 保持していた `observationTask` はこの「cancel トークン」そのものだった。**所有をスコープへ移せば、畳む場所を書く必要がなくなる。**
 
 ### View 側の使い方
 
-View は Bridge を `@State` で保持し、**`.task { viewModel.onAppear() }` で observation を起こす**。エラーは `viewModel.error != nil` を `isPresented` に束ねた `.alert` で出し、閉じるときに `onErrorDismissed()` を呼び返す（UIState 側の error をクリアする）。
+View は Bridge を `@State` で保持し、**`.task { await viewModel.observe(...) }` で購読を起こす**。エラーは `viewModel.error != nil` を `isPresented` に束ねた `.alert` で出し、閉じるときに `onErrorDismissed()` を呼び返す（UIState 側の error をクリアする）。
 
-- **`.onAppear` ではなく `.task`** を使う（Bridge の `onAppear()` が Task を張るため、View のライフサイクルに合わせて自動キャンセルされる方が安全）
+- **`.onDisappear` で購読を止めるコードを書かない。** 止めるのは `.task` の仕事で、View が消えれば SwiftUI がキャンセルし、再表示で張り直す
+- **戻らない処理を 1 つの `.task` に並べない。** `observe()` はキャンセルされるまで return しないので、後ろに続けて書いた処理は実行されない。並行させたいなら `.task` を複数付ける（`MapTabView` が 3 本持つのはこのため）
 - Bridge の生存スコープは 2 系統: **タブ常駐画面 = `AppState` で 1 つ保持** / **push・sheet 画面 = View 内 `@State` で遷移ごと生成**（`.claude/rules/swift-ios.md`）
+- **長寿命ブリッジでも購読は張り直される。** `MapSearchController.searchBridge` はブリッジ自体を使い回すが、`MapTabView` の `.task` が再実行されるたびに `observe()` を呼び直す
 
 ## CoroutineScope の橋渡し
 
@@ -427,11 +434,9 @@ extension Photo_: @retroactive Identifiable {}        // SQLDelight 生成行型
 
 - Kotlin/Native のオブジェクトは ARC ではなくランタイム独自の参照カウントで管理される（New Memory Model 前提）
 - Swift 側で Kotlin オブジェクトを `weak` に保持できないケースがあるため、**ブリッジは Kotlin ViewModel を強参照で持つ**
-- **破棄フックは `isolated deinit` 一本**。Kotlin の所有 `viewModelScope` を畳む `kotlin.clear()` はここからだけ呼ぶ（`Features/<Name>/<Name>ViewModelBridge.swift` の全本がこの形）。`.onDisappear` は遷移アニメ中にも発火し、タブ常駐 View では再 init もされないため、破棄フックとして成立しない
-- **Swift 側の observation task も原則 `deinit` まで生かす**（上記「observation の停止タイミングに注意」）。`.onDisappear` で止めてよいのは、**再表示時に `onAppear()` を呼び直す経路が View 側にあるときだけ**。経路が無いまま止めると状態が凍結して戻らない（`CafeSearchView` = lessons 2026-06-25 / `CafeDetailView` = 同 2026-07-03 の実例）
-  - **observation だけを外部から止める public API を作らない。** 畳むならブリッジごと破棄する（`= nil`）。タブ常駐ブリッジが持つ `cancel()` は `AppState.resetAndRebootstrap()` が**直後に `= nil` するのとセットで呼ぶ前処理**であって、単独で観測を止めるための API ではない（`cancel()` だけ呼ぶと Kotlin の `viewModelScope` が畳まれないまま observation だけ死に、既知の凍結バグと同じ形になる）
-  - ⚠ **`deinit` 後に observation task が残るかは未検証**。全ブリッジの `deinit` は `kotlin.clear()` のみで `observationTask` を明示キャンセルしていない。`kotlin.state` は `StateFlow`（完了しない）で、Task は `let flow = kotlin.state` を強参照キャプチャし、ループを抜けるのは `guard let self else { break }` = **次の emit が来たとき**。実際に task が解放されるかは SKIE の `SkieSwiftFlow` の挙動次第で、リポジトリ内に一次情報がない。明示キャンセルを入れるかの判断は tasks B-11 に合流させる
-  - **現状 `CoffeeListView` / `AnalysisView` は `.onDisappear` で止めて再表示時に張り直す型**で、自己回復はするが規約からは外れている（`onAppear()` の先頭が `observationTask?.cancel()` なので張り替えは冪等）。deinit まで生かす型への統一は未着手（tasks B-11 / 経緯は lessons 2026-07-03）
+- **ブリッジは `Task` を保持しない**（上記「ViewModel ブリッジパターン」）。したがって Swift 側の後始末を書く場所は無く、`deinit` に残るのは Kotlin 側を畳む `kotlin.clear()` だけ
+- **observation だけを外部から止める public API を作らない。** 畳むならブリッジごと破棄する。`cancel()` や `onDisappear()` のような「観測だけ止める口」は、呼ばれた先で再購読できずに凍結する（lessons 2026-06-25 / 2026-07-03）
+- `Task` を自前で張る箇所が新しく出たら、**そのキャンセルを誰が持つか**を先に決める。持ち主がスコープでないなら設計を疑う
 - `Task` の中で `self` をキャプチャするときは `[weak self]` を忘れない
 
 ---

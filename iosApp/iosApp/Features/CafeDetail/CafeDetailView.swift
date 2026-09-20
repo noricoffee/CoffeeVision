@@ -7,9 +7,9 @@ import SharedLogic
 /// - ツールバーの `+` ボタンで `CoffeeEditorView` を sheet で起動（cafe pre-filled）
 /// - NavigationStack push ごとに新規 Bridge を生成するため、`@State` で保持する
 /// - マップの Annotation タップ / 検索結果タップの両方から push される
-/// - observation は `bridge` の `deinit`（= View 破棄）まで生かす。`onDisappear` での
-///   cancel は push → pop 後の再表示で observation が凍結するバグになるため行わない
-///   （`kmp-bridge.md` の既知パターン）
+/// - Bridge 生成と observation 開始は単一の `.task` にまとめる（構造化 `Task`。B-11）。
+///   View が破棄される（pop される）と `.task` が自動キャンセルされ、Bridge 自体の `deinit`
+///   （`kotlin.clear()`）も連鎖する
 struct CafeDetailView: View {
 
     // MARK: - Properties
@@ -44,16 +44,22 @@ struct CafeDetailView: View {
         .errorToast(message: bridge?.error) {
             bridge?.onErrorDismissed()
         }
-        .onAppear {
-            if bridge == nil, let uid = appState.uid {
-                bridge = CafeDetailViewModelBridge(
+        .task {
+            let currentBridge: CafeDetailViewModelBridge
+            if let bridge {
+                currentBridge = bridge
+            } else {
+                guard let uid = appState.uid else { return }
+                currentBridge = CafeDetailViewModelBridge(
                     viewModel: appState.container.makeCafeDetailViewModel(
                         placeId: placeId,
                         initialCafe: initialCafe,
                         userId: uid
                     )
                 )
+                bridge = currentBridge
             }
+            await currentBridge.observe()
         }
         .sheet(isPresented: $isPresentingEditor) {
             CoffeeEditorView(

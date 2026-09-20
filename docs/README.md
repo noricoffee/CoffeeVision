@@ -11,8 +11,6 @@ CoffeeVision の設計・仕様・運用ドキュメントの置き場。ここ�
 コーディング時に従う正本：
 `architecture` / `coding-conventions` / `ui-ux-guidelines` / `requirements` / `data-model` / `analysis-model` / `kmp-bridge` / `implementation_note` / `tasks` / `app-store-metadata` / `paid-services`。
 
-- **[admob-setup-todo.md](./admob-setup-todo.md)** — AdMob 本番ユニットの ID 控え（**git 非追跡**）。実装側の切替手順の正本は `iosApp/Configuration/README.md`。
-
 ## archive/ — 凍結したリリース分
 
 **リリースしたバージョンまでの作業ログを、バージョン単位のフォルダに凍結して置く。追記しない。**

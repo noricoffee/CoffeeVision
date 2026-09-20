@@ -123,7 +123,25 @@
 
 > 提出用の原稿・プライバシー申告・提出前チェックリストは [`app-store-metadata.md`](./app-store-metadata.md) が正。1.0 は 2026-08-11 に提出し、審査通過後リリース済み。
 
-### 1.0.2 リリース（2026-08-31 起票 / **提出済み・審査待ち**）
+### 1.0.3 リリース（2026-09-20 起票 / **提出準備中**）
+
+> **中身は B-11**（observation を View スコープ所有の構造化 `Task` へ移す）**1 件**。実在したメモリリークの修正で、カフェ検索シートの開閉・カフェ詳細の push/pop のたびに Kotlin の ViewModel が 1 つずつ残っていた。ユーザー可視の症状は無かったが、長時間利用で積み上がる。詳細は [`implementation_note.md`](./implementation_note.md) 2026-09-20 / PR #12。
+>
+> **`MARKETING_VERSION` / Android `versionName` は 1.0.3 に更新済み**（`248c4c3`。ビルド番号は CI 採番のため据え置き）。
+>
+> **提出前チェックリスト（[`app-store-metadata.md`](./app-store-metadata.md) §10）の消化状況**: 原稿の文字数は全項目実測して上限内（名前 25/30・サブタイトル 21/30・プロモ 148/170・説明文 1013/4000・キーワード ja 98/100・en 98/100）。App Privacy（§6.1 / §6.3）は 1.0.2 から収集内容の変更なし（`PrivacyInfo.xcprivacy` も無変更）。年齢制限（§7）も変更なし。Firestore Rules は 2026-07-17 以降変更がなく反映済み。
+
+| 状態 | タスク | 備考 |
+|------|--------|------|
+| [x] | `MARKETING_VERSION` / Android `versionName` を 1.0.3 へ | 2026-09-20（`248c4c3`）。ビルド番号は据え置き |
+| [x] | **CI の AdMob 本番 ID 供給を下部固定帯のキーへ追随させる** | 2026-09-20。`release-testflight.yml` が旧 2 面のキー（`_CAFE_DETAIL` / `_MAP_SEARCH`）のままで、**`_GLOBAL_BOTTOM` を供給していなかった** = リリースビルドがデモ ID のまま出荷される状態だった。2026-07-22 と同型の再発（lessons 2026-09-20） |
+| [x] | **AdMob コンソールで下部固定帯用の広告ユニットを発行**し、GitHub Secrets に `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` を登録する | 2026-09-20 完了（ユーザー作業）。**コンソール側のユニット自動更新はオフ（手動更新）**である前提 — クライアントが 60 秒タイマーでリフレッシュするため、有効だと二重に走る |
+| [ ] | 旧 GitHub Secrets（`ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `_MAP_SEARCH`）と AdMob コンソールの旧ユニット 2 つを整理する | CI はもう参照しないので**害は無い**が、残すと次に触る人が用途を追う時間が発生する。レポート上も死んだ行が残る |
+| [x] | **What's New の文言を決める** | 2026-09-20、**「軽微な修正を行いました」**（1.0.2 と同一文言。ユーザー確定）。app-store-metadata §9 に記録済み |
+| [ ] | **スクリーンショットの全面再撮影** | **今回のスコープ外**（ユーザー判断）。2026-09-19 の広告帯再編以降、1.0.2 までの全カットが現物と不一致。§10 の「スクショが現物と一致するか」は**不合格のまま**。撮影手順は app-store-metadata §5 |
+| [ ] | 審査提出（ユーザー作業） | 上記ブロッカーの解消後 |
+
+### 1.0.2 リリース（2026-08-31 起票 / **リリース済み**）
 
 > **`MARKETING_VERSION` を 1.0.2 に上げた**（`iosApp/Configuration/Config.xcconfig`。Android の `versionName` も同値に揃えた）。**ビルド番号（`CURRENT_PROJECT_VERSION`）は据え置きで正しい** — `release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、xcconfig の `1` は Release では使われない（app-store-metadata §1 / §10）。
 >

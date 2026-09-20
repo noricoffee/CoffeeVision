@@ -1311,3 +1311,23 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
   - `grep -rn ": Task<" iosApp/iosApp` で保持 Task を点検 → `AppleNearbyCafeLoader.fetchTask` 1 件。**デバウンス用の有界タスク**（300ms sleep → fetch → 終了。`schedule()` の冒頭で毎回 cancel）で、無限購読ではない。**該当なし**
   - **結論: 該当は 8 ブリッジのみ、すべて修正済み**
 - **発生源**: B-11 / `fix/observation-task-structured-concurrency`（`b5c071c`）。設計判断の経緯は implementation_note 2026-09-20、規約は `.claude/rules/swift-ios.md` と `docs/kmp-bridge.md` へ昇格済み
+
+### xcconfig のキー名を変えたら、CI の秘匿値供給も同じ変更で追随させる（同型の再発）
+
+- **症状**: 何も壊れない。ローカルビルドも CI も通り、実機でも広告は出る。**出ているのが Google のデモ広告**というだけで、収益がゼロになる
+- **原因の構造**: 2026-09-19 の広告再編でインライン 2 面（`ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `_MAP_SEARCH`）を下部固定帯 1 面（`_GLOBAL_BOTTOM`）へ集約したが、**`release-testflight.yml` の「Restore secret files」が旧キー名のまま**だった。結果
+  - fail-fast のガードが**存在しないキー**を見張る（守っているつもりで何も守っていない）
+  - `_GLOBAL_BOTTOM` は CI が書き出さないので `Base.xcconfig` のフォールバック = **デモ ID** が採用される
+  - ワークフロー自身のコメントが「未設定のまま出荷すると Base.xcconfig のデモ AdMob ID で広告が載る（収益ゼロ）」と警告しているのに、**その警告どおりの状態になっていた**
+- **同型の再発である点が重要**: 2026-07-22 に**同じファイルで同じ形**を踏んでいる（当時は `PLACES_API_KEY` しか書き出しておらず、AdMob 本番 ID を発行しても TestFlight はデモ ID のままだった。tasks-archive「CI リリースへの本番 AdMob ID 注入」）。あのときは「キーを足す」で直したが、**「キー名を変えたときにも同じ穴が開く」ことまでは一般化していなかった**
+- **教訓**: **`Base.xcconfig` / `Info.plist` のビルド変数名を変えたら、その場で供給側（CI）を grep する。** 機械的な点検手順は「`Info.plist` が `$(...)` で要求する変数」と「CI が `Secrets.xcconfig` へ書き出す変数」の集合比較で、差があれば必ず事故になる
+
+  ```bash
+  grep -o '\$([A-Z_][A-Z0-9_]*)' iosApp/iosApp/Info.plist | tr -d '$()' | sort -u > /tmp/need.txt
+  grep -oE "printf '[A-Z_][A-Z0-9_]*" .github/workflows/release-testflight.yml | sed "s/printf '//" | sort -u > /tmp/ci.txt
+  comm -23 /tmp/need.txt /tmp/ci.txt   # 空でなければ供給漏れ
+  ```
+
+- **見つけ方の教訓**: 発見は「1.0.3 の提出準備」でチェックリストを上から潰していた過程。**リリース前チェックリストが機能した実例**で、`app-store-metadata.md` §10 の「本番環境の設定（アプリが動くかでは検出できないもの）」という節の存在理由そのものだった
+- **横展開点検（2026-09-20 実施）**: 上記の集合比較を実行 → `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` / `PLACES_API_KEY` の 3 つで**過不足なく一致**。`Base.xcconfig` が宣言する残り 3 つ（`SWIFT_VERSION` / `SWIFT_DEFAULT_ACTOR_ISOLATION` / `SWIFT_APPROACHABLE_CONCURRENCY`）は秘匿値ではなくビルド設定なので対象外。**該当は本件 1 件のみ、修正済み**
+- **発生源**: 1.0.3 提出準備（`chore/release-1.0.3-prep`）。旧キーの撤去は 2026-09-19 の広告再編（`2449ece` / `32967ca`）で漏れていた

@@ -1,6 +1,6 @@
 [versions]
-agp = "9.2.1"
-android-compileSdk = "36"
+agp = "9.5.0"
+android-compileSdk = "37"
 android-minSdk = "36"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
@@ -9,10 +9,10 @@ androidx-core = "1.18.0"
 androidx-espresso = "3.7.0"
 androidx-lifecycle = "2.11.0-beta01"
 androidx-testExt = "1.3.0"
-composeMultiplatform = "1.11.0"
+composeMultiplatform = "1.12.2"
 junit = "4.13.2"
-kotlin = "2.3.21"
-material3 = "1.11.0-alpha07"
+kotlin = "2.4.21"
+material3 = "1.12.0-alpha03"
 
 # KMP 共通基盤
 kotlinxCoroutines = "1.10.2"
@@ -27,10 +27,10 @@ ktor = "3.0.3"
 
 # Firebase（Android 側）
 firebaseBom = "33.7.0"
-googleServices = "4.4.2"
+googleServices = "4.5.0"
 
 # Kotlin → Swift トランスパイラ拡張（suspend / Flow / sealed を Swift idiomatic に変換）
-skie = "0.10.12"
+skie = "0.10.16"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }

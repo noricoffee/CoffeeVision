@@ -4,10 +4,10 @@ android-compileSdk = "37"
 android-minSdk = "36"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
-androidx-appcompat = "1.7.1"
-androidx-core = "1.18.0"
+androidx-appcompat = "1.8.0"
+androidx-core = "1.19.1"
 androidx-espresso = "3.7.0"
-androidx-lifecycle = "2.11.0-beta01"
+androidx-lifecycle = "2.11.0"
 androidx-testExt = "1.3.0"
 composeMultiplatform = "1.12.2"
 junit = "4.13.2"
@@ -15,15 +15,15 @@ kotlin = "2.4.21"
 material3 = "1.12.0-alpha03"
 
 # KMP 共通基盤
-kotlinxCoroutines = "1.10.2"
-kotlinxSerialization = "1.8.0"
+kotlinxCoroutines = "1.11.0"
+kotlinxSerialization = "1.12.0"
 kotlinxDatetime = "0.6.2"
 
 # ローカル DB
-sqldelight = "2.1.0"
+sqldelight = "2.4.1"
 
 # HTTP
-ktor = "3.0.3"
+ktor = "3.6.1"
 
 # Firebase（Android 側）
 firebaseBom = "33.7.0"

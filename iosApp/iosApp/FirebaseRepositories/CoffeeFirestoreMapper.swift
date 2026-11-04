@@ -340,6 +340,6 @@ nonisolated enum CoffeeFirestoreMapper {
         else {
             return nil
         }
-        return Kotlinx_datetimeLocalDate(year: year, monthNumber: month, dayOfMonth: day)
+        return Kotlinx_datetimeLocalDate(year: year, month: month, day: day)
     }
 }

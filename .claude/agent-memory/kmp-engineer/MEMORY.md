@@ -27,3 +27,4 @@
 - [公開 API メソッド削除チェックリスト](dead_api_removal_checklist.md) — interface メソッド削除時に見落としがちな KDoc 内の名指し参照 + Swift 側の余剰 override（コンパイラでは検出不可）
 - [複数 Repository をまたぐ順序保証削除の拡張パターン](cascade_delete_ordered_stage_pattern.md) — DeleteAccountUseCase 型の N 段階削除に新ステージを挟む手順。共通 callOrder による順序テスト設計 + `data-firebase` の Android compile タスク名の罠 + Swift 側無引数 suspend fun の `__` + completionHandler 裏取り方法
 - [Gradle wrapper 更新 + androidLibrary→android DSL 移行](gradle_wrapper_and_androidlibrary_dsl_migration.md) — wrapper メジャー更新時は properties を手で先に書き換える手順 / AGP 9.5 で KMP `androidLibrary {}` が `android {}` に / `com.android.build.gradle.LibraryExtension` deprecation 対処 / CMP 1.12.2 が compileSdk 37 を強制する話 / sandbox の MissingXcodeException 判別法
+- [依存バージョン一括更新の検証手順](dependency_bump_verification_approach.md) — maven-metadata.xml で最新安定版を確認する URL（AndroidX は dl.google.com 配下）/ SQLDelight gradle-plugin の `setVisible` deprecation はバージョンを上げても消えない（アップストリーム側の原因）ことの class ファイル裏取り方法

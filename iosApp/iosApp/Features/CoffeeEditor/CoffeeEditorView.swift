@@ -216,8 +216,8 @@ struct CoffeeEditorView: View {
         let components = gregorianCalendar.dateComponents([.year, .month, .day], from: date)
         return Kotlinx_datetimeLocalDate(
             year: Int32(components.year ?? 2026),
-            monthNumber: Int32(components.month ?? 1),
-            dayOfMonth: Int32(components.day ?? 1)
+            month: Int32(components.month ?? 1),
+            day: Int32(components.day ?? 1)
         )
     }
 

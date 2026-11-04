@@ -11,7 +11,7 @@ import SharedLogic
 ///   Swift に橋渡しされた型。コンストラクタシグネチャは `CoffeeFirestoreMapper.swift` と同じパターン
 /// - Kotlin の `Kotlinx_datetimeInstant` は `Kotlinx_datetimeInstant.Companion.shared
 ///   .fromEpochMilliseconds(epochMilliseconds:)` で生成する
-/// - Kotlin の `Kotlinx_datetimeLocalDate` は `Kotlinx_datetimeLocalDate(year:monthNumber:dayOfMonth:)` で生成する
+/// - Kotlin の `Kotlinx_datetimeLocalDate` は `Kotlinx_datetimeLocalDate(year:month:day:)` で生成する
 enum PreviewSamples {
 
     // MARK: - 日時ヘルパ
@@ -37,8 +37,8 @@ enum PreviewSamples {
     static func localDate(year: Int, month: Int, day: Int) -> Kotlinx_datetimeLocalDate {
         Kotlinx_datetimeLocalDate(
             year: Int32(year),
-            monthNumber: Int32(month),
-            dayOfMonth: Int32(day)
+            month: Int32(month),
+            day: Int32(day)
         )
     }
 

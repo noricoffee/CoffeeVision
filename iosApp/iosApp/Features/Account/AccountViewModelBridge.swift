@@ -5,16 +5,13 @@ import SharedLogic
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - 観測タスクは `onAppear` で開始し、**破棄は `deinit` 起点**（`cancel()` は `AppState` が
-///   ブリッジを捨てるときの明示キャンセル用）。`AccountView` の `.onDisappear` からは
-///   キャンセルしない — サインアウト / 削除の完了待ち中に画面を離れると、`apply(_:)` が
-///   止まって `isProcessing` が凍結するため（SR-1）
+/// - 観測は `observe()`（構造化 `Task`。`AccountView` の `.task` から呼ぶ）が担う。
+///   ブリッジ自身は `Task` を保持しない（B-11）。破棄は `deinit` の `kotlin.clear()` 一本
 @MainActor
 @Observable
 final class AccountViewModelBridge {
 
     private let kotlin: AccountViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -51,26 +48,14 @@ final class AccountViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    func onAppear() {
-        observationTask?.cancel()
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
-        }
-    }
-
-    /// 観測タスクを明示的にキャンセルする。`AppState` が破棄されるときに呼ぶ。
+    /// state 購読を開始する。`AccountView` の `.task` から呼ぶ（構造化 `Task`）。
     ///
-    /// **`AccountView` の `.onDisappear` からは呼ばない。** 呼ぶと `apply(_:)` が止まり、
-    /// `isKmpProcessing` が凍結して処理中オーバーレイと「完了」ボタンの活性が実態からずれる
-    /// （`CafeDetailView` と同じ判断。`MapViewModelBridge.cancel()` と同じ役割）。
-    func cancel() {
-        observationTask?.cancel()
-        observationTask = nil
+    /// `AccountView` は `.onDisappear` でこの購読を止めない設計を維持する
+    /// （タブ常駐のため `AppState` がブリッジを保持し、破棄は `deinit` 起点）。
+    func observe() async {
+        for await state in kotlin.state {
+            apply(state)
+        }
     }
 
     // MARK: - ユーザーアクション
@@ -106,8 +91,8 @@ final class AccountViewModelBridge {
 
     /// `onSignOutTapped()` / `onDeleteAccountTapped(userId:)` 呼び出し直後の完了を待つ。
     ///
-    /// KMP の `state` を **`observationTask` とは独立に**購読する。これにより、待っている間に
-    /// `AccountView` が pop されて `apply(_:)` が止まっても完了を取りこぼさない。
+    /// KMP の `state` を **`observe()` とは独立に**購読する。これにより、待っている間に
+    /// `AccountView` が pop されて `observe()` の `Task` がキャンセルされても完了を取りこぼさない。
     ///
     /// KMP 側は各アクションの呼び出し時点で**同期的に** `isProcessing = true` にする
     /// （`AccountViewModel.markProcessingStarted`）ため、購読開始時には必ず true が観測できる。
@@ -163,8 +148,18 @@ final class AccountViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: AccountViewModel.UIState) {
-        self.account = state.account
-        self.isKmpProcessing = state.isProcessing
-        self.error = state.error
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `AuthAccount` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        if account != state.account {
+            account = state.account
+        }
+        if isKmpProcessing != state.isProcessing {
+            isKmpProcessing = state.isProcessing
+        }
+        if error != state.error {
+            error = state.error
+        }
     }
 }

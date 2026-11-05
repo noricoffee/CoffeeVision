@@ -75,7 +75,7 @@ public API（コンストラクタのオーバーロード等）を確認する�
 ## サンドボックスでの `iosSimulatorArm64Test` 実行（2026-07-12 実績）
 
 CLAUDE.md / 他エージェントのメモリには「sandbox 制約で `iosSimulatorArm64Test` は実行できない」とあるが、
-今回 `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew :shared:data-local:iosSimulatorArm64Test`
+今回 `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./gradlew :shared:data-local:iosSimulatorArm64Test`
 は実際に成功した（`linkDebugTestIosSimulatorArm64` → `iosSimulatorArm64Test` まで完走、5 テストスイート全 green）。
 環境によっては実行できる場合があるので、`compileTestKotlinIosSimulatorArm64` で満足せず、まず実行を試す価値がある
 （失敗したら諦めて親に委ねる。1 回で判断する）。

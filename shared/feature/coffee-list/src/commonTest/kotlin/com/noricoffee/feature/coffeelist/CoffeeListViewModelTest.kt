@@ -7,11 +7,11 @@ import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * [CoffeeListViewModel] の検索フィルタ（要件 6-1）・月別グルーピング（要件 2-11）のテスト。

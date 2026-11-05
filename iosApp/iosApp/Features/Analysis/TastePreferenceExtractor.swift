@@ -1,5 +1,9 @@
 import Foundation
 import FoundationModels
+import os
+
+/// 好み抽出（オンデバイス LLM）のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "TastePreference")
 
 // MARK: - TastePreference（@Generable 出力スキーマ）
 
@@ -74,10 +78,10 @@ final class TastePreferenceExtractor: Sendable {
     /// - Returns: `TastePreferenceExtractor` のインスタンス、非対応端末では nil。
     static func makeIfAvailable() -> TastePreferenceExtractor? {
         guard SystemLanguageModel.default.availability == .available else {
-            print("[CoffeeVision] TastePreferenceExtractor: Foundation Models unavailable: \(SystemLanguageModel.default.availability)")
+            log.notice("Foundation Models unavailable: \(String(describing: SystemLanguageModel.default.availability), privacy: .public)")
             return nil
         }
-        print("[CoffeeVision] TastePreferenceExtractor: Foundation Models available")
+        log.info("Foundation Models available")
         return TastePreferenceExtractor()
     }
 

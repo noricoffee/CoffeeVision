@@ -88,6 +88,9 @@ struct CafeSearchView: View {
         .errorToast(message: bridge.error) {
             bridge.onErrorDismissed()
         }
+        .task {
+            await bridge.observe()
+        }
     }
 
     // MARK: - Actions

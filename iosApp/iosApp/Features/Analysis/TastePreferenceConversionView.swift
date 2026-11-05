@@ -1,6 +1,10 @@
 import Charts
 import SwiftUI
 @preconcurrency import SharedLogic
+import os
+
+/// 好み変換デモ画面のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "TastePreference")
 
 // MARK: - TastePreferenceConversionView
 
@@ -333,7 +337,7 @@ struct TastePreferenceConversionView: View {
                 await searchRecordsAfterExtraction(preference: preference)
             } catch {
                 let message = error.localizedDescription
-                print("[CoffeeVision] TastePreferenceConversionView: extraction failed: \(error)")
+                log.error("TastePreferenceConversionView: extraction failed: \(String(describing: error), privacy: .public)")
                 extractionState = .failed(message)
             }
         }
@@ -351,7 +355,7 @@ struct TastePreferenceConversionView: View {
                 searchState = .found(Array(summaries))
             }
         } catch {
-            print("[CoffeeVision] TastePreferenceConversionView: search failed: \(error)")
+            log.error("TastePreferenceConversionView: search failed: \(String(describing: error), privacy: .public)")
             searchState = .unavailable
         }
     }

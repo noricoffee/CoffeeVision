@@ -2,6 +2,10 @@ import Foundation
 import FirebaseAuth
 import FirebaseFirestore
 import SharedLogic
+import os
+
+/// 認証・同意状態の Firestore リスナのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Auth")
 
 /// `com.noricoffee.repository.AuthRepository` の iOS 実装。
 ///
@@ -11,7 +15,9 @@ import SharedLogic
 ///
 /// `nonisolated` である理由は他の Kotlin interface 実装と同じ（Kotlin ランタイムが任意スレッドから
 /// 呼び出す）。加えて `Features/Account/AccountView.swift` が Swift 側の素のヘルパとしても直接
-/// 生成・使用するが、可変状態を保持しないためどちらの呼び出し経路でも安全（SW6-2）。
+/// 生成・使用するが、クラス自体は可変状態を保持しないためどちらの呼び出し経路でも安全（SW6-2）。
+/// `observe*` が張るリスナ登録はメソッドローカルだが `onStart` / `onCancel` の 2 つのクロージャから
+/// 共有されるため `OSAllocatedUnfairLock` で保護する（SL-1）。
 nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
 
     // MARK: - signInAnonymouslyIfNeeded
@@ -47,23 +53,33 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
     /// Firebase Auth の state listener を Kotlin Flow にブリッジ。
     /// Flow<String?> は SKIE 経由で SkieSwiftOptionalFlow<String> として実装する。
     func observeUserId() -> SkieSwiftOptionalFlow<String> {
-        var handle: AuthStateDidChangeListenerHandle?
+        // `onStart`（Kotlin ランタイムの任意スレッド）で書き、`onCancel`（= deinit、同じく任意スレッド）で
+        // 読んで無効化する共有可変状態なのでロックで保護する。`AuthStateDidChangeListenerHandle` は
+        // 非 Sendable なので `uncheckedState:` / `withLockUnchecked` 側の API を使う（SL-1）。
+        let handleLock = OSAllocatedUnfairLock<AuthStateDidChangeListenerHandle?>(uncheckedState: nil)
         // Auth の state listener はエラーを返さない API なので `fail` は使わない。
         let callbackFlow = CallbackFlow<NSString>(
             onStart: { emit, _ in
-                handle = Auth.auth().addStateDidChangeListener { _, user in
+                let handle = Auth.auth().addStateDidChangeListener { _, user in
                     if let uid = user?.uid {
                         emit(uid as NSString)
                     }
                     // サインアウト時の nil emit は今回スコープ外。
                     // 必要になったら CallbackFlow を Optional 対応に拡張する。
                 }
+                handleLock.withLockUnchecked { $0 = handle }
             },
             onCancel: {
-                if let handle {
-                    Auth.auth().removeStateDidChangeListener(handle)
+                // 取り出しと無効化をアトミックに行う（`FlowCompletionGate.finish` と同じ考え方）。
+                // 解除自体はロックの外で呼ぶ。
+                let pending = handleLock.withLockUnchecked { current -> AuthStateDidChangeListenerHandle? in
+                    let taken = current
+                    current = nil
+                    return taken
                 }
-                handle = nil
+                if let pending {
+                    Auth.auth().removeStateDidChangeListener(pending)
+                }
             }
         )
         // SkieSwiftOptionalFlow<String> は @_spi(SKIE) の internal init しか持たず、
@@ -80,11 +96,12 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
     /// サインイン中は AuthAccount を emit し、サインアウト（nil user）は nil を emit する。
     /// SKIE 実装側は `SkieSwiftOptionalFlow<AuthAccount>` を返す。
     func observeAccount() -> SkieSwiftOptionalFlow<AuthAccount> {
-        var handle: AuthStateDidChangeListenerHandle?
+        // 保護の理由は `observeUserId` と同じ（SL-1）。
+        let handleLock = OSAllocatedUnfairLock<AuthStateDidChangeListenerHandle?>(uncheckedState: nil)
         // Auth の state listener はエラーを返さない API なので `fail` は使わない。
         let callbackFlow = CallbackFlowOptional<AuthAccount>(
             onStart: { emitSome, emitNone, _ in
-                handle = Auth.auth().addStateDidChangeListener { _, user in
+                let handle = Auth.auth().addStateDidChangeListener { _, user in
                     if let user {
                         let account = AuthRepositoryIosImpl.makeAuthAccount(from: user)
                         emitSome(account)
@@ -92,12 +109,17 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
                         emitNone()
                     }
                 }
+                handleLock.withLockUnchecked { $0 = handle }
             },
             onCancel: {
-                if let handle {
-                    Auth.auth().removeStateDidChangeListener(handle)
+                let pending = handleLock.withLockUnchecked { current -> AuthStateDidChangeListenerHandle? in
+                    let taken = current
+                    current = nil
+                    return taken
                 }
-                handle = nil
+                if let pending {
+                    Auth.auth().removeStateDidChangeListener(pending)
+                }
             }
         )
         return SkieSwiftOptionalFlow._unconditionallyBridgeFromObjectiveC(
@@ -297,7 +319,8 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
     /// 「読めなかった」は別の事象で、後者で `false` を emit するのは同意状態の**値の捏造**に
     /// あたる（`permission-denied` が UI 上は「同意していない」として現れてしまう）。
     func observeAnalyticsConsent() -> SkieSwiftFlow<KotlinBoolean> {
-        var listenerRegistration: ListenerRegistration?
+        // 保護の理由は `observeUserId` と同じ（SL-1）。
+        let listenerLock = OSAllocatedUnfairLock<(any ListenerRegistration)?>(uncheckedState: nil)
 
         let flow = CallbackFlow<KotlinBoolean>(
             onStart: { emit, fail in
@@ -305,22 +328,27 @@ nonisolated final class AuthRepositoryIosImpl: NSObject, AuthRepository {
                     emit(KotlinBoolean(value: false))
                     return
                 }
-                listenerRegistration = Firestore.firestore()
+                let registration = Firestore.firestore()
                     .collection("users")
                     .document(uid)
                     .addSnapshotListener { snapshot, error in
                         if let error {
-                            print("[AuthRepositoryIosImpl] analyticsConsent snapshot error: \(error)")
+                            log.error("analyticsConsent snapshot error: \(String(describing: error), privacy: .public)")
                             fail(error)
                             return
                         }
                         let consent = snapshot?.data()?["analyticsConsent"] as? Bool ?? false
                         emit(KotlinBoolean(value: consent))
                     }
+                listenerLock.withLockUnchecked { $0 = registration }
             },
             onCancel: {
-                listenerRegistration?.remove()
-                listenerRegistration = nil
+                let pending = listenerLock.withLockUnchecked { current -> (any ListenerRegistration)? in
+                    let taken = current
+                    current = nil
+                    return taken
+                }
+                pending?.remove()
             }
         )
         return SkieSwiftFlow._unconditionallyBridgeFromObjectiveC(

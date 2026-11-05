@@ -11,7 +11,6 @@ import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.coroutines.coroutineContext
 import kotlin.test.AfterTest
@@ -20,6 +19,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class LocalCoffeeRepositoryTest {
 

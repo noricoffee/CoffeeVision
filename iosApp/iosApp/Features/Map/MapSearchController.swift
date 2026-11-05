@@ -78,10 +78,17 @@ final class MapSearchController {
         self.onDismissKeyboard = onDismissKeyboard
     }
 
-    /// 検索ブリッジを 1 度だけ生成する。`MapTabView` の `.task` から呼ぶ。
-    func setup(makeViewModel: () -> CafeSearchViewModel) {
-        guard searchBridge == nil else { return }
-        searchBridge = CafeSearchViewModelBridge(kotlin: makeViewModel())
+    /// 検索ブリッジを 1 度だけ生成し、state 購読を開始する。`MapTabView` の `.task` から呼ぶ
+    /// （構造化 `Task`。B-11）。
+    ///
+    /// `searchBridge` は `MapSearchController` 自体が破棄されるまで使い回されるため、
+    /// この `.task` が再実行される（`MapTabView` が再表示される）たびに `observe()` を
+    /// 呼び直し、既存のブリッジに対して再購読する。ブリッジ自身は `Task` を保持しない。
+    func setupAndObserve(makeViewModel: () -> CafeSearchViewModel) async {
+        if searchBridge == nil {
+            searchBridge = CafeSearchViewModelBridge(kotlin: makeViewModel())
+        }
+        await searchBridge?.observe()
     }
 
     /// `.task` で View 生成後にカメラ / キーボードのコールバックを差し替える。
@@ -170,8 +177,13 @@ final class MapSearchController {
 
         // エリア検索は表示範囲外の結果（Places の locationBias は範囲制限ではないため混入しうる）
         // を除外する。テキスト検索は全件をそのまま反映する。
-        displayedResults = wasAreaSearch ? filterResultsWithinAreaSearchRegion(sb.results) : sb.results
-        mapBridge.onSearchResultsUpdated(displayedResults)
+        let results = wasAreaSearch ? filterResultsWithinAreaSearchRegion(sb.results) : sb.results
+        // `@Observable` は値を比較せず代入だけで変更を通知するため同値ガードを置く
+        // （`Cafe` は Kotlin data class で `isEqual:` を持つので `!=` が値比較になる）。
+        if displayedResults != results {
+            displayedResults = results
+        }
+        mapBridge.onSearchResultsUpdated(results)
 
         if wasAreaSearch {
             if let currentCenter {
@@ -223,35 +235,12 @@ final class MapSearchController {
             }
             return CLLocationCoordinate2D(latitude: lat, longitude: lng)
         }
-        guard !coordinates.isEmpty else { return }
-
-        if coordinates.count == 1 {
-            onRequestCamera(
-                MKCoordinateRegion(
-                    center: coordinates[0],
-                    latitudinalMeters: 800,
-                    longitudinalMeters: 800
-                )
-            )
-            return
-        }
-
-        let lats = coordinates.map { $0.latitude }
-        let lngs = coordinates.map { $0.longitude }
-        let minLat = lats.min()!
-        let maxLat = lats.max()!
-        let minLng = lngs.min()!
-        let maxLng = lngs.max()!
-        let center = CLLocationCoordinate2D(
-            latitude: (minLat + maxLat) / 2,
-            longitude: (minLng + maxLng) / 2
-        )
-        // 1.3 倍（片側 15% 相当）は setInitialCameraFromVisitedCafes と同じ padding 係数。
-        let span = MKCoordinateSpan(
-            latitudeDelta: max((maxLat - minLat) * 1.3, 0.01),
-            longitudeDelta: max((maxLng - minLng) * 1.3, 0.01)
-        )
-        onRequestCamera(MKCoordinateRegion(center: center, span: span))
+        // padding 係数・span 下限は setInitialCameraFromVisitedCafes と共通（MapRegionFitting）。
+        guard let region = MapRegionFitting.region(
+            fitting: coordinates,
+            singleCoordinateMeters: 800
+        ) else { return }
+        onRequestCamera(region)
     }
 
     // MARK: - このエリアを検索

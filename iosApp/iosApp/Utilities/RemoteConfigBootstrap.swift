@@ -1,4 +1,8 @@
 import FirebaseRemoteConfig
+import os
+
+/// Remote Config 取得のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "RemoteConfig")
 
 /// アプリ起動時に Firebase Remote Config の fetch + activate を 1 回だけ行う中立的な入口。
 ///
@@ -17,7 +21,7 @@ enum RemoteConfigBootstrap {
         do {
             _ = try await RemoteConfig.remoteConfig().fetchAndActivate()
         } catch {
-            print("[CoffeeVision] RemoteConfigBootstrap.fetchAndActivate failed (ignored): \(error)")
+            log.notice("fetchAndActivate failed (ignored): \(String(describing: error), privacy: .public)")
         }
     }
 }

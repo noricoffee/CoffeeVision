@@ -33,7 +33,7 @@ kotlin {
     iosArm64()
     iosSimulatorArm64()
 
-    androidLibrary {
+    android {
         // namespace は各モジュールの build.gradle.kts で個別に設定すること
         compileSdk = libs.findVersion("android-compileSdk").get().requiredVersion.toInt()
         minSdk = libs.findVersion("android-minSdk").get().requiredVersion.toInt()

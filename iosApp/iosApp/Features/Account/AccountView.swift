@@ -2,6 +2,10 @@ import AuthenticationServices
 import SharedLogic
 import SwiftUI
 import UIKit
+import os
+
+/// アカウント画面（サインイン）のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Account")
 
 // MARK: - AccountView
 
@@ -113,12 +117,12 @@ struct AccountView: View {
             Text(String(localized: "アカウントとすべての記録が完全に削除されます。この操作は取り消せません。"))
         }
         .task {
-            viewModel.onAppear()
+            await viewModel.observe()
         }
-        // `.onDisappear` で observation を止めない。止めると `apply(_:)` が走らなくなり、
-        // サインアウト / 削除の完了待ち中に `isProcessing` が凍結する（SR-1）。
-        // ブリッジは `AppState` が保持しており、破棄は `deinit` 起点で行う
-        // （`CafeDetailView` と同じ判断）。
+        // `AccountView` は `.onDisappear` で observation を止めない。ブリッジは `AppState` が
+        // 保持しており、破棄は `deinit` 起点で行う（`CafeDetailView` と同じ判断）。
+        // `awaitProcessingCompletion()` はこの `.task` とは独立に購読するため、
+        // 画面遷移でこの `.task` がキャンセルされてもサインアウト / 削除の完了待ちは影響を受けない（SR-1）。
     }
 
     // MARK: - アカウントセクション
@@ -265,7 +269,7 @@ struct AccountView: View {
                    nsError.code == ASAuthorizationError.canceled.rawValue {
                     return
                 }
-                print("[AccountView] Apple sign-in error: \(error.localizedDescription)")
+                log.error("Apple sign-in error: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

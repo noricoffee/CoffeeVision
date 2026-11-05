@@ -19,7 +19,7 @@
 
 `shared/domain/src/commonMain/kotlin/com/noricoffee/domain/model/CoffeeStats.kt`
 
-分析タブ（[`requirements.md`](./requirements.md) §9）の **階層1（記述統計）+ 階層2（傾向抽出）** の結果。`CoffeeRecord` 群から `BuildCoffeeStatsUseCase` が決定論的に生成する。**永続化しない派生モデル**（DB / Firestore 表現は持たない）。この `CoffeeStats` が ① 統計 UI の入力であり、② 階層3（Foundation Models）に渡す**唯一の入力**でもある（生レコードは LLM に渡さない）。
+分析タブ（[`requirements.md`](./requirements.md) §9）の **階層1（記述統計）+ 階層2（傾向抽出）** の結果。`CoffeeRecord` 群から `BuildCoffeeStatsUseCase` が決定論的に生成する。この `CoffeeStats` が ① 統計 UI の入力であり、② 階層3（Foundation Models）に渡す**唯一の入力**でもある（生レコードは LLM に渡さない）。
 
 ```kotlin
 data class CoffeeStats(
@@ -79,7 +79,7 @@ data class CoffeeStats(
 - **`tastingAverages`**: `tasting != null` の記録だけを母数に、5 要素それぞれの平均。tasting を持つ記録が 1 件も無ければ各要素 `null`。`ratedCount` = tasting を持つ記録件数（all-or-nothing なので 5 要素で共通。UI が「n 件の平均」を出せる）。
 - **上位 N / 件数の定数**（`BuildCoffeeStatsUseCase.companion`。将来変更可）: `ORIGIN_RANKING_LIMIT = 10` / `TOP_CAFES_LIMIT = 10` / `RECENT_HIGHLIGHTS_LIMIT = 5` / `HIGHLIGHTS_MIN_RATING = 4.0`（**`HIGHLIGHTS_MIN_RATING` のみ `private`** = UseCase 内部専用。同じ 4.0 を使う §2 の推薦は別定数 `ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING` を持つ）。
 
-> `ObserveCoffeeStatsUseCase` が `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す。`favoriteSignals` は階層3（要約・Q&A）の `buildPrompt` にも「弱い傾向＋件数の但し書き」として渡し、LLM は断定させない。
+> `ObserveCoffeeStatsUseCase` が `CoffeeRepository.observeAll(userId)` を `map` して `Flow<CoffeeStats>` を返す。
 
 ### 階層3（自然言語解釈）のインターフェース
 
@@ -130,7 +130,7 @@ digest で答えられない**個別レコード単位の問い**（「○○カ
 
 ## 2. RecommendedCafe（味覚プロファイル一致カフェ / 要件 9-5）
 
-マップ上で「あなた好みの一杯があった店」を強調するための**派生集計モデル**（永続化しない）。`CoffeeRecord` 群と `FavoriteSignals` から決定論的に算出する。
+マップ上で「あなた好みの一杯があった店」を強調するための派生集計モデル。`CoffeeRecord` 群と `FavoriteSignals` から決定論的に算出する。
 
 ### モデル（`shared/domain`）
 
@@ -170,7 +170,7 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 あるカフェ（`cafe.placeId` でグループ化、`cafe == null` のセルフ抽出は座標が無いため対象外）に、次を**両方**満たす `CoffeeRecord` が 1 件以上あれば `RecommendedCafe` として返す:
 
-1. `rating >= ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING`（= 4.0。`recentHighlights` の `HIGHLIGHTS_MIN_RATING` と同値だが、あちらは `private` のため別定数として持つ）
+1. `rating >= ObserveTasteMatchedCafesUseCase.RECOMMEND_MIN_RATING`（= 4.0。`HIGHLIGHTS_MIN_RATING` と別定数な理由は §1 の定数一覧）
 2. かつ `FavoriteSignals` のカテゴリ好み（`bestOrigin` / `bestRoastLevel` / `bestBrewMethod` / `bestProcessing` のうち **非 null のもの**）のいずれかに一致:
    - `origin`: `OriginNormalizer.normalize`（trim + lowercase + シノニム辞書）で `bestOrigin.label` と一致（`buildOriginRanking` と同じ正規化）
    - `roastLevel`: enum 一致（`bestRoastLevel.label == record.roastLevel?.name`）
@@ -196,7 +196,7 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 ### 9-6 協調フィルタリング（リモート実装 / 設計確定・未実装）
 
-9-5（ローカル・既訪問の再訪）に**追加**で載る新規開拓推薦。`CafeRecommendationProvider` のリモート実装として差し替える（`MapViewModel` / iOS UI / 理由表示層は不変）。**実装はインフラ選定から段階着手**（tasks 12-D）。
+9-5（ローカル・既訪問の再訪）に**追加**で載る新規開拓推薦。**実装はインフラ選定から段階着手**（tasks 12-D）。
 
 - **同意**: 新規 `recommendationConsent`（[`data-model.md`](./data-model.md) §3.2 の `users/{uid}`。`analyticsConsent` とは目的別・オプトイン・既定 false）。ON かつ記録変更時に自プロファイルを再計算し `sharedTasteProfiles/{uid}` へ upsert、OFF で削除（共有撤回）。
 - **共有プロファイル `sharedTasteProfiles/{uid}`**（`beanProfiles` / `curatedCafes` と同型のグローバルコレクション。[`data-model.md`](./data-model.md) §3.2 / §3.3 参照）: 特徴ベクトルのみを持ち、生メモ・タグ・記録本文・カフェ名は含めない（プライバシー最小化）。
@@ -214,7 +214,7 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 
 ## 3. UnexploredBeanSuggestion（未経験の豆への探索提案 / 要件 9-8）
 
-好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計（永続化しない）。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
+好み信号に合致するが**ユーザーがまだ飲んでいない** `BeanProfile` を提案する派生集計。9-5（既訪問店の**再訪**推薦）に対する**新規開拓**のナッジ。決定論（FM 不要）。
 
 **`data class UnexploredBeanSuggestion`**: `profile: BeanProfile`（提案する豆）/ `matchedOriginLabel: String`（マッチ理由の表示用ラベル。`FavoriteSignals.bestOrigin` 由来）。
 
@@ -225,13 +225,4 @@ enum class PreferenceMatchAxis { Origin, RoastLevel, BrewMethod, Processing }
 - **空になる条件**: `signals.bestOrigin == null`（好み未確定）/ `profiles` 空（BeanProfile 未投入）
 - **配線**: `BuildCoffeeStatsUseCase.invoke(records, beanProfiles)` 内で `beanProfiles.isNotEmpty()` のときだけ計算し `CoffeeStats.unexploredBeanSuggestions` に格納（`preferredBeanTraits` = 12-C と同じ流儀。`ObserveCoffeeStatsUseCase` に `BeanProfileRepository?` を注入した端末でのみ非空）。`readiness`（UI メタ）と違い**ドメイン実質のある派生値**なので `CoffeeStats` 内に置く
 - **LLM 非混入**: iOS の `buildPrompt(from: stats)` はフィールドを選択的に読む実装のため、本フィールドを buildPrompt に足さない限り Foundation Models の digest には入らない（分析タブ UI 表示専用）
-
----
-
-## 参考リンク
-
-- [データモデル（永続エンティティ）](./data-model.md)
-- [要件定義 §9 分析タブ](./requirements.md)
-- [実装ノート（統計設計の経緯・実測値）](./implementation_note.md)
-- [KMP ブリッジ（Foundation Models 連携の配線）](./kmp-bridge.md)
 

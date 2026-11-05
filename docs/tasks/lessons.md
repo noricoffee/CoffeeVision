@@ -1203,3 +1203,184 @@ Phase 5 まで進んだ時点で docs 全体を精査したところ、個々の
   - **非該当（塗りではない）**: `CoffeeEditorView+Sections` の 2 箇所（`.bordered` = 背景が塗られないためアイコンが `accentColor` でも同化しない。色の不一致は残るが既存の状態で、本件とは別軸）
   - **非該当（`List` の外）**: `CoffeeListView.emptyView` の CTA。同日中にユーザー依頼でカフェ詳細へ揃えて `Label` + `plus` を足したが、`ContentUnavailableView` は `List` の外なので **`.foregroundStyle` 無しでアイコンが正しく描かれることを目視で確認済み**
 - **条件の精密化（2026-08-31、上の追加確認で判明）**: 罠の成立には **「塗り + `Label` + `List` / `Form` の中」の 3 条件すべて**が要る。塗り + `Label` だけでは起きない。この区別が実務上重要なのは、**カフェ詳細の `.foregroundStyle(.white)` を「揃えるべき見た目」として機械的に写すと負債になる**から — あれは `List` 内でしか必要のない対処で、`List` 外に写すと**将来 tint を変えたときに読めなくなる**。同じ見た目の UI を 2 箇所に作るとき、**片方に付いている modifier が「意匠」なのか「特定コンテナへの対処」なのかを区別してから写す**
+
+### 外部システムに記録が残っている事実を、口頭申告のまま doc に書いた
+
+- **症状**: 1.0.2 の提出を記録する際、ユーザーの「What's New は 1.0 と同じ文言で出した」という説明をそのまま `app-store-metadata.md` §9 と `tasks.md` に書き、**コミット（`710bbac`）を切った直後に「『軽微な修正を行いました』にした」と訂正されて誤りが判明**。1 コミットが丸ごと誤った事実を含んでいた
+- **原因の構造**: ユーザー申告は一次情報だが、**「どの版に何を入力したか」のような過去の入力内容は記憶違いが起きる**。そして本件は**実測手段が同じ doc の中にあった** — `itunes.apple.com/lookup` は 1.0.1 のリリース確認で実際に使い、その旨が `tasks.md` の 1.0.1 節に書かれている。**手段を知っていて、使わなかった**
+- **修正パターン**: 配信済みの版のメタデータは `lookup` で実測できる（`releaseNotes` / `trackName` / `version` / `minimumOsVersion` / `genres` / `formattedPrice` / `contentAdvisoryRating`）。実測したところ **1.0.1 は「軽微な不具合を修正しました」**で、1.0 の文言とは別物だった。§9 を版ごとの記録に組み直し、**実測コマンドと「口頭申告ではなく実測を正とする」旨を前文に埋めた**
+- **教訓**: **「ユーザーが言った」は一次情報だが、外部システムに記録が残っている事実については実測に劣る**。doc に書く前に「**これは外から確認できるか**」を一度問う。CLAUDE.md の「doc に書く事実は、書く前にソースを開いて確かめる」は**コードだけの話ではなく、ストア・CI・外部 API も『ソース』**に含む
+  - **同じ日の同じ構造**: 上のエントリ（`.borderedProminent` の罠を検証項目に挙げながら実装に反映しなかった）と根が同じ。**手段や知識を持っていることと、書く / 実装する直前にそれを適用することは別の作業**。1 日に 2 回踏んだ
+- **発生源**: 2026-08-31、1.0.2 の審査提出の記録
+- **横展開点検（2026-08-31）**: `lookup` で取れる全項目を app-store-metadata §1 / §7 と突き合わせた。**不一致なし**。`trackId` 6788339362 / `trackName`「CoffeeVision コーヒーマップ＆好み分析」/ `minimumOsVersion` 26.0 / `formattedPrice` 無料 / `genres` フード／ドリンク・ライフスタイルはいずれも doc の記述と一致（`genres` のスラッシュだけ全角・半角の表記ゆれがあるが、doc 側は人間向け表記なので直さない）。**`contentAdvisoryRating` = 4+ は §7 が「想定回答」として書いていた内容の実測値**なので、確定値として §7 に追記した。**サブタイトルとキーワードは `lookup` に出ないため実測不能**（ASC でしか確認できない = 口頭申告に頼らざるを得ない唯一の領域として §1 に明記）
+
+---
+
+## 2026-09-19
+
+### シートの表示フラグ（`showX`）を、非同期フローの「完了」ゲートとして使った
+
+- **症状**: 全画面下部固定バナー（requirements §11-5）で「同意フローが閉じるまで広告をロードしない」というゲートを `canLoad: !appState.showConsentOnboarding && !appState.showAdConsentFlow` で実装した。ビルドも通り、ロジックも一見正しい。だが**実際には ATT ダイアログが表示されている最中に広告リクエストが飛ぶ**ため、ゲートを付けた目的（セッション最初のインプレッションが `.notDetermined` = 非パーソナライズで消費されるのを防ぐ）がまったく達成されない
+- **原因の構造**: `showAdConsentFlow` は**プレプロンプトシートの表示状態**しか表していない。`AppState.onAdPrePromptContinue()` は
+
+  ```swift
+  showAdConsentFlow = false                    // ← ここでゲートが開く
+  UserDefaults.standard.set(true, forKey: ...)
+  Task { await AdConsentCoordinator.run() }    // ← ATT ダイアログはこの後、非同期で
+  ```
+
+  の順で、**「シートを閉じた」時点と「フローが決着した」時点の間に非同期の空白がある**。フラグ名（`show...`）は前者しか約束していないのに、読む側は後者の意味で使ってしまった。`Task { }` に切り出されている以上、呼び出し元は完了を待っていないので、**フラグが false になった瞬間は「まだ何も決まっていない」に等しい**
+- **修正パターン**: 完了を表す状態を別に立てる。`AppState.isAdConsentResolved`（`private(set)`）を追加し、①既実施ユーザーで early return する枝 ②`await AdConsentCoordinator.run()` が**完了した後** の 2 箇所でだけ true にする。ゲート側は `appState.isAdConsentResolved` を読む
+  - **やってはいけない代替**: `ATTrackingManager.trackingAuthorizationStatus != .notDetermined` を直接ゲートにすること。端末設定で「App からのトラッキング要求を許可」がオフのユーザーは `.notDetermined` のまま固定されるため、**広告が永久に出なくなる**。「状態を直接見る」ほうが正しそうに見えるが、この状態は決着しないことがある
+- **教訓**: **`show` / `isPresenting` で始まるフラグは UI の提示状態であって、そこで始まった処理の完了ではない。**「〜が終わるまで待つ」条件をこれらのフラグの否定で書こうとしたら、その時点で誤り。**見分け方は、フラグを false にする行の後ろに `Task { }` / `await` / completion handler があるか** — あれば、そのフラグは完了を表していない。名前で気づけない（`showAdConsentFlow` の「Flow」はフロー全体を指すように読める）ので、**フラグを条件に使う前に、それを書き換えている場所を開いて前後を読む**
+  - 型もテストも検出しない。ゲートが機能していない状態でも**画面は正常に見える**（広告は出るし、ATT ダイアログも出る）。壊れているのは 2 つの順序だけで、症状は「収益が想定より出ない」という形でしか現れない
+- **発生源**: 2026-09-19、広告レイアウト再編（インライン 2 面 → 全画面下部固定 1 面）。親の dispatch 指示が「`showConsentOnboarding` と `showAdConsentFlow` を見ろ」と**フラグ名を名指ししていた**のが直接の原因で、サブエージェントは指示どおりに実装した。**親が「意味」ではなく「実装手段」を指示したため、意味の誤りがそのまま通った**
+- **横展開点検（2026-09-19）**: 同型を 2 方向から洗った。
+  - ①「フラグを false にした直後に `Task` を起動する」形: `grep -rn --include="*.swift" -A4 "= false$" iosApp/iosApp | grep -E "Task \{|Task\("` → `AppState.swift` の 3 箇所のみ。`onConsentGranted` / `onConsentDeclined`（190 / 199 行）の `Task` は `writeAnalyticsConsent` の fire-and-forget で、**その完了をゲートに使っている箇所は無い**。`onAdPrePromptContinue`（235 行）が本件
+  - ②2 つのフラグの全参照: `grep -rn --include="*.swift" "showConsentOnboarding\|showAdConsentFlow" iosApp/iosApp` → 宣言 / `.sheet` バインディング / 代入を除く**読み取りは 2 箇所だけ**。`AppState.swift:283` の `if !showConsentOnboarding { presentAdConsentFlowIfNeeded() }` は「オンボーディングを出していないなら」という**提示状態そのものの判定**なので正しい用法（新規ユーザー側は `onConsentGranted` / `onConsentDeclined` から別途呼ばれる）。もう 1 箇所が本件の `canLoad`
+  - 各 View ローカルの `@State private var isPresentingEditor` 等（`CoffeeDetailView` / `CafeDetailView` / `CoffeeListView` / `MapTabView` / `AccountView` / `CoffeeEditorView`）は `.sheet` / `.confirmationDialog` のバインディング専用で、**他の条件式に現れない**ことを確認。該当なし
+  - **結論: 該当は本件 1 件のみ、修正済み**。`.claude/rules/swift-ios.md` へ要点を昇格済み（発生源として本エントリは残す）
+
+### `.safeAreaInset` はフレームを縮めない — 「下に何かを敷く」を寸法の話だと思い込んだ
+
+- **症状**: 全画面下部固定バナーで `RootTabView` を `.safeAreaInset(edge: .bottom) { 広告帯 }` で包んだところ、広告帯は正しく画面下端に出たが、**タブバーが画面から消えた**。ビルドは通り、広告のロードも同意フローのゲートも正常。崩れているのはタブバーだけ
+- **原因の構造**: `.safeAreaInset` は**ビューのフレームを一切縮めない**。やっているのは「このビューの内側に、これだけのセーフエリアがあることにする」という**報告値の書き換え**だけで、`TabView` は画面全体のフレームを保ったまま。iOS 26 の浮動タブバーは**自身のフレーム基準で画面下端に位置決めする**ため、セーフエリアの報告値をいくら削っても動かず、後から描かれる不透明な広告帯の背景の裏に入った
+  - **効く子と効かない子がいる**のがこの API の本質。セーフエリアを読んでレイアウトする子（`ScrollView` の内容、MapKit の Legal / コンパス、`List`）には効く。フレーム基準で自分を置く子（浮動タブバー）には効かない。**同じ modifier が、子の実装次第で効いたり効かなかったりする**
+  - 実際、同じリポジトリの `MapTabView` は `.safeAreaInset(edge: .bottom)` で `CafeSelectionCard` を出していて**正しく動いている** — あちらは「MapKit に Legal を上げさせる」= セーフエリアを読む子が相手だから。**動いている前例があることは、新しい用途で動く根拠にならない**
+- **修正パターン**: フレームそのものを縮めたいなら `VStack(spacing: 0) { content; bar }` を使う。判断基準は **「押しのけたい相手は、セーフエリアを読んでいるか、フレームを読んでいるか」**
+- **教訓**: **「下に何かを敷いて、上のものを押し上げる」は寸法の操作に見えて、実際には『誰が何を読んでレイアウトしているか』の問題**。`safeAreaInset` / `ignoresSafeArea` / `contentMargins` はどれも**寸法ではなく「報告される環境値」をいじる API** で、その値を読まない相手には無音で効かない。**効かない相手がいることを前提に、押しのけたい対象を名指しで確認してから API を選ぶ**
+  - 設計段階で親は「`VStack` で並べるのと結果は同じだが、safe area の扱いを SwiftUI に任せられる分こちらが素直」と書いてプランに載せた。**「同じ」と判断した根拠が無かった**のが誤りの起点で、実装・レビュー・ビルドのどの段階でも検出されず、実機スクリーンショットで初めて出た
+  - 既出の「**『効かない modifier』を見たらまず自分がどのコンテナの中にいるかを疑う**」（lessons 2026-08-21、`List` × `tint`）の**裏返し**。あちらは「コンテナが子の指定を握り潰す」、こちらは「コンテナの指定が子に届かない」。どちらも**境界をまたぐと無音で失われる**という同じ構造
+- **発生源**: 2026-09-19、広告レイアウト再編。親の設計判断（プラン段階で `safeAreaInset` を明示的に推奨し、dispatch 指示にも書いた）。`.claude/rules/swift-ios.md` へ要点を昇格済み
+- **横展開点検（2026-09-19）**: `grep -rn --include="*.swift" -B2 -A2 "safeAreaInset" iosApp/iosApp` で全使用箇所を確認。
+  - `MapTabView.swift:580`（`CafeSelectionCard`）: 押しのけたい相手は **MapKit の Legal / 帰属表記**（セーフエリアを読む）。正しい用法で**該当なし**
+  - `Components/ErrorToast.swift:138 / 157`: どちらも `#Preview` 内の `.safeAreaInset(edge: .top)` で、相手は `Color`。**該当なし**。なお production 側の `ErrorToastModifier` は `.overlay(alignment: .bottom)` を**意図的に選んでおり**（「`.ignoresSafeArea()` を持つコンテンツでも押し下げを避けるため」とコメント済み）、本件と同じ論点を 2026-07 時点で正しく扱っている
+  - **結論: 該当は本件 1 件のみ、修正済み（`VStack` 方式へ）**
+
+### 既存実装の作法を、前提が変わった文脈へそのまま持ち込んだ（「枠ごと畳む」）
+
+- **症状**: 下部固定広告帯を「未受信・失敗時は高さ 0 に畳む」で実装したところ、ユーザー報告「**広告ロード前は高さを取得できておらず、ロード後にタブバーごと上にいく**」。広告が遅れて到着した瞬間に、帯だけでなく**タブバーとコンテンツ全体**が跳ね上がる
+- **原因の構造**: 「ロード失敗・オフライン時は枠ごと畳む（プレースホルダなし）」は requirements §11 の確定仕様として**既に存在していた**。ただしそれは**インライン枠（カフェ詳細・マップ検索シートの、コンテンツの流れの中に差し込む 1 枠）のための作法**で、「消えても周囲が詰まるだけ」という前提の上に成り立っていた。**下部固定帯はレイアウトの土台**なので、同じ挙動が「全体が動く」に変わる。親は §11 の既存仕様を新機能へそのまま引き継ぎ、**前提が変わったことを検査しなかった**
+- **さらに悪いことに、逆を指示する規約を自分で持っていた**: `.claude/rules/swift-ios.md` の「**幅・高さを持つ要素を `if` で条件生成しない**（兄弟がシフトする）。常時レイアウトに乗せ、`.opacity` + `.disabled` + `.accessibilityHidden` で見た目と操作性だけを切り替える」（lessons 2026-07-26）がまさにこれ。親は dispatch 指示に「未受信・失敗時は高さ 0 に畳む」と**明示的に書いて**規約違反を発注した
+- **修正パターン**: 常設帯は**高さを常時確保する**（60pt 固定）。受信した広告は枠内に収める。畳む作法はインライン枠側に残し、**両者で作法が違うことと、その理由（流れの中の枠か、レイアウトの土台か）を doc とコードコメントの両方に書く**
+- **教訓**: **既存実装の作法をコピーするとき、その作法が成り立っている前提が新しい文脈でも成立するかを検査する。** 「同じアプリの同じ機能（広告）だから同じ作法」は理由にならない。本件の分かれ目は広告かどうかではなく **「その要素が消えたとき、動くのは周囲だけか、全体か」** だった
+  - 2026-08-31 の「`.foregroundStyle(.white)` を**意匠**と見て写すと負債になる（あれは `List` 内でしか要らない**対処**）」と同じ構造。**写す前に「これは何のための指定か」を言語化する**
+  - **規約を持っていることと、発注時にそれを適用することは別の作業**（2026-08-31 に 2 回、9-19 にも再演）。今回は「既存仕様（§11）を引き継ぐ」という**もっともらしい動機**が規約チェックを飛ばさせた。**既存仕様の引き継ぎは、新規記述より検査が緩くなる**
+- **発生源**: 2026-09-19、広告レイアウト再編。親の dispatch 指示。ユーザーの実機確認で発覚（ビルド・型・レビューのいずれも検出しない）
+- **横展開点検（2026-09-19）**: 「ロード / 取得状態で高さが変わる要素が、レイアウトの土台になっていないか」で確認。
+  - `InlineBannerAdView`（カフェ詳細 / マップ検索シート）: **畳むのが正**。`List` の行 / `LazyVStack` の要素で、消えても周囲が詰まるだけ。**該当なし**（なお両者とも本件の撤去対象）
+  - `MapTabView` の `CafeSelectionCard`（`.safeAreaInset(edge: .bottom)`）: 選択時のみ出る条件付き要素だが、**ユーザー操作に同期して出入りする**ため「勝手に跳ねる」性質ではない。**該当なし**
+  - `MapSearchResultsSheet`: 高さは `mapContainerSize` 由来の計算値で、ロード状態に依存しない（`isLoading` 中は `ProgressView` を同じ枠内に出す = **既に正しい形**）。**該当なし**
+  - `CoffeeListView` / `CafeDetailView` の空状態 `ContentUnavailableView`: データ取得で入れ替わるが、画面全体を占める排他表示で兄弟を持たない。**該当なし**
+  - **結論: 該当は本件 1 件のみ、修正済み**
+
+---
+
+## 2026-09-20
+
+### ViewModel ブリッジに非構造化 `Task` を保持させると、購読がブリッジより長生きしてリークする
+
+- **症状**: 何も壊れて見えない。ビルドも型検査も通り、画面も正常に動く。カフェ検索シートを開閉する、カフェ詳細を push/pop する、そのたびに Kotlin の ViewModel が 1 つずつ端末に残り続ける。**目視でもテストでも検出できない**
+- **原因の構造**: 全 8 ブリッジが `private var observationTask: Task<Void, Never>?` を保持し、`Task { for await state in flow { ... } }` を自前で回していた。ここに 3 つの事実が重なる
+  1. **非構造化 `Task` は参照を手放しても止まらない** — `stdlib/public/Concurrency/Task.swift:26-31`「It's not a programming error to discard a reference to a task ... **A task runs regardless of whether you keep a reference to it**」
+  2. **`StateFlow` は完了しない** — `deinit` で `kotlin.clear()` を呼んでも `viewModelScope` が畳まれるだけで、`_state` は終わらない
+  3. **ループを抜ける条件が `guard let self else { break }` = 次の emit 時だけ** — ViewModel は既に clear 済みなので emit は来ない
+  結果、Task は `for await` で停まったまま `flow`（= Kotlin の ViewModel）を強参照し続ける。`[weak self]` はブリッジを弱めるだけで、**捕まっているのは Kotlin オブジェクトのほう**
+- **実測**: 番兵オブジェクトを `Task` クロージャに強参照キャプチャさせ、シミュレータで計測。`deinit` は走るのに番兵の `deinit` が 1 件も出ず、45 秒待っても解放されなかった。`deinit` に `observationTask?.cancel()` を足すと解放されることも確認（**SKIE は協調キャンセルに応答する**）
+- **修正パターン**: `cancel()` を足すのは対症療法。**所有をスコープへ移す**
+
+  ```swift
+  // Before: ブリッジが Task を持つ
+  private var observationTask: Task<Void, Never>?
+  func onAppear() { observationTask = Task { [weak self] in for await s in flow { self?.apply(s) } } }
+  func onDisappear() { observationTask?.cancel() }
+
+  // After: View の .task が所有する構造化 Task
+  func observe() async { for await state in kotlin.state { apply(state) } }
+  // View 側: .task { await viewModel.observe() }
+  ```
+
+  根拠は SE-0304「Structured concurrency」115-117 行 — 「cancel メソッドを持つトークンを同期的に返す API 設計は**複雑さを持ち込む** / 構造化ならキャンセルは自然に伝播する」。`observationTask` はそのトークンそのものだった
+- **副次効果**: observation の開始が `init` のみで**再購読の口が無かった** `CafeDetail` / `CafeSearch` / `Map` が、`.task` で自動的に張り直されるようになった。**2026-06-25 / 2026-07-03 の凍結バグが構造的に消えた** — あの 2 件は「`.onDisappear` で止めると再開できない」問題で、所有を移せば止める場所も再開する場所も書かなくてよくなる
+- **教訓**: **`Task` を書いたら「キャンセルを誰が持つか」を先に決める。持ち主がスコープでないなら設計を疑う。** この原則はリポジトリに既にあった — `.claude/rules/swift-ios.md` の「`.onChange(of:) { Task { } }` を書かない。非構造化タスクはビューのライフサイクルに紐づかない」（lessons 2026-08-01）がそれで、**あちらは起こし方、こちらは持ち方**という違いだけだった。**既存の規約を「別の形をした同じ問題」に適用できていなかった**のが本件の根
+- **もう 1 つの教訓**: **`.onDisappear` は破棄を意味しない**ことを 2 回踏んで規約化したのに（2026-06-25 / 2026-07-03）、その規約が「では `deinit` で畳む」という結論に留まり、**そもそも自分で畳む必要がない形**に行き着かなかった。規約が「どう対処するか」で止まっていると、対処が要らない設計を見落とす
+- **横展開点検（2026-09-20 実施）**: `grep -rn "for await" iosApp/iosApp` で無限購読の全 10 箇所を列挙し、所有者を 1 件ずつ確認
+  - 8 ブリッジの `kotlin.state` 購読 → すべて `observe()` に移し `.task` 所有へ。**修正済み**
+  - `MapTabView+Location.swift:104`（`for await location in locationStream()`）→ `setupLocation` 経由で `.task` 所有。**該当なし**
+  - `AccountViewModelBridge.swift:108`（`awaitProcessingCompletion`）→ 最初の `isProcessing == false` で `return` する**有界ループ**。呼び出し元が `await` で所有。**該当なし**（SR-1 の中核なので今回も無変更）
+  - `grep -rn ": Task<" iosApp/iosApp` で保持 Task を点検 → `AppleNearbyCafeLoader.fetchTask` 1 件。**デバウンス用の有界タスク**（300ms sleep → fetch → 終了。`schedule()` の冒頭で毎回 cancel）で、無限購読ではない。**該当なし**
+  - **結論: 該当は 8 ブリッジのみ、すべて修正済み**
+- **発生源**: B-11 / `fix/observation-task-structured-concurrency`（`b5c071c`）。設計判断の経緯は implementation_note 2026-09-20、規約は `.claude/rules/swift-ios.md` と `docs/kmp-bridge.md` へ昇格済み
+
+### xcconfig のキー名を変えたら、CI の秘匿値供給も同じ変更で追随させる（同型の再発）
+
+- **症状**: 何も壊れない。ローカルビルドも CI も通り、実機でも広告は出る。**出ているのが Google のデモ広告**というだけで、収益がゼロになる
+- **原因の構造**: 2026-09-19 の広告再編でインライン 2 面（`ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL` / `_MAP_SEARCH`）を下部固定帯 1 面（`_GLOBAL_BOTTOM`）へ集約したが、**`release-testflight.yml` の「Restore secret files」が旧キー名のまま**だった。結果
+  - fail-fast のガードが**存在しないキー**を見張る（守っているつもりで何も守っていない）
+  - `_GLOBAL_BOTTOM` は CI が書き出さないので `Base.xcconfig` のフォールバック = **デモ ID** が採用される
+  - ワークフロー自身のコメントが「未設定のまま出荷すると Base.xcconfig のデモ AdMob ID で広告が載る（収益ゼロ）」と警告しているのに、**その警告どおりの状態になっていた**
+- **同型の再発である点が重要**: 2026-07-22 に**同じファイルで同じ形**を踏んでいる（当時は `PLACES_API_KEY` しか書き出しておらず、AdMob 本番 ID を発行しても TestFlight はデモ ID のままだった。tasks-archive「CI リリースへの本番 AdMob ID 注入」）。あのときは「キーを足す」で直したが、**「キー名を変えたときにも同じ穴が開く」ことまでは一般化していなかった**
+- **教訓**: **`Base.xcconfig` / `Info.plist` のビルド変数名を変えたら、その場で供給側（CI）を grep する。** 機械的な点検手順は「`Info.plist` が `$(...)` で要求する変数」と「CI が `Secrets.xcconfig` へ書き出す変数」の集合比較で、差があれば必ず事故になる
+
+  ```bash
+  grep -o '\$([A-Z_][A-Z0-9_]*)' iosApp/iosApp/Info.plist | tr -d '$()' | sort -u > /tmp/need.txt
+  grep -oE "printf '[A-Z_][A-Z0-9_]*" .github/workflows/release-testflight.yml | sed "s/printf '//" | sort -u > /tmp/ci.txt
+  comm -23 /tmp/need.txt /tmp/ci.txt   # 空でなければ供給漏れ
+  ```
+
+- **見つけ方の教訓**: 発見は「1.0.3 の提出準備」でチェックリストを上から潰していた過程。**リリース前チェックリストが機能した実例**で、`app-store-metadata.md` §10 の「本番環境の設定（アプリが動くかでは検出できないもの）」という節の存在理由そのものだった
+- **横展開点検（2026-09-20 実施）**: 上記の集合比較を実行 → `ADMOB_APP_ID` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` / `PLACES_API_KEY` の 3 つで**過不足なく一致**。`Base.xcconfig` が宣言する残り 3 つ（`SWIFT_VERSION` / `SWIFT_DEFAULT_ACTOR_ISOLATION` / `SWIFT_APPROACHABLE_CONCURRENCY`）は秘匿値ではなくビルド設定なので対象外。**該当は本件 1 件のみ、修正済み**
+- **発生源**: 1.0.3 提出準備（`chore/release-1.0.3-prep`）。旧キーの撤去は 2026-09-19 の広告再編（`2449ece` / `32967ca`）で漏れていた
+
+### クラス全体の `@unchecked Sendable` は、そのクラスの**利用側の捕捉**まで検査から外す
+
+- **症状**: 何も起きない。ビルドも型検査も通り、警告も 0。UI も正常。**サインアウト → 再サインインのたびに Firestore / Auth のリスナが 1 組ずつ残り続ける**。壊れ方が「壊れる」ではなく「**解放されずに残る**」形なので、目視でもテストでも検出できない
+- **原因の構造**: `FlowBridge.swift` の `CallbackFlow` は「クラスに `@unchecked Sendable`、`onStart` / `onCancel` は非 `@Sendable`」という組み合わせだった。この 2 つが噛み合うと:
+  1. クラスが `@unchecked Sendable` なので、格納している非 `@Sendable` クロージャの中身は**何も検査されない**
+  2. その結果、利用側は「2 つのエスケープクロージャで同じローカル `var` を共有捕捉する」形を**無警告で書ける**
+  3. 実際に利用側 **5 箇所すべて**がそう書いていた（`var handle: AuthStateDidChangeListenerHandle?` / `var listener: ListenerRegistration?`）
+  4. 書き込みは `onStart`（= `__collect` 経由、Kotlin/Native の任意スレッド）、読み書きは `onCancel`（= `deinit`、これも任意スレッド）。同期プリミティブが一切ない共有可変状態で、**`onStart` の代入が `deinit` から見えなければ `removeStateDidChangeListener` / `listener.remove()` が飛ばない**
+- **見分け方**: **エスケープクロージャを 2 つ以上受け取る API で、その 2 つが同じローカル `var` を読み書きしていないか。** さらに「**その 2 つが別々の実行文脈から駆動されるか**」を見る。片方が `deinit` 起点だと、症状がリークになって表に出ない
+- **修正パターン**: `@unchecked` をクラスから外し、クロージャを `@Sendable` にして**コンパイラに利用側を検査させる**。状態はロックへ入れる
+
+  ```swift
+  // Before: クラスに @unchecked、クロージャは非 @Sendable → 利用側の捕捉が無検査
+  nonisolated final class CallbackFlow<T: AnyObject>: NSObject, ..., @unchecked Sendable {
+      private let onStart: (@escaping (T) -> Void, @escaping (any Error) -> Void) -> Void
+
+  // After: クロージャを @Sendable にすると、クラスは素の Sendable で足りる
+  nonisolated final class CallbackFlow<T: AnyObject>: NSObject, ..., Sendable {
+      private let onStart: @Sendable (@escaping @Sendable (T) -> Void, @escaping @Sendable (any Error) -> Void) -> Void
+  ```
+
+  根拠は SE-0302（Sendable）の設計 — `@unchecked` は「不変条件を人間が保証した**最小の箱**」に付けるもの。**クラスに付けるのは箱が大きすぎる**
+- **既出の原則の別の形**: `.claude/rules/swift-ios.md` の「検査を外す手段は**穴の広さで選ぶ**」（`nonisolated(unsafe)` vs `@preconcurrency import`、lessons 2026-08-07）とまったく同じ軸だった。あちらは「どの手段を選ぶか」、こちらは「**選んだ手段をどのスコープに置くか**」。穴の広さは手段だけでなく**貼る位置**でも決まる
+- **副産物**: `@Sendable` 化で「`@Sendable` なクロージャに `Firestore` インスタンスを持ち込めない」ことも表に出た（`FIRFirestore.h` に `NS_SWIFT_SENDABLE` が無い / `FIRCollectionReference` / `FIRDocumentReference` / `FIRQuery` には有る）。**型検査を戻すと、隠れていた別の前提も一緒に表に出る**
+- **横展開点検（2026-09-20 実施）**:
+  - `grep -rn '@unchecked Sendable' iosApp/iosApp` → 修正後に残るのは `BeanProfileRepositoryIosImpl` / `CuratedCafeRepositoryIosImpl` の 2 件のみ。どちらも `private let db = Firestore.firestore()`（非 Sendable な `FIRFirestore`）を**格納プロパティに直接持つ**ため素の `Sendable` には落とせない。**判定基準どおりの正当な残存**（外すには `db` を持たない設計変更が要る。費用対効果で見送り）
+  - エスケープクロージャを 2 つ受け取る自作 API の全数調査 → `CallbackFlow` / `CallbackFlowOptional` のほかに `MapSearchController`（`onRequestCamera` / `onDismissKeyboard`）が 1 件。**こちらは問題なし** — `@MainActor @Observable` で両クロージャとも MainActor からのみ駆動されるため、今回の危険条件（2 つが別々の実行文脈から駆動される）を満たさない。**この「見つかったが該当しない」も判定基準が効いていることの確認になる**
+  - 判定基準は [`kmp-bridge.md`](../kmp-bridge.md)「Kotlin interface の実装クラスは `nonisolated` にする」節の表と `.claude/rules/swift-ios.md` へ昇格済み
+
+### `@Observable` の同値ガードは「値比較が入らない経路」すべてに要る。`StateFlow` → ブリッジの `apply()` がその経路だった
+
+- **症状**: 何も壊れない。ビルドも目視も通る。マップタブで `isLookingUpPoi` が切り替わっただけの emit でも、`curatedCafes`（実データ 421 件）を読む body が丸ごと再評価され、Set 構築と測地距離計算が走る
+- **原因の構造**: Kotlin の `StateFlow` は **1 フィールドだけ変わった `UIState` も丸ごと emit する**。ブリッジの `apply(_:)` がそれを全プロパティへ無条件代入していると、**実際に変わっていないプロパティの observer まで発火する**。`ObservationRegistrar.withMutation`（`stdlib/public/Observation/Sources/Observation/ObservationRegistrar.swift:301-309`）は旧値と新値を比較せず `willSet` / `didSet` をそのまま呼ぶため。**ブリッジ 8 本すべてが同型だった**
+- **取りこぼしの原因**: 2026-08-09 に同じ性質を「`@Observable` は値を比較せず代入だけで通知する」として記録し、判定基準も「**その経路に値比較が入るか**」で正しく書いていた。**にもかかわらず、点検した経路が `.onChange` / `.onMapCameraChange` という SwiftUI の modifier に閉じていた**。判定基準は正しくても、**適用先の列挙が狭いと取りこぼす**。次に同じ問いを立てるときは「`@Observable` プロパティへ代入している場所」を全部並べる（modifier / Flow 購読 / delegate コールバック / completion handler）
+- **`==` が通ることを値比較の根拠にしない**（Kotlin 型の場合）: `data class` も素の `class` も生成 Obj-C 側で `SharedLogicBase : NSObject` を継承するため、Foundation の `extension NSObject: Equatable` 経由で**どちらも `==` がコンパイルを通る**。違いは `isEqual:` のオーバーライドの有無だけで、無い型は参照比較になり**ガードが恒久的に不成立**になる（毎回「変わった」と判定され、書いた意味が消える。コンパイルも実行も通るので気づけない）。判定は生成ヘッダ `SharedLogic.h` の `@interface` ブロックに `- (BOOL)isEqual:(id)other` があるかを見る。`data class` にだけ出る（対照: `CoffeeRecordQueryImpl` / `AppContainer` には無い）
+- **`.onChange(of:)` は同値ガードの万能薬ではない**: 「SwiftUI が値比較してくれる」利点と「**`of:` の式が body 評価時に評価される = その値を body で読む依存が生まれる**」代償はセット。既に body が読んでいる値なら利点だけ得られるが、読んでいない値に使うと依存を増やす。SL-4 でカメラ中心を body から追い出す際、親が `.onChange(of: appState.mapSearchCenter)` を指示したのはこの点で誤りだった（実装は `.onMapCameraChange` から直接呼ぶ形に修正された）
+- **横展開点検（2026-09-20 実施）**: `iosApp/iosApp` の `@Observable` クラス**全 13 件**を列挙して 1 件ずつ確認
+  - ブリッジ 8 本（`Map` / `Analysis` / `Account` / `CafeDetail` / `CoffeeEditor` / `CoffeeDetail` / `CafeSearch` / `CoffeeList`）→ **本件で修正**
+  - `AppleNearbyCafeLoader.cafes` / `AppState.mapSearchCenter` / `MapSearchController.showAreaSearchButton` → 2026-08-09 で対処済み
+  - **未対処 2 件を SL-10 として起票**: `LocationManager.lastLocation`（`CLLocationCoordinate2D` が `Equatable` 非準拠）/ `MapSearchController.displayedResults`。どちらも低頻度（前者は `requestLocation()` の一回限り取得、後者は検索完了ごと 1 回）
+  - `BannerAdLoader` → **「該当なし」ではなく「パターンはあるが頻度が低い」**。`loadFailed = false`（`:82` / `:127`）等が無条件代入だが、発火はロード 1 回ごと（自動リフレッシュは 60 秒間隔）なので実害なし。**この区別を「該当なし」と丸めない** — 同じコードを次に読む人が「ここは対象外」と誤読する
+
+### scratch の `swiftc -typecheck` は、このプロジェクトの分離まわりの可否を判定できない
+
+- **経緯**: SL-8 で共有ロガーをファイルスコープの `let` に持たせたところ、プロジェクトの `xcodebuild` が分離の診断を出した（実装は `private nonisolated let` + `nonisolated enum AppLog` で解決）。サブエージェントは原因を「`SWIFT_APPROACHABLE_CONCURRENCY = YES` が束ねる upcoming feature 群が scratch では揃わないため」と報告してきた
+- **検証（2026-09-20、親）**: **その説明は裏が取れなかった。** 3 構成を試したが**どれも再現しない**
+  1. `-swift-version 6 -default-isolation MainActor` のみ → 通過
+  2. 上記 + `-enable-upcoming-feature NonisolatedNonsendingByDefault -enable-upcoming-feature InferIsolatedConformances` → 通過
+  3. `AppLog` を `nonisolated` 無し（= 既定 MainActor）にして、その static func をグローバル `let` の初期化式に使う形 → 通過
+- **したがって記録するのは事実だけ**: **scratch の単発 typecheck が通ることは、プロジェクトのビルドが通ることを意味しない。** 原因は未特定（ホールモジュール vs 単一ファイル、実際の初期化式の差、その他）。**分離まわりの可否は `xcodebuild` で確かめる**。再現条件を突き止めたくなったら、まず実際に落ちたコードを最小化するところから始めること（今回は解決済みコードからの逆算で作ったため、落ちる形そのものを手元に持っていない）
+- **同じ穴に親も落ちていた**: 今回のレビューで「`OSAllocatedUnfairLock` に揃えろ」と dispatch する前に、親は scratch の typecheck でパターンの成立を確認した。**しかし実際に probe したのは `Mutex` で、指示したのは `OSAllocatedUnfairLock` だった。** その結果、`OSAllocatedUnfairLock.withLock` が非 Sendable な State に使えない（`init(initialState:)` が `where State : Sendable` 拡張内、`withLock` が `body: @Sendable` と `R : Sendable` を要求する）ことは probe をすり抜け、実装側が `.swiftinterface` を読んで気づいた。**検証は「勧める API そのもの」で行う。似た API で代用した検証は何も証明しない**
+- **判定基準**: コンパイルの可否を根拠に何か書くとき、「私が実際にコンパイルしたコードは、私が主張している対象と同一か」を 1 回問う。①API が同じか ②ビルド構成が同じか ③そのファイルだけか / プロジェクト全体か

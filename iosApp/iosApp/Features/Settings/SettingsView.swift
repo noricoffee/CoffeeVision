@@ -7,6 +7,10 @@ import SwiftUI
 @preconcurrency import SharedLogic
 #if DEBUG
 import GoogleMobileAds
+import os
+
+/// 設定画面（開発者向け診断）のロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Settings")
 #endif
 
 /// アプリ設定画面。TabBar の「設定」タブとして常設表示する。
@@ -289,7 +293,7 @@ struct SettingsView: View {
     private func presentAdInspector() {
         MobileAds.shared.presentAdInspector(from: RootViewControllerProvider.current) { error in
             if let error {
-                print("[CoffeeVision] Ad Inspector: \(error.localizedDescription)")
+                log.error("Ad Inspector: \(error.localizedDescription, privacy: .public)")
             }
         }
     }

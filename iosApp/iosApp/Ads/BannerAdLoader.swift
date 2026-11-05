@@ -1,11 +1,20 @@
 import GoogleMobileAds
 import Observation
+import os
 
-/// カフェ詳細 / マップ検索ドロップダウンの 2 面で共有するアダプティブバナー広告ローダー
-/// （requirements.md §11。コーヒー記録・分析タブの 2 面は 2026-07-16 に撤去済み。git 履歴で復元可能）。
+/// バナー広告のロード状況ロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Ads")
+
+/// アダプティブバナー広告ローダー（requirements.md §11）。
 ///
-/// - 自動リフレッシュなし。呼び出し側（`InlineBannerAdView`）が
-///   画面表示（push / タブ遷移）のたびに `load(adSize:)` を呼ぶ
+/// 現在は全画面下部固定バナー（`AnchoredBannerAdBar`、requirements.md §11-5）の 1 面のみが使う。
+/// コーヒー記録・分析タブの 2 面は 2026-07-16 に、カフェ詳細 / マップ検索ドロップダウンの
+/// インライン 2 面は 2026-09-20 に、いずれもユーザビリティレビューで撤去した（git 履歴で復元可能）。
+/// 複数面が併存していた頃の名残で「面ごとに別インスタンスを持ち、状態を共有しない」設計のままだが、
+/// 現状は `AppRootView` が保持する 1 インスタンスのみが存在する。
+///
+/// - `AnchoredBannerAdBar` はクライアント側タイマーで 60 秒ごとに `load(adSize:forceReload: true)`
+///   を呼ぶ（`isAutoloadEnabled` は不採用。理由は `AnchoredBannerAdView.swift` のコメント参照）
 /// - ロード失敗・オフライン時は `isLoaded` が `false` のままになり、呼び出し側が枠ごと畳む
 ///   （プレースホルダなし）
 /// - Places 由来のデータ（店名 / カテゴリ等）は広告リクエストに一切含めない
@@ -18,8 +27,8 @@ import Observation
 ///   何度も発火しうる。過渡幅で即リクエストすると「ゴミ幅でロード中に正しい幅の再発火が
 ///   `isLoading` ガードで破棄され、幅が変化しないので `task(id:)` が再発火せず回復不能になる」
 ///   実機バグが起きたため（2026-07-14）、以下の 2 段構えで堅牢化している:
-///   1. **呼び出し側**（`InlineBannerAdView` / `CafeDetailView`）が
-///      `minimumRequestableWidth` 未満の幅ではそもそも `load(adSize:)` を呼ばない
+///   1. **呼び出し側**（`AnchoredBannerAdBar`）が `minimumRequestableWidth` 未満の幅では
+///      そもそも `load(adSize:)` を呼ばない
 ///   2. **`pendingAdSize` 方式**: それでも `isLoading` 中に新しい `load(adSize:)` が来たら
 ///      破棄せず `pendingAdSize` に保存し、現在のロード完了（成功 / 失敗どちらでも）後に
 ///      追いかけてロードする。「最後に要求されたサイズが最終的に必ずロードされる」ことを保証する
@@ -60,14 +69,17 @@ final class BannerAdLoader: NSObject {
 
     /// 画面表示のたびに呼ぶ。
     /// - ロード中に呼ばれた場合は破棄せず `pendingAdSize` に保存し、完了後に追いかけてロードする
-    /// - 既に同一サイズでロード済みのときは no-op（無限リロード防止）
+    /// - 既に同一サイズでロード済みのときは no-op（無限リロード防止）。`forceReload: true` を渡すと
+    ///   同一サイズでも再ロードする（`AnchoredBannerAdBar` のクライアント側自動リフレッシュ用。
+    ///   requirements.md §11-5。初回ロード時は既定値 `false` のまま呼ぶため、同一サイズへの
+    ///   無駄なリロードを防ぐガードは活きている）
     /// - 初回は `adSize` で `BannerView` を生成し、2 回目以降は既存のビューを使い回して再ロードする
-    func load(adSize: AdSize) {
+    func load(adSize: AdSize, forceReload: Bool = false) {
         guard !isLoading else {
             pendingAdSize = adSize
             return
         }
-        if isLoaded, let currentSize, isAdSizeEqualToSize(size1: currentSize, size2: adSize) {
+        if !forceReload, isLoaded, let currentSize, isAdSizeEqualToSize(size1: currentSize, size2: adSize) {
             return
         }
         isLoading = true
@@ -119,6 +131,9 @@ extension BannerAdLoader: BannerViewDelegate {
         loadFailed = false
         hasEverReceivedAd = true
         loadedAdSize = bannerView.adSize.size
+        // 受信広告の実サイズをログに残す（`inlineAdaptiveBanner` は Google 側の最適化ロジックで
+        // `maxHeight` 以下の高さが返るため、目視確認時に実測値を追いたい。requirements.md §11-5）。
+        log.info("did receive ad (adUnitID=\(self.adUnitID, privacy: .public)): size=\(String(describing: bannerView.adSize.size), privacy: .public)")
         loadPendingIfNeeded()
     }
 
@@ -129,7 +144,7 @@ extension BannerAdLoader: BannerViewDelegate {
         if !hasEverReceivedAd {
             isLoaded = false
         }
-        print("[CoffeeVision] BannerAdLoader load failed (adUnitID=\(adUnitID)): \(error)")
+        log.notice("load failed (adUnitID=\(self.adUnitID, privacy: .public)): \(String(describing: error), privacy: .public)")
         loadPendingIfNeeded()
     }
 }

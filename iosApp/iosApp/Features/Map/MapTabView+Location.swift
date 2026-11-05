@@ -128,7 +128,7 @@ extension MapTabView {
                 // ポーリングで監視（LocationManager は @Observable のため値変化を検知できる）
                 var lastLat: Double? = nil
                 for _ in 0 ..< 30 { // 最大 3 秒待機
-                    try? await Task.sleep(nanoseconds: 100_000_000) // 0.1s
+                    try? await Task.sleep(for: .milliseconds(100))
                     if let loc = locationManager.lastLocation, loc.latitude != lastLat {
                         lastLat = loc.latitude
                         continuation.yield(loc)
@@ -149,7 +149,10 @@ extension MapTabView {
             return CLLocationCoordinate2D(latitude: lat, longitude: lng)
         }
 
-        if coordinates.isEmpty {
+        guard let region = MapRegionFitting.region(
+            fitting: coordinates,
+            singleCoordinateMeters: 2000
+        ) else {
             // デフォルト: 東京駅
             cameraPosition = .region(
                 MKCoordinateRegion(
@@ -158,31 +161,8 @@ extension MapTabView {
                     longitudinalMeters: 5000
                 )
             )
-        } else if coordinates.count == 1 {
-            cameraPosition = .region(
-                MKCoordinateRegion(
-                    center: coordinates[0],
-                    latitudinalMeters: 2000,
-                    longitudinalMeters: 2000
-                )
-            )
-        } else {
-            // bounding box の中心と span を計算
-            let lats = coordinates.map { $0.latitude }
-            let lngs = coordinates.map { $0.longitude }
-            let minLat = lats.min()!
-            let maxLat = lats.max()!
-            let minLng = lngs.min()!
-            let maxLng = lngs.max()!
-            let center = CLLocationCoordinate2D(
-                latitude: (minLat + maxLat) / 2,
-                longitude: (minLng + maxLng) / 2
-            )
-            let span = MKCoordinateSpan(
-                latitudeDelta: max((maxLat - minLat) * 1.3, 0.01),
-                longitudeDelta: max((maxLng - minLng) * 1.3, 0.01)
-            )
-            cameraPosition = .region(MKCoordinateRegion(center: center, span: span))
+            return
         }
+        cameraPosition = .region(region)
     }
 }

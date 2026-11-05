@@ -1,36 +1,36 @@
 [versions]
-agp = "9.2.1"
-android-compileSdk = "36"
+agp = "9.5.0"
+android-compileSdk = "37"
 android-minSdk = "36"
 android-targetSdk = "36"
 androidx-activity = "1.13.0"
-androidx-appcompat = "1.7.1"
-androidx-core = "1.18.0"
+androidx-appcompat = "1.8.0"
+androidx-core = "1.19.1"
 androidx-espresso = "3.7.0"
-androidx-lifecycle = "2.11.0-beta01"
+androidx-lifecycle = "2.11.0"
 androidx-testExt = "1.3.0"
-composeMultiplatform = "1.11.0"
+composeMultiplatform = "1.12.2"
 junit = "4.13.2"
-kotlin = "2.3.21"
-material3 = "1.11.0-alpha07"
+kotlin = "2.4.21"
+material3 = "1.12.0-alpha03"
 
 # KMP 共通基盤
-kotlinxCoroutines = "1.10.2"
-kotlinxSerialization = "1.8.0"
-kotlinxDatetime = "0.6.2"
+kotlinxCoroutines = "1.11.0"
+kotlinxSerialization = "1.12.0"
+kotlinxDatetime = "0.8.0"
 
 # ローカル DB
-sqldelight = "2.1.0"
+sqldelight = "2.4.1"
 
 # HTTP
-ktor = "3.0.3"
+ktor = "3.6.1"
 
 # Firebase（Android 側）
-firebaseBom = "33.7.0"
-googleServices = "4.4.2"
+firebaseBom = "35.1.0"
+googleServices = "4.5.0"
 
 # Kotlin → Swift トランスパイラ拡張（suspend / Flow / sealed を Swift idiomatic に変換）
-skie = "0.10.12"
+skie = "0.10.16"
 
 [libraries]
 kotlin-test = { module = "org.jetbrains.kotlin:kotlin-test", version.ref = "kotlin" }
@@ -74,9 +74,9 @@ ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 
 # Firebase（Android 側のみ。BoM 経由なので個別の version は指定しない）
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
-firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx" }
-firebase-auth = { module = "com.google.firebase:firebase-auth-ktx" }
-firebase-storage = { module = "com.google.firebase:firebase-storage-ktx" }
+firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
+firebase-storage = { module = "com.google.firebase:firebase-storage" }
 
 # Gradle plugin classpath（build-logic/convention から参照する）
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }

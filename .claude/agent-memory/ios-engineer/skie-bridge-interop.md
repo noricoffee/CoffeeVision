@@ -15,7 +15,7 @@ metadata:
 `.swiftinterface` は SKIE が追加する **Swift 側拡張のみ**しか載らず、Kotlin の `data class` / `interface` 本体の宣言（プロパティ名・引数順・completion handler シグネチャ）は載らない。本体を確認するなら
 `shared/framework/build/bin/iosSimulatorArm64/debugFramework/SharedLogic.framework/Headers/SharedLogic.h`（Obj-C ヘッダ）を読むこと。`@property` / `initWith...` / `swift_name(...)` 属性がそのまま Swift シグネチャの正。
 kmp-engineer が commit 済みでも `shared/framework/build/**` は古いままなことが多いので、まず
-`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew :shared:framework:linkDebugFrameworkIosSimulatorArm64` で最新化してから読む（数秒で終わる。xcodebuild 本番実行より軽い下調べ用）。
+`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./gradlew :shared:framework:linkDebugFrameworkIosSimulatorArm64` で最新化してから読む（数秒で終わる。xcodebuild 本番実行より軽い下調べ用）。
 
 ## Kotlin data class（ネスト型含む）は `.onChange(of:)` にそのまま渡せる — Foundation の `NSObject: Equatable` 拡張が effectively 効く（2026-07-13、`MapViewModel.PoiLookupError` 導入で確認）
 
@@ -81,3 +81,32 @@ Kotlin `data class Cafe(placeId, name, address, latitude, longitude, photoRefere
 - 「Edit モードで catalog に無い legacy 値でも壊れない」要件は、**Menu で自前ラベルを出す**より、**Picker の選択肢配列に legacy 値を動的追加する**方が既存の Picker パターン（`brewMethod`/`processing` 等）と統一でき、アクセシビリティも native のまま乗る。`options = ["", ...countries, BLEND] + (legacy値があれば追加) + [OTHER]` を組み、`selection: Binding<String>` の `set` で `newValue == OTHER` のときだけ「その他モード」用の別 `@State` フラグを立てて自由入力 `TextField` を出す（Picker の `get` はフラグが立っている間 `OTHER` を固定で返す）。
 - 「その他」選択時は literal を保存しない仕様のため、フラグを立てるのと同時に `onXxxChanged("")` で一旦空にしてから自由入力に委ねると、選択直後に前の値が誤って保存される事故を防げる。
 - `CoffeeRecord` に `origin` + `region`（表示専用の別フィールド）が両方あるケースの表示結合は、`CoffeeRecord` に `extension` で computed property（`originDisplayText`）を生やして複数 View（詳細画面 / シェアカード）から共有するのが最小实装（`iosApp/iosApp/Utilities/` 配下に新規ファイルを置くパターン）。
+
+## Kotlin 型が Swift の `==` で「値比較になるか参照比較になるか」は Obj-C ヘッダの `isEqual:` の有無で機械判定できる（2026-09-20、SL-3 ブリッジ同値ガードで確立）
+
+Kotlin/Native は `data class` にだけ `equals()` 由来の `- (BOOL)isEqual:(id)other` を生成する。素の `class`（`CoffeeRecordQueryImpl` / `AppContainer` 等）には出さない。すべて `SharedLogicBase : NSObject` を継承しており、Foundation の `extension NSObject: Equatable`（`==` が `isEqual:` を呼ぶ）が効くので **`==` はどちらの型でもコンパイルが通ってしまう**。参照比較になる型に同値ガードを入れると毎回不一致で無意味になるため、着手前に `@interface` ブロック単位で判定する:
+
+```bash
+H=shared/framework/build/bin/iosSimulatorArm64/debugFramework/SharedLogic.framework/Headers/SharedLogic.h
+python3 - "$H" <<'PY'
+import re,sys
+src=open(sys.argv[1],encoding='utf-8').read()
+for name,body in re.findall(r'@interface (\w+)[^\n]*\n(.*?)\n@end', src, re.S):
+    if name in {"SharedLogicCafe","SharedLogicVisitedCafe"}:   # 調べたい型
+        print(name, 'isEqual あり(値比較)' if 'isEqual:' in body else 'isEqual なし(参照比較)')
+PY
+```
+
+ヘッダが古いと誤判定するので `./gradlew :shared:framework:linkDebugFrameworkIosSimulatorArm64` で最新化してから読む。
+
+### SKIE の sealed interface は Swift の `Equatable` に載らない
+
+- `sealed interface X` は Obj-C **プロトコル**（`@protocol SharedLogicX`、`NSObject` プロトコルを継承しない）になる。よって `any X` に `isEqual` メンバは無く、`[any X]` は `Equatable` 非準拠で `!=` が書けない（`CafeDetailViewModel.UIState.matches` = `[any RecommendationReason]` が該当。同値ガードを諦めた）。
+- ただし全ケースが Kotlin の **`data object`（シングルトン）**なら、ヘッダに `@property (class, readonly, getter=shared)` と `+ (instancetype)xxx __attribute__((swift_name("init()")))` が出る。この場合 Swift 側は常に同一インスタンスなので **`!==` で同値ガードを書ける**（`AnalysisViewModel.InsightStatus` / `QaStatus` が該当）。ObjC プロトコルの existential は class-constrained なので `!==` はそのままコンパイルが通る。
+
+## kotlinx-datetime 0.8 移行（2026-11-05、`kotlin.time.Instant` / `LocalDate.month` enum 化）
+
+- `kotlinx.datetime.Instant` が `kotlin.time.Instant` に一本化され、Swift 側の型名も **`Kotlinx_datetimeInstant` → `KotlinInstant`** に変わった（Obj-C ヘッダでクラス名ごと変わるので `grep -rl "Kotlinx_datetimeInstant" iosApp` で全置換が必須。API の形（`Companion.shared.fromEpochMilliseconds(epochMilliseconds:)` / `toEpochMilliseconds()`）は不変）。
+- `Kotlinx_datetimeLocalDate.month` が `Int32`（`monthNumber`、deprecated）から `Kotlinx_datetimeMonth`（enum、`.january`〜`.december` の宣言順 = `ordinal` 0〜11）に変わった。`dayOfMonth` も `day` に deprecated 移行。Kotlin の拡張プロパティ `Month.number` は SKIE 経由で Swift に出ない（`.swiftinterface` にも Obj-C ヘッダにも載らない）ため、月の数値化は Swift 側で `month.ordinal + 1` を書く必要がある。**1 箇所の extension（`Utilities/Kotlinx_datetimeLocalDate+Month.swift` の `monthValue: Int32`）に閉じ込め、呼び出し側（表示整形・`DateComponents` 変換など 5 ファイル）はそれだけを使う**（`DomainLabels.swift` と同じ「1 箇所集約」パターン）。
+- この手の「deprecated プロパティへの参照」はコンパイルエラーにならず warning のみなので、置き換え後は `grep` の 0 件確認に加えて `xcodebuild` ログの deprecation warning 件数も 0 を確認する（バッチコンパイルで該当ファイルの warning が隠れていないかの裏取り）。
+- `Kotlinx_datetimeLocalDate(year:month:day:)`（`day:` は `Int32`、`month:` も `Int32` の designated initializer）は 0.8 でも維持されており、生成側（`DateComponents` → `LocalDate`）は無改修で通る。読み取り側（`.monthNumber`/`.dayOfMonth`）だけが影響を受ける非対称な変更だった。

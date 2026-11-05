@@ -4,15 +4,20 @@ import SharedLogic
 /// `CoffeeEditorViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `onAppear(mode:userId:)` / `onDisappear()` でライフサイクルを管理し、観測タスクのリーク防止する
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
 /// - 画面遷移ごとに新規インスタンスを生成するため `CoffeeEditorView` 内の `@State` で保持する
+/// - ライフサイクルは 2 メソッドに分かれる（他ブリッジと異なり `onAppear` と `observe` を
+///   1 本化していない）。理由: `CoffeeEditorView` の `.task` は `onAppear` 相当の同期初期化の
+///   **後に** カフェ pre-fill / 現在地サジェストの追加処理を挟んでから observation へ入る必要が
+///   あり、`observe()` 自体は `kotlin.state` を purge するまで返らない（呼び出し元をブロックする）
+///   ため、両方を 1 メソッドに畳むとその追加処理が実行されなくなる:
+///   - `onAppear(mode:userId:)`: 同期。`kotlin.onAppear` を転送するだけ
+///   - `observe()`: 非同期。state 購読のみ（構造化 `Task`。B-11）
 @MainActor
 @Observable
 final class CoffeeEditorViewModelBridge {
 
     private let kotlin: CoffeeEditorViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -38,23 +43,25 @@ final class CoffeeEditorViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    /// 画面表示時に呼ぶ。`mode` と `userId` を受け取り初期 draft を設定する。
+    /// 画面表示時に呼ぶ。`mode` と `userId` を受け取り初期 draft を設定する（同期処理のみ）。
+    ///
+    /// `CoffeeEditorView` の `.task` から、カフェ pre-fill / 現在地サジェストより前に呼ぶ。
     func onAppear(mode: any CoffeeEditorViewModelMode, userId: String) {
         kotlin.onAppear(mode: mode, userId: userId)
-        observationTask?.cancel()
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
+    }
+
+    /// state 購読を開始する。`CoffeeEditorView` の `.task` から `onAppear` の後に呼ぶ
+    /// （構造化 `Task`。B-11）。
+    func observe() async {
+        for await state in kotlin.state {
+            apply(state)
         }
     }
 
-    /// 画面非表示時に呼ぶ。観測タスクをキャンセルする。
+    /// 画面非表示時に呼ぶ。Kotlin 側の進行中 Job（load / save / タグカタログ購読）をキャンセルする。
+    ///
+    /// observation（`observe()`）の停止は `.task` の構造化キャンセルに委ねるため、ここでは触らない。
     func onDisappear() {
-        observationTask?.cancel()
-        observationTask = nil
         kotlin.onDisappear()
     }
 
@@ -224,14 +231,36 @@ final class CoffeeEditorViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CoffeeEditorViewModel.UIState) {
-        self.draft = state.draft
-        self.isLoading = state.isLoading
-        self.isSaving = state.isSaving
-        self.error = state.error
-        self.savedCoffeeId = state.savedCoffeeId
-        self.tags = state.draft.tags
-        self.suggestedCafes = state.suggestedCafes
-        self.tagInput = state.tagInput
-        self.suggestedTags = state.suggestedTags
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `CoffeeDraft` / `Cafe` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の
+        // `isEqual:` を持つため `==` が値比較になる。
+        if draft != state.draft {
+            draft = state.draft
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if isSaving != state.isSaving {
+            isSaving = state.isSaving
+        }
+        if error != state.error {
+            error = state.error
+        }
+        if savedCoffeeId != state.savedCoffeeId {
+            savedCoffeeId = state.savedCoffeeId
+        }
+        if tags != state.draft.tags {
+            tags = state.draft.tags
+        }
+        if suggestedCafes != state.suggestedCafes {
+            suggestedCafes = state.suggestedCafes
+        }
+        if tagInput != state.tagInput {
+            tagInput = state.tagInput
+        }
+        if suggestedTags != state.suggestedTags {
+            suggestedTags = state.suggestedTags
+        }
     }
 }

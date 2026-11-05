@@ -7,6 +7,10 @@ import FirebaseFirestore
 // `container.authRepository`（`any AuthRepository`）を受け手にして await すると、受け手を別の
 // 分離ドメインへ「送る」ことになり data race エラーになる（リリース CI run 31203044578）。
 @preconcurrency import SharedLogic
+import os
+
+/// 起動シーケンス・同意状態まわりのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "AppState")
 
 /// マップタブのカメラ中心を検索タブへ共有するための値型。
 ///
@@ -106,6 +110,15 @@ final class AppState {
     /// （`UserDefaults` の `hasCompletedAdConsentFlow` フラグ）のときは以後表示しない。
     var showAdConsentFlow: Bool = false
 
+    /// 広告プレプロンプト → ATT の一連が決着したか（requirements.md §11-5 のロードゲート用）。
+    ///
+    /// `showAdConsentFlow == false` は「シートを閉じた」ことしか意味せず、`onAdPrePromptContinue()`
+    /// はシートを閉じた直後に ATT ダイアログを非同期で開始する（`showAdConsentFlow` が false になった
+    /// 時点ではまだ ATT が `.notDetermined` のまま）。この状態を広告ロードのゲートに使うと、ATT
+    /// ダイアログの表示中にロードが飛んでしまい、セッション最初のインプレッションが必ず NPA になる
+    /// （回避したかった事象そのもの）。**このフラグは ATT ダイアログの結果が確定した後に true になる**。
+    private(set) var isAdConsentResolved: Bool = false
+
     private static let adConsentFlowShownKey = "hasCompletedAdConsentFlow"
 
     /// データ共有への同意状態。Firestore `users/{uid}.analyticsConsent` と同期する。
@@ -203,18 +216,29 @@ final class AppState {
 
     /// データ共有同意オンボーディングの直後（新規ユーザー）、または `bootstrap()` 時点で
     /// オンボーディング自体が不要だった既存ユーザーに対して、未実施のときだけ広告プレプロンプトを表示する。
+    ///
+    /// 既に完了済み（このセッションで表示せず終わる経路）では `isAdConsentResolved` を即 true にする
+    /// （前回セッションで ATT はすでに確定済みのため、追加で待つ理由がない）。
     private func presentAdConsentFlowIfNeeded() {
-        guard !UserDefaults.standard.bool(forKey: Self.adConsentFlowShownKey) else { return }
+        guard !UserDefaults.standard.bool(forKey: Self.adConsentFlowShownKey) else {
+            isAdConsentResolved = true
+            return
+        }
         showAdConsentFlow = true
     }
 
     /// `AdPrePromptView` の「続ける」タップで呼ぶ。シートを閉じ、ATT 許諾ダイアログを実行する
     /// （UMP は呼ばない — `AdConsentCoordinator` 参照。Google Mobile Ads SDK 自体は `iOSApp.init()` で起動済み）。
+    ///
+    /// `isAdConsentResolved` は `AdConsentCoordinator.run()`（ATT ダイアログの表示・結果確定）が
+    /// **完了した後**に true にする。`showAdConsentFlow = false` の時点ではまだ ATT が
+    /// `.notDetermined` のままなので、これをロードゲートに使ってはいけない。
     func onAdPrePromptContinue() {
         showAdConsentFlow = false
         UserDefaults.standard.set(true, forKey: Self.adConsentFlowShownKey)
-        Task {
+        Task { [weak self] in
             await AdConsentCoordinator.run()
+            self?.isAdConsentResolved = true
         }
     }
 
@@ -266,11 +290,11 @@ final class AppState {
             // 状態の公開はここで最後に行う（uid != nil が RootTabView への切り替えトリガーのため）
             self.uid = uid
             self.status = .ready
-            print("[CoffeeVision] startInitialSync succeeded uid=\(uid)")
+            log.info("startInitialSync succeeded uid=\(uid, privacy: .private)")
         } catch {
             self.lastError = error.localizedDescription
             self.status = .failed
-            print("[CoffeeVision] startInitialSync failed: \(error)")
+            log.error("startInitialSync failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -298,7 +322,7 @@ final class AppState {
                 showConsentOnboarding = true
             }
         } catch {
-            print("[CoffeeVision] checkConsentOnboarding failed (ignored): \(error)")
+            log.notice("checkConsentOnboarding failed (ignored): \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -308,7 +332,7 @@ final class AppState {
         do {
             try await container.authRepository.updateAnalyticsConsent(consent: consent)
         } catch {
-            print("[CoffeeVision] updateAnalyticsConsent failed: \(error)")
+            log.error("updateAnalyticsConsent failed: \(String(describing: error), privacy: .public)")
         }
     }
 
@@ -324,16 +348,16 @@ final class AppState {
         if ProcessInfo.processInfo.environment["SEED_DUMMY_DATA"] == "1" {
             do {
                 try await container.seedDummyData(userId: userId)
-                print("[CoffeeVision] seedDummyData succeeded uid=\(userId)")
+                log.debug("seedDummyData succeeded uid=\(userId, privacy: .private)")
             } catch {
-                print("[CoffeeVision] seedDummyData failed (ignored): \(error)")
+                log.debug("seedDummyData failed (ignored): \(String(describing: error), privacy: .public)")
             }
         } else {
             do {
                 try await container.clearDummyData(userId: userId)
-                print("[CoffeeVision] clearDummyData succeeded uid=\(userId)")
+                log.debug("clearDummyData succeeded uid=\(userId, privacy: .private)")
             } catch {
-                print("[CoffeeVision] clearDummyData failed (ignored): \(error)")
+                log.debug("clearDummyData failed (ignored): \(String(describing: error), privacy: .public)")
             }
         }
     }
@@ -350,11 +374,10 @@ final class AppState {
         // `permission-denied` を受け続け、サインアウトのたびに 1 組ずつ積み上がる。
         container.stopSync()
 
-        coffeeListBridge?.onDisappear()
-        mapBridge?.cancel()
-        accountBridge?.cancel()
-        analysisBridge?.cancel()
-
+        // ブリッジの observation（`.task` が回す構造化 `Task`）は、ここで nil にすることで
+        // `AppRootView` の分岐が `RootTabView` からローディング表示へ切り替わり、
+        // 各画面の `.task` が SwiftUI によって自動キャンセルされる（B-11。旧 `onDisappear()` /
+        // `cancel()` の手動キャンセルは不要になった）。
         coffeeListBridge = nil
         mapBridge = nil
         accountBridge = nil

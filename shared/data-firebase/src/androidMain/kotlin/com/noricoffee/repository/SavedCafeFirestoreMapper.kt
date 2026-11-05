@@ -3,7 +3,7 @@ package com.noricoffee.repository
 import com.google.firebase.Timestamp
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.model.SavedCafe
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * Kotlin の [SavedCafe] ドメインモデル ↔ Firestore ドキュメント `Map<String, Any?>` を変換するヘルパ。

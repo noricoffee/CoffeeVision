@@ -66,3 +66,11 @@ metadata:
 ## 参照: [ui-components-patterns.md](ui-components-patterns.md) の「排他的な複数種シート」パターンとは独立の論点
 
 上記は「1 つの View を複数の小さい View 構造体に割る」ときの状態設計の話で、`ui-components-patterns.md` の enum item シートパターン（表示状態の排他制御）とは別の関心事。
+
+## `body` 内の派生コレクションをブリッジ側の `private(set) var` へ追い出す型（2026-09-20、SL-4 マップピン）
+
+`MapTabView` の body で `displayedSavedCafes(bridge)` のような関数を呼んでいると、無関係な `@Observable` プロパティが変わるだけで Set 構築や `CLLocation` の測地距離計算（curated 421 件）が丸ごと走り直す。移設先の選び方:
+
+- **入力が Kotlin state だけの派生値** → `MapViewModelBridge` の `private(set) var` にし、`apply(_:)` の中で「入力が実際に変わったときだけ」再計算する（SL-3 の同値ガードで `pinInputsChanged` フラグを立て、立ったときだけ `recomputeDerivedPinSets()`）。View の `.onChange(of:)` で受け直すより速い（Kotlin 配列の `==` は要素ごとに ObjC 越しの `isEqual:` を呼ぶので、body 評価のたびに比較させない）。
+- **入力にカメラ等の View 側 state が混ざる派生値** → `func updateXxx(_:)` をブリッジに生やし、**既存のイベントハンドラから直接呼ぶ**。`.onChange(of: appState.mapSearchCenter)` を新設すると body がカメラを読む依存が復活するので使わない（2026-08-09 のウォッチドッグ循環）。**同値ガードは呼び出し側に相乗りせずブリッジ側に持つ** — 相乗りすると、サインアウト → 再ブートストラップでブリッジだけ作り直されたとき `AppState` 側の値が残って「同値だから渡されない」が起き、カメラが動くまで復帰しない。加えて View の `.task` 冒頭（`await observe()` の前）で現在値を 1 回流し込んでおくと再生成直後も埋まる。
+- **別の `@Observable`（`AppleNearbyCafeLoader`）へ渡す値** → ブリッジに `private(set) var existingPinCoordinates: [MapPinCoordinate]` を持たせ、View の `.onChange(of:..., initial: true)` で loader の setter を呼ぶ。`CLLocationCoordinate2D` は `Equatable` 非準拠なので `.onChange` に渡せない（lat/lng だけの `Equatable` struct を挟む）。この経路は 1 フレーム遅れる（新ピン出現と Apple ピン重複排除が同じ pass で揃わない）ので、見た目に響く用途では使わない。

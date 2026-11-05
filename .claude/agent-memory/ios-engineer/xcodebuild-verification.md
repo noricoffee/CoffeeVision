@@ -9,9 +9,11 @@ metadata:
 
 `xcodebuild ... | tail -80` のように末尾だけ見ると、ビルド後半（Swift コンパイル〜リンク）しか映らず、序盤に実行される `./gradlew :shared:framework:embedAndSignAppleFrameworkForXcode`（`project.pbxproj` の Run Script フェーズ）のログが消えて「Gradle が本当に走ったか」を確認できない。**`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` を使わずに Gradle 実行を裏取りしたいときは、出力をファイルへリダイレクト（`> build.log 2>&1`）してから `grep` する**（`tail` で絞らない）。差分検証なら `clean build` にすると Run Script も含め全フェーズが必ず再実行されるので確実。
 
+**同じ `tail` 切り捨ては Swift コンパイルエラーの件数把握にも影響する**（2026-11-05、kotlinx-datetime バンプの `LocalDate(year:monthNumber:dayOfMonth:)` → `(year:month:day:)` ラベル変更で確認）。Xcode の新ビルドシステムは複数ファイルをバッチ化して 1 つの `swift-frontend` 呼び出しに束ねるため、`tail` で絞ると**同種のエラーが複数ファイルに存在するのに 1 件しか見えない**ことがある（実例: `PreviewSamples.swift` 1 件だけが見えたが、同じ初期化子呼び出しが `CoffeeFirestoreMapper.swift` / `CoffeeEditorView.swift` にも残っていて、ファイルへリダイレクトして `grep error:` すると初めて 2 件目が出た。3 件目の `CoffeeEditorView.swift` 分は同一バッチ内の後続ファイルのため診断そのものが出力されず、`grep "monthNumber:\|dayOfMonth:"` でソースを直接 grep してようやく見つかった）。**「エラーは N 件」という報告はビルドログの `grep error:` 件数だけでなく、同型の呼び出しパターンをソース全体で `grep` した件数とも必ず突き合わせる**。
+
 ## xcodebuild のシミュレータ destination 名は `xcrun simctl list devices available` で確認する（2026-07-07 確認）
 
-環境によって「iPhone 16」等の型番が存在しないことがある（この環境では iPhone 17 系のみインストール済み）。`-destination 'platform=iOS Simulator,name=iPhone 16'` は `Unable to find a device matching...` で即失敗するので、事前に `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcrun simctl list devices available | grep iPhone` で存在する名前を確認してから `-destination` を組み立てる。
+環境によって「iPhone 16」等の型番が存在しないことがある（この環境では iPhone 17 系のみインストール済み）。`-destination 'platform=iOS Simulator,name=iPhone 16'` は `Unable to find a device matching...` で即失敗するので、事前に `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun simctl list devices available | grep iPhone` で存在する名前を確認してから `-destination` を組み立てる。
 
 ## `xcodebuild -project ... -list` の出力は末尾までスクロールしないと `Schemes:` セクションが見えないことがある（2026-07-07 確認）
 

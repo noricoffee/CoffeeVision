@@ -1,5 +1,11 @@
 import Foundation
-import SharedLogic
+// `@preconcurrency`: `__collect` が protocol 要件として受け取る
+// `any Kotlinx_coroutines_coreFlowCollector` は Kotlin 由来で Sendable 非準拠だが、
+// `emit` / `emitSome` / `emitNone` を `@Sendable` にする以上そのクロージャへ捕捉するしかない
+// （シグネチャ自体の要件なのでプロパティ単位の対処が構造的に効かない。`docs/kmp-bridge.md`
+// 「`@preconcurrency import SharedLogic` を使ってよい条件」）。本ファイルが参照する
+// SharedLogic 型は `Kotlinx_coroutines_coreFlow` / `...FlowCollector` の 2 つだけなので影響範囲は閉じている。
+@preconcurrency import SharedLogic
 import os
 
 // MARK: - FlowCompletionGate
@@ -101,15 +107,24 @@ private nonisolated final class FlowCompletionGate: Sendable {
 /// MainActor へ非同期にホップするため、解放が実際のタイミングより遅延し、
 /// 同一クエリの即時再購読時にリスナが二重に生き残る競合窓が生まれうる。
 /// そのため既定 MainActor 分離を明示的に無効化している。
-nonisolated final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow, @unchecked Sendable {
+///
+/// ## `onStart` / `onCancel` が `@Sendable` である理由（SL-1）
+///
+/// この 2 つは Kotlin ランタイムの任意スレッドから、別々の経路（`__collect` / `deinit`）で呼ばれる。
+/// 非 `@Sendable` だと、両者が同じローカル `var`（Firestore / Auth のリスナハンドル）を捕捉して
+/// 共有していてもコンパイラは何も言えない——実際に利用側 5 箇所すべてがそうなっていた。
+/// `@Sendable` にすると、捕捉する可変状態はロック等で保護しない限りコンパイルが通らなくなる。
+/// 格納プロパティが `@Sendable` クロージャとロックだけになったので、クラスは素の `Sendable` で足りる
+/// （`@unchecked` にするとこの検査自体が利用側まで含めて外れてしまう）。
+nonisolated final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow, Sendable {
 
-    private let onStart: (@escaping (T) -> Void, @escaping (any Error) -> Void) -> Void
-    private let onCancel: () -> Void
+    private let onStart: @Sendable (@escaping @Sendable (T) -> Void, @escaping @Sendable (any Error) -> Void) -> Void
+    private let onCancel: @Sendable () -> Void
     private let gate = FlowCompletionGate()
 
     init(
-        onStart: @escaping (@escaping (T) -> Void, @escaping (any Error) -> Void) -> Void,
-        onCancel: @escaping () -> Void
+        onStart: @escaping @Sendable (@escaping @Sendable (T) -> Void, @escaping @Sendable (any Error) -> Void) -> Void,
+        onCancel: @escaping @Sendable () -> Void
     ) {
         self.onStart = onStart
         self.onCancel = onCancel
@@ -124,11 +139,11 @@ nonisolated final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines
     ) {
         gate.arm(completionHandler)
 
-        let emit: (T) -> Void = { value in
+        let emit: @Sendable (T) -> Void = { value in
             // emit は suspend 関数 → Obj-C ブリッジでは completion handler 形式。
             collector.__emit(value: value) { _ in }
         }
-        let fail: (any Error) -> Void = { [gate] error in
+        let fail: @Sendable (any Error) -> Void = { [gate] error in
             gate.finish(error)
         }
         onStart(emit, fail)
@@ -150,17 +165,25 @@ nonisolated final class CallbackFlow<T: AnyObject>: NSObject, Kotlinx_coroutines
 /// 例外終了させる（意味はすべて `CallbackFlow` と同じ。上記 KDoc 参照）。
 /// Obj-C ブリッジでは nil を `NSNull` として渡すことで Kotlin 側が null として受け取る。
 ///
-/// `nonisolated` である理由も `CallbackFlow` と同じ（Kotlin ランタイムが任意スレッドから
-/// `__collect` / `deinit` を駆動するため）。
-nonisolated final class CallbackFlowOptional<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow, @unchecked Sendable {
+/// `nonisolated` である理由、`onStart` / `onCancel` を `@Sendable` にしている理由も
+/// `CallbackFlow` と同じ（上記 KDoc 参照）。
+nonisolated final class CallbackFlowOptional<T: AnyObject>: NSObject, Kotlinx_coroutines_coreFlow, Sendable {
 
-    private let onStart: (@escaping (T) -> Void, @escaping () -> Void, @escaping (any Error) -> Void) -> Void
-    private let onCancel: () -> Void
+    private let onStart: @Sendable (
+        @escaping @Sendable (T) -> Void,
+        @escaping @Sendable () -> Void,
+        @escaping @Sendable (any Error) -> Void
+    ) -> Void
+    private let onCancel: @Sendable () -> Void
     private let gate = FlowCompletionGate()
 
     init(
-        onStart: @escaping (@escaping (T) -> Void, @escaping () -> Void, @escaping (any Error) -> Void) -> Void,
-        onCancel: @escaping () -> Void
+        onStart: @escaping @Sendable (
+            @escaping @Sendable (T) -> Void,
+            @escaping @Sendable () -> Void,
+            @escaping @Sendable (any Error) -> Void
+        ) -> Void,
+        onCancel: @escaping @Sendable () -> Void
     ) {
         self.onStart = onStart
         self.onCancel = onCancel
@@ -172,14 +195,14 @@ nonisolated final class CallbackFlowOptional<T: AnyObject>: NSObject, Kotlinx_co
     ) {
         gate.arm(completionHandler)
 
-        let emitSome: (T) -> Void = { value in
+        let emitSome: @Sendable (T) -> Void = { value in
             collector.__emit(value: value) { _ in }
         }
-        let emitNone: () -> Void = {
+        let emitNone: @Sendable () -> Void = {
             // nil を Obj-C ブリッジ経由で Kotlin 側の null として渡す
             collector.__emit(value: nil) { _ in }
         }
-        let fail: (any Error) -> Void = { [gate] error in
+        let fail: @Sendable (any Error) -> Void = { [gate] error in
             gate.finish(error)
         }
         onStart(emitSome, emitNone, fail)

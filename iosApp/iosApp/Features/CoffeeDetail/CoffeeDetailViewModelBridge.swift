@@ -4,7 +4,8 @@ import SharedLogic
 /// `CoffeeDetailViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `onAppear(coffeeId:userId:)` / `onDisappear()` でライフサイクルを管理し、観測タスクのリーク防止する
+/// - 観測は `observe(coffeeId:userId:)`（構造化 `Task`。`CoffeeDetailView` の `.task` から呼ぶ）
+///   が担う。ブリッジ自身は `Task` を保持しない（B-11）
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
 /// - 詳細画面は画面遷移ごとに新規インスタンスを生成するため
 ///   `CoffeeDetailView` 内の `@State` で保持する（AppState にはホルダプロパティを持たせない）
@@ -13,7 +14,6 @@ import SharedLogic
 final class CoffeeDetailViewModelBridge {
 
     private let kotlin: CoffeeDetailViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -40,27 +40,13 @@ final class CoffeeDetailViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    /// 画面表示時に呼ぶ。`coffeeId` に対応するコーヒー記録の購読を開始する。
-    ///
-    /// 前回の観測タスクをキャンセルしてから再スタートするため、
-    /// 複数回呼ばれても二重購読しない。
-    func onAppear(coffeeId: String, userId: String) {
+    /// `coffeeId` に対応するコーヒー記録の購読を開始する。`CoffeeDetailView` の `.task` から呼ぶ
+    /// （構造化 `Task`）。
+    func observe(coffeeId: String, userId: String) async {
         kotlin.onAppear(coffeeId: coffeeId, userId: userId)
-        observationTask?.cancel()
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
+        for await state in kotlin.state {
+            apply(state)
         }
-    }
-
-    /// 画面非表示時に呼ぶ。観測タスクをキャンセルする。
-    func onDisappear() {
-        observationTask?.cancel()
-        observationTask = nil
     }
 
     // MARK: - ユーザーアクション
@@ -82,10 +68,22 @@ final class CoffeeDetailViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CoffeeDetailViewModel.UIState) {
-        self.coffee = state.coffee
-        self.isLoading = state.isLoading
-        self.error = state.error
-        self.isDeleted = state.isDeleted
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `CoffeeRecord` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        if coffee != state.coffee {
+            coffee = state.coffee
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if error != state.error {
+            error = state.error
+        }
+        if isDeleted != state.isDeleted {
+            isDeleted = state.isDeleted
+        }
 
         if state.isDeleted, let fileNames = pendingPhotoFileNames {
             for fileName in fileNames {

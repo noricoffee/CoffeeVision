@@ -47,7 +47,7 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 - **dispatch 判断**: Swift だけで完結するなら `ios-engineer`、Kotlin だけなら `kmp-engineer`。両方に跨るタスクは分解する
 - **KMP ブリッジの仲介**: `commonMain` の公開 API 変更が出たら、親が「インターフェースの合意書」を docs に固めてから両エージェントに dispatch する
 - **整合性チェックと再検証**: 両エージェントのレポートを突き合わせ、`commonMain` API 変更と iOS Bridge の追随の齟齬を確認する。サブエージェントのビルド成功報告が `OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` 付きなら親がフラグ無しで再検証する（偽の成功になるため）
-- **iOS ターゲットのテスト実行**: sandbox 制約でサブエージェントは `iosSimulatorArm64Test` 等を実行できない。親が `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew ...` で実行する
+- **iOS ターゲットのテスト実行**: sandbox 制約でサブエージェントは `iosSimulatorArm64Test` 等を実行できない。親が `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./gradlew ...` で実行する
 - **実装ノートの記録**: レポート中の「仕様 / トレードオフの論点」のうち要件未満だが残すべき判断・経緯を [`docs/implementation_note.md`](./docs/implementation_note.md) に追記（タイトル + 本文で十分）。同種エントリが溜まったら正規 doc へ昇格させ、ノートから削除する
 - **横断 doc の同時更新**: 方針転換・モジュール追加時は、同じ変更内で横断 doc（architecture 現状 / 本ファイル / 各サマリ）の旧記述の消し込みまで行う（陳腐化防止。lessons 2026-06-16）
 - **doc に書く事実は、書く前にソースを開いて確かめる**: 「〜のはず」で書かない。doc とコードのどちらが正本かも推測で決めない（2026-07-25 に 2 回踏んだ: `seed-coffees.mjs` は「未知キーを素通しするはず」→ 実際は明示 allowlist でフィールドを落としていた / `FLAVOR_VOCABULARY` は「スクリプトが正本だろう」→ コメントに「正本は data-model §3.2」と書かれていた）。docs 更新は親の独占権なので、誤りは親以外に止める人がいない

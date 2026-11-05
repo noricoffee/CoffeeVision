@@ -45,11 +45,8 @@ struct AnalysisView: View {
         .errorToast(message: viewModel.error) {
             viewModel.onErrorDismissed()
         }
-        .onAppear {
-            viewModel.onAppear()
-        }
-        .onDisappear {
-            viewModel.onDisappear()
+        .task {
+            await viewModel.observe()
         }
         // レビュー依頼（要件 9-8 / ASO-1）: 分析タブで傾向信号が初めて出た瞬間に 1 回だけ提示する。
         // `.task(id:)` は id（readiness.hasAnySignal）が変化するたびに前のタスクをキャンセルして

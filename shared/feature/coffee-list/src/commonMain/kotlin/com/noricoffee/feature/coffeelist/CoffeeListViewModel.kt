@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.datetime.number
 
 /**
  * コーヒー記録一覧画面の ViewModel。
@@ -167,7 +168,7 @@ class CoffeeListViewModel(
 
     private fun CoffeeRecord.yearMonth(): String {
         val year = visitedOn.year.toString().padStart(4, '0')
-        val month = visitedOn.monthNumber.toString().padStart(2, '0')
+        val month = visitedOn.month.number.toString().padStart(2, '0')
         return "$year-$month"
     }
 }

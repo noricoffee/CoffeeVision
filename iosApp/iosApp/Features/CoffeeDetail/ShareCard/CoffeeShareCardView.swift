@@ -249,7 +249,7 @@ struct CoffeeShareCardView: View {
     // MARK: - 日付フォーマット
 
     private func formattedDate(_ date: Kotlinx_datetimeLocalDate) -> String {
-        String(format: "%04d/%02d/%02d", Int(date.year), Int(date.monthNumber), Int(date.dayOfMonth))
+        String(format: "%04d/%02d/%02d", Int(date.year), Int(date.monthValue), Int(date.day))
     }
 }
 

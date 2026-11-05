@@ -103,3 +103,10 @@ PY
 
 - `sealed interface X` は Obj-C **プロトコル**（`@protocol SharedLogicX`、`NSObject` プロトコルを継承しない）になる。よって `any X` に `isEqual` メンバは無く、`[any X]` は `Equatable` 非準拠で `!=` が書けない（`CafeDetailViewModel.UIState.matches` = `[any RecommendationReason]` が該当。同値ガードを諦めた）。
 - ただし全ケースが Kotlin の **`data object`（シングルトン）**なら、ヘッダに `@property (class, readonly, getter=shared)` と `+ (instancetype)xxx __attribute__((swift_name("init()")))` が出る。この場合 Swift 側は常に同一インスタンスなので **`!==` で同値ガードを書ける**（`AnalysisViewModel.InsightStatus` / `QaStatus` が該当）。ObjC プロトコルの existential は class-constrained なので `!==` はそのままコンパイルが通る。
+
+## kotlinx-datetime 0.8 移行（2026-11-05、`kotlin.time.Instant` / `LocalDate.month` enum 化）
+
+- `kotlinx.datetime.Instant` が `kotlin.time.Instant` に一本化され、Swift 側の型名も **`Kotlinx_datetimeInstant` → `KotlinInstant`** に変わった（Obj-C ヘッダでクラス名ごと変わるので `grep -rl "Kotlinx_datetimeInstant" iosApp` で全置換が必須。API の形（`Companion.shared.fromEpochMilliseconds(epochMilliseconds:)` / `toEpochMilliseconds()`）は不変）。
+- `Kotlinx_datetimeLocalDate.month` が `Int32`（`monthNumber`、deprecated）から `Kotlinx_datetimeMonth`（enum、`.january`〜`.december` の宣言順 = `ordinal` 0〜11）に変わった。`dayOfMonth` も `day` に deprecated 移行。Kotlin の拡張プロパティ `Month.number` は SKIE 経由で Swift に出ない（`.swiftinterface` にも Obj-C ヘッダにも載らない）ため、月の数値化は Swift 側で `month.ordinal + 1` を書く必要がある。**1 箇所の extension（`Utilities/Kotlinx_datetimeLocalDate+Month.swift` の `monthValue: Int32`）に閉じ込め、呼び出し側（表示整形・`DateComponents` 変換など 5 ファイル）はそれだけを使う**（`DomainLabels.swift` と同じ「1 箇所集約」パターン）。
+- この手の「deprecated プロパティへの参照」はコンパイルエラーにならず warning のみなので、置き換え後は `grep` の 0 件確認に加えて `xcodebuild` ログの deprecation warning 件数も 0 を確認する（バッチコンパイルで該当ファイルの warning が隠れていないかの裏取り）。
+- `Kotlinx_datetimeLocalDate(year:month:day:)`（`day:` は `Int32`、`month:` も `Int32` の designated initializer）は 0.8 でも維持されており、生成側（`DateComponents` → `LocalDate`）は無改修で通る。読み取り側（`.monthNumber`/`.dayOfMonth`）だけが影響を受ける非対称な変更だった。

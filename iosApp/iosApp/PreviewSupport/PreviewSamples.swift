@@ -9,15 +9,15 @@ import SharedLogic
 ///   （`#if DEBUG` で囲むと Preview Canvas では見えるが Xcode ビルドで dead-code strip される）
 /// - `CoffeeRecord` / `Photo_` は KMP 側の Kotlin ドメインモデルから
 ///   Swift に橋渡しされた型。コンストラクタシグネチャは `CoffeeFirestoreMapper.swift` と同じパターン
-/// - Kotlin の `Kotlinx_datetimeInstant` は `Kotlinx_datetimeInstant.Companion.shared
+/// - Kotlin の `KotlinInstant` は `KotlinInstant.Companion.shared
 ///   .fromEpochMilliseconds(epochMilliseconds:)` で生成する
 /// - Kotlin の `Kotlinx_datetimeLocalDate` は `Kotlinx_datetimeLocalDate(year:month:day:)` で生成する
 enum PreviewSamples {
 
     // MARK: - 日時ヘルパ
 
-    /// 指定した日付から `Kotlinx_datetimeInstant` を生成する（時刻は 09:00 JST 固定）。
-    static func instant(year: Int, month: Int, day: Int) -> Kotlinx_datetimeInstant {
+    /// 指定した日付から `KotlinInstant` を生成する（時刻は 09:00 JST 固定）。
+    static func instant(year: Int, month: Int, day: Int) -> KotlinInstant {
         var components = DateComponents()
         components.year = year
         components.month = month
@@ -28,7 +28,7 @@ enum PreviewSamples {
         components.timeZone = TimeZone(identifier: "Asia/Tokyo")
         let date = Calendar(identifier: .gregorian).date(from: components) ?? Date()
         let epochMillis = Int64(date.timeIntervalSince1970 * 1000)
-        return Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+        return KotlinInstant.Companion.shared.fromEpochMilliseconds(
             epochMilliseconds: epochMillis
         )
     }

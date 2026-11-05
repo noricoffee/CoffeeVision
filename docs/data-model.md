@@ -45,7 +45,7 @@ User (Firebase Auth uid)
 ```kotlin
 package com.noricoffee.domain
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 import kotlinx.datetime.LocalDate
 
 data class CoffeeRecord(

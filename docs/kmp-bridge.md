@@ -30,6 +30,8 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 | `Flow<T>` | コールバック型（生 SDK）/ `AsyncSequence`（SKIE 経由） | **SKIE 推奨** |
 | `StateFlow<T>` | 同上 | 同上 |
 | `Exception` | `NSError` | Swift では `try / catch (let e as NSError)` |
+| `kotlin.time.Instant` | `KotlinInstant` | 生成は `KotlinInstant.Companion.shared.fromEpochMilliseconds(epochMilliseconds:)`、読み出しは `toEpochMilliseconds()`。Kotlin 側は `kotlinx.datetime.Instant` を使わない（2026-11-05 に kotlinx-datetime 0.8 へ移行。旧名は `Kotlinx_datetimeInstant`） |
+| `kotlinx.datetime.LocalDate` | `Kotlinx_datetimeLocalDate` | 生成は `init(year:month:day:)`（引数は `Int32`）、読み出しは `year` / `day`。`month` は `Kotlinx_datetimeMonth`（enum）で、Kotlin の拡張プロパティ `Month.number` は Swift に公開されない。**月の数値は iosApp の `Kotlinx_datetimeLocalDate` extension 1 か所（`Utilities/Kotlinx_datetimeLocalDate+Month.swift` の `monthValue` = `month.ordinal + 1`）に閉じ込め、呼び出し側はそれを使う**。`monthNumber` / `dayOfMonth` は kotlinx-datetime 0.7 以降で deprecated（旧イニシャライザ `init(year:monthNumber:dayOfMonth:)` は削除済み） |
 
 ---
 

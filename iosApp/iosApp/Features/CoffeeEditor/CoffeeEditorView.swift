@@ -207,8 +207,8 @@ struct CoffeeEditorView: View {
     func localDateToDate(_ localDate: Kotlinx_datetimeLocalDate) -> Date {
         var components = DateComponents()
         components.year = Int(localDate.year)
-        components.month = Int(localDate.monthNumber)
-        components.day = Int(localDate.dayOfMonth)
+        components.month = Int(localDate.monthValue)
+        components.day = Int(localDate.day)
         return gregorianCalendar.date(from: components) ?? Date()
     }
 

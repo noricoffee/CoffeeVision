@@ -24,7 +24,7 @@ import SharedLogic
 /// - `CoffeeRecord` ドメイン → Swift 側で `CoffeeRecord`（SQLDelight 行型 `Coffee_record` と衝突しないためアンダースコアなし）
 /// - `Photo` ドメイン → Swift 側で `Photo_`（SQLDelight 生成 `Photo` 行型との衝突回避）
 /// - `LocalDate` → `Kotlinx_datetimeLocalDate`
-/// - `Instant` → `Kotlinx_datetimeInstant`
+/// - `Instant` → `KotlinInstant`
 ///
 /// `nonisolated`: `RemoteCoffeeDataSourceIosImpl`（Kotlin ランタイムが任意スレッドから呼ぶ）から
 /// 直接呼ばれるため。ステートレスな純粋変換関数のみで構成されるため安全（SW6-2）。
@@ -141,10 +141,10 @@ nonisolated enum CoffeeFirestoreMapper {
             photos = []
         }
 
-        let createdAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+        let createdAt = KotlinInstant.Companion.shared.fromEpochMilliseconds(
             epochMilliseconds: Int64(createdAtTs.dateValue().timeIntervalSince1970 * 1000)
         )
-        let updatedAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+        let updatedAt = KotlinInstant.Companion.shared.fromEpochMilliseconds(
             epochMilliseconds: Int64(updatedAtTs.dateValue().timeIntervalSince1970 * 1000)
         )
 
@@ -267,7 +267,7 @@ nonisolated enum CoffeeFirestoreMapper {
             return nil
         }
 
-        let createdAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+        let createdAt = KotlinInstant.Companion.shared.fromEpochMilliseconds(
             epochMilliseconds: Int64(createdAtTs.dateValue().timeIntervalSince1970 * 1000)
         )
 

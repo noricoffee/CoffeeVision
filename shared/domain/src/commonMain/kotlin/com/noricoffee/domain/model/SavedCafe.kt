@@ -1,7 +1,7 @@
 package com.noricoffee.domain.model
 
 import com.noricoffee.domain.Cafe
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * 「行きたい店」（ウィッシュリスト）1 件を表すドメインモデル。

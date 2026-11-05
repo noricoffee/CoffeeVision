@@ -4,9 +4,9 @@ import com.noricoffee.domain.export.CoffeeRecordExportEnvelope
 import com.noricoffee.domain.export.CoffeeRecordExportMapper
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.first
-import kotlinx.datetime.Clock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlin.time.Clock
 
 /**
  * ユーザーの全 [com.noricoffee.domain.CoffeeRecord] を JSON 文字列にエクスポートする UseCase

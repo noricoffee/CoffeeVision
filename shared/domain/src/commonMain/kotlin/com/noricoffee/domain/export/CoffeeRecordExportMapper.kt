@@ -11,7 +11,7 @@ import com.noricoffee.domain.TastingScores
  * Firestore 直列化規則（[CoffeeFirestoreMapper] と同等。[data-model.md] §3.2）を踏襲する:
  * - enum は `.name` 文字列
  * - `visitedOn` は `"YYYY-MM-DD"`（[kotlinx.datetime.LocalDate.toString] がその形式）
- * - `createdAt` / `updatedAt` は ISO-8601 文字列（[kotlinx.datetime.Instant.toString]）
+ * - `createdAt` / `updatedAt` は ISO-8601 文字列（[kotlin.time.Instant.toString]）
  */
 object CoffeeRecordExportMapper {
 

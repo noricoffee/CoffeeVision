@@ -6,7 +6,6 @@ import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.model.SavedCafe
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -14,6 +13,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNull
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 class LocalSavedCafeRepositoryTest {
 

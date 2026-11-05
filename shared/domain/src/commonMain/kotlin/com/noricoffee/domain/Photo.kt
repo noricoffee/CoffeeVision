@@ -1,6 +1,6 @@
 package com.noricoffee.domain
 
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 data class Photo(
     val id: String,

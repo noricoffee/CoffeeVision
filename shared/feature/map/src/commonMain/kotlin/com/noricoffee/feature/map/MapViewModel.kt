@@ -23,9 +23,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import kotlinx.datetime.Clock
 import kotlin.math.PI
 import kotlin.math.cos
+import kotlin.time.Clock
 
 /**
  * マップ画面の ViewModel。

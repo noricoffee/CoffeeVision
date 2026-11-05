@@ -8,8 +8,8 @@ import com.noricoffee.domain.Photo
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlin.time.Instant
 
 /**
  * Kotlin の [CoffeeRecord] ドメインモデル ↔ Firestore ドキュメント `Map<String, Any?>` を変換するヘルパ。

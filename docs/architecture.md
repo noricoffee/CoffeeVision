@@ -158,7 +158,7 @@ KMP は iOS 向けに **1 つの Framework として出力する** のが原則�
 
 実体は `build-logic/convention/src/main/kotlin/*.gradle.kts`（ここに複製しない）。要点:
 
-- **`kmp.library`**: `iosArm64()` / `iosSimulatorArm64()` / `androidLibrary`（jvmTarget = 11）+ `freeCompilerArgs += "-Xexpect-actual-classes"`。**`jvmToolchain(17)` は付けない**（toolchain 強制は JDK ダウンロード要求で開発機運用と衝突する）。SKIE / SQLDelight のような「特定モジュールだけ要るプラグイン」はここで適用しない
+- **`kmp.library`**: `iosArm64()` / `iosSimulatorArm64()` / `android`（jvmTarget = 11。AGP 9.5 で旧名 `androidLibrary` は deprecated）+ `freeCompilerArgs += "-Xexpect-actual-classes"`。**`jvmToolchain(17)` は付けない**（toolchain 強制は JDK ダウンロード要求で開発機運用と衝突する）。SKIE / SQLDelight のような「特定モジュールだけ要るプラグイン」はここで適用しない
 - **`kmp.feature`**: `kmp.library` を継承し、`shared/core` と `shared/domain` を `api` で自動配線する
 
 各 feature の `build.gradle.kts` は `plugins { id("kmp.feature") }` を起点に、必要な依存だけを追加します。**自動配線されるのは `core` / `domain` のみ**で、`kotlinx-coroutines-core`（全 feature 必須）・`kotlinx-datetime`（`LocalDate` 等を直接参照する場合）・commonTest 依存は各 feature が手動追加する（commonTest を持つ feature が増えたら Plugin への組み込みを再検討）。
@@ -361,7 +361,7 @@ ViewModel が UIState を更新 → View が再描画
 
 - **Firebase は公式のプラットフォーム別 SDK を採用する**
     - iOS: `FirebaseFirestore` / `FirebaseAuth` を Xcode の SPM（または CocoaPods）で `iosApp` に追加
-    - Android: `gradle/libs.versions.toml` で Firebase BoM + `firebase-firestore-ktx` / `firebase-auth-ktx` を宣言し、`shared/data-firebase/androidMain` で利用
+    - Android: `gradle/libs.versions.toml` で Firebase BoM + `firebase-firestore` / `firebase-auth`（BoM 34 で `-ktx` は廃止）を宣言し、`shared/data-firebase/androidMain` で利用
     - GitLive 製の Firebase KMP SDK（`dev.gitlive.firebase.*`）は採用しない
 - **Firestore のオフライン永続化を有効にする**（公式 SDK のデフォルト挙動。iOS / Android それぞれで初期化時に確認）
 - 同期キューを独自実装しない。Firestore SDK が再接続時に自動同期する

@@ -102,6 +102,21 @@
 | [ ] | B-10 | **`TastePreferenceConversionView` の入れ子 `NavigationStack` を解消**。`AnalysisView` の `NavigationLink` で push されるのに自身の `body` で `NavigationStack` を作っている | `AccountView` と**同型**（lessons 2026-08-21 の横展開点検で検出）。修正は同じパターンで小さいはずだが、あちらと違い「処理中の戻る封じ」要件が無いため**実害は見た目に留まる見込みで未検証**。1.0.1 のスコープ外とした。着手時はまず二重ナビゲーションバー等の実害の有無を目視で確認する |
 | [x] | B-11 | **observation を View スコープ所有の構造化 `Task` へ移した**（当初「`deinit` 起点への統一」として起票したが、調査の結果ブリッジが非構造化 `Task` を保持していること自体が原因と判明し、所有をスコープへ移す形に変更） | **2026-09-20 完了**（`b5c071c`）。`CafeSearch` / `CafeDetail` の実リークを番兵オブジェクトで実測し、移行後に解消することを再計測で確認済み。`cancel()` / observation 用 `onDisappear()` は全廃。経緯は [`implementation_note.md`](./implementation_note.md) 2026-09-20、教訓と横断点検は [`tasks/lessons.md`](./tasks/lessons.md) 同日、規約は `kmp-bridge.md` と `.claude/rules/swift-ios.md` へ昇格済み。**実機確認まで完了**（2026-09-20、ユーザー）|
 
+### 依存ライブラリ一括更新（2026-11-05 起票）
+
+> 全依存を最新の**安定版**に上げる（2026-11-05 ユーザー決定: プレリリースは使わない / kotlinx-datetime は compat 版で据え置かず 0.8 へ本移行 / ステップごとに検証してコミット）。現在すでにプレリリースの CMP material3 は、安定版が存在しないため 1.12 系の最新版（1.12.0-alpha03）にとどめる。目標バージョンの一覧は DU-1〜DU-5 の各行に書く。
+>
+> **2026-11-05 実装完了**（DU-1〜DU-6。コミットはライブラリごと = 2026-11-05 ユーザー指示。DU-1 / DU-2 は指示の前にまとめてコミット済みだったため、そのままにした）。親がフラグ無し `** BUILD SUCCEEDED **` / `iosSimulatorArm64Test` / `testAndroidHostTest` で再検証済み。**残る目視は [`tasks/verification-checklist.md`](./tasks/verification-checklist.md) のパス 2 / 3**。判断の経緯は [`implementation_note.md`](./implementation_note.md) 同日
+
+| 状態 | ID | タスク | 備考 |
+|------|----|------|------|
+| [x] | DU-1 | **ビルド基盤**: Gradle 9.4.1→9.8.2 / AGP 9.2.1→9.5.0 / Kotlin 2.3.21→2.4.21 / SKIE 0.10.12→0.10.16 / CMP 1.11.0→1.12.2（material3 1.12.0-alpha03）/ google-services 4.4.2→4.5.0 | SKIE 0.10.16 の Kotlin 2.4.21 対応は upstream のコミット #211（2026-10-25）で確認した。SKIE の生成 API が変わりうるため iosApp のビルドまで確認する **2026-11-05 完了**（`0e2400b`）。CMP 1.12 が要求するため compileSdk を 37 に上げた。AGP 9.5 で deprecated になった `androidLibrary {}` を `android {}` へ置き換えた |
+| [x] | DU-2 | **KMP ライブラリ**: coroutines 1.10.2→1.11.0 / serialization 1.8.0→1.12.0 / SQLDelight 2.1.0→2.4.1 / Ktor 3.0.3→3.6.1 / lifecycle 2.11.0-beta01→2.11.0 / androidx 各種 | **2026-11-05 完了**（`1025ff9`）。Ktor 3.6.1 が datetime を compat 版に引き上げるため、Swift の `LocalDate` イニシャライザ 3 か所のラベルを追随させた |
+| [x] | DU-3 | **kotlinx-datetime 0.6.2→0.8.0**: `Instant` / `Clock` を `kotlin.time` へ移す。PoC で Swift 側の型名を確定してから本実装する（Kotlin 約 39 ファイル + Swift 4 ファイル） | Swift で現在 `Kotlinx_datetimeInstant` を参照しているのは `CoffeeFirestoreMapper` / `SavedCafeFirestoreMapper` / `CoffeeEditorView+Photos` / `PreviewSamples` の 4 ファイル。エクスポート JSON の形式が変わらないことをテストで確認する **2026-11-05 完了**（`89e12bf`）。Swift 側の型名は `KotlinInstant`。月の数値は `Kotlinx_datetimeLocalDate+Month.swift` の `monthValue` に集約した。compat 版は Ktor のために残る（implementation_note 同日） |
+| [x] | DU-4 | **Firebase Android BoM 33.7.0→35.1.0**: BoM 34 で `-ktx` artifact が廃止されたため、artifact を `firebase-firestore` / `-auth` / `-storage` へ置き換える | `-ktx` パッケージの import はコードにない（2026-11-05 に grep で確認） **2026-11-05 完了**（`fcc799b`） |
+| [x] | DU-5 | **iOS SPM**: firebase-ios-sdk 12.14.0→13.1.1 / Google Mobile Ads 13.6.0→13.12.0 | Firebase 13 の破壊的変更（AI / MLModelDownloader の削除、最低 Swift コンパイラのチェック）が使用中のプロダクトに影響しないか、**CI の Xcode 26.6 でビルドできるか**を確認する **2026-11-05 完了**（firebase-ios-sdk `ff47458` / Google Mobile Ads `8da8af2`） |
+| [x] | DU-6 | **docs の追随**: `kmp-bridge.md`（SKIE / Kotlin のバージョン、`-ktx`）/ `architecture.md:364` / `data-model.md`（`Instant` の import）/ `app-store-metadata.md`・`implementation_note.md` の「firebase-ios-sdk 12.14.0」/ `requirements.md` 8-3 のライセンス件数 | 必読 doc 表を 1 本ずつ開いて、更新が要るかを判断する（lessons 2026-08-01） **2026-11-05 完了**。⚠ `app-store-metadata.md` §6 と `implementation_note.md` の「`FirebaseAnalytics` は既定で IDFA 非依存」は**事実と合わない**（ビルド成果物に `GoogleAppMeasurementIdentitySupport.framework` が入っている）。プライバシー申告に関わるため書き換えずに残し、ユーザーの判断待ちとした |
+
 ### Swift 言語設計レビュー（2026-09-20 起票）
 
 > `swift-language-design` skill による `iosApp/**` 全体レビュー（93 ファイル・16,921 行）。一次情報は `swift-evolution`（2026-09-16 時点）/ `swift`（2026-09-19 時点）を参照した。**2026-08-08 のレビュー（SR-1〜SR-5）とは観点が違う** — あちらはリーク・メインスレッド・ナビゲーション構造、今回は「Swift 6 の型システムに仕事をさせているか」「stdlib / SE の先例に沿っているか」。

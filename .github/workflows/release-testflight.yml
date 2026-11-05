@@ -18,17 +18,24 @@ concurrency:
 jobs:
   upload:
     name: Archive & upload to App Store Connect
-    runs-on: macos-26
+    runs-on: xcode-27
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
-      # deployment target が iOS 26.0 のため Xcode 26 系が必須。
-      # ランナーに複数バージョンがある場合は 26 系の最新を選ぶ。
-      - name: Select Xcode 26
+      # Xcode 27.2 に固定する。ローカル開発と同じバージョンにそろえるため。
+      # xcode-27 イメージの既定は 27.1 なので、明示的に選ぶ必要がある。
+      # Xcode_27.2.app はエイリアスで、2026-10-26 版のイメージでは RC（27B48）を指す。
+      # App Store Connect は 27.2 RC のアップロードも受け付ける（2026-10-20 のリリースノート）。
+      # 27.2 が消えた（イメージ更新）ときは黙って別版を使わず、ここで止める。
+      - name: Select Xcode 27.2
         run: |
-          XCODE_APP="$(ls -d /Applications/Xcode_26*.app | sort -V | tail -1)"
-          echo "Selected: $XCODE_APP"
+          XCODE_APP="/Applications/Xcode_27.2.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "::error::$XCODE_APP not found on this runner"
+            ls -d /Applications/Xcode_*.app
+            exit 1
+          fi
           sudo xcode-select -s "$XCODE_APP"
           xcodebuild -version
 

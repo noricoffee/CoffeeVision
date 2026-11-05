@@ -9,14 +9,14 @@ metadata:
 
 ```bash
 cd /Users/noricoffee/dev/git/coffeevision
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
   -project iosApp/iosApp.xcodeproj \
   -scheme "iosApp (Dummy Data)" \
   -destination 'platform=iOS Simulator,name=iPhone 17 Pro' \
   -configuration Debug build
 ```
 
-- `/Applications/Xcode-beta.app` のみが存在（安定版 Xcode.app は無い）。`xcode-select` の既定は Command Line Tools なので `DEVELOPER_DIR` を明示しないと `xcodebuild` 自体が失敗する
+- Xcode 27.2 は `/Applications/Xcode.app`（2026-11-05 に 27.0 beta から移行。`Xcode-beta.app` も残っているが使わない）。`xcode-select` の既定は Command Line Tools なので `DEVELOPER_DIR` を明示しないと `xcodebuild` 自体が失敗する
 - ビルドログに `> Task :shared:framework:...` と `BUILD SUCCESSFUL` が出ていれば Gradle 経由の実ビルド（偽陽性ではない）。`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED=YES` は付けない
 - スキーム一覧: `xcodebuild -list -project iosApp/iosApp.xcodeproj` で確認可能（`iosApp` / `iosApp (Dummy Data)`）
 - 成果物パス: `~/Library/Developer/Xcode/DerivedData/iosApp-<hash>/Build/Products/Debug-iphonesimulator/coffeevision.app`（bundle id: `com.noricoffee.coffeevision`）

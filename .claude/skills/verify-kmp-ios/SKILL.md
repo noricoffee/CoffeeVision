@@ -22,7 +22,7 @@ lessons.md に蓄積された検証の定石を手順化したもの（各項目
 
 ```bash
 ./gradlew testAndroidHostTest
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew iosSimulatorArm64Test
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./gradlew iosSimulatorArm64Test
 ```
 
 - `androidHostTest` はソースセット名。実行タスクは `testAndroidHostTest`（コンパイル単体は `compileAndroidHostTest`）

@@ -11,7 +11,7 @@ metadata:
 
 - `xcrun simctl` に tap/swipe/input を送るサブコマンドは存在しない（`simctl help` で確認済み。`io` は screenshot / video 録画のみ）
 - `idb` / `idb_companion`（Facebook 製、`simctl` の入力操作を補う定番ツール）は未インストール
-- `/Applications/Xcode-beta.app/Contents/Developer/Applications/Simulator.app` が存在しない。GUI 版 Simulator.app 自体がこの環境に無く、`open -a Simulator` も失敗する。そのため `osascript` / System Events 経由のクリック自動化も不可能（"Unable to find application" エラー）
+- `/Applications/Xcode.app/Contents/Developer/Applications/Simulator.app` が存在しない。GUI 版 Simulator.app 自体がこの環境に無く、`open -a Simulator` も失敗する。そのため `osascript` / System Events 経由のクリック自動化も不可能（"Unable to find application" エラー）
 - `xcrun simctl boot` でデバイスを起動し、`xcrun simctl install` / `launch` / `io screenshot` は正常に動く（バックエンドのみのヘッドレス実行）。**screenshot は撮れるが、その画面を操作して次の画面に進む手段がない**
 
 **含意**: Firestore 上の同意状態（`users/{uid}` ドキュメント）に依存する初回起動フロー（データ共有同意オンボーディングシート）のような、タップでスキップしないと先に進めない画面がある機能では、それより奥の画面（例: マップタブ本体）をシミュレータで実機的に確認することがこの環境ではできない。ビルド成功 + 起動直後の 1 枚の screenshot までが自動検証の限界。

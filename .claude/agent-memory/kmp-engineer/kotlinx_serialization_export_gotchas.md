@@ -55,7 +55,7 @@ kotlinx-serialization は `encodeDefaults` の既定値が **false**。data clas
 
 `:shared:framework:assembleSharedLogicXCFramework` はデフォルトの `xcode-select -p`
 （CommandLineTools）だと `linkDebugFrameworkIosSimulatorArm64` 等が `xcrun xcodebuild -version`
-失敗で FAILED になるが、`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` を
+失敗で FAILED になるが、`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` を
 付けて自分（サブエージェント）で実行すれば通る（2026-07-13 再確認。約 51 秒、debug/release 両方
 XCFramework 生成成功）。`commonMain` の公開 API 変更時はこれで最後まで検証してから報告してよい。
 

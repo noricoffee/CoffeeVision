@@ -346,7 +346,7 @@ GitLive 製の Kotlin Multiplatform Firebase SDK（`dev.gitlive.firebase.*`）�
 | プラットフォーム | SDK | 配置 |
 |------|-----|------|
 | iOS | `FirebaseFirestore` / `FirebaseAuth`（SPM or CocoaPods） | `iosApp/iosApp/FirebaseRepositories/` に Swift 実装 |
-| Android | Firebase BoM + `firebase-firestore-ktx` / `firebase-auth-ktx` | `shared/data-firebase/androidMain` |
+| Android | Firebase BoM + `firebase-firestore` / `firebase-auth`（BoM 34 で `-ktx` は廃止） | `shared/data-firebase/androidMain` |
 
 > 写真本体はクラウドに同期せず端末ローカル（Documents）のみに保存する方針のため、Storage SDK は採用しない（[`requirements.md`](./requirements.md) §7-2 / [`architecture.md`](./architecture.md) §永続化方針）。
 
@@ -361,8 +361,8 @@ shared/domain/src/commonMain/kotlin/com/noricoffee/repository/
     AuthRepository.kt                    ← interface のみ
 
 shared/data-firebase/src/androidMain/kotlin/com/noricoffee/repository/
-    RemoteCoffeeDataSourceAndroidImpl.kt ← firebase-firestore-ktx を使う
-    AuthRepositoryAndroidImpl.kt         ← firebase-auth-ktx を使う
+    RemoteCoffeeDataSourceAndroidImpl.kt ← firebase-firestore を使う
+    AuthRepositoryAndroidImpl.kt         ← firebase-auth を使う
 
 iosApp/iosApp/FirebaseRepositories/
     RemoteCoffeeDataSourceIosImpl.swift  ← FirebaseFirestore (Swift) を使う
@@ -403,7 +403,7 @@ iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kot
 ### Firestore 初期化と永続化
 
 - iOS: `iosApp` の `@main App` 内で `FirebaseApp.configure()` を呼ぶ。Firestore のオフライン永続化はデフォルト ON
-- Android: Firebase BoM 経由の `firebase-firestore-ktx` を導入し、`androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用、`google-services.json` を `androidApp/` に配置（Phase 2 で実施）
+- Android: Firebase BoM 経由の `firebase-firestore`（当時は `-ktx`）を導入し、`androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用、`google-services.json` を `androidApp/` に配置（Phase 2 で実施）
 
 ---
 

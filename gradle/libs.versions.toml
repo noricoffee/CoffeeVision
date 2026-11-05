@@ -26,7 +26,7 @@ sqldelight = "2.4.1"
 ktor = "3.6.1"
 
 # Firebase（Android 側）
-firebaseBom = "33.7.0"
+firebaseBom = "35.1.0"
 googleServices = "4.5.0"
 
 # Kotlin → Swift トランスパイラ拡張（suspend / Flow / sealed を Swift idiomatic に変換）
@@ -74,9 +74,9 @@ ktor-client-mock = { module = "io.ktor:ktor-client-mock", version.ref = "ktor" }
 
 # Firebase（Android 側のみ。BoM 経由なので個別の version は指定しない）
 firebase-bom = { module = "com.google.firebase:firebase-bom", version.ref = "firebaseBom" }
-firebase-firestore = { module = "com.google.firebase:firebase-firestore-ktx" }
-firebase-auth = { module = "com.google.firebase:firebase-auth-ktx" }
-firebase-storage = { module = "com.google.firebase:firebase-storage-ktx" }
+firebase-firestore = { module = "com.google.firebase:firebase-firestore" }
+firebase-auth = { module = "com.google.firebase:firebase-auth" }
+firebase-storage = { module = "com.google.firebase:firebase-storage" }
 
 # Gradle plugin classpath（build-logic/convention から参照する）
 android-gradle-plugin = { module = "com.android.tools.build:gradle", version.ref = "agp" }

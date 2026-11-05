@@ -361,7 +361,7 @@ ViewModel が UIState を更新 → View が再描画
 
 - **Firebase は公式のプラットフォーム別 SDK を採用する**
     - iOS: `FirebaseFirestore` / `FirebaseAuth` を Xcode の SPM（または CocoaPods）で `iosApp` に追加
-    - Android: `gradle/libs.versions.toml` で Firebase BoM + `firebase-firestore-ktx` / `firebase-auth-ktx` を宣言し、`shared/data-firebase/androidMain` で利用
+    - Android: `gradle/libs.versions.toml` で Firebase BoM + `firebase-firestore` / `firebase-auth`（BoM 34 で `-ktx` は廃止）を宣言し、`shared/data-firebase/androidMain` で利用
     - GitLive 製の Firebase KMP SDK（`dev.gitlive.firebase.*`）は採用しない
 - **Firestore のオフライン永続化を有効にする**（公式 SDK のデフォルト挙動。iOS / Android それぞれで初期化時に確認）
 - 同期キューを独自実装しない。Firestore SDK が再接続時に自動同期する

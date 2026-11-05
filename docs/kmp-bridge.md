@@ -39,7 +39,7 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 
 [**SKIE**](https://skie.touchlab.co/) は Touchlab が提供する Kotlin/Native → Swift トランスパイラ拡張で、`suspend` を Swift の `async` に、`Flow` を `AsyncSequence` に、`sealed class` を Swift の `enum` に変換してくれます。
 
-> **採用済み: SKIE 0.10.12（Kotlin 2.3.21 互換）**。適用先は `shared/framework` umbrella。デフォルト機能（SuspendInterop / FlowInterop / SealedInterop）のみ有効化、独自設定なし。
+> **採用済み: SKIE 0.10.16（Kotlin 2.4.21 互換。2026-11-05 に 0.10.12 から更新）**。適用先は `shared/framework` umbrella。デフォルト機能（SuspendInterop / FlowInterop / SealedInterop）のみ有効化、独自設定なし。
 
 ### Gradle 設定
 
@@ -56,7 +56,7 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 
 #### ⚠ デフォルト引数は Swift に伝播しない
 
-SKIE 0.10.12 は `DefaultArgumentInterop` を有効化しておらず、Kotlin のデフォルト引数は Obj-C initializer では**全パラメーター必須**になる。data class（`Cafe` / `CoffeeRecord` / `CoffeeRecordFilter` 等）や `AppContainer` にフィールド・引数をデフォルト値付きで追加したら、**Swift の全呼び出し箇所へ新引数の明示追加が必要**（フィールド追加のたびに繰り返し踏んでいるルール）。関数のデフォルト引数を Swift に見せたい場合はオーバーロードを手で切る（例: `searchText` のバイアス有無 2 本、`onNearbySearchRequested` の半径付き）。SKIE の `defaultArgumentInterop` 有効化で解消できる可能性はあるが未検証・未採用。
+SKIE（0.10.16 時点）は `DefaultArgumentInterop` を既定で無効にしており、Kotlin のデフォルト引数は Obj-C initializer では**全パラメーター必須**になる。data class（`Cafe` / `CoffeeRecord` / `CoffeeRecordFilter` 等）や `AppContainer` にフィールド・引数をデフォルト値付きで追加したら、**Swift の全呼び出し箇所へ新引数の明示追加が必要**（フィールド追加のたびに繰り返し踏んでいるルール）。関数のデフォルト引数を Swift に見せたい場合はオーバーロードを手で切る（例: `searchText` のバイアス有無 2 本、`onNearbySearchRequested` の半径付き）。SKIE の `defaultArgumentInterop` 有効化で解消できる可能性はあるが未検証・未採用。
 
 あわせて、SKIE は `operator fun invoke` を Swift の `callAsFunction` に変換しない。UseCase の呼び出しは `.invoke(userId:)` のように明示する（15-E-2 で確認）。
 

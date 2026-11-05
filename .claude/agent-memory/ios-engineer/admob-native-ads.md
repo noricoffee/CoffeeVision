@@ -268,6 +268,20 @@ UIKit レンダリング知見（`NativeAdView` の headlineView 等）は不要
   コメントアウト済み残骸がこのファイルに残っていても触らない（gitignore 済みで実害なし、かつ
   親から明示的に「触らないこと」と指示されている）。
 
+## GoogleMobileAds 13.6.0 → 13.12.0 更新（2026-11-05、DU-5b）
+
+- `project.pbxproj` の `minimumVersion` を上げるだけで UMP（推移的依存）は 2.7.0 のまま変化なし、
+  firebase-ios-sdk も無関係に 13.1.1 のまま固定された（pbxproj の `requirement` を分けて持つ
+  パッケージ同士は `-resolvePackageDependencies` 1 回でも互いに波及しない）。
+- 13.7〜13.12 の release notes を確認した範囲では、本アプリが使う API（`BannerView` /
+  `inlineAdaptiveBanner(width:maxHeight:)` / `MobileAds.shared` / NPA `Extras`）に deprecation は
+  なかった。13.11.0 で「SwiftUI `UIViewRepresentable` でバナーをロードするとクラッシュする」バグが
+  SDK 側で修正されている（本アプリの `BannerViewRepresentable` がまさにこの構成）。13.11.0 の
+  「`GADPortraitAnchoredAdaptiveBannerAdSizeWithWidth` / `GADLandscapeAnchoredAdaptiveBannerAdSizeWithWidth`
+  は main queue 必須」は iPhone Duo 専用の別関数で、本アプリが使う `inlineAdaptiveBanner` /
+  `largeAnchoredAdaptiveBanner` とは無関係（混同しないこと）。新規必須 Info.plist キーは release notes
+  上では見つからなかった（`GADDisableAdInspector` は 13.8.0 で追加されたが opt-in、必須ではない）。
+
 ## xcodebuild 検証中に DerivedData の `rm -rf` を中断すると SPM checkout が壊れる
 
 - `rm -rf DerivedData/iosApp-*` の途中で `Directory not empty` エラーが出て中断されると、
@@ -277,3 +291,18 @@ UIKit レンダリング知見（`NativeAdView` の headlineView 等）は不要
   （SourceKitService 等が同時にファイルを触っているため rm が完走しないことがある、
   [[xcodebuild-verification]] 参照）。**同じ `rm -rf` をもう一度実行するだけで直る**ことが多い
   （2 回目で完全に消える）。原因調査に時間をかけず、まず再実行する。
+- **2026-11-05 に `rm -rf` を繰り返すこと自体が症状を悪化させるケースを確認**: `rm -rf` → すぐ
+  `-resolvePackageDependencies` を 5 回程度繰り返したところ、エラーが
+  `file not found at path .../*.zip` → `post-update.sample が開けない` → `unable to write new
+  index file` → `downloaded archive ... does not contain a binary artifact`（アーティファクト
+  zip の破損）→ 複数パッケージの `dependency 'xxx' is missing; cloning again` と**毎回違う症状に
+  変わりながら解消しない**状態になった。`ps aux` で
+  `com.apple.dt.Xcode.sourcecontrol.WorkingCopyScanner.xpc` が常駐しており、`DerivedData` の
+  `SourcePackages` を `rm` で消す→SPM が再作成する→スキャナがそれを横から触る、の競合が
+  `rm` 1 回の再試行では収まらないほど増幅されたとみられる。**壊れた `.zip` アーティファクト単体は
+  `~/Library/Caches/org.swift.swiftpm/artifacts/https___...png` 配下から該当ファイルだけ `rm` すれば
+  個別に直る**（今回は `grpcpp.zip` を消して解決）。**最終的に効いたのは「`DerivedData` を消さずに
+  そのまま `-resolvePackageDependencies` を再実行する」**こと — 消す/作り直すサイクル自体が
+  スキャナとの競合を誘発するなら、サイクルを止めるのが正攻法。**この手の SPM 解決エラーで
+  2〜3 回同じ `rm -rf` 再試行を繰り返しても直らない兆候（エラー文言が毎回変わる）が出たら、
+  `rm -rf` をやめて素の再実行に切り替える**。

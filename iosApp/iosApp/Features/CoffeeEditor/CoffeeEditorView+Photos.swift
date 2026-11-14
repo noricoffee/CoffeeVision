@@ -29,7 +29,7 @@ extension CoffeeEditorView {
             let localPath = "photos/\(fileName)"
 
             let epochMillis = Int64(Date().timeIntervalSince1970 * 1000)
-            let createdAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+            let createdAt = KotlinInstant.Companion.shared.fromEpochMilliseconds(
                 epochMilliseconds: epochMillis
             )
 

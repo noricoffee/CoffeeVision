@@ -95,6 +95,8 @@ struct CoffeeEditorView: View {
                         break
                     }
                 }
+                // state 購読を開始する（構造化 `Task`。この `.task` がキャンセルされるまで戻らない）。
+                await viewModel.observe()
             }
             .onDisappear {
                 viewModel.onDisappear()
@@ -205,8 +207,8 @@ struct CoffeeEditorView: View {
     func localDateToDate(_ localDate: Kotlinx_datetimeLocalDate) -> Date {
         var components = DateComponents()
         components.year = Int(localDate.year)
-        components.month = Int(localDate.monthNumber)
-        components.day = Int(localDate.dayOfMonth)
+        components.month = Int(localDate.monthValue)
+        components.day = Int(localDate.day)
         return gregorianCalendar.date(from: components) ?? Date()
     }
 
@@ -214,8 +216,8 @@ struct CoffeeEditorView: View {
         let components = gregorianCalendar.dateComponents([.year, .month, .day], from: date)
         return Kotlinx_datetimeLocalDate(
             year: Int32(components.year ?? 2026),
-            monthNumber: Int32(components.month ?? 1),
-            dayOfMonth: Int32(components.day ?? 1)
+            month: Int32(components.month ?? 1),
+            day: Int32(components.day ?? 1)
         )
     }
 

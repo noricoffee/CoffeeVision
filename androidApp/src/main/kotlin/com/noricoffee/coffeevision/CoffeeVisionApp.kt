@@ -45,7 +45,7 @@ class CoffeeVisionApp : Application() {
         // 1. Firebase 初期化
         FirebaseApp.initializeApp(this)
 
-        // 2. Firestore オフライン永続化（Firebase BoM 33.7.0 / Firestore 25.x の PersistentCacheSettings）
+        // 2. Firestore オフライン永続化（Firebase BoM 35.1.0 の PersistentCacheSettings）
         FirebaseFirestore.getInstance().firestoreSettings = firestoreSettings {
             setLocalCacheSettings(PersistentCacheSettings.newBuilder().build())
         }

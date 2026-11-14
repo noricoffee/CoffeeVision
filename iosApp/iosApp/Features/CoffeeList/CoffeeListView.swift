@@ -36,10 +36,7 @@ struct CoffeeListView: View {
         )
         .task {
             guard let uid = appState.uid else { return }
-            viewModel.onAppear(userId: uid)
-        }
-        .onDisappear {
-            viewModel.onDisappear()
+            await viewModel.observe(userId: uid)
         }
         .errorToast(message: viewModel.error) {
             viewModel.onErrorDismissed()
@@ -247,8 +244,8 @@ struct CoffeeRow: View {
         return String(
             format: "%04d/%02d/%02d",
             Int(d.year),
-            Int(d.monthNumber),
-            Int(d.dayOfMonth)
+            Int(d.monthValue),
+            Int(d.day)
         )
     }
 

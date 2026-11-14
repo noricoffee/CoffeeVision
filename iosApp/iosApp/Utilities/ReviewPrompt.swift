@@ -25,7 +25,7 @@ enum ReviewPrompt {
 
     private static let remoteConfigKey = "review_prompt_enabled"
     private static let milestoneShownKey = "hasRequestedReviewAtFirstSignal"
-    private static let presentationDelayNanoseconds: UInt64 = 1_500_000_000
+    private static let presentationDelay: Duration = .milliseconds(1500)
 
     /// 分析タブで傾向信号（`readiness.hasAnySignal`）が初めて `true` になったときに呼ぶ。
     ///
@@ -40,7 +40,7 @@ enum ReviewPrompt {
         guard !UserDefaults.standard.bool(forKey: milestoneShownKey) else { return }
         guard !Crashlytics.crashlytics().didCrashDuringPreviousExecution() else { return }
 
-        try? await Task.sleep(nanoseconds: presentationDelayNanoseconds)
+        try? await Task.sleep(for: presentationDelay)
         // `try?` はキャンセル時に nil を返すだけで実行が次行へ進んでしまうため、
         // 明示的にキャンセルを確認してから続ける（下記クラスコメントの制約も参照）。
         guard !Task.isCancelled else { return }

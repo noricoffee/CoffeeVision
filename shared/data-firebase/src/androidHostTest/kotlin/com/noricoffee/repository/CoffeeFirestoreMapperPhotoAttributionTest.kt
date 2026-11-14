@@ -4,11 +4,11 @@ import com.google.firebase.Timestamp
 import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.time.Instant
 
 /**
  * [CoffeeFirestoreMapper] の `cafe.photoAttributions`（写真の作者帰属。

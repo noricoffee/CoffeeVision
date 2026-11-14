@@ -2,9 +2,9 @@ package com.noricoffee.feature.coffeeeditor
 
 import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.TastingScores
-import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 
 // --- record ⇄ draft マッピング ---
 

@@ -24,11 +24,10 @@ SWIFT_APPROACHABLE_CONCURRENCY = YES
 // Info.plist の $(PLACES_API_KEY) で参照する。
 PLACES_API_KEY =
 
-// AdMob App ID / アダプティブバナー広告ユニット ID（2 面）のフォールバック宣言。
+// AdMob App ID / アダプティブバナー広告ユニット ID（1 面: 全画面下部固定）のフォールバック宣言。
 // PLACES_API_KEY と異なり、空文字ではなく Google 公式のテスト用バナーユニット ID をフォールバックに
 // している（テスト ID は実際に広告が返るため、Secrets.xcconfig 未設定の開発環境でもそのままテスト広告で
-// 動作する）。アンカーアダプティブバナーとインラインアダプティブバナーは同一のテストユニット ID を
-// 共用できる（Google 公式ドキュメント記載）。
+// 動作する）。
 // 本番 ID は Secrets.xcconfig 側で上書きする（本番切り替え手順は Configuration/README.md 参照）。
 // 【重要】この宣言も PLACES_API_KEY と同様、必ず Secrets.xcconfig の include より「前」に置くこと。
 //
@@ -36,9 +35,10 @@ PLACES_API_KEY =
 // ADMOB_NATIVE_AD_UNIT_ID_* → ADMOB_BANNER_AD_UNIT_ID_* にリネーム（requirements.md §11 参照）。
 // 【2026-07-16】コーヒー記録タブ / 分析タブの 2 面はユーザビリティレビューで撤去した
 // （requirements.md §11-3。git 履歴で復元可能）。
+// 【2026-09-20】カフェ詳細 / マップ検索ドロップダウンのインライン 2 面（CAFE_DETAIL / MAP_SEARCH）を
+// 全画面下部固定バナー（GLOBAL_BOTTOM、requirements.md §11-5）へ集約し撤去した（git 履歴で復元可能）。
 ADMOB_APP_ID = ca-app-pub-3940256099942544~1458002511
-ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL = ca-app-pub-3940256099942544/2435281174
-ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH = ca-app-pub-3940256099942544/2435281174
+ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM = ca-app-pub-3940256099942544/2435281174
 
 // Google Places API キー設定。
 // Secrets.xcconfig がある場合はそちらで PLACES_API_KEY を実キーに上書きする（コミット禁止・.gitignore 済）。

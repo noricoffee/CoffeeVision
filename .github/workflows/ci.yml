@@ -69,9 +69,23 @@ jobs:
 
   ios:
     name: iOS framework (Kotlin/Native link)
-    runs-on: macos-latest
+    runs-on: xcode-27
     steps:
       - uses: actions/checkout@v4
+
+      # release-testflight.yml と同じ Xcode 27.2 に固定する（理由はそちらのコメント）。
+      # Kotlin/Native のリンクは xcode-select の Xcode を使うので、ここがずれると
+      # CI で通ったものがリリースビルドで通らないことがありうる。
+      - name: Select Xcode 27.2
+        run: |
+          XCODE_APP="/Applications/Xcode_27.2.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "::error::$XCODE_APP not found on this runner"
+            ls -d /Applications/Xcode_*.app
+            exit 1
+          fi
+          sudo xcode-select -s "$XCODE_APP"
+          xcodebuild -version
 
       - name: Set up JDK 17
         uses: actions/setup-java@v4

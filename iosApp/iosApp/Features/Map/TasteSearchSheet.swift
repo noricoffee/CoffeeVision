@@ -1,5 +1,9 @@
 import SwiftUI
 @preconcurrency import SharedLogic
+import os
+
+/// 味わい検索シートのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "TasteSearch")
 
 // MARK: - TasteSearchSheet
 
@@ -162,11 +166,11 @@ struct TasteSearchSheet: View {
                     errorMessage = String(localized: "テイスト特徴が検出できませんでした。より具体的な説明を試してください。")
                     return
                 }
-                print("[CoffeeVision] TasteSearchSheet: 生成キーワード='\(keywords)'")
+                log.debug("TasteSearchSheet: 生成キーワード='\(keywords, privacy: .private)'")
                 onKeywordsGenerated(keywords)
                 dismiss()
             } catch {
-                print("[CoffeeVision] TasteSearchSheet: extraction failed: \(error)")
+                log.error("TasteSearchSheet: extraction failed: \(String(describing: error), privacy: .public)")
                 isExtracting = false
                 errorMessage = error.localizedDescription
             }

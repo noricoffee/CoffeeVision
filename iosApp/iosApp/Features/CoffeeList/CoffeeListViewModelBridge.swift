@@ -15,14 +15,14 @@ extension CoffeeListViewModel.MonthSection: @retroactive Identifiable {
 /// `CoffeeListViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `onAppear` / `onDisappear` でライフサイクルを管理し、観測タスクのリーク防止する
+/// - 観測は `observe(userId:)`（構造化 `Task`。`CoffeeListView` の `.task` から呼ぶ）が担う。
+///   ブリッジ自身は `Task` を保持しない（B-11）
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
 @MainActor
 @Observable
 final class CoffeeListViewModelBridge {
 
     private let kotlin: CoffeeListViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -65,27 +65,16 @@ final class CoffeeListViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    /// 画面表示時に呼ぶ。userId でコーヒー記録の購読を開始する。
+    /// userId でコーヒー記録の購読を開始する。`CoffeeListView` の `.task` から呼ぶ
+    /// （構造化 `Task`）。
     ///
-    /// 前回の観測タスクをキャンセルしてから再スタートするため、
-    /// タブ切り替えなどで複数回呼ばれても二重購読しない。
-    func onAppear(userId: String) {
+    /// タブ切り替えで View が再表示されるたびに `.task` が再実行されるため、
+    /// 複数回呼ばれても構わない（都度新しい購読に張り替わる）。
+    func observe(userId: String) async {
         kotlin.onAppear(userId: userId)
-        observationTask?.cancel()
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
+        for await state in kotlin.state {
+            apply(state)
         }
-    }
-
-    /// 画面非表示時に呼ぶ。観測タスクをキャンセルする。
-    func onDisappear() {
-        observationTask?.cancel()
-        observationTask = nil
     }
 
     // MARK: - ユーザーアクション
@@ -106,12 +95,27 @@ final class CoffeeListViewModelBridge {
     // MARK: - Private
 
     private func apply(_ state: CoffeeListViewModel.UIState) {
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `MonthSection` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        //
         // SKIE 環境では state.sections は既に [CoffeeListViewModel.MonthSection] として型付けされている
-        self.sections = state.sections
-        self._searchQuery = state.searchQuery
-        self.isLoading = state.isLoading
-        self.error = state.error
+        if sections != state.sections {
+            sections = state.sections
+        }
+        if _searchQuery != state.searchQuery {
+            _searchQuery = state.searchQuery
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if error != state.error {
+            error = state.error
+        }
 
+        // 写真の物理削除は `sections` の変化有無に関わらず判定する
+        // （`onCoffeeDeleted` で pending に積まれた分を取りこぼさないため）。
         resolvePendingPhotoDeletions()
     }
 

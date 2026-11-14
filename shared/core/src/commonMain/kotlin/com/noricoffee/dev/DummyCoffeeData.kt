@@ -6,11 +6,11 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
-import kotlinx.datetime.Clock
 import kotlinx.datetime.DatePeriod
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.minus
 import kotlinx.datetime.todayIn
+import kotlin.time.Clock
 
 /**
  * 開発・デバッグ用のダミー [CoffeeRecord] データ生成ユーティリティ。

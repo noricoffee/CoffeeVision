@@ -1,7 +1,7 @@
 package com.noricoffee.domain.model
 
 import com.noricoffee.domain.Cafe
-import kotlinx.datetime.Instant
+import kotlin.time.Instant
 
 /**
  * 同一カフェへのコーヒー記録を集計した集約モデル。

@@ -16,10 +16,10 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | サブタイトル（Subtitle） | カフェ巡り記録・テイスティング・行きたい店 | 30 字以内（**21 字**）。**アプリ名と 1 語も重複させない**方針 — `コーヒー` / `分析` はアプリ名側が拾うため、サブタイトルは `カフェ` / `巡り` / `記録` / `テイスティング` / `行きたい` / `店` に充てる |
 | Bundle ID | `com.noricoffee.coffeevision` | `Config.xcconfig`（`$(TEAM_ID)` を除いた本体） |
 | SKU | `com.noricoffee.coffeevision` | Bundle ID と同値。外部には出ない社内識別子だが**登録後は変更できない** |
-| Apple ID（App ID） | `6788339362` | ASC が採番。ストア URL は `https://apps.apple.com/app/id6788339362` |
+| Apple ID（App ID） | `6788339362` | ASC が採番 |
 | ストア URL | `https://apps.apple.com/app/id6788339362` | **アプリ内に埋めるのはこの短縮形**。ASC がコピーさせる長い URL（`/app/coffeevision-コーヒーマップ-好み分析/id...`）の**スラグ部分はアプリ名から生成される装飾**で、リダイレクトにしか使われない。ASO で名前を変えるたびに変わる文字列をバイナリへ焼かない（アプリ名は ASO-2 で一度変更済み） |
-| バージョン | 1.0.2 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える） |
-| ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。`release-testflight.yml` が `github.run_number` を `xcodebuild archive` に渡すため、`Config.xcconfig` の `1` は Release では使われない。**手入力・手動更新は不要**（詳細は §10） |
+| バージョン | 1.0.3 | `MARKETING_VERSION`（Android の `versionName` も同値に揃える）。**配信済みの版は `lookup` の `version` で実測できる**（§9 のコマンド参照） |
+| ビルド番号 | CI が採番 | `CURRENT_PROJECT_VERSION`。**手入力・手動更新は不要**（仕組みと注意点は §10） |
 | 最小 OS | iOS 26.0 | `IPHONEOS_DEPLOYMENT_TARGET` |
 | デバイス | iPhone | `TARGETED_DEVICE_FAMILY = 1`。iPad は対象外（`"1,2"` のままだと iPad にインストール可能になり、ASC が iPad スクショを必須要求する）|
 | プライマリカテゴリ | フード/ドリンク（Food & Drink） | |
@@ -29,6 +29,11 @@ CoffeeVision の App Store Connect 申請に使う原稿・設定値・チェッ
 | 対応言語 | 日本語（プライマリ）+ **英語(U.S.)（キーワード枠としてのみ追加）** | アプリ本体の UI は日本語のみ（`.xcstrings` / `.lproj` は未整備）。**バンドルの実効言語は `ja`**（`developmentRegion = ja` / `CFBundleLocalizations = [ja]`）— これは `.lproj` の追加や多言語文言の追加を意味せず、`DatePicker` 等 **OS が描画する部分の書式が英語にフォールバックする不具合**を塞ぐための設定（lessons 2026-08-06）。英語(U.S.) ロケールは §4 の英語キーワード 100 字を得る目的だけで追加し、名前 / サブタイトル / 説明文 / スクショは日本語をそのまま転記する（理由は §4 の注記） |
 
 > **アプリ名 = ストア表示名 / `CFBundleDisplayName` = ホーム画面のアイコン下**で、両者は独立したフィールド。同一視しないこと。
+
+> **この表のどこまでを実測で裏取りできるか**（2026-08-31 に全項目を突き合わせて確定 / lessons 2026-08-31）。
+>
+> - **`lookup` で実測できる**: アプリ名（`trackName`）/ Apple ID（`trackId`）/ バージョン（`version`）/ 最小 OS（`minimumOsVersion`）/ カテゴリ（`genres`）/ 価格（`formattedPrice`）/ 年齢制限（`contentAdvisoryRating`）/ リリースノート（`releaseNotes`、§9）。**記憶や口頭申告ではなくこちらを正とする**（コマンドは §9）
+> - **`lookup` に出ない = ASC でしか確認できない**: **サブタイトル / キーワード（§4）/ プロモーションテキスト（§2）**。ここだけは口頭申告に頼らざるを得ないので、**変更したら即座にこの doc へ書く**（後から外部で照合する手段が無い唯一の領域）
 
 ---
 
@@ -179,7 +184,9 @@ coffee,cafe,journal,diary,log,tracker,tasting,brew,espresso,pourover,beans,roast
 | 5 | `05-record-editor.png` | コーヒー記録 作成 / 編集画面 | テイスティング 5 軸のスライダー + 星評価 | 味の記憶を、／5 つの軸で |
 | 6 | `06-cafe-detail.png` | カフェ詳細画面 | 店舗写真・評価・営業状況 + 同じ店の記録の集約 | もちろん／カフェの情報もチェック |
 
-> ⚠️ **`04-record-list.png` と `06-cafe-detail.png` は次回提出時に撮り直しが必要**（2026-08-31 時点）。ナビバー右上の追加ボタンを `.buttonStyle(.borderedProminent)` の塗りに変え、記録一覧の空状態にも CTA ボタンを追加したため、撮影済みの画像は現物と一致しない。04 は訴求ポイント自体が「**ナビバー右上の追加ボタン**」を含み、06 も同じボタンがナビバーに写る。**原本（`screenshots/6.9/`）と焼き込み版（`screenshots/submit/`）の両方**が対象。
+> ⚠️ **`04-record-list.png` と `06-cafe-detail.png` は現物と一致していない**（2026-08-31 発生 / **未解消のまま 1.0.2 を提出済み**）。ナビバー右上の追加ボタンを `.buttonStyle(.borderedProminent)` の塗りに変え、記録一覧の空状態にも CTA ボタンを追加したため。04 は訴求ポイント自体が「**ナビバー右上の追加ボタン**」を含み、06 も同じボタンがナビバーに写る。**原本（`screenshots/6.9/`）と焼き込み版（`screenshots/submit/`）の両方**が対象。
+>
+> **1.0.2 では撮り直さず既存のまま提出した**（ユーザー判断）。**次バージョンへ持ち越し**であって解消済みではない — §10 の提出前チェックリスト「スクリーンショットが現物の UI と一致するか」は 1.0.2 で不合格のまま通した状態なので、**この警告を消してよいのは実際に撮り直したときだけ**。
 
 > **表示順は「分析サマリ → 分析サジェスト → マップ」で始める**。検索結果のサムネイル実寸（幅 300px 相当）で並べた実測では、マップは訪問済みピンが地図の陰影に沈み、ピンの意匠 3 種の描き分けもフィルタチップも判読できず「地図のスクショ」以上の情報が残らなかった一方、分析サマリは 3 つの数値・評価分布のバー・レーダーの五角形が形として生き残った。限られた上位枠は差別化点（= 分析）に寄せる。**検索結果ではポートレート 3 枚が見える**のでマップが 3 番でも preview には入る。
 >
@@ -201,7 +208,9 @@ xcrun simctl io <udid> screenshot screenshots/6.9/NN-name.png
 - 機種は **iPhone 17 Pro Max（6.9 インチ / iOS 26.5）**。ネイティブ解像度がそのまま 1320×2868 になる
 - **`SEED_DUMMY_DATA=1` を必ず付ける**。付けずに起動すると `AppState.seedOrClearDummyData` が `clearDummyData` を呼び、ダミー 30 件が消える
 - ダミーデータは**写真と `SavedCafe` を持たない**（`DummyCoffeeData.kt` は `photos = emptyList()`）。カフェも `dummy-place-001` 等の架空 ID で Places に存在しないため、営業時間・店舗写真が要る画面（#6）は**実在の店を検索して記録を作る**必要がある。写真は `xcrun simctl addmedia` でフォトライブラリに投入する
-- **カフェ詳細（#6）には広告が入る**（情報系の後・記録の前）。Debug ビルドは AdMob デモ ID なので、スクロール位置を上げて **"Test Ad" を画面外に出す**こと（1.0 の撮影時に 1 度写り込んで撮り直した）
+- **全スクリーンショットの下端に広告帯が写る**（2026-09-19 の再編で、広告が全画面共通の下部固定帯になったため）。Debug ビルドは AdMob デモ ID なので **"Test Ad" が全カットに入る**。1.0 / 1.0.x の「カフェ詳細だけスクロール位置を上げて画面外に出す」という回避はもう成立しない。
+  - **撮影前に広告帯を消すこと**。`AppRootView` の `.bottomAdBanner(...)` を一時的に外してビルドするのが確実（帯ごと消えるので、タブバーが下端に戻った状態で撮れる）。**撮影後に戻すのを忘れない**
+  - **1.0.2 までの全スクリーンショットは撮り直しが必要**。広告帯の有無でレイアウトが変わるため、旧カットと新ビルドの見た目が一致しない
 - 分析画面（#5 相当）の Foundation Models 要約は Apple Intelligence 有効な実機でのみ表示される（シミュレータ撮影なら統計グラフのみ）
 
 ### 提出物の生成（キャッチコピーの焼き込み）
@@ -254,10 +263,10 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | Firebase Performance | Google | 起動 / 描画 / ネットワーク性能診断（**常時**） | トレース時間・ネットワークリクエストの URL/遅延/ステータス・デバイス/OS |
 | Firebase Analytics | Google | 製品利用分析（**同意時のみ**） | `screen_view`・自動収集イベント（起動/セッション等）。IDFA なし・クロスアプリ追跡なし |
 | Firebase Remote Config | Google | マップ POI 除外キーワードの設定値配信（**常時**、同意不要） | 設定値取得のためのリクエスト（Firebase Installation ID・アプリバージョン/デバイス構成）。ユーザーデータの送信なし（SDK 同梱マニフェストは Other Diagnostic Data / 非トラッキングを自己申告） |
-| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（**カフェ詳細 / マップ検索結果シートの 2 面のみ** = requirements.md §11。記録タブ・分析タブには置かない） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
+| Google Mobile Ads SDK（AdMob） | Google | アダプティブバナー広告の配信（**全画面共通の下部固定帯 1 面のみ** = requirements.md §11。全タブに表示） | ATT 許諾時: IDFA・広告インタラクション。拒否時: NPA 配信（IDFA なし）。`maxAdContentRating = G`。Places 由来データはターゲティングシグナルに渡さない |
 | UMP SDK（User Messaging Platform） | Google | （コードから未使用） | Google Mobile Ads SDK の内部依存としてリンクされるのみで、API は一切呼ばない（同意 UI は自前プレプロンプト + ATT で完結。requirements.md §11）。EU 配信を始める場合に GDPR フォームとして再導入 |
 
-> Firebase Crashlytics / Performance は**常時**収集（同意不要 = 安定性・技術品質の正当利益）、Firebase Analytics は `analyticsConsent = true` の**同意時のみ**有効化（既定は収集停止）。Analytics は素の `FirebaseAnalytics` プロダクト（現行 firebase-ios-sdk 12.14.0 で既定 IDFA 非依存。旧 `WithoutAdIdSupport` は廃止、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` 追加の反転構成）でクロスアプリ追跡を行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
+> Analytics の `FirebaseAnalytics` プロダクトは、現行 firebase-ios-sdk 12.14.0 では既定で IDFA 非依存（旧 `WithoutAdIdSupport` は廃止され、IDFA 利用時のみ `FirebaseAnalyticsIdentitySupport` を足す反転構成）。クロスアプリ追跡は行わない。`PrivacyInfo.xcprivacy` に集計データ種別（Crash Data / Performance Data / Product Interaction）を宣言済み。
 
 > **`PrivacyInfo.xcprivacy`（アプリ側 manifest）と App Privacy 申告（§6.1）は別物**。privacy manifest は**そのバイナリ自身のコードが**収集・アクセスするものを宣言する枠組みで、SDK 側の収集は SDK 同梱の manifest が宣言する。`iosApp` のコードは `AdConsentCoordinator` で `ATTrackingManager` の状態確認 / 許可要求を行うだけで、`AdSupport` を import せず IDFA を直接読まない（広告 ID を扱うのは Google Mobile Ads SDK）。したがってアプリ側 manifest は現状の `NSPrivacyTracking = false` / トラッキングドメイン空 / 収集データ 3 種（Crash / Performance / ProductInteraction）**のままで整合**し、追加宣言は不要。一方 **App Store Connect の App Privacy 申告では §6.1 の IDFA 行を「トラッキングする」で申告する**（アプリが埋め込む SDK の挙動も申告対象のため）。
 
@@ -284,9 +293,13 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 | ユーザー生成コンテンツ / SNS 機能 | なし（記録は本人のみ閲覧。**共有カード（2-12）は端末の share sheet に画像を渡すだけ**で、アプリ内に他ユーザーへ公開する経路はない = ガイドライン 1.2 の通報 / ブロック要件は非該当） |
 | 無制限の Web アクセス | なし |
 | 位置情報の共有 | なし（他ユーザーとの共有はしない） |
-| **アプリ内広告** | **あり**（AdMob アダプティブバナー 2 面 = §6.3 / requirements §11。`maxAdContentRating = G`）。ASC 上で申告済み |
+| **アプリ内広告** | **あり**（AdMob アダプティブバナー **下部固定帯 1 面** = §6.3 / requirements §11。`maxAdContentRating = G`）。ASC 上で申告済み。**面数が変わっても「あり」の申告は変わらない**ので ASC 側の再申告は不要 |
 
-→ 想定レーティング: **4+**（広告ありでも 4+ は維持できる）
+→ 想定レーティング: **4+**（広告ありでも 4+ は維持できる）。**2026-08-31 に実測で確定** — `lookup` の `contentAdvisoryRating` が `4+`（下記コマンド。§9 の `releaseNotes` と同じ経路で取れる）。つまりこの節はもう「想定」ではなく**実際のレーティングと一致していることが確認済み**。
+
+```
+curl -s "https://itunes.apple.com/lookup?id=6788339362&country=jp" | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['contentAdvisoryRating'])"
+```
 
 > **この表は ASC のアンケート項目に 1:1 で対応させて維持すること**。1.0 前のガイドラインレビューで、**ASC が問う「アプリ内広告の有無」の行が抜けていた**ことが判明した（広告導入時に §6.1 / §6.2 / §6.3 は更新されたが §7 だけ追随していなかった）。申告と実態の乖離はガイドライン 2.3 の指摘対象になる。**収集データ（§6）を変える変更では §7 も開いて突き合わせる**。
 
@@ -316,7 +329,43 @@ App Store Connect の「App のプライバシー」セクションで申告す�
 
 ---
 
-## 9. What's New（バージョン 1.0 リリースノート）
+## 9. What's New（リリースノート）
+
+> **版ごとに書き下ろす**（1 本の使い回しではない）。この節は**実際に提出した文言の記録**で、**版を追加するときは上に積む**。
+>
+> **パッチ版は「軽微な〜」の 1 行**という運用が 1.0.1 / 1.0.2 / 1.0.3 で定着している（文言を毎回変える必要も、揃える必要も無いと判断。実際 1.0.2 と 1.0.3 は同一文言）。機能追加を含む版では書き下ろすこと。
+>
+> **配信済みの版は `itunes.apple.com/lookup` の `releaseNotes` で実測できる**（下記コマンド）。**ここに書く文言は記憶や口頭申告ではなく実測を正とする** — 2026-08-31 に未検証のまま「1.0.1 も 1.0 と同じ文言」と書いて誤りを入れた（lessons 2026-08-31）。
+>
+> ```
+> curl -s "https://itunes.apple.com/lookup?id=6788339362&country=jp" | python3 -c "import json,sys; print(json.load(sys.stdin)['results'][0]['releaseNotes'])"
+> ```
+
+### 1.0.3（2026-09-20 / **未提出**）
+
+```
+軽微な修正を行いました
+```
+
+> **1.0.2 と同一文言**（ユーザー確定 / 2026-09-20）。中身は B-11 のメモリリーク修正で、クラッシュも表示バグも無くユーザーから見えない内部修正のため、「軽微な〜」の枠に収まると判断した。**未提出のため `releaseNotes` での実測はまだ**。配信後に上のコマンドで照合すること。
+
+### 1.0.2（2026-08-31 リリース済み）
+
+```
+軽微な修正を行いました
+```
+
+> 2026-09-20 に `releaseNotes` で実測して確定（`currentVersionReleaseDate` = 2026-08-31）。
+
+### 1.0.1（2026-08-21 リリース）
+
+```
+軽微な不具合を修正しました
+```
+
+> 2026-08-31 に `releaseNotes` で実測して確定。
+
+### 1.0（初回リリース）
 
 ```
 CoffeeVision を初めてリリースしました。
@@ -351,6 +400,10 @@ CoffeeVision を初めてリリースしました。
   - **クォータ上限**（Places API (New) の分あたりリクエスト数 / Places の量に天井。`per user` は無制限のまま = 判断根拠は `paid-services.md` §1）
   - **API の制限を Places に限定**（認証情報 → 該当キー / 他 Maps API への迂回路を塞ぐ。**新しい Google API を使い始めるときは許可リストへの追加が必要**）
   - **実値は Cloud Console が正本**（doc に書かない）。背景はキーがクライアント埋め込みで抽出不可避なこと
+- [x] **AdMob 下部固定帯の広告ユニット**（1.0.3 / AdMob コンソール + GitHub Secrets）。2026-09-20 発行・登録。**3 点セットで初めて成立する**
+  - **ユニットを発行し、本番 ID を GitHub Secrets `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM` へ登録**（`ADMOB_APP_ID` はアプリ単位で不変）
+  - **`release-testflight.yml` が同じキー名を書き出していること** — 2026-09-19 の広告再編でキー名を変えたのに CI が旧名のままで、**リリースビルドがデモ ID のまま出荷される状態だった**（2026-09-20 に修正。lessons 同日）。**ビルド変数名を変えたら供給側を必ず grep する**
+  - **コンソール側のユニット自動更新をオフ（手動更新）にする** — クライアントが 60 秒タイマーでリフレッシュするため、有効だと二重に走る（requirements §11）。**発行時の既定は「Google による最適化」= 自動更新 ON なので、明示的に変える必要がある**
 - [x] **Remote Config `review_prompt_enabled`**（1.0 / Boolean・既定値 `true`・条件なし）。要件 9-9 のレビュー依頼キルスイッチ。実装は**キー未設定なら発火する**側に倒してあるため、キーが無い状態は「止める手段が無い」と同義。⚠️ **即時停止はできない**（`minimumFetchInterval` 12h + fetch は起動時 1 回 → 反映まで最大 12h + 次回起動）
 
 ### 一度きりの設定（1.0 で完了済み / 変えるときに効いてくる知識）
@@ -443,8 +496,15 @@ Three things set CoffeeVision apart. First, the five-axis tasting profile is the
 
 ## 変更履歴
 
+**2026-09-20（1.0.3 へ）**: `MARKETING_VERSION` / Android の `versionName` を **1.0.3** に更新（ビルド番号は CI 採番のため据え置き）。**提出はまだしていない** — B-11（observation を構造化並行性へ移す変更）を実機で確認するためのバージョン。What's New は §9 未記載で、提出時に書き下ろす。
+
 1.0 リリース時点の内容。それ以前の原稿・申告の変遷は git log と [`tasks-archive.md`](./archive/1.0/tasks-archive.md)（ASO-1 / ASO-2 / ASO-6 の各行）を参照。
 
-**2026-08-31（バージョン）**: §1 のバージョンを **1.0.2** に更新（`Config.xcconfig` の `MARKETING_VERSION` / Android の `versionName` も同値。ビルド番号は CI 採番のため据え置き）。**§9 What's New は「バージョン 1.0」のまま未更新**で、1.0.1 でも書き換えられていない — 1.0.2 の原稿を書く際に、この節を版ごとに積むのか最新版だけ置くのかを決めること（tasks 1.0.2 節に起票済み）。**§5 の `04-record-list.png` / `06-cafe-detail.png` は再撮影が必要**（同節の警告を参照）。
+**2026-08-31（1.0.2 提出）**: §1 のバージョンを **1.0.2** に更新（`Config.xcconfig` の `MARKETING_VERSION` / Android の `versionName` も同値。ビルド番号は CI 採番のため据え置き）。同日ユーザーが審査提出した。
+
+**この版は積み残しを 2 件抱えたまま出している**（どちらも次バージョンへ持ち越し。tasks 1.0.2 節に起票済み）:
+
+- **§5 のスクショ 2 枚が現物と不一致**（詳細と解消条件は §5 の ⚠ ブロック）
+- ~~§9 What's New は 1.0 の文言をそのまま提出~~ → **誤り。同日中に訂正した**。実際は版ごとに書き下ろされており、1.0.1 =「軽微な不具合を修正しました」（`releaseNotes` で実測）/ 1.0.2 =「軽微な修正を行いました」。§9 を版ごとの記録に組み直し、**実測コマンドと「口頭申告ではなく実測を正とする」旨**を前文に追加した（lessons 2026-08-31）
 
 **2026-08-31**: §11 Featuring Nomination を新設（ASO-10）。§4 の日本語キーワードを **19 語 89 字 → 24 語 98 字**へ再配分（ASO-8。7 語を外し 12 語を追加、アプリ名 / サブタイトル / 英語キーワードは据え置き）。あわせて §4 末尾の「サブタイトルを旧文言に戻す場合は 83 字 / 17 語」という注記を**削除**した（旧 19 語構成を前提にした字数で、新構成では成立しないため）。

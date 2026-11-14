@@ -4,6 +4,10 @@ import FirebaseCrashlytics
 import FirebaseFirestore
 import GoogleMobileAds
 import SharedLogic
+import os
+
+/// 起動時の Firebase 初期化まわりのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Startup")
 
 @main
 struct iOSApp: App {
@@ -25,7 +29,7 @@ struct iOSApp: App {
             sizeBytes: NSNumber(value: FirestoreCacheSizeUnlimited)
         )
         Firestore.firestore().settings = settings
-        print("[CoffeeVision] Firestore persistent cache enabled")
+        log.info("Firestore persistent cache enabled")
 
         // Remote Config の fetch + activate（POI 名前フィルタ・レビュー依頼キルスイッチ等、
         // 全キー共通）。同意フローとは無関係に取得してよく、失敗・未取得時は各機能側の
@@ -72,13 +76,16 @@ private struct AppRootView: View {
     /// `system` / `dark` を選んだ場合のみそちらに切り替わる）。
     @AppStorage("appAppearance") private var appearanceRaw = AppAppearance.light.rawValue
 
+    /// 全画面下部固定バナー専用のローダー（requirements.md §11-5）。広告の関心は View 層に閉じるため
+    /// `AppState` には持ち込まない。
+    @State private var bottomAdLoader = BannerAdLoader(adUnitID: AdUnitIDs.globalBottom)
+
     var body: some View {
         if appState.uid != nil,
            appState.coffeeListBridge != nil,
            appState.mapBridge != nil,
            appState.accountBridge != nil {
             RootTabView(appState: appState)
-                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
                 .errorToast(message: appState.lastError) {
                     appState.clearLastError()
                 }
@@ -100,6 +107,11 @@ private struct AppRootView: View {
                         .presentationDragIndicator(.visible)
                         .interactiveDismissDisabled()
                 }
+                .bottomAdBanner(
+                    loader: bottomAdLoader,
+                    canLoad: !appState.showConsentOnboarding && appState.isAdConsentResolved
+                )
+                .preferredColorScheme(AppAppearance(rawValue: appearanceRaw)?.colorScheme)
         } else {
             loadingView
                 .task {

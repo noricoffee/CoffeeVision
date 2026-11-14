@@ -3,12 +3,12 @@ package com.noricoffee.repository
 import com.google.firebase.Timestamp
 import com.noricoffee.domain.BrewMethod
 import com.noricoffee.domain.CoffeeRecord
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.time.Instant
 
 /**
  * [CoffeeFirestoreMapper] の `rating` nullable 化（2026-07-12 B-4）の decode / encode 正規化を検証する。

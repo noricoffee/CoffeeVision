@@ -24,22 +24,25 @@
 
 ## AdMob App ID / バナー広告ユニット ID の設定手順（本番切り替え）
 
-アダプティブバナー広告 2 面（requirements.md §11。コーヒー記録タブ / 分析タブの 2 面は
-2026-07-16 にユーザビリティレビューで撤去済み。git 履歴で復元可能）は `Base.xcconfig` に
-Google 公式のテスト用 ID がフォールバックとして設定済みのため、`Secrets.xcconfig` が無くても
-テスト広告で動作する。本番 ID へ切り替えるときだけ以下を行う。
+アダプティブバナー広告 1 面（requirements.md §11-5、全画面下部固定。コーヒー記録タブ / 分析タブの 2 面は
+2026-07-16 に、カフェ詳細 / マップ検索ドロップダウンのインライン 2 面は 2026-09-20 に、いずれも
+ユーザビリティレビューで撤去済み。git 履歴で復元可能）は `Base.xcconfig` に Google 公式のテスト用 ID が
+フォールバックとして設定済みのため、`Secrets.xcconfig` が無くてもテスト広告で動作する。
+本番 ID へ切り替えるときだけ以下を行う。
 
 1. AdMob（https://admob.google.com/）でアプリを登録し、App ID を発行する
-2. バナー広告ユニットを 2 つ発行する（カフェ詳細 / マップ検索ドロップダウン）
-3. `iosApp/Configuration/Secrets.xcconfig` に以下を追記（キーは `Base.xcconfig` のフォールバックと同名）:
+2. バナー広告ユニットを 1 つ発行する（全画面下部固定）
+3. **ユニットの自動更新（自動リフレッシュ）設定をオフ（手動更新）にする**。クライアント側で
+   60 秒間隔の自動リフレッシュを実装済みのため（`AnchoredBannerAdView.swift`）、コンソール側の
+   自動更新も有効なままだと二重にリフレッシュが走る
+4. `iosApp/Configuration/Secrets.xcconfig` に以下を追記（キーは `Base.xcconfig` のフォールバックと同名）:
    ```
    ADMOB_APP_ID = ca-app-pub-xxxxxxxxxxxxxxxx~yyyyyyyyyy
-   ADMOB_BANNER_AD_UNIT_ID_CAFE_DETAIL = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
-   ADMOB_BANNER_AD_UNIT_ID_MAP_SEARCH = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
+   ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM = ca-app-pub-xxxxxxxxxxxxxxxx/yyyyyyyyyy
    ```
-4. Xcode でビルドすると `Info.plist` の `GADApplicationIdentifier` / 各 `ADMOB_BANNER_AD_UNIT_ID_*`
+5. Xcode でビルドすると `Info.plist` の `GADApplicationIdentifier` / `ADMOB_BANNER_AD_UNIT_ID_GLOBAL_BOTTOM`
    エントリに本番値が反映される
-5. AdMob アプリと Firebase プロジェクトのコンソールリンクを行う（任意だが Google 公式推奨。
+6. AdMob アプリと Firebase プロジェクトのコンソールリンクを行う（任意だが Google 公式推奨。
    Analytics に広告収益イベントが流れるようになる）
 
 ## 注意事項

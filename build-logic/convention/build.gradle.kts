@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+
 plugins {
     `kotlin-dsl`
 }
@@ -5,6 +7,15 @@ plugins {
 java {
     sourceCompatibility = JavaVersion.VERSION_17
     targetCompatibility = JavaVersion.VERSION_17
+}
+
+kotlin {
+    // Kotlin 2.4 系では compileKotlin の jvmTarget が実行環境の JDK に追随するため、
+    // compileJava（上記 sourceCompatibility 17）と食い違い「Inconsistent JVM Target
+    // Compatibility」警告が出る。明示的に 17 へ固定して揃える。
+    compilerOptions {
+        jvmTarget.set(JvmTarget.JVM_17)
+    }
 }
 
 dependencies {

@@ -1,11 +1,11 @@
-import com.android.build.gradle.LibraryExtension
+import com.android.build.api.dsl.LibraryExtension
 import org.gradle.api.artifacts.VersionCatalogsExtension
 import org.gradle.api.JavaVersion
 
 /**
  * AGP `com.android.library`（純粋な Android ライブラリ）用の Convention Plugin。
  *
- * KMP モジュールでは `kmp.library` 経由で `androidLibrary` DSL を使うため、現状このプラグインを
+ * KMP モジュールでは `kmp.library` 経由で `android` DSL（旧 `androidLibrary`）を使うため、現状このプラグインを
  * 適用する側はない。Phase 2.5（PR1）時点では「Android-only ライブラリが必要になった場合の
  * 受け皿」として枠だけ作っておく。
  *

@@ -156,8 +156,22 @@ final class LocationManager: NSObject, CLLocationManagerDelegate {
     ) {
         guard let coord = locations.first?.coordinate else { return }
         Task { @MainActor in
+            // `@Observable` は値を比較せず代入だけで変更を通知するため、同じ座標での
+            // 再代入を弾く（`requestLocation()` を短時間に複数回呼ぶと CoreLocation が
+            // 同一のキャッシュ済み fix をそのまま返すので、実際に重複が起きる）。
+            guard !self.isSameAsLastLocation(coord) else { return }
             self.lastLocation = coord
         }
+    }
+
+    /// 現在の [lastLocation] と同一座標か。
+    ///
+    /// 許容誤差は設けず完全一致で比較する。本クラスは継続監視ではなくワンショット取得
+    /// （`requestLocation()`）しか使わないため、抑止したい重複は「同じ fix の再配信」であって
+    /// GPS の下位桁の揺れではない。誤差付き比較にすると、近距離の実移動まで握り潰してしまう。
+    private func isSameAsLastLocation(_ coord: CLLocationCoordinate2D) -> Bool {
+        guard let last = lastLocation else { return false }
+        return last.latitude == coord.latitude && last.longitude == coord.longitude
     }
 
     nonisolated func locationManager(

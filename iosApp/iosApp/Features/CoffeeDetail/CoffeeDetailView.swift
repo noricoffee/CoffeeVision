@@ -85,9 +85,8 @@ struct CoffeeDetailView: View {
             }
             .task {
                 guard let uid = appState.uid else { return }
-                viewModel.onAppear(coffeeId: coffeeId, userId: uid)
+                await viewModel.observe(coffeeId: coffeeId, userId: uid)
             }
-            .onDisappear { viewModel.onDisappear() }
             .onChange(of: viewModel.isDeleted) { _, isDeleted in
                 if isDeleted { dismiss() }
             }
@@ -282,8 +281,8 @@ struct CoffeeDetailView: View {
         String(
             format: "%04d/%02d/%02d",
             Int(date.year),
-            Int(date.monthNumber),
-            Int(date.dayOfMonth)
+            Int(date.monthValue),
+            Int(date.day)
         )
     }
 }

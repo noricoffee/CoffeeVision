@@ -4,15 +4,18 @@ import SharedLogic
 /// `CafeSearchViewModel`（Kotlin）を SwiftUI から扱うための @Observable ブリッジ。
 ///
 /// - Kotlin の `StateFlow<UIState>` を Swift の `@Observable` プロパティに変換する
-/// - `init` 時に観測タスクを起動し、`cancel()` / deinit で終了する
+/// - 観測は `observe()`（構造化 `Task`）が担う。ブリッジ自身は `Task` を保持しない（B-11）
 /// - `@MainActor` を付けることで `apply(_:)` が常にメインスレッドで動く
-/// - `CafeSearchView` 内の `@State` で保持する（sheet 起動ごとに新規生成・破棄）
+/// - 生成箇所は 2 つ: `CafeSearchView` の `@State`（sheet 起動ごとに新規生成・破棄。
+///   `.task { await bridge.observe() }` で観測開始）と `MapSearchController.searchBridge`
+///   （`MapTabView` の `.task` から `MapSearchController.setupAndObserve(makeViewModel:)`
+///   経由で生成・観測開始。`MapTabView` の `.task` が再実行されるたびに `observe()` が
+///   再購読される）
 @MainActor
 @Observable
 final class CafeSearchViewModelBridge {
 
     private let kotlin: CafeSearchViewModel
-    private var observationTask: Task<Void, Never>?
 
     // MARK: - SwiftUI が観測するプロパティ
 
@@ -29,7 +32,6 @@ final class CafeSearchViewModelBridge {
 
     init(kotlin: CafeSearchViewModel) {
         self.kotlin = kotlin
-        startObservation()
     }
 
     isolated deinit {
@@ -38,10 +40,11 @@ final class CafeSearchViewModelBridge {
 
     // MARK: - ライフサイクル
 
-    /// 観測タスクを明示的にキャンセルする。`onDisappear` から呼ぶ。
-    func cancel() {
-        observationTask?.cancel()
-        observationTask = nil
+    /// state 購読を開始する。呼び出し元の `.task` から呼ぶ（構造化 `Task`）。
+    func observe() async {
+        for await state in kotlin.state {
+            apply(state)
+        }
     }
 
     // MARK: - ユーザーアクション
@@ -95,22 +98,25 @@ final class CafeSearchViewModelBridge {
 
     // MARK: - Private
 
-    private func startObservation() {
-        let flow = kotlin.state
-        observationTask = Task { [weak self] in
-            // SKIE により StateFlow が AsyncSequence 化されている
-            for await state in flow {
-                guard let self else { break }
-                self.apply(state)
-            }
-        }
-    }
-
     private func apply(_ state: CafeSearchViewModel.UIState) {
-        self.query = state.query
-        self.results = state.results
-        self.isLoading = state.isLoading
-        self.error = state.error
-        self.hasSearched = state.hasSearched
+        // `@Observable` は値を比較せず、代入するだけで observer に変更を通知するため、
+        // 同値の再代入で無駄な body 再評価が走る。実際に変わった分だけ通知する（SL-3）。
+        // `Cafe` は Kotlin の `data class` で Obj-C 側に `equals()` 由来の `isEqual:` を
+        // 持つため `==` が値比較になる。
+        if query != state.query {
+            query = state.query
+        }
+        if results != state.results {
+            results = state.results
+        }
+        if isLoading != state.isLoading {
+            isLoading = state.isLoading
+        }
+        if error != state.error {
+            error = state.error
+        }
+        if hasSearched != state.hasSearched {
+            hasSearched = state.hasSearched
+        }
     }
 }

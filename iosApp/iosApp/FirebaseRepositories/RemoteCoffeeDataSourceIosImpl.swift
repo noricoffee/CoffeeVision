@@ -1,6 +1,10 @@
 import Foundation
 import FirebaseFirestore
 import SharedLogic
+import os
+
+/// コーヒー記録の Firestore リスナのロガー（SL-8）。
+private nonisolated let log = AppLog.logger(category: "Firestore")
 
 /// `com.noricoffee.repository.RemoteCoffeeDataSource` の iOS 実装。
 ///
@@ -18,8 +22,9 @@ import SharedLogic
 /// `SkieSwiftFlow` は `_ObjectiveCBridgeable` 経由で `SkieKotlinFlow` から暗黙ブリッジする。
 ///
 /// `nonisolated` である理由: `RemoteCoffeeDataSource`（Kotlin interface）実装は Kotlin ランタイムが
-/// 任意スレッドから呼び出す。可変状態は保持しない（`firestore` は `let`、`observeChanges` 内の
-/// `listener` はメソッドローカルでクロージャに直接キャプチャされるため、クラスの isolation とは無関係）（SW6-2）。
+/// 任意スレッドから呼び出す。クラス自体は可変状態を保持しない（`firestore` は `let`）。
+/// `observeChanges` 内のリスナ登録はメソッドローカルだが、**クラスの isolation とは無関係に**
+/// `onStart` / `onCancel` の 2 つのクロージャから共有されるため `OSAllocatedUnfairLock` で保護する（SL-1）。
 nonisolated final class RemoteCoffeeDataSourceIosImpl: NSObject, RemoteCoffeeDataSource {
 
     private let firestore: Firestore
@@ -48,22 +53,24 @@ nonisolated final class RemoteCoffeeDataSourceIosImpl: NSObject, RemoteCoffeeDat
     /// photos 埋め込み配列方式のため、リスナ 1 本で完結する。
     /// SKIE の要求により `SkieSwiftFlow<[CoffeeRecord]>` を返す。
     func observeChanges(userId: String) -> SkieSwiftFlow<[CoffeeRecord]> {
-        var listener: ListenerRegistration?
-        let firestore = self.firestore
+        // `onStart`（Kotlin ランタイムの任意スレッド）で書き、`onCancel`（= deinit、同じく任意スレッド）で
+        // 読んで無効化する共有可変状態なのでロックで保護する。`ListenerRegistration` は非 Sendable なので
+        // `uncheckedState:` / `withLockUnchecked` 側の API を使う（SL-1）。
+        let listenerLock = OSAllocatedUnfairLock<(any ListenerRegistration)?>(uncheckedState: nil)
+        // `Firestore` は非 Sendable だが `CollectionReference` は Sendable。
+        // `@Sendable` な `onStart` へ持ち込めるよう、参照の組み立てだけ外で済ませる。
+        let collection = coffeesCollection(userId: userId)
 
         let callbackFlow = CallbackFlow<NSArray>(
-            onStart: { [firestore] emit, fail in
-                listener = firestore
-                    .collection("users")
-                    .document(userId)
-                    .collection("coffees")
+            onStart: { emit, fail in
+                let registration = collection
                     .addSnapshotListener { snapshot, error in
                         if let error {
                             // 握り潰さず Flow を例外終了させる（`RemoteCoffeeDataSource.observeChanges`
                             // のエラー契約）。以前は print して return するだけだったため、
                             // `permission-denied` を受けても Kotlin 側の collect は永久に宙吊りになり、
                             // 同期が黙って止まったことが誰にも分からなかった。
-                            print("[RemoteCoffeeDataSourceIosImpl] snapshot error: \(error)")
+                            log.error("RemoteCoffeeDataSourceIosImpl snapshot error: \(String(describing: error), privacy: .public)")
                             fail(error)
                             return
                         }
@@ -74,10 +81,17 @@ nonisolated final class RemoteCoffeeDataSourceIosImpl: NSObject, RemoteCoffeeDat
                         }
                         emit(records as NSArray)
                     }
+                listenerLock.withLockUnchecked { $0 = registration }
             },
             onCancel: {
-                listener?.remove()
-                listener = nil
+                // 取り出しと無効化をアトミックに行い、解除自体はロックの外で呼ぶ
+                // （`FlowCompletionGate.finish` と同じ考え方）。
+                let pending = listenerLock.withLockUnchecked { current -> (any ListenerRegistration)? in
+                    let taken = current
+                    current = nil
+                    return taken
+                }
+                pending?.remove()
             }
         )
 

@@ -50,7 +50,7 @@ EOF
 
 ## ビルド検証は Debug + シミュレータで十分（アセット差し替えのみなら Kotlin framework は UP-TO-DATE でよい）
 
-アイコン/画像アセットだけの変更では `shared:framework` 系タスクは `UP-TO-DATE` のままで問題ない（Kotlin 公開 API 変更が絡まないため）。`DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS Simulator,name=iPhone 17' build`（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無し）で `** BUILD SUCCEEDED **` を確認すれば足りる。ただしアルファチャンネルの有無を検証したいときは Debug/シミュレータでは不十分（次項参照）。
+アイコン/画像アセットだけの変更では `shared:framework` 系タスクは `UP-TO-DATE` のままで問題ない（Kotlin 公開 API 変更が絡まないため）。`DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild -project iosApp/iosApp.xcodeproj -scheme iosApp -destination 'platform=iOS Simulator,name=iPhone 17' build`（`OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED` 無し）で `** BUILD SUCCEEDED **` を確認すれば足りる。ただしアルファチャンネルの有無を検証したいときは Debug/シミュレータでは不十分（次項参照）。
 
 ## App Store アイコンはアルファチャンネルを持てない — CGContext(noneSkipLast) + NSGraphicsContext(cgContext:flipped:) で描く（2026-08-06）
 
@@ -67,13 +67,13 @@ EOF
 - 検証コマンド一式（この切り分けに使った）:
   ```bash
   # Debug/シミュレータ（速いが actool の alpha strip が効かない環境）
-  DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
     -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Debug \
     -destination 'platform=iOS Simulator,name=iPhone 17' \
     -derivedDataPath /path/to/DerivedData clean build > build.log 2>&1
 
   # Release/Archive（実際の提出物に近い経路。--compress-pngs が効く）
-  DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcodebuild \
+  DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcodebuild \
     -project iosApp/iosApp.xcodeproj -scheme iosApp -configuration Release \
     -destination 'generic/platform=iOS' \
     -archivePath /path/to/coffeevision.xcarchive archive > archive.log 2>&1

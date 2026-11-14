@@ -2,7 +2,7 @@ package com.noricoffee.feature.coffeeeditor
 
 import com.noricoffee.domain.Cafe
 import com.noricoffee.domain.CoffeeRecord
-import kotlinx.datetime.Clock
+import kotlin.time.Clock
 
 /**
  * draft のバリデーション。エラーメッセージを返す。問題なければ null を返す。

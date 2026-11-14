@@ -74,7 +74,7 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 - 必読 docs を毎回 Read してから着手。同じアプローチで 2 回失敗したら止めて親にレポート
 - 最終レスポンスは「実装した内容 / 検証結果 / 仕様トレードオフ / 親への依頼 / 未解決」の構造化 Markdown
 - 永続メモリ（`.claude/agent-memory/<name>/`、git 管理）に**作業ノウハウ**を自己蓄積する。仕様・トレードオフ・教訓の正本は `docs/**`（親管轄）で、メモリに複製しない
-- 関連 Skill（ios: `ios-developer` / `mobile-ios-design`、kmp: `kotlin-coroutines-flows`）は frontmatter `skills` でプリロード指定済み
+- 関連 Skill（ios: `ios-developer` / `mobile-ios-design`、kmp: `kotlin-coroutines-flows`。いずれも `~/.claude/skills/` の個人 Skill）は frontmatter `skills` でプリロード指定済み
 
 ### よくある dispatch パターン
 
@@ -88,7 +88,7 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 
 ### Plan Mode Default
 
-- 非自明なタスク（3 ステップ以上、またはアーキテクチャの意思決定）には必ずプランモードに入る（構築だけでなく検証ステップも対象）。曖昧さを減らすため詳細な仕様を最初に書く。仕様の曖昧さが残るときは `grilling` skill で意思決定を 1 問ずつ詰めてから確定する
+- 非自明なタスク（3 ステップ以上、またはアーキテクチャの意思決定）には必ずプランモードに入る（構築だけでなく検証ステップも対象）。曖昧さを減らすため詳細な仕様を最初に書く。仕様の曖昧さが残るときは `grilling` skill（個人 Skill）で意思決定を 1 問ずつ詰めてから確定する。確定した仕様は dispatch 前に親が docs（`requirements.md` / `data-model.md` / `tasks.md` の確定仕様行など該当箇所）に固定し、未決事項は未決として明記する
 - うまくいかなくなったら止めて再計画する。**同じ系統のアプローチで 2 回失敗したら必ずプランモードに入り、根本原因を再調査する**
 
 ### Verification Before Done
@@ -119,7 +119,7 @@ Swift / Kotlin の実装は専用サブエージェントに委譲し、メイ�
 - **No Laziness**: 根本原因を探る。一時的な修正はしない。シニアデベロッパーの基準で
 - **Minimal Impact**: 変更は必要なものだけに触れる。バグを持ち込まない
 - **Demand Elegance**: 非自明な変更で修正がハック的に感じたら、立ち止まってより洗練された方法を探す（単純な修正では過剰設計しない）
-- **Autonomous Bug Fixing**: バグレポートが来たらすぐ直す。ログ・エラー・失敗テストを自分で特定して解決し、手取り足取りを求めない。原因が非自明・再現困難なバグは `diagnosing-bugs` skill の診断ループに従う
+- **Autonomous Bug Fixing**: バグレポートが来たらすぐ直す。ログ・エラー・失敗テストを自分で特定して解決し、手取り足取りを求めない。原因が非自明・再現困難なバグは `diagnosing-bugs` skill（個人 Skill）の診断ループに従う。本プロジェクトでの接続先: 探索の起点 = `docs/architecture.md` / `docs/data-model.md` / `docs/tasks/lessons.md`、テスト seam = `commonTest` / `androidHostTest`（サブエージェントも実行可）・`iosSimulatorArm64Test`（sandbox 制約のため親が `DEVELOPER_DIR` 付きで実行）・iosApp の XCTest、汎用の落とし穴 = `record-lesson` skill、要件未満の判断 = `implementation_note.md`、seam 不在などアーキテクチャの課題 = `docs/tasks.md` のバックログ
 
 ---
 

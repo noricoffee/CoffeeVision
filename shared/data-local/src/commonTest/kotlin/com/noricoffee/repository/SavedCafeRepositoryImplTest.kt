@@ -13,7 +13,6 @@ import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
-import kotlinx.datetime.Instant
 import kotlin.coroutines.coroutineContext
 import kotlin.test.AfterTest
 import kotlin.test.BeforeTest
@@ -21,6 +20,7 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertTrue
+import kotlin.time.Instant
 
 /**
  * [SavedCafeRepositoryImpl] の合成挙動を検証する。[CoffeeRepositoryImplTest] と同じパターンで

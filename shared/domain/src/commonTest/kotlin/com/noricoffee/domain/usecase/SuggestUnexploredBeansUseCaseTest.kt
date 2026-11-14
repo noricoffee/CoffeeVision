@@ -6,8 +6,8 @@ import com.noricoffee.domain.CoffeeRecord
 import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.model.CategoryStat
 import com.noricoffee.domain.model.FavoriteSignals
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
+import kotlin.time.Instant
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue

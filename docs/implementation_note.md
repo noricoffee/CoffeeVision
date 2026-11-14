@@ -324,3 +324,18 @@ docs の冗長排除中に `kmp-bridge.md`「メモリ管理の注意」の記�
 - 影響: `print` の `[CoffeeVision]` 等の手書きプレフィックスは subsystem / category へ移した。開発時は `xcrun simctl spawn <udid> log stream --level debug --predicate 'subsystem == "com.noricoffee.coffeevision"'` で見る（`--level debug` を省くと `.info` / `.debug` が出ない）
 - 未確認: **`privacy: .private` の redaction はシミュレータでは実証できない**（デバッガ配下では private データが表示される Apple の挙動）。コード上 `.private` が付いていることまでは確定だが、「本番端末のログに uid が出ない」の実証は実機 / TestFlight ビルドでの確認が要る
 - SL-9: 単一件数時のズーム距離が用途ごとに違った（訪問済み 2000m / 検索結果 800m）ため `singleCoordinateMeters` 引数で受ける形にした。0 件は `nil` 返しで、訪問済み側は東京駅 5km デフォルト、検索結果側は no-op という従来の差を呼び出し側に残してある（0 / 1 / 複数件の 3 ケースとも挙動不変）
+
+### 2026-11-05: 依存ライブラリ一括更新（DU-1〜DU-5）で決めたこと
+
+- 関連: `gradle/libs.versions.toml` / `iosApp/iosApp.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved` / `iosApp/iosApp/Utilities/Kotlinx_datetimeLocalDate+Month.swift` / kmp-bridge「Kotlin → Swift で型がどう見えるか」/ tasks DU-1〜DU-6
+
+全依存を最新の安定版に上げた（ユーザー決定: プレリリースは使わない / kotlinx-datetime は compat 版で据え置かず 0.8 へ本移行する / ライブラリごとにコミットする）。目標バージョンは tasks の DU-1〜DU-5 の各行に書いた。要件未満の判断は次のとおり。
+
+- **material3（CMP）は 1.12.0-alpha03 にとどめた**。もともと 1.11.0-alpha07 というプレリリースで、CMP 向けの material3 には安定版がない。「安定版のみ」の方針とは矛盾するが、CMP 1.12.2 に対応する版の中で最新のものを選んだ。Android は検証ターゲットでリリース対象外なので、影響は小さい
+- **compileSdk を 36 から 37 に上げた**（minSdk / targetSdk は 36 のまま）。CMP 1.12.2 が引き込む androidx.compose 1.12 系が compileSdk 37 を要求するため。CI で platform 37 が自動で入るかは PR の CI で確認する
+- **Ktor 3.6.1 が kotlinx-datetime を `0.8.0-0.6.x-compat` に引き上げる**（`ktor-serialization-kotlinx-json` → `ktor-openapi-schema`）。`libs.versions.toml` の 0.8.0 より compat 版が依存解決で選ばれ、compat 版の旧 `kotlinx.datetime.Instant` は `kotlin.time.Instant` とは**別のクラス**として残る。0.8.0 を強制すると Ktor が壊れるおそれがあるので compat 版は残し、自分たちのコードは `kotlin.time` に揃えた（旧 Instant は Ktor の内部でだけ使われる）。DU-2（Ktor の更新）の時点で、Swift から見える `LocalDate` のイニシャライザのラベルがすでに `year:month:day:` に変わっていた
+- **Swift で月の数値を取る処理は 1 か所に閉じ込めた**。Kotlin の拡張プロパティ `Month.number` は Obj-C ヘッダに出ないため、`Kotlinx_datetimeLocalDate+Month.swift` の `monthValue`（`month.ordinal + 1`）を使う。`Kotlinx_datetimeMonth` が january〜december の順に宣言されていることはヘッダで確認した
+- **`kotlin.time.Instant` に opt-in は要らない**（Kotlin 2.3 で stable。2.4.21 の stdlib で `@WasExperimental` を確認）
+- 影響: SQLDelight 2.4.1 の Gradle プラグインが内部で `Configuration.setVisible` を呼んでいて、Gradle 9.8 で deprecation warning が出る。プロジェクト側では直せないので、SQLDelight の次のリリースを待つ
+- 影響: Kotlin 2.4 の null 解析が強くなったことで、`BuildCoffeeStatsUseCaseTest.kt` に不要な `!!` の warning が 17 件出るようになった。テストコードだけの話なので今回は直していない
+- 経緯: DU-3 を 1 回の dispatch（約 38 ファイルの置き換え + シリアライザ / SQLDelight / Firestore の互換確認）で投げたところ、サブエージェントが 2 回続けて無応答で止まった。domain + core / data-* / feature / Swift の 4 本に分けたら、どれも 4〜7 分で終わった

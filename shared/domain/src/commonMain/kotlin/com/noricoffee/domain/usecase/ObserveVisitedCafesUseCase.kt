@@ -5,10 +5,10 @@ import com.noricoffee.domain.model.VisitedCafe
 import com.noricoffee.repository.CoffeeRepository
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
 import kotlinx.datetime.atStartOfDayIn
+import kotlin.time.Instant
 
 /**
  * ユーザーのコーヒー記録からカフェを集計して [VisitedCafe] のリストとして返す UseCase。

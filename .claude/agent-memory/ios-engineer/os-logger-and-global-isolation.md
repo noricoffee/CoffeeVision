@@ -34,7 +34,7 @@ metadata:
 ## simctl でログを実見する手順（`.info` / `.debug` は既定で出ない）
 
 ```bash
-export DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer
+export DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer
 UDID=$(xcrun simctl list devices available | grep -m1 'iPhone 17 Pro' | sed -E 's/.*\(([-0-9A-F]+)\).*/\1/')
 xcrun simctl install $UDID <DerivedData>/Build/Products/Debug-iphonesimulator/coffeevision.app
 xcrun simctl spawn $UDID log stream --level debug --style compact \

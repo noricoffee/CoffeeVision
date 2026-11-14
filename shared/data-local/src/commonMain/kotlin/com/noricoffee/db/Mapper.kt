@@ -8,11 +8,11 @@ import com.noricoffee.domain.ProcessingMethod
 import com.noricoffee.domain.RoastLevel
 import com.noricoffee.domain.TastingScores
 import com.noricoffee.domain.model.SavedCafe
-import kotlinx.datetime.Instant
 import kotlinx.datetime.LocalDate
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import kotlin.time.Instant
 
 private val json = Json
 private val photoRefsSerializer = ListSerializer(String.serializer())

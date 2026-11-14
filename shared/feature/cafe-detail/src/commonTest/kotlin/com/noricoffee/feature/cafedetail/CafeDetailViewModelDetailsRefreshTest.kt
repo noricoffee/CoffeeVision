@@ -114,8 +114,8 @@ class CafeDetailViewModelDetailsRefreshTest {
             cup = null,
             brewRecipe = null,
             tasting = null,
-            createdAt = kotlinx.datetime.Instant.fromEpochMilliseconds(1_750_000_000_000),
-            updatedAt = kotlinx.datetime.Instant.fromEpochMilliseconds(1_750_000_000_000),
+            createdAt = kotlin.time.Instant.fromEpochMilliseconds(1_750_000_000_000),
+            updatedAt = kotlin.time.Instant.fromEpochMilliseconds(1_750_000_000_000),
         )
     }
 

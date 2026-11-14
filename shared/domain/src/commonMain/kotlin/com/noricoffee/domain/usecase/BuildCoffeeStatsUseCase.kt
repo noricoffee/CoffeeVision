@@ -13,6 +13,7 @@ import com.noricoffee.domain.model.RecordDigest
 import com.noricoffee.domain.model.TastingAverages
 import com.noricoffee.domain.model.TastingAxis
 import com.noricoffee.domain.model.TastingAxisCorrelation
+import kotlinx.datetime.number
 import kotlin.math.sqrt
 
 /**
@@ -270,7 +271,7 @@ class BuildCoffeeStatsUseCase {
         return records
             .groupBy { record ->
                 val year = record.visitedOn.year.toString().padStart(4, '0')
-                val month = record.visitedOn.monthNumber.toString().padStart(2, '0')
+                val month = record.visitedOn.month.number.toString().padStart(2, '0')
                 "$year-$month"
             }
             .map { (yearMonth, group) ->

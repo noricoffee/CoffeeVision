@@ -409,8 +409,8 @@ private struct CoffeeSummaryRow: View {
         return String(
             format: "%04d/%02d/%02d",
             Int(d.year),
-            Int(d.monthNumber),
-            Int(d.dayOfMonth)
+            Int(d.monthValue),
+            Int(d.day)
         )
     }
 }

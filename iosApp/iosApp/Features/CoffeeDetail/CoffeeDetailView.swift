@@ -281,8 +281,8 @@ struct CoffeeDetailView: View {
         String(
             format: "%04d/%02d/%02d",
             Int(date.year),
-            Int(date.monthNumber),
-            Int(date.dayOfMonth)
+            Int(date.monthValue),
+            Int(date.day)
         )
     }
 }

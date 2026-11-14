@@ -44,7 +44,7 @@ nonisolated enum SavedCafeFirestoreMapper {
             return nil
         }
 
-        let savedAt = Kotlinx_datetimeInstant.Companion.shared.fromEpochMilliseconds(
+        let savedAt = KotlinInstant.Companion.shared.fromEpochMilliseconds(
             epochMilliseconds: Int64(savedAtTs.dateValue().timeIntervalSince1970 * 1000)
         )
 

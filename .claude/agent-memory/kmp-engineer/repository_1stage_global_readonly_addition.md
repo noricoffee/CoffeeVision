@@ -30,7 +30,7 @@ metadata:
   :shared:feature:<xxx>:compileKotlinIosSimulatorArm64
 ./gradlew :shared:feature:<xxx>:compileTestKotlinIosSimulatorArm64 :shared:feature:<xxx>:testAndroidHostTest
 ./gradlew :androidApp:assembleDebug
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer ./gradlew :shared:framework:assembleSharedLogicXCFramework
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer ./gradlew :shared:framework:assembleSharedLogicXCFramework
 ```
 
 `assembleSharedLogicXCFramework` は DEVELOPER_DIR 環境変数だけで sandbox でも最後まで通る（2026-07-17 確認、debug/release 両方、約 50 秒）。

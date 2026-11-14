@@ -38,7 +38,7 @@ metadata:
 
 `:shared:framework:assembleSharedLogicXCFramework` は `xcode-select -p` が CommandLineTools を指す
 デフォルト状態だと `linkDebugFrameworkIosSimulatorArm64` 等が `xcrun xcodebuild -version` 失敗で FAILED になる。
-**ただし `DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer` を付けて自分（サブエージェント）で
+**ただし `DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer` を付けて自分（サブエージェント）で
 実行すれば通る**（2026-07-06 確認。フルビルド 47 秒、debug/release 両 XCFramework 生成成功）。
 `iosSimulatorArm64Test`（実機/シミュレータ実行を伴う）は依然サンドボックス制約でサブエージェントには不可だが、
 リンクだけの `assembleSharedLogicXCFramework` は DEVELOPER_DIR 環境変数だけで解決するので、

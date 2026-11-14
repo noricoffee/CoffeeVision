@@ -30,6 +30,8 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 | `Flow<T>` | コールバック型（生 SDK）/ `AsyncSequence`（SKIE 経由） | **SKIE 推奨** |
 | `StateFlow<T>` | 同上 | 同上 |
 | `Exception` | `NSError` | Swift では `try / catch (let e as NSError)` |
+| `kotlin.time.Instant` | `KotlinInstant` | 生成は `KotlinInstant.Companion.shared.fromEpochMilliseconds(epochMilliseconds:)`、読み出しは `toEpochMilliseconds()`。Kotlin 側は `kotlinx.datetime.Instant` を使わない（2026-11-05 に kotlinx-datetime 0.8 へ移行。旧名は `Kotlinx_datetimeInstant`） |
+| `kotlinx.datetime.LocalDate` | `Kotlinx_datetimeLocalDate` | 生成は `init(year:month:day:)`（引数は `Int32`）、読み出しは `year` / `day`。`month` は `Kotlinx_datetimeMonth`（enum）で、Kotlin の拡張プロパティ `Month.number` は Swift に公開されない。**月の数値は iosApp の `Kotlinx_datetimeLocalDate` extension 1 か所（`Utilities/Kotlinx_datetimeLocalDate+Month.swift` の `monthValue` = `month.ordinal + 1`）に閉じ込め、呼び出し側はそれを使う**。`monthNumber` / `dayOfMonth` は kotlinx-datetime 0.7 以降で deprecated（旧イニシャライザ `init(year:monthNumber:dayOfMonth:)` は削除済み） |
 
 ---
 
@@ -37,7 +39,7 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 
 [**SKIE**](https://skie.touchlab.co/) は Touchlab が提供する Kotlin/Native → Swift トランスパイラ拡張で、`suspend` を Swift の `async` に、`Flow` を `AsyncSequence` に、`sealed class` を Swift の `enum` に変換してくれます。
 
-> **採用済み: SKIE 0.10.12（Kotlin 2.3.21 互換）**。適用先は `shared/framework` umbrella。デフォルト機能（SuspendInterop / FlowInterop / SealedInterop）のみ有効化、独自設定なし。
+> **採用済み: SKIE 0.10.16（Kotlin 2.4.21 互換。2026-11-05 に 0.10.12 から更新）**。適用先は `shared/framework` umbrella。デフォルト機能（SuspendInterop / FlowInterop / SealedInterop）のみ有効化、独自設定なし。
 
 ### Gradle 設定
 
@@ -54,7 +56,7 @@ CoffeeVision は **Kotlin Multiplatform（KMP）+ SwiftUI** の構成です。
 
 #### ⚠ デフォルト引数は Swift に伝播しない
 
-SKIE 0.10.12 は `DefaultArgumentInterop` を有効化しておらず、Kotlin のデフォルト引数は Obj-C initializer では**全パラメーター必須**になる。data class（`Cafe` / `CoffeeRecord` / `CoffeeRecordFilter` 等）や `AppContainer` にフィールド・引数をデフォルト値付きで追加したら、**Swift の全呼び出し箇所へ新引数の明示追加が必要**（フィールド追加のたびに繰り返し踏んでいるルール）。関数のデフォルト引数を Swift に見せたい場合はオーバーロードを手で切る（例: `searchText` のバイアス有無 2 本、`onNearbySearchRequested` の半径付き）。SKIE の `defaultArgumentInterop` 有効化で解消できる可能性はあるが未検証・未採用。
+SKIE（0.10.16 時点）は `DefaultArgumentInterop` を既定で無効にしており、Kotlin のデフォルト引数は Obj-C initializer では**全パラメーター必須**になる。data class（`Cafe` / `CoffeeRecord` / `CoffeeRecordFilter` 等）や `AppContainer` にフィールド・引数をデフォルト値付きで追加したら、**Swift の全呼び出し箇所へ新引数の明示追加が必要**（フィールド追加のたびに繰り返し踏んでいるルール）。関数のデフォルト引数を Swift に見せたい場合はオーバーロードを手で切る（例: `searchText` のバイアス有無 2 本、`onNearbySearchRequested` の半径付き）。SKIE の `defaultArgumentInterop` 有効化で解消できる可能性はあるが未検証・未採用。
 
 あわせて、SKIE は `operator fun invoke` を Swift の `callAsFunction` に変換しない。UseCase の呼び出しは `.invoke(userId:)` のように明示する（15-E-2 で確認）。
 
@@ -344,7 +346,7 @@ GitLive 製の Kotlin Multiplatform Firebase SDK（`dev.gitlive.firebase.*`）�
 | プラットフォーム | SDK | 配置 |
 |------|-----|------|
 | iOS | `FirebaseFirestore` / `FirebaseAuth`（SPM or CocoaPods） | `iosApp/iosApp/FirebaseRepositories/` に Swift 実装 |
-| Android | Firebase BoM + `firebase-firestore-ktx` / `firebase-auth-ktx` | `shared/data-firebase/androidMain` |
+| Android | Firebase BoM + `firebase-firestore` / `firebase-auth`（BoM 34 で `-ktx` は廃止） | `shared/data-firebase/androidMain` |
 
 > 写真本体はクラウドに同期せず端末ローカル（Documents）のみに保存する方針のため、Storage SDK は採用しない（[`requirements.md`](./requirements.md) §7-2 / [`architecture.md`](./architecture.md) §永続化方針）。
 
@@ -359,8 +361,8 @@ shared/domain/src/commonMain/kotlin/com/noricoffee/repository/
     AuthRepository.kt                    ← interface のみ
 
 shared/data-firebase/src/androidMain/kotlin/com/noricoffee/repository/
-    RemoteCoffeeDataSourceAndroidImpl.kt ← firebase-firestore-ktx を使う
-    AuthRepositoryAndroidImpl.kt         ← firebase-auth-ktx を使う
+    RemoteCoffeeDataSourceAndroidImpl.kt ← firebase-firestore を使う
+    AuthRepositoryAndroidImpl.kt         ← firebase-auth を使う
 
 iosApp/iosApp/FirebaseRepositories/
     RemoteCoffeeDataSourceIosImpl.swift  ← FirebaseFirestore (Swift) を使う
@@ -401,7 +403,7 @@ iOS 側は **Swift で Kotlin の interface を直接実装** できます（Kot
 ### Firestore 初期化と永続化
 
 - iOS: `iosApp` の `@main App` 内で `FirebaseApp.configure()` を呼ぶ。Firestore のオフライン永続化はデフォルト ON
-- Android: Firebase BoM 経由の `firebase-firestore-ktx` を導入し、`androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用、`google-services.json` を `androidApp/` に配置（Phase 2 で実施）
+- Android: Firebase BoM 経由の `firebase-firestore`（当時は `-ktx`）を導入し、`androidApp/build.gradle.kts` に `com.google.gms.google-services` プラグインを適用、`google-services.json` を `androidApp/` に配置（Phase 2 で実施）
 
 ---
 

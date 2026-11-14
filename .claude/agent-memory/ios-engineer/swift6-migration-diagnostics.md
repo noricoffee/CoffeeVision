@@ -59,7 +59,7 @@ SW6-1 の追加検証（2026-08-07）で実物 2 パターンを確認:
 タップ操作でアプリの実際の画面を辿れない環境（`sandbox_no_gui_simulator.md` 参照）でも、`@concurrent` が実際にメインスレッドを外れるかは**アプリ本体を経由せず**確認できる。`iosApp` と同じコンパイラフラグ（`Base.xcconfig` の `SWIFT_VERSION = 6.0` + `SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor` + `SWIFT_APPROACHABLE_CONCURRENCY = YES`）を単体の `swiftc` 実行で再現し、`nonisolated async`（`@concurrent` 無し）と `@concurrent` を並べて `Thread.isMainThread` を出力させるだけで挙動差が出る:
 
 ```bash
-DEVELOPER_DIR=/Applications/Xcode-beta.app/Contents/Developer xcrun swiftc \
+DEVELOPER_DIR=/Applications/Xcode.app/Contents/Developer xcrun swiftc \
   -swift-version 6 -default-isolation MainActor \
   -enable-upcoming-feature NonisolatedNonsendingByDefault \
   -parse-as-library -o /tmp/test main.swift && /tmp/test
